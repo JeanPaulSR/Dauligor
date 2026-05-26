@@ -1,6 +1,6 @@
 import { CLASS_CATALOG_FILE, MODULE_ID, SETTINGS } from "./constants.js";
 import { registerDauligorCharacterSheet } from "./dauligor-character-sheet.js";
-import { exportApplicationWindow, exportFeatFolder, exportSpellFolder } from "./export-service.js";
+import { exportActorFolder, exportApplicationWindow, exportFeatFolder, exportItemFolder, exportSpellFolder } from "./export-service.js";
 import { openFeatureManager, promptLongRestCommit } from "./feature-manager-app.js";
 import { openDauligorImporter } from "./importer-app.js";
 import { initializeSocket } from "./import-service.js";
@@ -695,12 +695,14 @@ function injectSidebarDirectoryButtons(root, { directoryType = "" } = {}) {
   const wrapper = document.createElement("div");
   wrapper.className = "header-actions action-buttons dauligor-directory-tools";
   wrapper.setAttribute(`data-${MODULE_ID}-sidebar-tools`, "true");
-  // Export buttons only appear on the Item directory — Foundry stores
-  // spell + feat items in the same Item sidebar, just routed by
-  // `item.type`. Keeping them side-by-side mirrors how Plutonium
-  // groups its sidebar tools by directory type.
-  const exportButtons = directoryType === "Item"
-    ? `
+  // Per-directory export buttons. Spell + Feat + Item live on the
+  // Item directory (Foundry stores all four document types in the
+  // same sidebar, routed by `item.type`). Actor exports live on the
+  // Actor directory. Keeping each set scoped to its native sidebar
+  // mirrors how Plutonium groups its sidebar tools by directory type.
+  let exportButtons = "";
+  if (directoryType === "Item") {
+    exportButtons = `
     <button type="button" class="dauligor-directory-tools__button" data-action="export-spell-folder" title="Export a Foundry spell folder for Dauligor spell import research">
       <i class="fas fa-wand-magic-sparkles"></i>
       <span>Export Spell Folder</span>
@@ -709,8 +711,19 @@ function injectSidebarDirectoryButtons(root, { directoryType = "" } = {}) {
       <i class="fas fa-medal"></i>
       <span>Export Feat Folder</span>
     </button>
-  `
-    : "";
+    <button type="button" class="dauligor-directory-tools__button" data-action="export-item-folder" title="Export a Foundry item folder (weapons / armor / consumables / tools / loot / containers) for Dauligor item import research">
+      <i class="fas fa-box-archive"></i>
+      <span>Export Item Folder</span>
+    </button>
+  `;
+  } else if (directoryType === "Actor") {
+    exportButtons = `
+    <button type="button" class="dauligor-directory-tools__button" data-action="export-actor-folder" title="Export a Foundry actor folder (characters / npcs / vehicles / groups) for Dauligor actor research">
+      <i class="fas fa-users"></i>
+      <span>Export Actor Folder</span>
+    </button>
+  `;
+  }
 
   wrapper.innerHTML = `
     <button type="button" class="dauligor-directory-tools__button dauligor-directory-tools__button--primary" data-action="open-importer" title="Open Dauligor Importer">
@@ -731,6 +744,12 @@ function injectSidebarDirectoryButtons(root, { directoryType = "" } = {}) {
   });
   wrapper.querySelector(`[data-action="export-feat-folder"]`)?.addEventListener("click", async () => {
     await promptAndExportFeatFolder();
+  });
+  wrapper.querySelector(`[data-action="export-item-folder"]`)?.addEventListener("click", async () => {
+    await promptAndExportItemFolder();
+  });
+  wrapper.querySelector(`[data-action="export-actor-folder"]`)?.addEventListener("click", async () => {
+    await promptAndExportActorFolder();
   });
   wrapper.querySelector(`[data-action="open-options"]`)?.addEventListener("click", async () => {
     await openLauncher();
@@ -931,6 +950,208 @@ async function promptAndExportFeatFolder() {
   }
 
   await exportFeatFolder(folder, { includeSubfolders: result?.includeSubfolders !== false });
+}
+
+// ─── Item folder export ─────────────────────────────────────────────
+//
+// Same shape as the feat + spell folder pickers. The set of item.types
+// counted here MUST stay in sync with ITEM_FOLDER_TYPES in
+// export-service.js (weapon / equipment / consumable / tool / loot /
+// container / backpack). If a folder mixes class/subclass/spell/feat
+// docs alongside physical items, only the physical ones are counted —
+// the other types have their own dedicated exporters.
+
+const ITEM_FOLDER_EXPORT_TYPES = ["weapon", "equipment", "consumable", "tool", "loot", "container", "backpack"];
+
+function collectItemFolderChoices() {
+  const folders = Array.from(game.folders ?? [])
+    .filter((folder) => folder.type === "Item")
+    .map((folder) => {
+      const descendants = new Set([folder.id]);
+      const queue = [folder.id];
+      while (queue.length) {
+        const parentId = queue.shift();
+        for (const candidate of Array.from(game.folders ?? [])) {
+          if (candidate.type !== "Item") continue;
+          if ((candidate.folder?.id ?? null) !== parentId) continue;
+          if (descendants.has(candidate.id)) continue;
+          descendants.add(candidate.id);
+          queue.push(candidate.id);
+        }
+      }
+
+      const itemCount = Array.from(game.items ?? []).filter((item) =>
+        ITEM_FOLDER_EXPORT_TYPES.includes(item.type)
+        && descendants.has(item.folder?.id ?? "")
+      ).length;
+
+      return {
+        folder,
+        path: getItemFolderPath(folder),
+        itemCount,
+      };
+    })
+    .filter((entry) => entry.itemCount > 0)
+    .sort((a, b) => a.path.localeCompare(b.path));
+
+  return folders;
+}
+
+async function promptAndExportItemFolder() {
+  const choices = collectItemFolderChoices();
+  if (!choices.length) {
+    notifyWarn("No Item folders with physical items (weapons / armor / consumables / tools / loot / containers) were found in this world.");
+    return;
+  }
+
+  const optionsHtml = choices.map((entry) => `
+    <option value="${foundry.utils.escapeHTML(entry.folder.id)}">
+      ${foundry.utils.escapeHTML(`${entry.path} (${entry.itemCount} items)`)}
+    </option>
+  `).join("");
+
+  let result = null;
+  try {
+    result = await foundry.applications.api.DialogV2.prompt({
+      window: { title: "Export Item Folder" },
+      content: `
+        <div class="form-group">
+          <label>Item folder</label>
+          <select name="folderId" autofocus>
+            ${optionsHtml}
+          </select>
+          <p class="hint">Exports all physical Foundry items in the selected folder as a Dauligor research/import batch. Covers weapons, armor / worn gear (equipment), consumables, tools, loot, and containers. Spells, feats, classes, subclasses, races, backgrounds, and facilities are excluded — they have their own export paths.</p>
+        </div>
+        <div class="form-group">
+          <label class="checkbox">
+            <input type="checkbox" name="includeSubfolders" checked>
+            <span>Include subfolders</span>
+          </label>
+        </div>
+      `,
+      ok: {
+        label: "Export",
+        callback: (_event, button) => ({
+          folderId: button.form.elements.folderId.value,
+          includeSubfolders: Boolean(button.form.elements.includeSubfolders.checked),
+        }),
+      },
+      rejectClose: false,
+      modal: true,
+    });
+  } catch {
+    return;
+  }
+
+  const folder = game.folders.get(result?.folderId ?? "");
+  if (!folder) {
+    notifyWarn("The selected item folder could not be found.");
+    return;
+  }
+
+  await exportItemFolder(folder, { includeSubfolders: result?.includeSubfolders !== false });
+}
+
+// ─── Actor folder export ────────────────────────────────────────────
+//
+// Actor folders live in the Actor directory (their `type` field is
+// "Actor", not "Item"). Same dialog shape as the item picker —
+// folder dropdown + "include subfolders" checkbox.
+//
+// The set of actor.type values MUST stay in sync with
+// ACTOR_FOLDER_TYPES in export-service.js (character / npc / vehicle
+// / group). `encounter` is intentionally excluded — it's an
+// org-tool document, not a creature.
+
+const ACTOR_FOLDER_EXPORT_TYPES = ["character", "npc", "vehicle", "group"];
+
+function collectActorFolderChoices() {
+  const folders = Array.from(game.folders ?? [])
+    .filter((folder) => folder.type === "Actor")
+    .map((folder) => {
+      const descendants = new Set([folder.id]);
+      const queue = [folder.id];
+      while (queue.length) {
+        const parentId = queue.shift();
+        for (const candidate of Array.from(game.folders ?? [])) {
+          if (candidate.type !== "Actor") continue;
+          if ((candidate.folder?.id ?? null) !== parentId) continue;
+          if (descendants.has(candidate.id)) continue;
+          descendants.add(candidate.id);
+          queue.push(candidate.id);
+        }
+      }
+
+      const actorCount = Array.from(game.actors ?? []).filter((actor) =>
+        ACTOR_FOLDER_EXPORT_TYPES.includes(actor.type)
+        && descendants.has(actor.folder?.id ?? "")
+      ).length;
+
+      return {
+        folder,
+        path: getItemFolderPath(folder),  // path traversal works for any Folder type
+        actorCount,
+      };
+    })
+    .filter((entry) => entry.actorCount > 0)
+    .sort((a, b) => a.path.localeCompare(b.path));
+
+  return folders;
+}
+
+async function promptAndExportActorFolder() {
+  const choices = collectActorFolderChoices();
+  if (!choices.length) {
+    notifyWarn("No Actor folders with characters / npcs / vehicles / groups were found in this world.");
+    return;
+  }
+
+  const optionsHtml = choices.map((entry) => `
+    <option value="${foundry.utils.escapeHTML(entry.folder.id)}">
+      ${foundry.utils.escapeHTML(`${entry.path} (${entry.actorCount} actors)`)}
+    </option>
+  `).join("");
+
+  let result = null;
+  try {
+    result = await foundry.applications.api.DialogV2.prompt({
+      window: { title: "Export Actor Folder" },
+      content: `
+        <div class="form-group">
+          <label>Actor folder</label>
+          <select name="folderId" autofocus>
+            ${optionsHtml}
+          </select>
+          <p class="hint">Exports all Foundry actor documents in the selected folder as a Dauligor research/import batch. Covers characters, npcs, vehicles, and groups. Encounter documents (org-tool scaffolds, not creatures) are excluded.</p>
+        </div>
+        <div class="form-group">
+          <label class="checkbox">
+            <input type="checkbox" name="includeSubfolders" checked>
+            <span>Include subfolders</span>
+          </label>
+        </div>
+      `,
+      ok: {
+        label: "Export",
+        callback: (_event, button) => ({
+          folderId: button.form.elements.folderId.value,
+          includeSubfolders: Boolean(button.form.elements.includeSubfolders.checked),
+        }),
+      },
+      rejectClose: false,
+      modal: true,
+    });
+  } catch {
+    return;
+  }
+
+  const folder = game.folders.get(result?.folderId ?? "");
+  if (!folder) {
+    notifyWarn("The selected actor folder could not be found.");
+    return;
+  }
+
+  await exportActorFolder(folder, { includeSubfolders: result?.includeSubfolders !== false });
 }
 
 function injectSpellTabButton(appLike, root) {

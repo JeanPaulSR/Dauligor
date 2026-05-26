@@ -109,12 +109,24 @@ export async function buildTopLevelCatalog() {
     spellCountsBySourceId.set(String(row.source_id), Number(row.spell_count) || 0);
   }
 
+  // Feat counts per source — parallel to spell counts. Drives the
+  // Foundry wizard's Feats importer source filter (`counts.feats > 0`
+  // OR unknown → accept). One row per source.
+  const featCountsRes = await executeD1QueryInternal({
+    sql: "SELECT source_id, COUNT(*) AS feat_count FROM feats GROUP BY source_id",
+  });
+  const featCountsBySourceId = new Map<string, number>();
+  for (const row of featCountsRes.results || []) {
+    featCountsBySourceId.set(String(row.source_id), Number(row.feat_count) || 0);
+  }
+
   const entries = allSources
     .filter((s: any) => s.status === "ready" || s.status === "active")
     .map((s: any) => {
       const slug = s.slug || s.id;
       const classCount = classCountsBySourceId.get(String(s.id)) || 0;
       const spellCount = spellCountsBySourceId.get(String(s.id)) || 0;
+      const featCount = featCountsBySourceId.get(String(s.id)) || 0;
       // `supportedImportTypes` — explicit allow-list the Foundry
       // wizard reads to decide which importer modes a source can
       // feed. Derived from the per-table counts so the catalog
@@ -123,6 +135,7 @@ export async function buildTopLevelCatalog() {
       const supportedImportTypes: string[] = [];
       if (classCount > 0) supportedImportTypes.push("classes-subclasses");
       if (spellCount > 0) supportedImportTypes.push("spells");
+      if (featCount > 0) supportedImportTypes.push("feats");
       return {
         // Public semantic id. The internal D1 row id is intentionally
         // NOT exposed — consumers join against this synthesized id,
@@ -140,6 +153,7 @@ export async function buildTopLevelCatalog() {
         counts: {
           classes: classCount,
           spells: spellCount,
+          feats: featCount,
           items: 0,
           bestiary: 0,
           journals: 0,
@@ -160,6 +174,12 @@ export async function buildTopLevelCatalog() {
         // construct the URL itself from `slug`, which works but
         // duplicates server knowledge on the client.
         spellCatalogUrl: `${slug}/spells.json`,
+        // Sibling URL hint for the feats importer. Same flat
+        // lightweight-summary shape as the spell list. Without this
+        // the Foundry wizard would have to construct the URL itself
+        // from `slug`; emitting it server-side keeps the source of
+        // truth one place.
+        featCatalogUrl: `${slug}/feats.json`,
       };
     });
 

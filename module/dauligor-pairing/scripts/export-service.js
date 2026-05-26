@@ -535,6 +535,657 @@ export async function exportFeatFolder(folder, { includeSubfolders = true } = {}
   if (shouldDownload) downloadJson(payload, `${folder.name}-feats-export`);
 }
 
+// ─── Item folder export ─────────────────────────────────────────────
+//
+// Mirrors the spell + feat folder exports but covers the seven dnd5e v5
+// Item document types that represent "physical things": weapon /
+// equipment / consumable / tool / loot / container / backpack.
+//
+// Deliberately EXCLUDED:
+//   - `feat` / `spell` — own exporters (richer summary shapes)
+//   - `class` / `subclass` / `race` / `background` — own document concepts;
+//     the existing per-class exporter handles those
+//   - `facility` — new dnd5e 2024 Bastion documents; no Dauligor table
+//     yet, so excluded to keep the payload focused
+//
+// `equipment` is a deliberately fuzzy bucket inside Foundry. A single
+// `equipment` Item can be armor (system.type.value ∈
+// light/medium/heavy/shield/natural) OR generic worn gear (clothing /
+// trinket / wondrous / vehicle). The exporter preserves both
+// `item.type` (document-level) and `system.type.value` (subcategory)
+// so the downstream importer can route correctly.
+
+const ITEM_FOLDER_TYPES = ["weapon", "equipment", "consumable", "tool", "loot", "container", "backpack"];
+
+/**
+ * Read `system.weight` defensively. dnd5e v5 wraps weight as
+ * `{ value: 1, units: "lb" }` but older items (and some legacy
+ * compendium content) still carry a flat number. Returns 0 when neither
+ * shape is present so the summary aggregation can sum safely.
+ */
+function readItemWeight(system) {
+  if (system == null) return 0;
+  const raw = system.weight;
+  if (raw == null) return 0;
+  if (typeof raw === "object") return Number(raw.value ?? 0) || 0;
+  return Number(raw) || 0;
+}
+
+function summarizeItemCounts(items) {
+  // `byType` counts by Foundry document type (weapon / consumable / …)
+  // — the routing key the downstream importer will switch on.
+  const byType = {};
+  // `bySubcategory` counts by `system.type.value` (light / simpleM /
+  // potion / …) — the within-type discriminator, useful for spotting
+  // armor-vs-clothing mixes inside the `equipment` bucket at a glance.
+  const bySubcategory = {};
+  // `byRarity` lets authors gauge "how much of this folder is magical
+  // / uncommon / rare" before deciding which subset to import.
+  const byRarity = {};
+  // Flag rollups for the import workbench's hero stats. `magical` is
+  // best-effort — dnd5e v5 uses two signals (`properties.includes('mgc')`
+  // AND a non-`none` rarity) and we count an item as magical if either
+  // is set, which matches how Plutonium tags magic items.
+  const flags = {
+    magical: 0,
+    requiresAttunement: 0,
+    container: 0,
+    hasActivities: 0,
+    hasEffects: 0,
+  };
+  let totalActivities = 0;
+  let totalEffects = 0;
+  let totalWeight = 0;
+  let totalPriceGp = 0;
+
+  for (const item of items) {
+    const source = item.toObject();
+    const system = source.system ?? {};
+    const type = item.type;
+    const subcategory = String(system.type?.value ?? "").trim();
+    const rarity = String(system.rarity ?? "").trim() || "none";
+    const attunement = String(system.attunement ?? "").trim();
+    const isMagical = (Array.isArray(system.properties) && system.properties.includes("mgc")) || rarity !== "none";
+    const activityCount = Object.keys(system.activities ?? {}).length;
+    const effectCount = Array.isArray(source.effects) ? source.effects.length : 0;
+    const weight = readItemWeight(system);
+    const quantity = Number(system.quantity ?? 1) || 1;
+
+    byType[type] = (byType[type] ?? 0) + 1;
+    if (subcategory) bySubcategory[subcategory] = (bySubcategory[subcategory] ?? 0) + 1;
+    byRarity[rarity] = (byRarity[rarity] ?? 0) + 1;
+    if (isMagical) flags.magical++;
+    if (attunement && attunement !== "none") flags.requiresAttunement++;
+    if (type === "container" || type === "backpack") flags.container++;
+    if (activityCount > 0) flags.hasActivities++;
+    if (effectCount > 0) flags.hasEffects++;
+    totalActivities += activityCount;
+    totalEffects += effectCount;
+    totalWeight += weight * quantity;
+    // Price denomination is intentionally ignored in the gp rollup —
+    // dnd5e v5 supports cp/sp/ep/gp/pp but the vast majority of
+    // compendium items list everything in gp, and a denominated sum
+    // would require a coin-rate constant nobody asked for. Authors who
+    // need the breakdown can read it off `sourceDocument.system.price`.
+    totalPriceGp += Number(system.price?.value ?? 0) * quantity;
+  }
+
+  return {
+    itemCount: items.length,
+    byType,
+    bySubcategory,
+    byRarity,
+    flags,
+    totalActivities,
+    totalEffects,
+    totalWeight,
+    totalPriceGp,
+  };
+}
+
+/**
+ * Build the per-item summary projection. Same idea as `featSummary` —
+ * a slim, type-aware preview the import workbench can render without
+ * touching `sourceDocument`. Authors who need fidelity always have
+ * the full `sourceDocument` to fall back on.
+ *
+ * The shape varies by `item.type` because the dnd5e v5 schema for each
+ * item document is genuinely different — a weapon has damage parts a
+ * potion doesn't, a container has a capacity object equipment doesn't,
+ * etc. Each branch only emits fields that exist for that type.
+ */
+function buildItemSummary(item, source) {
+  const system = source.system ?? {};
+  const properties = Array.from(system.properties ?? []);
+
+  const base = {
+    itemType: item.type,
+    itemCategory: String(system.type?.value ?? ""),
+    itemSubcategory: String(system.type?.subtype ?? ""),
+    identifier: String(system.identifier ?? ""),
+    rarity: String(system.rarity ?? "").trim() || "none",
+    quantity: Number(system.quantity ?? 1) || 1,
+    weight: readItemWeight(system),
+    price: {
+      value: Number(system.price?.value ?? 0) || 0,
+      denomination: String(system.price?.denomination ?? "gp"),
+    },
+    attunement: String(system.attunement ?? ""),
+    equipped: !!system.equipped,
+    identified: system.identified !== false,
+    magical: properties.includes("mgc") || (String(system.rarity ?? "").trim() && system.rarity !== "none"),
+    properties,
+    uses: system.uses ?? {},
+    activation: system.activation ?? {},
+    activityCount: Object.keys(system.activities ?? {}).length,
+    effectCount: Array.isArray(source.effects) ? source.effects.length : 0,
+  };
+
+  // Type-specific projections — each branch reads only fields the
+  // dnd5e v5 schema documents for that item type.
+  if (item.type === "weapon") {
+    base.weapon = {
+      // `system.damage.base` carries the canonical damage line in
+      // dnd5e v5 (number of dice / die / bonus). Activities re-state
+      // it on the per-activity attack roll.
+      damage: system.damage ?? {},
+      range: system.range ?? {},
+      mastery: String(system.mastery ?? ""),
+      magicalBonus: Number(system.magicalBonus ?? 0) || 0,
+      ammunition: system.ammunition ?? null,
+      proficient: system.proficient ?? null,
+    };
+  } else if (item.type === "equipment") {
+    base.equipment = {
+      // `system.armor.value` is the AC; `.dex` is the dex bonus cap
+      // (null = no cap, 0 = no dex, 2 = medium-armor +2 cap, etc.).
+      // `.magicalBonus` is the +N enchant.
+      armor: system.armor ?? {},
+      strength: system.strength ?? null,
+      stealth: !!system.stealth,
+      proficient: system.proficient ?? null,
+    };
+  } else if (item.type === "tool") {
+    base.tool = {
+      ability: String(system.ability ?? ""),
+      proficient: system.proficient ?? null,
+      bonus: String(system.bonus ?? ""),
+    };
+  } else if (item.type === "consumable") {
+    base.consumable = {
+      // Most consumable behavior is encoded in activities + uses;
+      // surface the auto-destroy flag so the workbench can preview
+      // "destroys on last use" without reaching into uses.
+      destroyOnEmpty: !!system.uses?.autoDestroy,
+    };
+  } else if (item.type === "container" || item.type === "backpack") {
+    base.container = {
+      // `capacity` shape: { type: "weight" | "items" | "volume", value: <number> }
+      capacity: system.capacity ?? {},
+    };
+  }
+  // `loot` has no type-specific extras beyond the base block.
+
+  return base;
+}
+
+function buildItemExportEntry(item, rootFolder) {
+  const source = getCleanSource(item);
+  const folderPath = item.folder ? getFolderPath(item.folder) : "";
+
+  return {
+    id: item.id,
+    uuid: item.uuid,
+    name: item.name,
+    type: item.type,
+    folderId: item.folder?.id ?? null,
+    folderPath,
+    relativeFolderPath: folderPath && rootFolder
+      ? folderPath.replace(new RegExp(`^${escapeRegex(getFolderPath(rootFolder))}/?`), "")
+      : "",
+    source: {
+      book: source.system?.source?.book ?? "",
+      page: source.system?.source?.page ?? null,
+      rules: source.system?.source?.rules ?? "",
+    },
+    itemSummary: buildItemSummary(item, source),
+    sourceDocument: source,
+  };
+}
+
+export function buildItemFolderExport(folder, { includeSubfolders = true } = {}) {
+  if (!folder || folder.documentName !== "Folder" || folder.type !== "Item") return null;
+
+  const includedFolderIds = includeSubfolders ? collectDescendantFolderIds(folder) : new Set([folder.id]);
+  const items = Array.from(game.items ?? []).filter((item) =>
+    ITEM_FOLDER_TYPES.includes(item.type)
+    && includedFolderIds.has(item.folder?.id ?? "")
+  );
+
+  const folderPath = getFolderPath(folder);
+
+  return {
+    kind: "dauligor.foundry-item-folder-export.v1",
+    schemaVersion: 1,
+    exportedAt: new Date().toISOString(),
+    moduleId: MODULE_ID,
+    game: {
+      worldId: game.world?.id ?? null,
+      worldTitle: game.world?.title ?? null,
+      systemId: game.system?.id ?? null,
+      systemVersion: game.system?.version ?? null,
+      coreVersion: game.release?.version ?? null,
+    },
+    folder: {
+      id: folder.id,
+      uuid: folder.uuid ?? null,
+      name: folder.name,
+      type: folder.type,
+      path: folderPath,
+      includeSubfolders,
+      includedFolderIds: Array.from(includedFolderIds),
+      parentId: folder.folder?.id ?? null,
+    },
+    summary: summarizeItemCounts(items),
+    items: items
+      .slice()
+      .sort((a, b) => {
+        // Cluster by Foundry item type first (all weapons together,
+        // then all armor, etc.) and alphabetize within each cluster.
+        // Mirrors the feat sort's "group by type then by name" idea.
+        if (a.type !== b.type) return a.type.localeCompare(b.type);
+        return String(a.name ?? "").localeCompare(String(b.name ?? ""));
+      })
+      .map((item) => buildItemExportEntry(item, folder)),
+  };
+}
+
+export async function exportItemFolder(folder, { includeSubfolders = true } = {}) {
+  if (!folder || folder.documentName !== "Folder" || folder.type !== "Item") {
+    notifyWarn("Select an Item folder before exporting items.");
+    return;
+  }
+
+  const payload = buildItemFolderExport(folder, { includeSubfolders });
+  const itemCount = payload?.summary?.itemCount ?? 0;
+  if (!itemCount) {
+    notifyWarn(`No item documents (weapon / equipment / consumable / tool / loot / container) were found in "${folder.name}".`);
+    return;
+  }
+
+  log("Prepared item folder export", payload);
+  notifyInfo(`Prepared ${itemCount} items from "${folder.name}". See console for the full object.`);
+
+  const shouldDownload = await chooseDownload({
+    title: "Export Item Folder",
+    name: `${folder.name} (${itemCount} items)`,
+  });
+
+  if (shouldDownload) downloadJson(payload, `${folder.name}-items-export`);
+}
+
+// ─── Actor folder export ────────────────────────────────────────────
+//
+// Mirrors the spell + feat + item folder exports for the four dnd5e v5
+// Actor document types: character / npc / vehicle / group.
+//
+// This is a **research-only** export today — Dauligor has no actor
+// table, no NPC bestiary, no PC round-trip. The payload ships the full
+// `sourceDocument` for fidelity plus a type-aware slim `actorSummary`
+// projection a future workbench can render without thawing the whole
+// document. When a Dauligor consumer lands (NPC bestiary, monster
+// compendium, character round-trip, …), the schema decision drives
+// the import; the exporter doesn't bake one in.
+//
+// `encounter` is intentionally NOT in the type list — it's an
+// org-tool document Foundry uses to scaffold encounter setup, not a
+// creature. If we want it later it's a one-line addition.
+
+const ACTOR_FOLDER_TYPES = ["character", "npc", "vehicle", "group"];
+
+/**
+ * Strip a biography blob down to plain-text first-N-chars for the
+ * slim summary. The full HTML is always present on `sourceDocument`;
+ * this is just enough for an importer's row-preview line.
+ */
+function buildBiographySnippet(html, maxLen = 200) {
+  const raw = String(html ?? "")
+    .replace(/<[^>]*>/g, " ")        // strip HTML tags
+    .replace(/\s+/g, " ")             // collapse whitespace
+    .trim();
+  if (raw.length <= maxLen) return raw;
+  return `${raw.slice(0, maxLen).trim()}…`;
+}
+
+function summarizeActorCounts(actors) {
+  // `byType` counts by actor document type — the routing key for a
+  // future fan-out importer (NPC bestiary vs character round-trip).
+  const byType = {};
+  // CR histogram only fills from npc actors; cleared zeros are
+  // dropped at the end so the JSON stays compact.
+  const byCr = {};
+  const flags = {
+    hasInventory: 0,
+    hasSpellbook: 0,
+    hasClasses: 0,
+    hasEffects: 0,
+  };
+  let totalEmbeddedItems = 0;
+  let totalEffects = 0;
+
+  for (const actor of actors) {
+    const source = actor.toObject();
+    const type = actor.type;
+    const system = source.system ?? {};
+    const itemsArray = Array.isArray(source.items) ? source.items : [];
+    const effectsArray = Array.isArray(source.effects) ? source.effects : [];
+
+    byType[type] = (byType[type] ?? 0) + 1;
+
+    if (type === "npc") {
+      // CR is stored as a number in dnd5e v5 (e.g. 0.125, 0.25, 1, 2, 10)
+      // — keep the literal value so authors can spot 1/8 vs 1 at a glance.
+      const cr = system.details?.cr;
+      const crLabel = cr == null ? "unknown" : String(cr);
+      byCr[crLabel] = (byCr[crLabel] ?? 0) + 1;
+    }
+
+    if (itemsArray.length > 0) flags.hasInventory++;
+    if (itemsArray.some((it) => it.type === "spell")) flags.hasSpellbook++;
+    if (itemsArray.some((it) => it.type === "class")) flags.hasClasses++;
+    if (effectsArray.length > 0) flags.hasEffects++;
+
+    totalEmbeddedItems += itemsArray.length;
+    totalEffects += effectsArray.length;
+  }
+
+  // Sort CR keys numerically so the JSON object reads in CR order
+  // when serialized (object key order is preserved in modern JS).
+  const sortedByCr = {};
+  Object.keys(byCr)
+    .sort((a, b) => Number(a) - Number(b) || a.localeCompare(b))
+    .forEach((key) => { sortedByCr[key] = byCr[key]; });
+
+  return {
+    actorCount: actors.length,
+    byType,
+    byCr: sortedByCr,
+    flags,
+    totalEmbeddedItems,
+    totalEffects,
+  };
+}
+
+/**
+ * Per-actor slim projection. Shape varies by `actor.type` because a
+ * character carries class progression a vehicle doesn't, an npc
+ * carries CR + creature traits a character doesn't, etc. Each branch
+ * only emits fields documented for that actor type by dnd5e v5.
+ *
+ * Always includes the common base fields so a generic preview row
+ * (name + image + HP + AC + ability scores) works regardless of type.
+ */
+function buildActorSummary(actor, source) {
+  const system = source.system ?? {};
+  const itemsArray = Array.isArray(source.items) ? source.items : [];
+  const effectsArray = Array.isArray(source.effects) ? source.effects : [];
+
+  // HP — dnd5e v5 stores `value` (current), `max` (cap), and
+  // `temp` (temporary). For npc / vehicle the max is the rolled HP;
+  // for character it's derived from class + Con + bonuses.
+  const hp = system.attributes?.hp ?? {};
+  // AC — `value` is the resolved AC when the sheet computes it;
+  // `flat` is an override; `formula` is the calculation string.
+  const ac = system.attributes?.ac ?? {};
+
+  const base = {
+    actorType: actor.type,
+    portraitImg: source.img ?? "",
+    tokenImg: source.prototypeToken?.texture?.src ?? source.token?.img ?? "",
+    alignment: String(system.details?.alignment ?? "").trim(),
+    hp: {
+      value: Number(hp.value ?? 0) || 0,
+      max: Number(hp.max ?? 0) || 0,
+      temp: Number(hp.temp ?? 0) || 0,
+    },
+    ac: {
+      value: Number(ac.value ?? 0) || 0,
+      flat: ac.flat ?? null,
+      formula: String(ac.formula ?? ""),
+      calc: String(ac.calc ?? ""),
+    },
+    abilities: {
+      str: Number(system.abilities?.str?.value ?? 0) || 0,
+      dex: Number(system.abilities?.dex?.value ?? 0) || 0,
+      con: Number(system.abilities?.con?.value ?? 0) || 0,
+      int: Number(system.abilities?.int?.value ?? 0) || 0,
+      wis: Number(system.abilities?.wis?.value ?? 0) || 0,
+      cha: Number(system.abilities?.cha?.value ?? 0) || 0,
+    },
+    biography: buildBiographySnippet(system.details?.biography?.value ?? system.description?.value ?? ""),
+    itemCount: itemsArray.length,
+    effectCount: effectsArray.length,
+    // Inventory roll-up — embedded item type histogram. Skips the
+    // full item dump (lives on sourceDocument.items) but lets a
+    // preview line read "1 class, 12 spells, 3 weapons" at a glance.
+    embeddedTypeCounts: itemsArray.reduce((acc, it) => {
+      const key = String(it.type ?? "unknown");
+      acc[key] = (acc[key] ?? 0) + 1;
+      return acc;
+    }, {}),
+  };
+
+  if (actor.type === "character") {
+    // Pull class + subclass info from embedded items so a preview can
+    // read "Fighter 5 / Wizard 3 (Diviner)" without parsing the
+    // full inventory. dnd5e v5 stores classes as embedded items of
+    // type "class" with system.levels; subclasses are separate items.
+    const classItems = itemsArray.filter((it) => it.type === "class");
+    const subclassItems = itemsArray.filter((it) => it.type === "subclass");
+    const classes = classItems.map((cls) => {
+      const subclass = subclassItems.find((sub) => sub.system?.classIdentifier === cls.system?.identifier);
+      return {
+        identifier: String(cls.system?.identifier ?? cls.name ?? ""),
+        name: String(cls.name ?? ""),
+        level: Number(cls.system?.levels ?? 0) || 0,
+        subclass: subclass ? {
+          identifier: String(subclass.system?.identifier ?? subclass.name ?? ""),
+          name: String(subclass.name ?? ""),
+        } : null,
+      };
+    });
+
+    base.character = {
+      race: String(system.details?.race ?? "").trim(),
+      background: String(system.details?.background ?? "").trim(),
+      classes,
+      totalLevel: classes.reduce((sum, c) => sum + c.level, 0),
+      xp: {
+        value: Number(system.details?.xp?.value ?? 0) || 0,
+        max: Number(system.details?.xp?.max ?? 0) || 0,
+      },
+      currency: {
+        cp: Number(system.currency?.cp ?? 0) || 0,
+        sp: Number(system.currency?.sp ?? 0) || 0,
+        ep: Number(system.currency?.ep ?? 0) || 0,
+        gp: Number(system.currency?.gp ?? 0) || 0,
+        pp: Number(system.currency?.pp ?? 0) || 0,
+      },
+      // Spell slot snapshot — dnd5e v5 stores per-level slots as
+      // system.spells.spell1, spell2, etc., plus pact. We surface
+      // only `value`/`max` per slot level so the preview is compact.
+      spellSlots: extractSpellSlotSummary(system.spells ?? {}),
+    };
+  } else if (actor.type === "npc") {
+    base.npc = {
+      creatureType: String(system.details?.type?.value ?? system.details?.type ?? "").trim(),
+      creatureSubtype: String(system.details?.type?.subtype ?? "").trim(),
+      cr: system.details?.cr ?? null,
+      proficiencyBonus: Number(system.attributes?.prof ?? 0) || 0,
+      source: {
+        book: String(system.details?.source?.book ?? "").trim(),
+        page: system.details?.source?.page ?? null,
+      },
+      // Traits — these are arrays of slugs in dnd5e v5
+      // (e.g. damage immunity slugs: "fire" / "cold" / "poison").
+      traits: {
+        damageImmunities: Array.from(system.traits?.di?.value ?? []),
+        damageResistances: Array.from(system.traits?.dr?.value ?? []),
+        damageVulnerabilities: Array.from(system.traits?.dv?.value ?? []),
+        conditionImmunities: Array.from(system.traits?.ci?.value ?? []),
+        languages: Array.from(system.traits?.languages?.value ?? []),
+      },
+    };
+  } else if (actor.type === "vehicle") {
+    base.vehicle = {
+      vehicleType: String(system.vehicleType ?? "").trim(),
+      dimensions: String(system.attributes?.dimensions ?? "").trim(),
+      capacity: {
+        creature: String(system.attributes?.capacity?.creature ?? "").trim(),
+        cargo: Number(system.attributes?.capacity?.cargo ?? 0) || 0,
+      },
+      actions: {
+        stations: !!system.attributes?.actions?.stations,
+        value: Number(system.attributes?.actions?.value ?? 0) || 0,
+        threshold: Number(system.attributes?.actions?.thresholds ?? 0) || 0,
+      },
+      movement: system.attributes?.movement ?? {},
+    };
+  } else if (actor.type === "group") {
+    // `system.members` in dnd5e v5 is `[{ actor: ActorUUID, ... }]`.
+    // Older worlds may have it as a flat string[] of ids. Tolerate both.
+    const rawMembers = Array.isArray(system.members) ? system.members : [];
+    const members = rawMembers.map((m) => {
+      if (typeof m === "string") return { uuid: m, name: "", actorType: "" };
+      const memberActor = m?.actor ? fromUuidSync?.(typeof m.actor === "string" ? m.actor : m.actor.uuid) : null;
+      return {
+        uuid: typeof m?.actor === "string" ? m.actor : (m?.actor?.uuid ?? ""),
+        name: memberActor?.name ?? m?.name ?? "",
+        actorType: memberActor?.type ?? "",
+      };
+    });
+    base.group = {
+      groupType: String(system.type?.value ?? system.type ?? "").trim(),
+      memberCount: members.length,
+      members,
+    };
+  }
+
+  return base;
+}
+
+/**
+ * Extract a compact spell-slot snapshot from `system.spells`. Returns
+ * `{ pact: {value, max}, spell1: {value, max}, ... }` skipping levels
+ * that don't exist on this sheet. Used by the character branch only.
+ */
+function extractSpellSlotSummary(spells) {
+  const result = {};
+  for (const key of Object.keys(spells)) {
+    if (!/^(?:spell[1-9]|pact)$/.test(key)) continue;
+    const slot = spells[key];
+    if (!slot || typeof slot !== "object") continue;
+    // Skip slot levels the actor doesn't have (max is 0). Keeps the
+    // payload focused on levels the character can actually cast at.
+    if (Number(slot.max ?? 0) === 0 && Number(slot.value ?? 0) === 0) continue;
+    result[key] = {
+      value: Number(slot.value ?? 0) || 0,
+      max: Number(slot.max ?? 0) || 0,
+      override: slot.override ?? null,
+    };
+  }
+  return result;
+}
+
+function buildActorExportEntry(actor, rootFolder) {
+  const source = getCleanSource(actor);
+  const folderPath = actor.folder ? getFolderPath(actor.folder) : "";
+
+  return {
+    id: actor.id,
+    uuid: actor.uuid,
+    name: actor.name,
+    type: actor.type,
+    folderId: actor.folder?.id ?? null,
+    folderPath,
+    relativeFolderPath: folderPath && rootFolder
+      ? folderPath.replace(new RegExp(`^${escapeRegex(getFolderPath(rootFolder))}/?`), "")
+      : "",
+    actorSummary: buildActorSummary(actor, source),
+    sourceDocument: source,
+  };
+}
+
+export function buildActorFolderExport(folder, { includeSubfolders = true } = {}) {
+  if (!folder || folder.documentName !== "Folder" || folder.type !== "Actor") return null;
+
+  const includedFolderIds = includeSubfolders ? collectDescendantFolderIds(folder) : new Set([folder.id]);
+  const actors = Array.from(game.actors ?? []).filter((actor) =>
+    ACTOR_FOLDER_TYPES.includes(actor.type)
+    && includedFolderIds.has(actor.folder?.id ?? "")
+  );
+
+  const folderPath = getFolderPath(folder);
+
+  return {
+    kind: "dauligor.foundry-actor-folder-export.v1",
+    schemaVersion: 1,
+    exportedAt: new Date().toISOString(),
+    moduleId: MODULE_ID,
+    game: {
+      worldId: game.world?.id ?? null,
+      worldTitle: game.world?.title ?? null,
+      systemId: game.system?.id ?? null,
+      systemVersion: game.system?.version ?? null,
+      coreVersion: game.release?.version ?? null,
+    },
+    folder: {
+      id: folder.id,
+      uuid: folder.uuid ?? null,
+      name: folder.name,
+      type: folder.type,
+      path: folderPath,
+      includeSubfolders,
+      includedFolderIds: Array.from(includedFolderIds),
+      parentId: folder.folder?.id ?? null,
+    },
+    summary: summarizeActorCounts(actors),
+    actors: actors
+      .slice()
+      .sort((a, b) => {
+        // Cluster by actor type (all npcs together, then all characters,
+        // …) then by name. Same approach the item export uses.
+        if (a.type !== b.type) return a.type.localeCompare(b.type);
+        return String(a.name ?? "").localeCompare(String(b.name ?? ""));
+      })
+      .map((actor) => buildActorExportEntry(actor, folder)),
+  };
+}
+
+export async function exportActorFolder(folder, { includeSubfolders = true } = {}) {
+  if (!folder || folder.documentName !== "Folder" || folder.type !== "Actor") {
+    notifyWarn("Select an Actor folder before exporting actors.");
+    return;
+  }
+
+  const payload = buildActorFolderExport(folder, { includeSubfolders });
+  const actorCount = payload?.summary?.actorCount ?? 0;
+  if (!actorCount) {
+    notifyWarn(`No actor documents (character / npc / vehicle / group) were found in "${folder.name}".`);
+    return;
+  }
+
+  log("Prepared actor folder export", payload);
+  notifyInfo(`Prepared ${actorCount} actors from "${folder.name}". See console for the full object.`);
+
+  const shouldDownload = await chooseDownload({
+    title: "Export Actor Folder",
+    name: `${folder.name} (${actorCount} actors)`,
+  });
+
+  if (shouldDownload) downloadJson(payload, `${folder.name}-actors-export`);
+}
+
 function serializeForJson(value, { seen = new WeakSet(), depth = 0, maxDepth = 10 } = {}) {
   if (value == null) return value;
   if (depth > maxDepth) return "[MaxDepth]";

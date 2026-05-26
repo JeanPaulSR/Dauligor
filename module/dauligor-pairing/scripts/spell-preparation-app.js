@@ -3490,7 +3490,7 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     const fav = this._getFavoriteDbIds().has(dbId);
 
     const imageHtml = full?.img
-      ? `<div class="dauligor-spell-manager__detail-image"><img src="${escapeHtml(full.img)}" alt="${escapeHtml(summary.name)}"></div>`
+      ? `<div class="dauligor-spell-manager__detail-image"><img src="${escapeHtml(full.img)}" alt="${escapeHtml(summary.name)}" onerror="this.onerror=null;this.src='icons/svg/aura.svg';"></div>`
       : `<div class="dauligor-spell-manager__detail-image dauligor-spell-manager__detail-image--placeholder" aria-hidden="true"></div>`;
 
     // 2-col info grid: Casting Time / Range / Components / Duration

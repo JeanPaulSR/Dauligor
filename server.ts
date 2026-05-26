@@ -81,7 +81,17 @@ function createTemporaryPassword(length = 14) {
 async function startServer() {
   const app = express();
   const PORT = 3000;
-  app.use(express.json());
+  // Body limit bumped from the 100kb default to 50mb so bulk
+  // Foundry imports (spells, feats, items) can flow through the
+  // local /api/d1/query proxy. Each Foundry-shaped entity carries
+  // its full preserved `foundry_data` JSON payload (~20-100kb per
+  // row); a folder of 500+ feats easily crosses single-MB territory.
+  // Production (Cloudflare Pages Functions + Worker) is bounded
+  // by Cloudflare's 100MB request body limit, so 50mb here is well
+  // below the platform ceiling. If a single batch ever exceeds
+  // 50mb, the client-side `batchUpsertFeats` / `batchUpsertSpells`
+  // helpers should chunk further.
+  app.use(express.json({ limit: '50mb' }));
 
   // JSON Endpoint for Character Pairings
   // In a real app we'd fetch from Firestore here. 
@@ -379,11 +389,14 @@ async function startServer() {
   // req/res pair into the Web Request/Response shape `onRequest`
   // expects.
   //
-  // `/api/module/*` is intentionally still NOT mounted here —
-  // its handler uses `context.waitUntil` and other Pages-runtime
-  // APIs that Express doesn't provide. For local module-export
-  // testing run `npx wrangler pages dev` instead, or use a deployed
-  // branch preview at `<preview>.dauligor.pages.dev`.
+  // `/api/module/*` is now mounted via the same wrapper — the handler
+  // optionally uses `context.waitUntil` (guarded with `typeof`) and
+  // reads D1 via the worker-fetch path (not `context.env`), so the
+  // request/params-only adapter in `pages-to-express.ts` is enough.
+  // Previously this required `wrangler pages dev`; that's only needed
+  // now if you're exercising the Cloudflare R2 cache binding, which
+  // the pipeline gracefully degrades without (cold path goes straight
+  // to D1 every time, slower but functional).
   const pagesFunctions: Array<{ mount: string; modulePath: string }> = [
     { mount: "/api/me", modulePath: "./functions/api/me/[[path]].ts" },
     { mount: "/api/admin/users", modulePath: "./functions/api/admin/users/[[path]].ts" },
@@ -395,9 +408,25 @@ async function startServer() {
     // the local Express dev server lets us exercise the prewarm
     // end-to-end without spinning up `wrangler pages dev`.
     { mount: "/api/admin/prewarm-spell-cache", modulePath: "./functions/api/admin/prewarm-spell-cache.ts" },
+    // Single-file Pages Functions for per-user favorites. Local dev
+    // wires them through the same `wrapPagesFunction` adapter so
+    // signed-in users get cloud-sync against `npx wrangler d1 …
+    // --local`. Without these mounts the requests fall through to
+    // the SPA and clients see `Unexpected token '<'` from the HTML
+    // body. (Production Cloudflare serves them automatically.)
+    { mount: "/api/spell-favorites", modulePath: "./functions/api/spell-favorites.ts" },
+    { mount: "/api/feat-favorites", modulePath: "./functions/api/feat-favorites.ts" },
+    { mount: "/api/item-favorites", modulePath: "./functions/api/item-favorites.ts" },
     { mount: "/api/proposals", modulePath: "./functions/api/proposals/[[path]].ts" },
     { mount: "/api/lore", modulePath: "./functions/api/lore/[[path]].ts" },
     { mount: "/api/campaigns", modulePath: "./functions/api/campaigns/[[path]].ts" },
+    // Module export pipeline (read-through cache for the Foundry
+    // pairing module's in-Foundry importer wizard). The handler is
+    // env-free — it accesses D1 via the worker-fetch path and only
+    // uses `context.waitUntil` optionally (guarded). Locally the R2
+    // cache binding is absent, so every request goes cold-path to
+    // D1 + worker — fine for dev (slower than prod, still correct).
+    { mount: "/api/module", modulePath: "./functions/api/module/[[path]].ts" },
   ];
 
   for (const { mount, modulePath } of pagesFunctions) {
