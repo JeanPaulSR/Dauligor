@@ -862,7 +862,7 @@ function normalizeAdvancementForExport(advancement: any, context: any) {
 
   if (type === 'Trait') {
     const traitType = trimString(configuration.type || 'skills');
-    normalized.configuration = {
+    const traitConfig: any = {
       ...configuration,
       mode: trimString(configuration.mode || 'default') || 'default',
       // `static` (default) — pool is the authored options[] below.
@@ -878,6 +878,21 @@ function normalizeAdvancementForExport(advancement: any, context: any) {
       options: uniqueStrings(asArray(configuration.options).map((value: string) => normalizeTraitEntry(traitType, value, context.refs))),
       categoryIds: uniqueStrings(asArray(configuration.categoryIds).map((value: string) => normalizeTraitCategory(traitType, value, context.refs)))
     };
+    // 20260526: weapon trait advancements may carry melee/ranged-restricted
+    // category arrays. Pass them through as parallel keys so the module's
+    // applyActorTraitAdvancements bridge can read them and expand to the
+    // correct Foundry trait keys (weapon:simpleM / weapon:simpleR /
+    // weapon:simple for "both"). Module-side handling spec is in
+    // module/dauligor-pairing/docs/class-import-contract.md.
+    if (traitType === 'weapons') {
+      traitConfig.categoryMeleeIds = uniqueStrings(
+        asArray(configuration.categoryMeleeIds).map((value: string) => normalizeTraitCategory(traitType, value, context.refs))
+      );
+      traitConfig.categoryRangedIds = uniqueStrings(
+        asArray(configuration.categoryRangedIds).map((value: string) => normalizeTraitCategory(traitType, value, context.refs))
+      );
+    }
+    normalized.configuration = traitConfig;
 
     if (configuration.scalingColumnId) {
       const scalingSourceId = context.scalingSourceIdById[configuration.scalingColumnId] || trimString(configuration.scalingColumnId);
