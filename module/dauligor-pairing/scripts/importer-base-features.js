@@ -1,3 +1,4 @@
+import { expandWeaponCategorySlugs } from "./class-import-service.js";
 
 export function baseClassHandler(workflow) {
   const allAdvancements = [
@@ -142,7 +143,20 @@ export function baseClassHandler(workflow) {
       // downstream, but staying prefixed lines us up with the primary
       // path's authored shape.
       const block = mc.block ?? {};
-      entry.fixed = (block.fixedIds || []).map((slug) => `${mc.kind}:${slug}`);
+      const baseFixed = (block.fixedIds || []).map((slug) => `${mc.kind}:${slug}`);
+
+      // 20260526: profile blocks may also carry category-level grants.
+      // Weapons get the Melee/Ranged split via expandWeaponCategorySlugs
+      // (categoryIds:['simple'] → both `weapons:simpleM` AND
+      // `weapons:simpleR`; the half arrays only emit the matching half).
+      // For other shapes (armor / tools / languages) dnd5e accepts the
+      // bare category slug as a trait key (`armor:lgt` / `tool:art`)
+      // so we just prefix `categoryIds` as-is.
+      const categoryFixed = mc.kind === 'weapons'
+        ? expandWeaponCategorySlugs(block).map((slug) => `${mc.kind}:${slug}`)
+        : (block.categoryIds || []).map((slug) => `${mc.kind}:${slug}`);
+
+      entry.fixed = [...new Set([...baseFixed, ...categoryFixed])];
       entry.options = (block.optionIds || []).map((slug) => `${mc.kind}:${slug}`);
       entry.choiceCount = Number(block.choiceCount || 0) || 0;
     }

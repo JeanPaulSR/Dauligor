@@ -625,6 +625,24 @@ are NOT preserved on the embedded actor advancement. After expansion, the
 resulting advancement has the standard `grants: ["weapon:simpleM", ...]` shape
 the rest of the import pipeline already understands.
 
+The same expansion rules apply to the class-level proficiency profile blocks
+(`class.proficiencies.weapons` and `class.multiclassProficiencies.weapons`).
+Both paths share `expandWeaponCategorySlugs(block)` exported from
+`class-import-service.js`:
+
+- The **multiclass apply path** (`applyActorTraitProfile` →
+  `buildTraitKeysFromProfileBlock`) consumes it for the runtime trait writes,
+  producing `weapon:simpleM` / `weapon:simpleR` keys instead of the bare
+  `weapon:simple` that dnd5e v5 doesn't recognize.
+- The **wizard's multiclass overlay** (`baseClassHandler` in
+  `importer-base-features.js`) consumes it for the prompt loop, producing
+  `weapons:simpleM` / `weapons:simpleR` (plural prefix — `stripTypePrefix`
+  removes it downstream before writing).
+
+If you author a `multiclassProficiencies.weapons` block with `categoryIds:
+['simple']`, both paths will expand it to both halves; the half arrays
+restrict to one half each.
+
 #### Weapon trait — character proficiency rows
 
 A class trait advancement with weapon grants produces matching

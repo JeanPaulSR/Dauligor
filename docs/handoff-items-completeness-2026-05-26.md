@@ -94,41 +94,36 @@ These were settled by the user 2026-05-26. Honor them in remaining work.
 
 ## Pending work — concrete next steps
 
-### Known gaps from the melee/ranged work (not blocking C6+ but worth picking up)
+### Melee/Ranged gaps — LANDED
 
-The C4-UI commit added weapon-category expansion to `normalizeSemanticFeatureTraitAdvancement`
-(via the new `expandWeaponCategoryGrants` helper) — that handles **trait advancements**.
-Two parallel module paths still consume only `categoryIds` (not the new Melee/Ranged
-arrays) and emit a single `weapon:simple` token which dnd5e v5 doesn't recognize:
+Both module-side gaps flagged during C4-UI are now closed. The expansion helper that
+`normalizeSemanticFeatureTraitAdvancement` uses for trait advancements was hoisted
+into a shared `expandWeaponCategorySlugs(block)` function that returns bare Foundry
+weaponType slugs (`simpleM` / `simpleR` / `natural` / etc.); both call sites consume
+it with the right prefix:
 
-- **`module/dauligor-pairing/scripts/class-import-service.js:4633`** —
-  `buildTraitKeysFromProfileBlock(type, block, …)`. Used by `applyActorTraitProfile`
-  for **multiclass proficiencies**. When `block.categoryIds` / `categoryMeleeIds` /
-  `categoryRangedIds` come through, emit `weapon:simpleM` etc. via the same probe-and-
-  split logic as `expandWeaponCategoryGrants`. Hoist that helper into a shared spot or
-  copy the logic into `normalizeProfileTraitKey` so the M/R split is honored.
+- **Multiclass proficiency apply path** — `class-import-service.js` →
+  `buildTraitKeysFromProfileBlock` now expands `block.categoryIds` /
+  `categoryMeleeIds` / `categoryRangedIds` via `expandWeaponCategorySlugs` for
+  weapon shapes, producing `weapon:simpleM` / `weapon:simpleR` instead of the
+  bare `weapon:simple` that dnd5e doesn't recognize.
 
-- **`module/dauligor-pairing/scripts/importer-base-features.js:130`** —
-  `'base-weapons': { kind: 'weapons', block: profile.weapons }`. The importer wizard
-  builds advancement entries from the class's main `proficiencies.weapons` block here.
-  It currently only reads `fixedIds` / `optionIds`. Should also expand
-  `categoryIds` / `categoryMeleeIds` / `categoryRangedIds` into advancement entries
-  (probably mapped into `entry.fixed` with the right Foundry trait keys via the same
-  helper).
+- **Wizard multiclass overlay** — `importer-base-features.js`'s `mcMap` loop now
+  expands the same arrays into `entry.fixed[]` with the `weapons:` plural prefix
+  the wizard's prompt loop expects. For non-weapon shapes (armor / tools /
+  languages) `block.categoryIds` is also now honored — dnd5e accepts the bare
+  prefixed key (`armor:lgt` / `tool:art`) as-is so no expansion is needed there.
 
-These are class-level proficiency block consumers — separate from the trait-advancement
-path C4-UI just wired. Until they're updated, multiclass weapon-category grants and the
-importer wizard's base-weapon row won't honor the new Melee/Ranged split. Low priority
-because most class-level weapon grants are still expressed per-item; the homebrew exotic
-ones authored via the new pills are the only ones affected today.
+The class-level proficiency block consumers are now consistent with the trait-
+advancement path. Homebrew classes authoring multiclass weapon proficiencies via
+the new Melee/Ranged pills will get the right runtime behavior on import.
 
-**Module canonical doc updates needed (flag for next session):**
-- `module/dauligor-pairing/docs/class-import-contract.md` — document the
-  `categoryMeleeIds` / `categoryRangedIds` arrays on proficiency blocks AND on trait
-  advancement configurations, and the fan-out to Foundry trait keys (`weapon:simpleM` /
-  `weapon:simpleR` / both when `categoryIds`).
-- `module/dauligor-pairing/docs/class-semantic-export-notes.md` — already shows the
-  `categoryIds` example block; extend with `categoryMeleeIds` / `categoryRangedIds`.
+**Module canonical doc state**: `class-import-contract.md` was updated as part of
+the C8 docs pass to document `categoryMeleeIds` / `categoryRangedIds` on weapon
+trait advancements + the resulting `character_proficiencies` rows.
+`class-semantic-export-notes.md` still shows only the original `categoryIds`
+example; a small extension to mention the half arrays would be nice but isn't
+blocking (the contract doc covers both).
 
 ---
 
