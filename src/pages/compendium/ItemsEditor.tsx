@@ -5,7 +5,10 @@ import { X } from 'lucide-react';
 import ItemImportWorkbench from '../../components/compendium/ItemImportWorkbench';
 import ActivityEditor from '../../components/compendium/ActivityEditor';
 import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
+import ItemDetailPanel from '../../components/compendium/ItemDetailPanel';
 import ItemUsesField from '../../components/compendium/ItemUsesField';
+import TagPicker from '../../components/compendium/TagPicker';
+import { normalizeTagRow } from '../../lib/tagHierarchy';
 import MarkdownEditor from '../../components/MarkdownEditor';
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
 import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
@@ -320,6 +323,13 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
   const [itemDetailsById, setItemDetailsById] = useState<Record<string, any>>({});
   const [sources, setSources] = useState<any[]>([]);
   const [profs, setProfs] = useState<ProficiencyBucket>(EMPTY_BUCKET);
+  // Tags + tagGroups feed the Tags super-tab's TagPicker. Loaded once
+  // on mount alongside the items list; the tags are normalized through
+  // normalizeTagRow so the picker's `parentTagId` / `groupId` shape
+  // matches the canonical snake_case → camelCase translation used by
+  // every other tag consumer.
+  const [tags, setTags] = useState<Array<{ id: string; name: string; groupId: string | null; parentTagId: string | null }>>([]);
+  const [tagGroups, setTagGroups] = useState<Array<{ id: string; name: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
@@ -357,7 +367,17 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
     let cancelled = false;
     (async () => {
       try {
-        const [itemRows, sourceRows, weapons, armor, tools, abilities, weaponProperties] = await Promise.all([
+        const [
+          itemRows,
+          sourceRows,
+          weapons,
+          armor,
+          tools,
+          abilities,
+          weaponProperties,
+          tagRows,
+          tagGroupRows,
+        ] = await Promise.all([
           fetchCollection<any>('items', { orderBy: 'name ASC' }),
           fetchCollection<any>('sources', { orderBy: 'name ASC' }),
           fetchCollection<any>('weapons', { orderBy: 'name ASC' }),
@@ -365,6 +385,8 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
           fetchCollection<any>('tools', { orderBy: 'name ASC' }),
           fetchCollection<any>('attributes', { orderBy: 'name ASC' }),
           fetchCollection<any>('weaponProperties', { orderBy: 'name ASC' }),
+          fetchCollection<any>('tags', { orderBy: 'name ASC' }),
+          fetchCollection<any>('tagGroups', { orderBy: 'name ASC' }),
         ]);
         if (cancelled) return;
         const mapped = itemRows.map((row: any) => ({
@@ -383,6 +405,22 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
           abilities: abilities.map((r) => denormalizeCompendiumData(r)),
           weaponProperties: weaponProperties.map((r) => denormalizeCompendiumData(r)),
         });
+        // Tags + tagGroups for the TagPicker. normalizeTagRow handles
+        // the snake_case → camelCase rename + the `parent_tag_id` →
+        // `parentTagId` shape the picker expects.
+        setTags(tagRows.map((row: any) => {
+          const normalized = normalizeTagRow(row);
+          return {
+            id: String(normalized.id),
+            name: String(normalized.name || ''),
+            groupId: normalized.groupId ?? null,
+            parentTagId: normalized.parentTagId ?? null,
+          };
+        }));
+        setTagGroups(tagGroupRows.map((row: any) => ({
+          id: String(row.id),
+          name: String(row.name || ''),
+        })));
         setLoading(false);
       } catch (err) {
         console.error('[ItemsEditor] failed to load:', err);
@@ -811,19 +849,25 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
   const tagsSubTabsList: TagsSubTab[] = useMemo(() => [
     {
       key: 'tags',
-      label: 'Tags',
+      label: (
+        <>
+          Tags {formData.tagIds.length > 0 && (
+            <span className="ml-1 text-gold/70">({formData.tagIds.length})</span>
+          )}
+        </>
+      ),
       render: () => (
-        <div className="space-y-2 border border-gold/10 rounded-md p-4 bg-background/20">
-          <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Tags</h3>
-          <p className="text-xs text-ink/40 italic">
-            Tag picker for items — TODO (follow-up: load tag / tagGroup rows + wire
-            a SpellTagPicker-style component bound to formData.tagIds, mirroring
-            SpellsEditor's Tags sub-tab).
-          </p>
-        </div>
+        <TagPicker
+          tags={tags}
+          tagGroups={tagGroups}
+          selectedIds={formData.tagIds}
+          onChange={(next) => setFormData((prev) => ({ ...prev, tagIds: next }))}
+          hint="Tag rules + class spell list rules use these to decide which items they include."
+          emptyHint="No tags loaded yet."
+        />
       ),
     },
-  ], []);
+  ], [tags, tagGroups, formData.tagIds]);
 
   // ── List columns ──────────────────────────────────────────────
   const listColumns: EditorListColumn<any>[] = useMemo(() => [
@@ -975,11 +1019,29 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
         editorSubTabs={editorSubTabs}
         tagsSubTabs={tagsSubTabsList}
         tagsSuperTabCount={formData.tagIds.length}
-        renderPreview={() => (
-          <div className="px-6 py-12 text-center text-ink/40 italic text-sm">
-            Live preview coming in a follow-up — wire a shared ItemDetailPanel.
-          </div>
-        )}
+        renderPreview={(id) => {
+          // The preview pane shows the LIVE form contents — feeds
+          // formData straight into ItemDetailPanel rather than the
+          // last-saved row. That way authors see the panel update as
+          // they edit. The shape is camelCase from formData; the panel
+          // tolerates both snake and camel so it Just Works.
+          if (!id && !formData.name) {
+            return (
+              <div className="px-6 py-12 text-center text-ink/50">
+                Select or create an item to preview it here.
+              </div>
+            );
+          }
+          const source = formData.sourceId
+            ? sources.find((s) => s.id === formData.sourceId)
+            : undefined;
+          return (
+            <ItemDetailPanel
+              row={formData as any}
+              source={source}
+            />
+          );
+        }}
       />
       {cascadeDep && cascadeDep.parentEntityType === 'tag' && cascadeDep.parentEntityId && (
         <TagReplacementPicker

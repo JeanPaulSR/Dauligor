@@ -421,6 +421,14 @@ export function denormalizeCompendiumData(row: any): any {
  */
 export async function upsertItem(id: string, data: Record<string, any>) {
   const normalized = normalizeCompendiumData(data);
+  // Same `tagIds` → `tags` remap upsertFeat does — the items column
+  // is `tags` (JSON array), but editors carry the loaded list as
+  // `tagIds` for cross-entity consistency. Translate on the way in to
+  // avoid "no such column: tag_ids".
+  if (normalized.tagIds !== undefined) {
+    normalized.tags = normalized.tagIds;
+    delete normalized.tagIds;
+  }
   return upsertDocument('items', id, normalized);
 }
 
