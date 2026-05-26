@@ -55,6 +55,9 @@ import SpellRulesEditor from './pages/compendium/SpellRulesEditor';
 import FeatsEditor from './pages/compendium/FeatsEditor';
 import FeatList from './pages/compendium/FeatList';
 import ItemsEditor from './pages/compendium/ItemsEditor';
+import ItemList from './pages/compendium/ItemList';
+import RacesList from './pages/compendium/RacesList';
+import BackgroundsList from './pages/compendium/BackgroundsList';
 import CharacterList from './pages/characters/CharacterList';
 import CharacterBuilder from './pages/characters/CharacterBuilder';
 import CharacterErrorBoundary from './pages/characters/CharacterErrorBoundary';
@@ -256,7 +259,19 @@ export default function App() {
                   <Route path="/compendium/spell-rules" element={<AdminOnly userProfile={effectiveProfile}><SpellRulesEditor userProfile={effectiveProfile} /></AdminOnly>} />
                   <Route path="/compendium/feats" element={<FeatList userProfile={effectiveProfile} />} />
                   <Route path="/compendium/feats/manage" element={<FeatsEditor userProfile={effectiveProfile} />} />
-                  <Route path="/compendium/items" element={<ItemsEditor userProfile={effectiveProfile} />} />
+                  {/* Items — public list at /items, admin editor at
+                      /items/manage. Mirrors the spells + feats route
+                      convention (/<entity> for the read-only browser,
+                      /<entity>/manage for the admin CRUD surface). */}
+                  <Route path="/compendium/items" element={<ItemList userProfile={effectiveProfile} />} />
+                  <Route path="/compendium/items/manage" element={<ItemsEditor userProfile={effectiveProfile} />} />
+                  {/* Races + Backgrounds — public placeholder list
+                      pages. Both currently live in the `feats` table
+                      with a `feat_type='race'/'background'` discriminator;
+                      dedicated /manage editors land in the editor-shell
+                      pass that adds FeatsEditor's `scopeFeatType` prop. */}
+                  <Route path="/compendium/races" element={<RacesList userProfile={effectiveProfile} />} />
+                  <Route path="/compendium/backgrounds" element={<BackgroundsList userProfile={effectiveProfile} />} />
                   <Route path="/compendium/scaling/new" element={<ScalingEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/scaling/edit/:id" element={<ScalingEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/spellcasting-scaling/new" element={<SpellcastingScalingEditor userProfile={effectiveProfile} />} />

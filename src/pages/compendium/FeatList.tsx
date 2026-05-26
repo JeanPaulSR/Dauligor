@@ -1,35 +1,43 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Scroll, Lock } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Lock, Sparkles, Star, X, RotateCcw } from 'lucide-react';
+import { auth } from '../../lib/firebase';
 import { fetchCollection } from '../../lib/d1';
 import { cn } from '../../lib/utils';
 import { Button } from '../../components/ui/button';
-import { Card, CardContent } from '../../components/ui/card';
-import { FilterBar } from '../../components/compendium/FilterBar';
-import { SectionFilterPanel, type FilterSection } from '../../components/compendium/SectionFilterPanel';
+import { type FilterSection } from '../../components/compendium/SectionFilterPanel';
+import {
+  CompendiumBrowserShell,
+  type CompendiumColumn,
+} from '../../components/compendium/CompendiumBrowserShell';
 import { matchesSingleAxisFilter, matchesMultiAxisFilter } from '../../lib/spellFilters';
+import { useAxisFilters } from '../../hooks/useAxisFilters';
+import { useFeatFavorites } from '../../lib/featFavorites';
 import FeatDetailPanel from '../../components/compendium/FeatDetailPanel';
-import VirtualizedList from '../../components/ui/VirtualizedList';
 import {
   FEAT_PROPERTY_LABELS,
   FEAT_PROPERTY_ORDER,
   FEAT_TYPE_LABELS,
   FEAT_TYPE_ORDER,
   deriveFeatPropertyFlags,
-  type FeatPropertyFilter,
   type FeatTypeValue,
 } from '../../lib/featFilters';
 
 /**
- * Public feat browser. Mirrors `SpellList.tsx`'s structure exactly:
- * filter bar + master-detail grid + virtualized rows + lock-icon
- * prereq affordance. Admins see a "Feat Manager" button that links
- * to the admin editing surface at `/compendium/feats/manage`.
+ * Public feat browser — thin wrapper around `CompendiumBrowserShell`.
  *
- * Data flow: a single load at mount pulls every feat row plus the
- * sources table for the source-abbreviation lookup. Property facets
- * are derived once per row (see `deriveFeatPropertyFlags`) so the
- * filter chips can flip in O(1) per row instead of recomputing.
+ * Supplies the feat-specific bits (data load, filter axes, column
+ * descriptors, FeatDetailPanel, useFeatFavorites hook); the shell
+ * owns viewport-lock, 3-col layout, FilterBar wiring, column
+ * visibility, favorites pane shell. Anything we change in the shell
+ * (e.g. row height, default pane widths) automatically propagates to
+ * ItemList (and SpellList once it migrates) — that's the win.
+ *
+ * Feat-specific affordances kept here:
+ *   - `?class=<identifier>` URL scope: shows only class-feature feats
+ *     for the named class. Banner chip in the shell's trailing slot.
+ *   - Prereq lock + repeatable glyph + activity/uses flags on the
+ *     name cell.
  */
 
 type SourceRecord = {
@@ -49,8 +57,6 @@ type FeatRow = {
   featSubtype?: string;
   repeatable?: boolean;
   requirements?: string;
-  requirementsTree?: any;
-  // Derived booleans the filter chips read against.
   repeatableFlag?: boolean;
   hasUses?: boolean;
   hasActivities?: boolean;
@@ -59,21 +65,41 @@ type FeatRow = {
   [key: string]: any;
 };
 
-const FEAT_LIST_HEIGHT = 820;
-const FEAT_ROW_HEIGHT = 78;
+// Declared axis keys — drives the activeFilterCount tally inside
+// useAxisFilters so stale keys (e.g. removed axes) don't inflate
+// the badge.
+const AXIS_KEYS = ['source', 'type', 'property'] as const;
 
 export default function FeatList({ userProfile }: { userProfile: any }) {
   const [feats, setFeats] = useState<FeatRow[]>([]);
   const [sources, setSources] = useState<SourceRecord[]>([]);
   const [loadingFeats, setLoadingFeats] = useState(true);
   const [search, setSearch] = useState('');
-  const [filterOpen, setFilterOpen] = useState(false);
   const [selectedFeatId, setSelectedFeatId] = useState('');
-  // Rich live filter state — uniform with the other compendium list
-  // pages. Each axis: { states (chip 1=include / 2=exclude),
-  // combineMode, exclusionMode } keyed by axis name.
-  type AxisState = { states: Record<string, number>; combineMode?: 'AND' | 'OR' | 'XOR'; exclusionMode?: 'AND' | 'OR' | 'XOR' };
-  const [axisFilters, setAxisFilters] = useState<Record<string, AxisState>>({});
+
+  const { axisFilters, cyclers, activeFilterCount, resetAll: resetFilters } =
+    useAxisFilters(AXIS_KEYS);
+
+  // Auth-aware favorites — feeds the shell with a userId-bound
+  // favorites Set. The onAuthStateChanged listener re-runs the hook
+  // whenever sign-in / sign-out happens so cloud + local merge.
+  const [authUserId, setAuthUserId] = useState<string | null>(() => auth.currentUser?.uid ?? null);
+  useEffect(() => {
+    const unsub = auth.onAuthStateChanged((u) => setAuthUserId(u?.uid ?? null));
+    return unsub;
+  }, []);
+  const { favorites, isFavorite, toggleFavorite } = useFeatFavorites(authUserId);
+
+  // ?class= URL param — feat-specific scope filter. Combines via AND
+  // with the rest of the filter chain so a user can browse "Wizard
+  // class features tagged X" by URL + chip.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const classScopeIdentifier = searchParams.get('class') || '';
+  const clearClassScope = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('class');
+    setSearchParams(next, { replace: true });
+  };
 
   useEffect(() => {
     const loadFeats = async () => {
@@ -102,7 +128,6 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
         setLoadingFeats(false);
       }
     };
-
     const loadFoundation = async () => {
       try {
         const sourcesData = await fetchCollection<any>('sources', { orderBy: 'name ASC' });
@@ -111,7 +136,6 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
         console.error('[FeatList] failed to load foundation data:', err);
       }
     };
-
     loadFeats();
     loadFoundation();
   }, []);
@@ -121,8 +145,12 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
     [sources],
   );
 
+  // Filter pipeline. Search + axis filters + class scope all AND
+  // together. Lives here (not in the shell) because the entity
+  // determines what "matching" means.
   const filteredFeats = useMemo(() => {
     const lowered = search.trim().toLowerCase();
+    const scopeIdLower = classScopeIdentifier.trim().toLowerCase();
     return feats.filter((feat) => {
       const sourceRecord = sourceById[String(feat.sourceId ?? '')];
       const sourceAbbrev = String(
@@ -135,10 +163,11 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
         || String(feat.featSubtype ?? '').toLowerCase().includes(lowered)
         || sourceAbbrev.includes(lowered);
 
-      // Properties are multi-valued — collect the flag set the feat
-      // carries and route through the shared multi-axis matcher.
-      // `repeatable` lives on `repeatableFlag` for legacy reasons; the
-      // others are direct boolean column copies (see deriveFeatPropertyFlags).
+      if (scopeIdLower) {
+        if (String(feat.featType ?? '').toLowerCase() !== 'class') return false;
+        if (String(feat.featSubtype ?? '').toLowerCase() !== scopeIdLower) return false;
+      }
+
       const propsHave = new Set<string>();
       for (const p of FEAT_PROPERTY_ORDER) {
         const flagKey = p === 'repeatable' ? 'repeatableFlag' : p;
@@ -151,120 +180,12 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
         && matchesMultiAxisFilter(propsHave, axisFilters.property)
       );
     });
-  }, [feats, sourceById, search, axisFilters]);
+  }, [feats, sourceById, search, axisFilters, classScopeIdentifier]);
 
-  // Drop the selected feat if the active filter set hides it. Prevents
-  // the detail pane from continuing to show a row the user can no longer
-  // see in the list. Same protective effect SpellList has.
-  useEffect(() => {
-    if (!selectedFeatId) return;
-    if (!filteredFeats.some((f) => f.id === selectedFeatId)) {
-      setSelectedFeatId('');
-    }
-  }, [filteredFeats, selectedFeatId]);
-
-  const activeFilterCount =
-    Object.keys(axisFilters.source?.states ?? {}).length
-    + Object.keys(axisFilters.type?.states ?? {}).length
-    + Object.keys(axisFilters.property?.states ?? {}).length;
-
-  // Per-axis updaters — same generic pattern every list page uses.
-  // Forward cyclers serve left-click; reverse cyclers power
-  // SectionFilterPanel's right-click affordance on pills + combinators.
-  const cycleAxisState = (axisKey: string, value: string) => {
-    setAxisFilters(prev => {
-      const cur = prev[axisKey] || { states: {} };
-      const states: Record<string, number> = { ...cur.states };
-      const s = states[value] || 0;
-      const nextState = s === 0 ? 1 : s === 1 ? 2 : 0;
-      if (nextState === 0) delete states[value];
-      else states[value] = nextState;
-      return { ...prev, [axisKey]: { ...cur, states } };
-    });
-  };
-  const cycleAxisStateReverse = (axisKey: string, value: string) => {
-    setAxisFilters(prev => {
-      const cur = prev[axisKey] || { states: {} };
-      const states: Record<string, number> = { ...cur.states };
-      const s = states[value] || 0;
-      const nextState = s === 0 ? 2 : s === 2 ? 1 : 0;
-      if (nextState === 0) delete states[value];
-      else states[value] = nextState;
-      return { ...prev, [axisKey]: { ...cur, states } };
-    });
-  };
-  const cycleAxisCombineMode = (axisKey: string) => {
-    setAxisFilters(prev => {
-      const cur = prev[axisKey] || { states: {} };
-      const m = (cur.combineMode || 'OR') as 'OR' | 'AND' | 'XOR';
-      const next = m === 'OR' ? 'AND' : m === 'AND' ? 'XOR' : 'OR';
-      return { ...prev, [axisKey]: { ...cur, combineMode: next } };
-    });
-  };
-  const cycleAxisCombineModeReverse = (axisKey: string) => {
-    setAxisFilters(prev => {
-      const cur = prev[axisKey] || { states: {} };
-      const m = (cur.combineMode || 'OR') as 'OR' | 'AND' | 'XOR';
-      const next = m === 'OR' ? 'XOR' : m === 'XOR' ? 'AND' : 'OR';
-      return { ...prev, [axisKey]: { ...cur, combineMode: next } };
-    });
-  };
-  const cycleAxisExclusionMode = (axisKey: string) => {
-    setAxisFilters(prev => {
-      const cur = prev[axisKey] || { states: {} };
-      const m = (cur.exclusionMode || 'OR') as 'OR' | 'AND' | 'XOR';
-      const next = m === 'OR' ? 'AND' : m === 'AND' ? 'XOR' : 'OR';
-      return { ...prev, [axisKey]: { ...cur, exclusionMode: next } };
-    });
-  };
-  const cycleAxisExclusionModeReverse = (axisKey: string) => {
-    setAxisFilters(prev => {
-      const cur = prev[axisKey] || { states: {} };
-      const m = (cur.exclusionMode || 'OR') as 'OR' | 'AND' | 'XOR';
-      const next = m === 'OR' ? 'XOR' : m === 'XOR' ? 'AND' : 'OR';
-      return { ...prev, [axisKey]: { ...cur, exclusionMode: next } };
-    });
-  };
-  const axisIncludeAll = (axisKey: string, values: readonly string[]) => {
-    setAxisFilters(prev => {
-      const cur = prev[axisKey] || { states: {} };
-      const states: Record<string, number> = { ...cur.states };
-      for (const v of values) states[v] = 1;
-      return { ...prev, [axisKey]: { ...cur, states } };
-    });
-  };
-  const axisExcludeAll = (axisKey: string, values: readonly string[]) => {
-    setAxisFilters(prev => {
-      const cur = prev[axisKey] || { states: {} };
-      const states: Record<string, number> = { ...cur.states };
-      for (const v of values) states[v] = 2;
-      return { ...prev, [axisKey]: { ...cur, states } };
-    });
-  };
-  const axisClear = (axisKey: string) => {
-    setAxisFilters(prev => {
-      const cur = prev[axisKey] || { states: {} };
-      return { ...prev, [axisKey]: { ...cur, states: {} } };
-    });
-  };
-
-  const renderSourceAbbreviation = (feat: FeatRow) => {
-    const sourceRecord = sourceById[String(feat.sourceId ?? '')];
-    return sourceRecord?.abbreviation || sourceRecord?.shortName || '—';
-  };
-
-  const resetFilters = () => {
-    setAxisFilters({});
-  };
-
-  // Axis descriptors for SectionFilterPanel. Three axes — Sources,
-  // Feat Type, Properties — no tag groups (feats aren't tagged in
-  // this catalogue). Sources is the only one with a meaningful
-  // default (clear is fine for feats since we don't pre-select).
-  const miniPillAxes = useMemo<FilterSection[]>(() => ([
+  const filterAxes = useMemo<FilterSection[]>(() => ([
     {
       key: 'source', name: 'Sources', kind: 'axis',
-      values: sources.map(s => ({
+      values: sources.map((s) => ({
         value: s.id,
         label: String(s.abbreviation || s.shortName || s.name || s.id),
         labelAlt: String(s.name || s.shortName || s.abbreviation || s.id),
@@ -272,163 +193,158 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
     },
     {
       key: 'type', name: 'Feat Type', kind: 'axis',
-      values: FEAT_TYPE_ORDER.map(value => ({ value, label: FEAT_TYPE_LABELS[value] })),
+      values: FEAT_TYPE_ORDER.map((value) => ({ value, label: FEAT_TYPE_LABELS[value] })),
     },
     {
       key: 'property', name: 'Properties', kind: 'axis',
-      values: FEAT_PROPERTY_ORDER.map(value => ({ value, label: FEAT_PROPERTY_LABELS[value] })),
+      values: FEAT_PROPERTY_ORDER.map((value) => ({ value, label: FEAT_PROPERTY_LABELS[value] })),
     },
   ]), [sources]);
 
-  return (
-    <div className="max-w-7xl mx-auto space-y-8 pb-20">
-      <div className="flex flex-col gap-4 border-b border-gold/10 pb-4 md:flex-row md:items-end md:justify-between">
-        <div className="space-y-2">
-          <div className="flex items-center gap-3 text-gold">
-            <Scroll className="h-6 w-6" />
-            <span className="text-xs font-bold uppercase tracking-[0.3em]">Compendium</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <h1 className="h1-title">Feat List</h1>
-          </div>
-        </div>
+  // ─── Column descriptors ──────────────────────────────────────
+  const renderSourceAbbreviation = (feat: FeatRow) => {
+    const sourceRecord = sourceById[String(feat.sourceId ?? '')];
+    return sourceRecord?.abbreviation || sourceRecord?.shortName || '—';
+  };
 
-        <div className="flex flex-wrap items-center gap-3">
+  const columns = useMemo<CompendiumColumn<FeatRow>[]>(() => ([
+    {
+      key: 'name',
+      label: 'Name',
+      width: 'minmax(0,1fr)',
+      alwaysVisible: true,
+      align: 'start',
+      render: (feat) => {
+        const starred = isFavorite(feat.id);
+        return (
+          <div className="min-w-0 flex items-center gap-1.5">
+            <span className="truncate font-serif text-sm text-ink">{feat.name}</span>
+            {starred && (
+              <Star className="w-3 h-3 text-gold/70 fill-gold/40 shrink-0" aria-label="Favorite" />
+            )}
+            {feat.hasPrereqs && (
+              <Lock className="w-3 h-3 text-blood/70 shrink-0" aria-label="Has prerequisites" />
+            )}
+            {feat.repeatable && (
+              <span title="Repeatable" className="text-[9px] uppercase tracking-widest text-gold/60 font-bold shrink-0">↻</span>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      key: 'type',
+      label: 'Type',
+      width: '120px',
+      render: (feat) => {
+        const label = FEAT_TYPE_LABELS[feat.featType as FeatTypeValue] || feat.featType || 'Feat';
+        return <span className="text-xs text-ink/75 truncate justify-self-center">{label}</span>;
+      },
+    },
+    {
+      key: 'source',
+      label: 'Source',
+      width: '60px',
+      render: (feat) => (
+        <span className="text-xs font-bold text-gold/80 justify-self-center">
+          {renderSourceAbbreviation(feat)}
+        </span>
+      ),
+    },
+    {
+      key: 'flags',
+      label: 'Flags',
+      width: '52px',
+      render: (feat) => (
+        <div className="flex items-center gap-0.5 justify-self-center text-ink/50">
+          {feat.hasActivities && <Sparkles className="w-3 h-3 text-gold/60" aria-label="Activities" />}
+          {feat.hasUses && <RotateCcw className="w-3 h-3 text-sky-400/70" aria-label="Uses" />}
+        </div>
+      ),
+    },
+  ]), [isFavorite, sourceById]);
+
+  // ─── Favorites pane row render ──────────────────────────────
+  const favoritesRowRender = ({ row: feat, selected, toggleStar, onSelect }: { row: FeatRow; selected: boolean; toggleStar: () => void; onSelect: () => void }) => {
+    const sourceLabel = renderSourceAbbreviation(feat);
+    return (
+      <button
+        type="button"
+        onClick={onSelect}
+        className={cn(
+          'w-full grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 px-3 py-2 text-left transition-colors',
+          selected ? 'bg-gold/10' : 'hover:bg-gold/5',
+        )}
+      >
+        <span className="truncate text-sm text-ink">{feat.name}</span>
+        <span className="text-[10px] font-bold text-gold/70">{sourceLabel}</span>
+        <span
+          role="button"
+          tabIndex={0}
+          onClick={(e) => { e.stopPropagation(); toggleStar(); }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              e.stopPropagation();
+              toggleStar();
+            }
+          }}
+          className="text-gold/80 hover:text-blood shrink-0 cursor-pointer"
+          title="Remove from favorites"
+          aria-label="Remove from favorites"
+        >
+          <Star className="w-3.5 h-3.5 fill-current" />
+        </span>
+      </button>
+    );
+  };
+
+  return (
+    <CompendiumBrowserShell<FeatRow>
+      rows={filteredFeats}
+      allRows={feats}
+      loading={loadingFeats}
+      getRowId={(feat) => feat.id}
+      selectedId={selectedFeatId}
+      onSelect={setSelectedFeatId}
+      search={search}
+      onSearchChange={setSearch}
+      searchPlaceholder="Search feat name, source, identifier, or subtype"
+      filterAxes={filterAxes}
+      axisFilters={axisFilters}
+      cyclers={cyclers}
+      activeFilterCount={activeFilterCount}
+      onResetFilters={resetFilters}
+      columns={columns}
+      columnsLocalStorageKey="dauligor.featListColumns"
+      favorites={favorites}
+      onToggleFavorite={toggleFavorite}
+      favoritesRowRender={favoritesRowRender}
+      favoritesEmptyMessage="Star a feat to pin it here."
+      detailPanel={<FeatDetailPanel featId={selectedFeatId || null} />}
+      emptyMessage="No feats match the current search and filters."
+      trailingActions={
+        <>
+          {classScopeIdentifier ? (
+            <button
+              type="button"
+              onClick={clearClassScope}
+              className="inline-flex items-center gap-1 h-8 px-2 rounded-md border border-gold/40 bg-gold/10 text-gold text-[11px] font-bold uppercase tracking-widest hover:bg-blood/10 hover:border-blood/40 hover:text-blood transition-colors"
+              title={`Scoped to ${classScopeIdentifier} class features. Click to clear.`}
+            >
+              Class: {classScopeIdentifier}
+              <X className="w-3 h-3" />
+            </button>
+          ) : null}
           {userProfile?.role === 'admin' ? (
             <Link to="/compendium/feats/manage">
-              <Button type="button" variant="outline" className="border-gold/20 text-gold hover:bg-gold/5">
+              <Button type="button" variant="outline" size="sm" className="h-8 border-gold/20 text-gold hover:bg-gold/5">
                 Feat Manager
               </Button>
             </Link>
           ) : null}
-        </div>
-      </div>
-
-      <div className="space-y-4">
-        <FilterBar
-          search={search}
-          setSearch={setSearch}
-          isFilterOpen={filterOpen}
-          setIsFilterOpen={setFilterOpen}
-          activeFilterCount={activeFilterCount}
-          resetFilters={resetFilters}
-          searchPlaceholder="Search feat name, source, identifier, or subtype"
-          filterTitle="Advanced Filters"
-          resetLabel="Reset Filters"
-          renderFilters={
-            <SectionFilterPanel
-              axes={miniPillAxes}
-              axisFilters={axisFilters}
-              tagStates={{}}
-              cycleAxisState={cycleAxisState}
-              cycleAxisStateReverse={cycleAxisStateReverse}
-              cycleTagState={() => {}}
-              cycleTagStateReverse={() => {}}
-              cycleAxisCombineMode={cycleAxisCombineMode}
-              cycleAxisCombineModeReverse={cycleAxisCombineModeReverse}
-              cycleAxisExclusionMode={cycleAxisExclusionMode}
-              cycleAxisExclusionModeReverse={cycleAxisExclusionModeReverse}
-              axisIncludeAll={axisIncludeAll}
-              axisExcludeAll={axisExcludeAll}
-              axisClear={axisClear}
-              search={search}
-              setSearch={setSearch}
-              activeFilterCount={activeFilterCount}
-              resetAll={resetFilters}
-              embedded
-            />
-          }
-        />
-
-        <div className="grid gap-6 xl:grid-cols-[460px_minmax(0,1fr)]">
-          <Card className="border-gold/10 bg-card/50 overflow-hidden">
-            <CardContent className="p-0">
-              <div className="grid grid-cols-[minmax(0,1fr)_140px_70px] gap-3 border-b border-gold/10 bg-background/35 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-gold/70">
-                <span>Name</span>
-                <span>Type</span>
-                <span>Source</span>
-              </div>
-              {loadingFeats ? (
-                <div className="px-6 py-12 text-center text-ink/45">Loading feats...</div>
-              ) : filteredFeats.length === 0 ? (
-                <div className="px-6 py-12 text-center text-ink/45">
-                  No feats match the current search and filters.
-                </div>
-              ) : (
-                <VirtualizedList
-                  items={filteredFeats}
-                  height={FEAT_LIST_HEIGHT}
-                  itemHeight={FEAT_ROW_HEIGHT}
-                  className="custom-scrollbar overflow-y-auto"
-                  innerClassName="divide-y divide-gold/5"
-                  renderItem={(feat: FeatRow) => {
-                    const sourceLabel = renderSourceAbbreviation(feat);
-                    const selected = selectedFeatId === feat.id;
-                    const valueLabel =
-                      FEAT_TYPE_LABELS[feat.featType as FeatTypeValue]
-                      || feat.featType
-                      || 'Feat';
-                    const subtype = String(feat.featSubtype || '').trim();
-                    const typeLine = subtype ? `${valueLabel} · ${subtype}` : valueLabel;
-                    return (
-                      <button
-                        key={feat.id}
-                        type="button"
-                        onClick={() => setSelectedFeatId(feat.id)}
-                        className={cn(
-                          'grid h-[78px] w-full grid-cols-[minmax(0,1fr)_140px_70px] gap-3 px-4 py-3 text-left transition-colors',
-                          selected ? 'bg-gold/10' : 'hover:bg-gold/5',
-                        )}
-                      >
-                        <div className="min-w-0">
-                          <div className="truncate font-serif text-lg text-ink flex items-center gap-1.5">
-                            <span className="truncate">{feat.name}</span>
-                            {feat.hasPrereqs ? (
-                              <span
-                                title={
-                                  feat.requirements
-                                    ? `Note: ${feat.requirements}`
-                                    : 'Has prerequisites'
-                                }
-                                className="shrink-0 inline-flex"
-                              >
-                                <Lock className="w-3 h-3 text-blood/70" aria-label="Has prerequisites" />
-                              </span>
-                            ) : null}
-                            {feat.repeatable ? (
-                              <span
-                                title="Repeatable"
-                                className="shrink-0 text-[9px] uppercase tracking-widest text-gold/60 font-bold"
-                              >
-                                ↻
-                              </span>
-                            ) : null}
-                          </div>
-                          <div className="truncate font-mono text-[10px] text-ink/40">
-                            {feat.identifier || '(no identifier)'}
-                          </div>
-                        </div>
-                        <div className="text-sm text-ink/75 truncate">{typeLine}</div>
-                        <div className="text-sm font-bold text-gold/80">{sourceLabel}</div>
-                      </button>
-                    );
-                  }}
-                />
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="border-gold/10 bg-card/50 overflow-hidden">
-            <CardContent className="p-0">
-              <FeatDetailPanel featId={selectedFeatId || null} />
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    />
   );
 }
-
-// FilterSection (include-only chip row) was removed when the page
-// migrated to the rich AxisFilterSection from FilterBar.tsx. Kept the
-// removal record so future grep-blame doesn't go looking for it.

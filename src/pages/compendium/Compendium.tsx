@@ -23,9 +23,11 @@ export default function Compendium({ userProfile }: { userProfile: any }) {
         { name: 'Classes', icon: Sword, path: '/compendium/classes', description: 'Core character classes and their progressions.' },
         { name: 'Spells', icon: Wand2, path: '/compendium/spells', description: 'Browse imported spell records by source, level, school, and tags.' },
         { name: 'Races', icon: Dna, path: '/compendium/races', description: 'Species and lineages of the world.' },
-        ...(userProfile?.role === 'admin' ? [
-          { name: 'Feats', icon: Scroll, path: '/compendium/feats', description: 'Admin-only development manager for feat-style items.' },
-        ] : []),
+        // Feats has a public browser at /compendium/feats. The
+        // earlier admin-only gate here was a holdover from when the
+        // route only resolved to the editor — public FeatList shipped
+        // before the link was refreshed.
+        { name: 'Feats', icon: Scroll, path: '/compendium/feats', description: 'Heritable abilities, prerequisites, and class features.' },
         { name: 'Modular Options', icon: Scroll, path: '/compendium/unique-options', description: 'Customizable options like Invocations or Metamagic.' },
         { name: 'Backgrounds', icon: Users, path: '/compendium/backgrounds', description: 'Origins and life before adventuring.' },
       ]
@@ -33,9 +35,13 @@ export default function Compendium({ userProfile }: { userProfile: any }) {
     {
       title: 'Magic & Equipment',
       items: [
+        // Items is a public unified browser covering weapons, armor,
+        // tools, and the catch-all items table. Admins get a separate
+        // "Item Manager" tile that links to the CRUD surface.
+        { name: 'Items', icon: Hammer, path: '/compendium/items', description: 'Unified browser for weapons, armor, tools, and gear.' },
         ...(userProfile?.role === 'admin' ? [
           { name: 'Spell Manager', icon: Wand2, path: '/compendium/spells/manage', description: 'Admin-only import and development manager for Foundry-facing spells.' },
-          { name: 'Items', icon: Hammer, path: '/compendium/items', description: 'Admin-only development manager for non-spell items.' },
+          { name: 'Item Manager', icon: Hammer, path: '/compendium/items/manage', description: 'Admin-only Foundry import + manual editor for items.' },
         ] : []),
       ]
     },
