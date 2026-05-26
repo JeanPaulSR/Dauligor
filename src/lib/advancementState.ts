@@ -106,6 +106,11 @@ export function normalizeAdvancementForEditor<T extends { type?: string; configu
     defaultHitDie: number;
   }
 ): T {
+  // `defaultLevel === 0` is the feat-context signal — feat advancements
+  // default to "always-on when feat is owned" and the L0 case is
+  // semantically distinct from L1+. Clamp floor matches the caller's
+  // default so the editor doesn't bump 0 → 1 on feats.
+  const levelFloor = Number(defaultLevel) <= 0 ? 0 : 1;
   if (!value || typeof value !== 'object') return { configuration: {} } as T;
 
   const nextAdvancement = JSON.parse(JSON.stringify(value)) as T;
@@ -194,7 +199,11 @@ export function normalizeAdvancementForEditor<T extends { type?: string; configu
     }
   }
 
-  (nextAdvancement as any).level = Math.max(1, Number((nextAdvancement as any).level || defaultLevel || 1) || 1);
+  const rawLevel = Number((nextAdvancement as any).level);
+  const candidateLevel = Number.isFinite(rawLevel)
+    ? rawLevel
+    : (Number.isFinite(Number(defaultLevel)) ? Number(defaultLevel) : 1);
+  (nextAdvancement as any).level = Math.max(levelFloor, candidateLevel);
   (nextAdvancement as any).title = typeof (nextAdvancement as any).title === 'string' ? (nextAdvancement as any).title : '';
   (nextAdvancement as any).configuration = configuration;
   return nextAdvancement;

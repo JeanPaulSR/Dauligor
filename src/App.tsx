@@ -57,7 +57,9 @@ import FeatList from './pages/compendium/FeatList';
 import ItemsEditor from './pages/compendium/ItemsEditor';
 import ItemList from './pages/compendium/ItemList';
 import RacesList from './pages/compendium/RacesList';
+import RaceEditor from './pages/compendium/RaceEditor';
 import BackgroundsList from './pages/compendium/BackgroundsList';
+import BackgroundEditor from './pages/compendium/BackgroundEditor';
 import CharacterList from './pages/characters/CharacterList';
 import CharacterBuilder from './pages/characters/CharacterBuilder';
 import CharacterErrorBoundary from './pages/characters/CharacterErrorBoundary';
@@ -265,13 +267,16 @@ export default function App() {
                       /<entity>/manage for the admin CRUD surface). */}
                   <Route path="/compendium/items" element={<ItemList userProfile={effectiveProfile} />} />
                   <Route path="/compendium/items/manage" element={<ItemsEditor userProfile={effectiveProfile} />} />
-                  {/* Races + Backgrounds — public placeholder list
-                      pages. Both currently live in the `feats` table
-                      with a `feat_type='race'/'background'` discriminator;
-                      dedicated /manage editors land in the editor-shell
-                      pass that adds FeatsEditor's `scopeFeatType` prop. */}
+                  {/* Races + Backgrounds — public list pages plus
+                      admin /manage editors. Both currently live in the
+                      `feats` table with a `feat_type='race'/'background'`
+                      discriminator; RaceEditor / BackgroundEditor thread
+                      `scopeFeatType` into FeatsEditor to constrain the
+                      list + new-entry default to the matching type. */}
                   <Route path="/compendium/races" element={<RacesList userProfile={effectiveProfile} />} />
+                  <Route path="/compendium/races/manage" element={<RaceEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/backgrounds" element={<BackgroundsList userProfile={effectiveProfile} />} />
+                  <Route path="/compendium/backgrounds/manage" element={<BackgroundEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/scaling/new" element={<ScalingEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/scaling/edit/:id" element={<ScalingEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/spellcasting-scaling/new" element={<SpellcastingScalingEditor userProfile={effectiveProfile} />} />

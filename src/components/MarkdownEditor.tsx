@@ -67,6 +67,21 @@ interface MarkdownEditorProps {
    * a separate prop.
    */
   hideToolbar?: boolean;
+  /**
+   * When true, the editor stretches to fill its flex parent instead
+   * of using a fixed pixel height. minHeight / maxHeight / the
+   * resize handle are all ignored; the editor relies entirely on
+   * the parent's flex layout for sizing. Use this when the editor
+   * lives inside a flex column with `flex-1 min-h-0` siblings —
+   * e.g. SpellsEditor's Basics-tab description box, which should
+   * fill the remaining space below the identity-fields grid.
+   *
+   * Internally this short-circuits the ResizeObserver + initial-
+   * sizing useEffects (which would otherwise re-lock the editor to
+   * a pixel height the first time they fire) and drops the inline
+   * `style` that sets explicit height.
+   */
+  fillContainer?: boolean;
 }
 
 export default function MarkdownEditor({
@@ -82,6 +97,7 @@ export default function MarkdownEditor({
   stickyOffset,
   label,
   hideToolbar = false,
+  fillContainer = false,
 }: MarkdownEditorProps) {
   const [showPreview, setShowPreview] = useState(false);
   const [isWYSIWYG, setIsWYSIWYG] = useState(true);
@@ -99,7 +115,12 @@ export default function MarkdownEditor({
   // Track height changes to persist across mode switches
   useEffect(() => {
     if (!resizableRef.current) return;
-    
+    // In fill-container mode the parent's flex layout drives the
+    // editor's height. Skipping the observer prevents it from
+    // measuring the rendered height and locking us into a pixel
+    // value that no longer follows the parent's growth.
+    if (fillContainer) return;
+
     const observer = new ResizeObserver((entries) => {
       if (!entries || !entries.length) return;
       
@@ -118,10 +139,13 @@ export default function MarkdownEditor({
 
     observer.observe(resizableRef.current);
     return () => observer.disconnect();
-  }, []);
+  }, [fillContainer]);
 
   // Initial sizing based on content
   useEffect(() => {
+    // Fill-container mode opts out of the height calculation
+    // entirely — the parent flex layout determines size.
+    if (fillContainer) return;
     if (!autoSizeToContent) {
       if (!hasManuallyResized) {
         setCurrentHeight(minHeight);
@@ -161,7 +185,7 @@ export default function MarkdownEditor({
     // Small delay to ensure content is rendered
     const timer = setTimeout(measureAndSetHeight, 100);
     return () => clearTimeout(timer);
-  }, [value, isWYSIWYG, minHeight, maxHeight, hasManuallyResized, autoSizeToContent]);
+  }, [value, isWYSIWYG, minHeight, maxHeight, hasManuallyResized, autoSizeToContent, fillContainer]);
 
   // Detect manual resize start
   const handleMouseDown = () => {
@@ -347,11 +371,19 @@ export default function MarkdownEditor({
         />
       )}
       
-      <div 
+      <div
         ref={resizableRef}
-        className="flex-grow resize-y overflow-hidden flex flex-col min-h-0" 
-        style={{ height: currentHeight, minHeight, maxHeight }}
-        onMouseDown={handleMouseDown}
+        className={
+          fillContainer
+            // Fill-container mode: just grow with the flex parent.
+            // No resize handle (the user can't drag-resize an
+            // auto-stretched pane in a meaningful way) and no
+            // explicit height — flex-grow + min-h-0 handle sizing.
+            ? "flex-grow overflow-hidden flex flex-col min-h-0"
+            : "flex-grow resize-y overflow-hidden flex flex-col min-h-0"
+        }
+        style={fillContainer ? undefined : { height: currentHeight, minHeight, maxHeight }}
+        onMouseDown={fillContainer ? undefined : handleMouseDown}
       >
         {isWYSIWYG ? (
           <div 

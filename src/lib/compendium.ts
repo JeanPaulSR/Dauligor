@@ -9,8 +9,10 @@ export function normalizeCompendiumData(data: Record<string, any>): Record<strin
     imageUrl: 'image_url',
     sourceId: 'source_id',
     itemType: 'item_type',
-    priceValue: 'price_value',
-    priceDenomination: 'price_denomination',
+    // priceValue / priceDenomination removed 2026-05-24 — the items
+    // table now stores `price` as a nested JSON column ({value, denomination}).
+    // Editors should write the nested shape directly; the legacy flat
+    // form fields are gone. See migration 20260524-1800.
     usesMax: 'uses_max',
     usesSpent: 'uses_spent',
     usesPeriod: 'uses_period',
@@ -39,7 +41,19 @@ export function normalizeCompendiumData(data: Record<string, any>): Record<strin
     grantedByAdvancementId: 'granted_by_advancement_id',
     countsAsClassId: 'counts_as_class_id',
     doesntCountAgainstPrepared: 'doesnt_count_against_prepared',
-    doesntCountAgainstKnown: 'doesnt_count_against_known'
+    doesntCountAgainstKnown: 'doesnt_count_against_known',
+    // 2026-05-24 Foundry alignment (migration 20260524-1800):
+    // weapon/armor/tool root-level fields. The nested JSON columns
+    // (weight, price, damage, range) don't need mapping — their form
+    // keys match the column names. These are the flat-scalar fields
+    // that needed the camelCase→snake_case translation.
+    magicalBonus: 'magical_bonus',
+    baseItem: 'base_item',
+    armorValue: 'armor_value',
+    armorDex: 'armor_dex',
+    armorMagicalBonus: 'armor_magical_bonus',
+    armorType: 'armor_type',
+    toolType: 'tool_type',
   };
 
   const normalized: Record<string, any> = {};
@@ -95,7 +109,18 @@ export function normalizeCompendiumData(data: Record<string, any>): Record<strin
   }
 
   // 6. Numeric Conversions
-  const numericFields = ['weight', 'price_value', 'level', 'quantity', 'uses_spent', 'prerequisites_level'];
+  // NOTE: `weight` and `price_value` were removed from this list
+  // 2026-05-24 — the items/weapons/armor/tools schemas now store
+  // weight as a nested JSON object `{value, units}` and price as
+  // `{value, denomination}`. Casting them to Number would corrupt
+  // the object. New numeric flat columns from the same migration
+  // (armor_value, armor_dex, armor_magical_bonus, magical_bonus,
+  // strength, stealth) are added below.
+  const numericFields = [
+    'level', 'quantity', 'uses_spent', 'prerequisites_level',
+    'armor_value', 'armor_dex', 'armor_magical_bonus', 'magical_bonus',
+    'strength',
+  ];
   numericFields.forEach(field => {
     if (normalized[field] !== undefined && normalized[field] !== '' && normalized[field] !== null) {
       normalized[field] = Number(normalized[field]);
@@ -111,13 +136,23 @@ export function normalizeCompendiumData(data: Record<string, any>): Record<strin
   });
 
   // 7. Boolean to Integer (SQLite doesn't have a native boolean type)
+  //
+  // The coercion fires ONLY when the value is an actual JS boolean.
+  // That keeps `attunement` safe across two callers writing different
+  // shapes against different schemas:
+  //   - items.attunement INTEGER (legacy) ← ItemsEditor sends `false`/`true`
+  //   - weapons/armor/tools.attunement TEXT ← Editor sends `''`/`'required'`/`'optional'`
+  // A blanket `value ? 1 : 0` would turn `'required'` into 1 and write
+  // the integer 1 into a TEXT column. typeof-boolean gates it.
   const booleanFields = [
     'attunement', 'equipped', 'identified', 'magical', 'ritual', 'concentration',
     'repeatable', 'components_vocal', 'components_somatic', 'components_material',
-    'components_consumed', 'is_subclass_feature'
+    'components_consumed', 'is_subclass_feature',
+    // armor.stealth disadvantage flag (0/1)
+    'stealth',
   ];
   booleanFields.forEach(field => {
-    if (normalized[field] !== undefined) {
+    if (typeof normalized[field] === 'boolean') {
       normalized[field] = normalized[field] ? 1 : 0;
     }
   });
@@ -134,13 +169,21 @@ export function normalizeCompendiumData(data: Record<string, any>): Record<strin
   // viewing, but it must not reach the upsert.
   const forbidden = [
     'effectsStr', 'id', 'automation', 'activitiesStr', 'status', 'usage',
-    'configuration', 'sourceType', 'source_type', 'type', '__usesRecoveryDraft',
-    'featType', 'feat_type', 'featureType', 'feature_type', 'source',
+    'configuration', 'sourceType', 'type', '__usesRecoveryDraft',
+    'featType', 'featureType', 'feature_type', 'source',
     // `uniqueOptionGroupIds` is seeded on new features (`[]`) but the
     // features table has no column for it — option groups link to
     // features one-way via `unique_option_groups.feature_id`, not back
     // through the feature row. Filter to avoid the "no such column" error.
     'uniqueOptionGroupIds', 'unique_option_group_ids',
+    // NOTE: `feat_type`, `feat_subtype`, `source_type` (snake_case) are
+    // intentionally NOT forbidden — they are valid columns on the `feats`
+    // table that FeatsEditor + FeatImportWorkbench both write directly.
+    // Removing them from the forbidden list (May 2026, alongside the
+    // FeatImportWorkbench rollout) fixed a latent silent-drop bug in the
+    // FeatsEditor's save path. The camelCase `featType` / `sourceType`
+    // stay forbidden so callers are forced through the snake-case
+    // columns (the schema's source of truth).
   ];
   forbidden.forEach(key => delete normalized[key]);
 
@@ -179,8 +222,10 @@ export function denormalizeCompendiumData(row: any): any {
     feat_type: 'featType',
     feature_type: 'featureType',
     source_type: 'sourceType',
-    price_value: 'priceValue',
-    price_denomination: 'priceDenomination',
+    // price_value / price_denomination dropped 2026-05-24 — `price`
+    // is now stored as a nested JSON object {value, denomination}
+    // (see migration 20260524-1800). The d1.ts jsonFields list
+    // auto-parses it on read, so consumers receive a typed object.
     uses_max: 'usesMax',
     uses_spent: 'usesSpent',
     uses_period: 'usesPeriod',
@@ -223,7 +268,18 @@ export function denormalizeCompendiumData(row: any): any {
     granted_by_advancement_id: 'grantedByAdvancementId',
     counts_as_class_id: 'countsAsClassId',
     doesnt_count_against_prepared: 'doesntCountAgainstPrepared',
-    doesnt_count_against_known: 'doesntCountAgainstKnown'
+    doesnt_count_against_known: 'doesntCountAgainstKnown',
+    // 2026-05-24 Foundry alignment — reverse mappings for the new
+    // weapon/armor/tool root-level columns added by migration
+    // 20260524-1800. The nested JSON columns (weight, price, damage,
+    // range) are parsed by d1.ts directly with no key change.
+    magical_bonus: 'magicalBonus',
+    base_item: 'baseItem',
+    armor_value: 'armorValue',
+    armor_dex: 'armorDex',
+    armor_magical_bonus: 'armorMagicalBonus',
+    armor_type: 'armorType',
+    tool_type: 'toolType',
   };
 
   const denormalized: any = { ...row };
@@ -330,10 +386,36 @@ export async function deleteItem(id: string) {
 }
 
 /**
+ * Batch upsert for items. Mirrors `upsertSpellBatch` / `upsertFeatBatch`.
+ * Used by `ItemImportWorkbench` to write the items-routed entries.
+ *
+ * Weapons / armor / tools imports go through `upsertDocumentBatch`
+ * directly (no compendium-side wrapper needed) because they don't
+ * carry the `tagIds → tags` remap items + features rely on. The
+ * payloads produced by `itemImport.ts:buildWeaponSavePayload` (etc.)
+ * are already snake_case + ready for upsertDocumentBatch.
+ */
+export async function upsertItemBatch(entries: { id: string | null, data: Record<string, any> }[]) {
+  const normalizedEntries = entries.map((entry) => ({
+    id: entry.id,
+    data: normalizeCompendiumData(entry.data),
+  }));
+  return upsertDocumentBatch('items', normalizedEntries);
+}
+
+/**
  * Feats specialized helpers
  */
 export async function upsertFeat(id: string, data: Record<string, any>) {
   const normalized = normalizeCompendiumData(data);
+  // Same `tagIds` → `tags` remap upsertFeature does — the feats column
+  // is `tags`, not `tag_ids`, but editors carry the loaded list as
+  // `tagIds` for cross-entity consistency. Translate on the way in to
+  // avoid "no such column: tag_ids".
+  if (normalized.tagIds !== undefined) {
+    normalized.tags = normalized.tagIds;
+    delete normalized.tagIds;
+  }
   return upsertDocument('feats', id, normalized);
 }
 
@@ -344,6 +426,33 @@ export async function fetchFeat(id: string) {
 
 export async function deleteFeat(id: string) {
   return deleteDocument('feats', id);
+}
+
+/**
+ * Batch upsert for feats. Mirrors `upsertSpellBatch` but without the
+ * filter-bucket materialisation (no `prepareSpellPayloadForWrite`
+ * equivalent — feats don't have the four filter columns spells do).
+ *
+ * Used by `FeatImportWorkbench` when the admin clicks
+ * "Import Visible Batch". Same payload shape as `upsertFeat` — every
+ * row is run through `normalizeCompendiumData` so callers can keep
+ * mixed camelCase / snake_case input, and the `tagIds` → `tags`
+ * remap is applied per-row.
+ */
+export async function upsertFeatBatch(entries: { id: string | null, data: Record<string, any> }[]) {
+  const normalizedEntries = entries.map((entry) => {
+    const normalized = normalizeCompendiumData(entry.data);
+    // The feats table column is `tags`, not `tag_ids` — the same
+    // translation upsertFeature does explicitly. Editors and the
+    // import workbench both pass `tagIds` for cross-entity
+    // consistency, so translate here to dodge "no such column: tag_ids".
+    if (normalized.tagIds !== undefined) {
+      normalized.tags = normalized.tagIds;
+      delete normalized.tagIds;
+    }
+    return { id: entry.id, data: normalized };
+  });
+  return upsertDocumentBatch('feats', normalizedEntries);
 }
 
 /**

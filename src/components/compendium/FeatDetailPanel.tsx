@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { BookOpen } from 'lucide-react';
 import { bbcodeToHtml } from '../../lib/bbcode';
+import { cn } from '../../lib/utils';
 import { fetchCollection, fetchDocument } from '../../lib/d1';
 import {
   parseRequirementTree,
@@ -255,27 +257,76 @@ function FeatInfoRow({ label, value, mono }: { label: string; value: string; mon
   );
 }
 
-// Slim image-preview component — matches `SpellArtPreview`'s contract
-// but local to the feats surface so we don't grow another shared
-// primitive yet. If a third surface needs it, extract.
+// Slim image-preview component — mirrors `SpellArtPreview`'s pattern
+// (in-JS `Image()` probe + onerror → Lucide glyph fallback). When the
+// feat's CDN-stored icon URL 404s (common case: a Foundry-shipped
+// Plutonium icon that wasn't uploaded to images.dauligor.com), the
+// component swaps to a `BookOpen` glyph rather than rendering a
+// broken image. `BookOpen` reads as "feat / training / knowledge" —
+// the visual analog to spells' `Wand2`. If a third surface ever
+// needs this, extract both this and `SpellArtPreview` to a shared
+// `EntityArtPreview` parameterized by fallback icon.
 function FeatArtPreview({ src, alt, size }: { src?: string; alt: string; size: number }) {
-  if (!src) {
-    return (
-      <div
-        className="rounded-md border border-gold/15 bg-background/30 grid place-items-center text-ink/30 text-[10px] uppercase tracking-widest"
-        style={{ width: size, height: size }}
-      >
-        No icon
-      </div>
-    );
-  }
+  const [status, setStatus] = useState<'idle' | 'loading' | 'loaded' | 'error'>(() => src ? 'loading' : 'idle');
+
+  useEffect(() => {
+    const nextSrc = String(src ?? '').trim();
+    if (!nextSrc) {
+      setStatus('idle');
+      return;
+    }
+
+    let cancelled = false;
+    const image = new Image();
+    setStatus('loading');
+    image.onload = () => {
+      if (!cancelled) setStatus('loaded');
+    };
+    image.onerror = () => {
+      if (!cancelled) setStatus('error');
+    };
+    image.src = nextSrc;
+
+    return () => {
+      cancelled = true;
+    };
+  }, [src]);
+
+  const dimensionStyle = { width: size, height: size };
+  const showImage = status === 'loaded' && src;
+
   return (
-    <img
-      src={src}
-      alt={alt}
-      className="rounded-md border border-gold/15 object-cover"
-      style={{ width: size, height: size }}
-    />
+    <div
+      className="relative overflow-hidden rounded-md border border-gold/15 bg-background/30"
+      style={dimensionStyle}
+    >
+      {showImage ? (
+        <img
+          src={src}
+          alt={alt}
+          loading="lazy"
+          decoding="async"
+          className="block rounded object-cover"
+          style={dimensionStyle}
+        />
+      ) : (
+        <div
+          className={cn(
+            'flex items-center justify-center rounded bg-background/40 text-ink/30',
+          )}
+          style={dimensionStyle}
+        >
+          {status === 'loading' ? (
+            <div className="flex flex-col items-center justify-center gap-2">
+              <div className="h-8 w-8 rounded-full border-2 border-gold border-t-transparent animate-spin" />
+              <span className="text-[9px] uppercase font-bold tracking-widest text-gold/60">Loading</span>
+            </div>
+          ) : (
+            <BookOpen className="h-8 w-8" />
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

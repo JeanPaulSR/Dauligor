@@ -58,6 +58,14 @@ interface AdvancementManagerProps {
   availableScalingColumns?: any[];
   availableOptionGroups?: any[];
   availableOptionItems?: any[];
+  // Feats pickable as ItemGrant / ItemChoice targets. When the
+  // author picks Item Type = "Feat", entries from this list populate
+  // the pool. Runtime synthesis in CharacterBuilder already reads
+  // feat-table rows out of `optionsCache` regardless of how they
+  // landed in `configuration.pool`, so the data shape stays unchanged
+  // (string IDs in `pool`). Filter / tag UI for feats is intentionally
+  // deferred — keep the picker simple for this pass.
+  availableFeats?: any[];
   isInsideFeature?: boolean;
   featureId?: string;
   classId?: string;
@@ -67,6 +75,25 @@ interface AdvancementManagerProps {
   defaultHitDie?: number;
   referenceContext?: ReferenceContext;
   referenceSheetTitle?: string;
+  /**
+   * Context this manager is mounted in. Affects which advancement
+   * types appear in the add menu and how the level input is labeled.
+   * This is the SOLE place the manager varies between class /
+   * subclass / feat — no separate components, no duplicated logic.
+   *  - 'class' (default): full type set, "Gained at Level" semantics.
+   *  - 'subclass': same as 'class' (kept distinct for future divergence).
+   *  - 'feat': hides HitPoints + Size from the add menu, hides the
+   *    "Attached to Feature" picker (feats have no sub-features),
+   *    relabels "Gained at Level" → "Required Level (0 = always)".
+   *    Runtime level-resolution against the granting class / character
+   *    happens in CharacterBuilder; this prop only drives the editor UI.
+   *  - 'race' | 'background': behave equivalently to 'feat' today
+   *    (races + backgrounds are feats with `feat_type='race'/'background'`
+   *    in storage; the editor surface is identical). Distinct values
+   *    are kept so the picker can later diverge — e.g. surface
+   *    racial-only advancement types — without restructuring callers.
+   */
+  parentContext?: 'class' | 'subclass' | 'feat' | 'race' | 'background';
 }
 
 function UpArrow({ className }: { className?: string }) {
@@ -93,6 +120,9 @@ const ADVANCEMENT_INFO: Record<AdvancementType, { label: string, icon: any, colo
 const ITEM_TYPE_LABELS: Record<string, string> = {
   any: 'Anything',
   feature: 'Feature',
+  // Feats joined the pickable pool list in 2026-05; runtime synthesis
+  // already handled them, the missing piece was authoring.
+  feat: 'Feat',
   'option-group': 'Unique Option Group',
   spell: 'Spell (Placeholder)',
   item: 'Item (Placeholder)',
@@ -232,6 +262,7 @@ export default function AdvancementManager({
   availableScalingColumns = [],
   availableOptionGroups = [],
   availableOptionItems = [],
+  availableFeats = [],
   isInsideFeature = false,
   featureId,
   classId,
@@ -240,8 +271,16 @@ export default function AdvancementManager({
   defaultLevel = 1,
   defaultHitDie = 8,
   referenceContext,
-  referenceSheetTitle = 'Reference Sheet'
+  referenceSheetTitle = 'Reference Sheet',
+  parentContext = 'class'
 }: AdvancementManagerProps) {
+  // Races + backgrounds use the same authoring shape as feats today
+  // (stored in the feats table with a feat_type discriminator). Treat
+  // them as feat-context for editor-UI purposes — the variation point
+  // is in the level-resolution runtime, not the authoring surface.
+  const isFeatContext = parentContext === 'feat'
+    || parentContext === 'race'
+    || parentContext === 'background';
   const resolvedDefaultHitDie = resolveAdvancementDefaultHitDie(defaultHitDie);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -250,6 +289,20 @@ export default function AdvancementManager({
   const [collapsedTraitCategories, setCollapsedTraitCategories] = useState<Record<string, boolean>>({});
   const [featureSearch, setFeatureSearch] = useState('');
   const [allFeatures, setAllFeatures] = useState<any[]>([]);
+  // Search state for the "Feat" choiceType picker. Mirrors featureSearch
+  // but feats come straight from the parent-provided list — we don't
+  // fall back to a separate global fetch the way features do, because
+  // every caller of AdvancementManager that supports feat-grants is
+  // already passing the full feats catalog through `availableFeats`.
+  const [featSearch, setFeatSearch] = useState('');
+  // ItemGrant feat-pool default: hide race / background entries (which
+  // share the feats table with `feat_type='race'/'background'`). Most
+  // class / subclass advancements granting a feat want a `feat`-type
+  // row (Skilled, Lucky, etc.); race + background entries appearing in
+  // the pool was the historical pain point. Toggle lets authors opt
+  // in when they intentionally want to grant a racial / background
+  // feature via ItemGrant.
+  const [includeNonFeatTypes, setIncludeNonFeatTypes] = useState(false);
   const [optionGroupSearch, setOptionGroupSearch] = useState('');
   const [showAllOptionGroups, setShowAllOptionGroups] = useState(false);
   const setEditingAdv = (nextValue: React.SetStateAction<Partial<Advancement>>) => {
@@ -282,6 +335,12 @@ export default function AdvancementManager({
       availableFeatures.find((f: any) => f.id === id) ||
       allFeatures.find((f: any) => f.id === id)
     )
+    .filter(Boolean);
+  // Resolve the pool against the feats catalog when choiceType === 'feat'.
+  // Kept distinct from selectedPoolFeatures so the existing feature-pool
+  // preview paths don't have to branch on choiceType.
+  const selectedPoolFeats = (editingAdv.configuration?.pool || [])
+    .map((id: string) => availableFeats.find((f: any) => f.id === id))
     .filter(Boolean);
   const optionalPoolIds = new Set(editingAdv.configuration?.optionalPool || []);
   const selectedSizeIds = Object.entries(editingAdv.configuration?.sizes || {})
@@ -696,10 +755,14 @@ export default function AdvancementManager({
                 <span className="truncate">
                   {adv.type === 'ItemGrant' && (adv.configuration?.choiceType === 'option-group'
                     ? `Grants items from Option Group`
-                    : `Grants items: ${adv.configuration?.pool?.length || 0}`)}
-                  {adv.type === 'ItemChoice' && (adv.configuration?.choiceType === 'option-group' 
-                    ? `Choose ${adv.configuration?.count || 1} from Option Group` 
-                    : `Choose ${adv.configuration?.count || 1} from ${adv.configuration?.pool?.length || 0}`)}
+                    : adv.configuration?.choiceType === 'feat'
+                      ? `Grants feats: ${adv.configuration?.pool?.length || 0}`
+                      : `Grants items: ${adv.configuration?.pool?.length || 0}`)}
+                  {adv.type === 'ItemChoice' && (adv.configuration?.choiceType === 'option-group'
+                    ? `Choose ${adv.configuration?.count || 1} from Option Group`
+                    : adv.configuration?.choiceType === 'feat'
+                      ? `Choose ${adv.configuration?.count || 1} from ${adv.configuration?.pool?.length || 0} feats`
+                      : `Choose ${adv.configuration?.count || 1} from ${adv.configuration?.pool?.length || 0}`)}
                   {adv.type === 'HitPoints' && `Hit Die: d${adv.configuration.hitDie || '?'}`}
                   {adv.type === 'Trait' && `Proficiency: ${TRAIT_TYPE_LABELS[adv.configuration.type] || adv.configuration.type}`}
                   {adv.type === 'Subclass' && `Subclass selection trigger`}
@@ -764,13 +827,21 @@ export default function AdvancementManager({
                 </div>
                 {!isInsideFeature && (
                   <div className="space-y-1.5">
-                    <label className="field-label">Gained at Level</label>
+                    <label className="field-label">
+                      {isFeatContext ? 'Required Level (0 = always)' : 'Gained at Level'}
+                    </label>
                     <Input
                       type="number"
-                      min="1"
+                      min={isFeatContext ? '0' : '1'}
                       max="20"
-                      value={editingAdv.featureId && availableFeatures.find(f => f.id === editingAdv.featureId) ? availableFeatures.find(f => f.id === editingAdv.featureId)?.level : (editingAdv.level || 1)}
-                      onChange={e => setEditingAdv({...editingAdv, level: parseInt(e.target.value)})}
+                      value={editingAdv.featureId && availableFeatures.find(f => f.id === editingAdv.featureId) ? availableFeatures.find(f => f.id === editingAdv.featureId)?.level : (editingAdv.level ?? (isFeatContext ? 0 : 1))}
+                      onChange={e => {
+                        const parsed = parseInt(e.target.value);
+                        const next = Number.isNaN(parsed)
+                          ? (isFeatContext ? 0 : 1)
+                          : parsed;
+                        setEditingAdv({ ...editingAdv, level: next });
+                      }}
                       disabled={!!(editingAdv.featureId && availableFeatures.find(f => f.id === editingAdv.featureId))}
                       className="h-9 bg-background/50 border-gold/10 disabled:opacity-50"
                     />
@@ -799,13 +870,20 @@ export default function AdvancementManager({
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      {Object.entries(ADVANCEMENT_INFO).filter(([key]) => key !== 'Subclass').map(([key, info]) => (
-                        <SelectItem key={key} value={key}>{info.label}</SelectItem>
-                      ))}
+                      {Object.entries(ADVANCEMENT_INFO)
+                        .filter(([key]) => key !== 'Subclass')
+                        // HitPoints + Size are class / race-shaped concerns —
+                        // hide them when the manager is mounted on a feat
+                        // editor. The Subclass type is already filtered above
+                        // (it's surfaced as an explicit class-side toggle).
+                        .filter(([key]) => !isFeatContext || (key !== 'HitPoints' && key !== 'Size'))
+                        .map(([key, info]) => (
+                          <SelectItem key={key} value={key}>{info.label}</SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                 </div>
-                {!isInsideFeature && (
+                {!isInsideFeature && !isFeatContext && (
                   <div className="space-y-1.5">
                     <label className="field-label">Attached to Feature</label>
                     <Select
@@ -888,6 +966,7 @@ export default function AdvancementManager({
                               <SelectContent>
                                 <SelectItem value="any">Anything</SelectItem>
                                 <SelectItem value="feature">Feature</SelectItem>
+                                <SelectItem value="feat">Feat</SelectItem>
                                 <SelectItem value="option-group">Unique Option Group</SelectItem>
                                 <SelectItem value="spell" disabled>Spell (Placeholder)</SelectItem>
                                 <SelectItem value="item" disabled>Item (Placeholder)</SelectItem>
@@ -896,7 +975,11 @@ export default function AdvancementManager({
                           </div>
                           <div className="space-y-1.5">
                             <label className="field-label">
-                              {editingAdv.configuration?.choiceType === 'option-group' ? 'Target Option Group' : 'Grant Source'}
+                              {editingAdv.configuration?.choiceType === 'option-group'
+                                ? 'Target Option Group'
+                                : editingAdv.configuration?.choiceType === 'feat'
+                                  ? 'Grant Source'
+                                  : 'Grant Source'}
                             </label>
                             {editingAdv.configuration?.choiceType === 'option-group' ? (() => {
                               const classFiltered = classId
@@ -967,7 +1050,7 @@ export default function AdvancementManager({
                               );
                             })() : (
                               <div className="h-9 rounded-md border border-gold/10 bg-background/35 px-3 flex items-center text-[10px] text-ink/40">
-                                Specific Features
+                                {editingAdv.configuration?.choiceType === 'feat' ? 'Specific Feats' : 'Specific Features'}
                               </div>
                             )}
                           </div>
@@ -1041,9 +1124,42 @@ export default function AdvancementManager({
                       title="Items Preview"
                       subtitle={editingAdv.configuration?.choiceType === 'option-group'
                         ? 'Included group items are listed here. Excluded items stay available in the group but will not be exported with this advancement.'
-                        : 'Use this panel to confirm the features granted by this advancement.'}
+                        : editingAdv.configuration?.choiceType === 'feat'
+                          ? 'Use this panel to confirm the feats granted by this advancement.'
+                          : 'Use this panel to confirm the features granted by this advancement.'}
                     >
-                      {editingAdv.configuration?.choiceType === 'option-group' ? (
+                      {editingAdv.configuration?.choiceType === 'feat' ? (
+                        selectedPoolFeats.length > 0 ? (
+                          <div className="border border-gold/10 rounded-md overflow-hidden">
+                            <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] px-3 py-2 bg-background/60 border-b border-gold/10">
+                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Optional</span>
+                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Feat</span>
+                            </div>
+                            <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto custom-scrollbar">
+                              {selectedPoolFeats.map((feat: any) => (
+                                <div key={feat.id} className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-3 px-3 py-2 items-start">
+                                  <span className="text-[10px] font-black tracking-widest text-ink/45 uppercase">
+                                    {editingAdv.configuration?.optional && optionalPoolIds.has(feat.id) ? 'Yes' : 'No'}
+                                  </span>
+                                  <div>
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-xs font-bold text-ink">{feat.name}</span>
+                                      {feat.featSubtype && (
+                                        <span className="text-[9px] text-gold/60 uppercase tracking-widest">{feat.featSubtype}</span>
+                                      )}
+                                    </div>
+                                    {feat.description && (
+                                      <p className="mt-1 text-[9px] text-ink/40 line-clamp-2">{feat.description}</p>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-[10px] italic text-ink/35">Select one or more feats to preview what this advancement will grant.</p>
+                        )
+                      ) : editingAdv.configuration?.choiceType === 'option-group' ? (
                         selectedOptionGroup ? (
                           <div className="space-y-3">
                             <div className="flex items-start justify-between gap-3">
@@ -1124,10 +1240,119 @@ export default function AdvancementManager({
                   <div className="space-y-4">
                     <fieldset className="config-fieldset bg-background/20 h-full">
                       <legend className="section-label text-gold/60 px-1">
-                        {editingAdv.configuration?.choiceType === 'option-group' ? 'Included Group Items' : 'Items to Grant'}
+                        {editingAdv.configuration?.choiceType === 'option-group'
+                          ? 'Included Group Items'
+                          : editingAdv.configuration?.choiceType === 'feat'
+                            ? 'Feats to Grant'
+                            : 'Items to Grant'}
                       </legend>
                       <div className="border border-gold/10 rounded-md overflow-hidden bg-background/20">
-                        {editingAdv.configuration?.choiceType === 'option-group' ? (
+                        {editingAdv.configuration?.choiceType === 'feat' ? (() => {
+                          const fq = featSearch.trim().toLowerCase();
+                          // Type-scope: default to `feat_type='feat'`
+                          // only. Race + background entries live in
+                          // the same table but pollute the picker by
+                          // default. Toggle opts in for the rare case
+                          // an author wants a racial / background row.
+                          const typeFiltered = includeNonFeatTypes
+                            ? availableFeats
+                            : availableFeats.filter((f: any) => {
+                                const t = String(f?.featType || f?.feat_type || 'feat').toLowerCase();
+                                return t === 'feat';
+                              });
+                          const displayedFeats = fq
+                            ? typeFiltered.filter((f: any) => (f.name || '').toLowerCase().includes(fq))
+                            : typeFiltered;
+                          return (
+                            <>
+                              <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gold/10 bg-background/30">
+                                <Search className="w-3 h-3 text-ink/30 shrink-0" />
+                                <input
+                                  type="text"
+                                  placeholder={fq ? `${displayedFeats.length} result${displayedFeats.length !== 1 ? 's' : ''}` : `${typeFiltered.length} feats — search…`}
+                                  value={featSearch}
+                                  onChange={e => setFeatSearch(e.target.value)}
+                                  className="flex-1 bg-transparent text-xs outline-none placeholder:text-ink/30 text-ink py-0.5"
+                                />
+                                {featSearch && (
+                                  <button type="button" onClick={() => setFeatSearch('')} className="text-ink/30 hover:text-ink/60 text-sm leading-none">×</button>
+                                )}
+                                <label className="flex items-center gap-1.5 cursor-pointer text-[9px] uppercase font-bold tracking-widest text-ink/50 hover:text-ink/80 shrink-0">
+                                  <input
+                                    type="checkbox"
+                                    className="w-3 h-3 rounded border-gold/20 text-gold focus:ring-gold"
+                                    checked={includeNonFeatTypes}
+                                    onChange={(e) => setIncludeNonFeatTypes(e.target.checked)}
+                                  />
+                                  Include race/bg
+                                </label>
+                              </div>
+                              <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] px-3 py-2 bg-gold/5 border-b border-gold/10">
+                                <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Feat</span>
+                                <span className="text-[9px] uppercase font-black tracking-widest text-gold/60 text-center">Optional</span>
+                              </div>
+                              <div className="divide-y divide-gold/5 max-h-[14rem] overflow-y-auto custom-scrollbar">
+                                {displayedFeats.map((f: any) => {
+                                  const isPicked = (editingAdv.configuration?.pool || []).includes(f.id);
+                                  return (
+                                    <div key={f.id} className="grid grid-cols-[minmax(0,1fr)_4.5rem] gap-3 px-3 py-2 items-center hover:bg-gold/5">
+                                      <label className="flex items-center gap-2 cursor-pointer min-w-0">
+                                        <div className={`w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center transition-all ${
+                                          isPicked ? 'bg-gold border-gold' : 'border-gold/30 hover:border-gold/60'
+                                        }`}>
+                                          {isPicked && <Check className="w-2.5 h-2.5 text-white" />}
+                                        </div>
+                                        <input
+                                          type="checkbox"
+                                          className="hidden"
+                                          checked={isPicked}
+                                          onChange={e => {
+                                            const pool = [...(editingAdv.configuration?.pool || [])];
+                                            const optionalPool = [...(editingAdv.configuration?.optionalPool || [])];
+                                            if (e.target.checked) pool.push(f.id);
+                                            else {
+                                              const i = pool.indexOf(f.id);
+                                              if (i !== -1) pool.splice(i, 1);
+                                              const o = optionalPool.indexOf(f.id);
+                                              if (o !== -1) optionalPool.splice(o, 1);
+                                            }
+                                            setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, pool, optionalPool }});
+                                          }}
+                                        />
+                                        <span className="min-w-0 text-xs font-bold text-ink truncate">
+                                          {f.name}
+                                          {f.featSubtype && <span className="text-ink/40 font-normal"> ({f.featSubtype})</span>}
+                                        </span>
+                                      </label>
+                                      <label className="flex justify-center cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          className="w-3 h-3 rounded border-gold/20 text-gold focus:ring-gold"
+                                          disabled={!isPicked || !editingAdv.configuration?.optional}
+                                          checked={(editingAdv.configuration?.optionalPool || []).includes(f.id)}
+                                          onChange={e => {
+                                            const optionalPool = [...(editingAdv.configuration?.optionalPool || [])];
+                                            if (e.target.checked) optionalPool.push(f.id);
+                                            else {
+                                              const i = optionalPool.indexOf(f.id);
+                                              if (i !== -1) optionalPool.splice(i, 1);
+                                            }
+                                            setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, optionalPool }});
+                                          }}
+                                        />
+                                      </label>
+                                    </div>
+                                  );
+                                })}
+                                {displayedFeats.length === 0 && (
+                                  <p className="px-3 py-4 text-[10px] italic text-ink/30">
+                                    {fq ? `No feats match "${featSearch}".` : 'No feats available — load the feats catalog at this scope.'}
+                                  </p>
+                                )}
+                              </div>
+                            </>
+                          );
+                        })() : editingAdv.configuration?.choiceType === 'option-group' ? (
                           <>
                             {selectedOptionGroup && selectedOptionItems.length > 0 && (
                               <div className="flex flex-wrap gap-2 px-3 py-2 bg-gold/5 border-b border-gold/10">
@@ -1338,6 +1563,7 @@ export default function AdvancementManager({
                             <SelectContent>
                               <SelectItem value="any">Anything</SelectItem>
                               <SelectItem value="feature">Feature</SelectItem>
+                              <SelectItem value="feat">Feat</SelectItem>
                               <SelectItem value="option-group">Unique Option Group</SelectItem>
                               <SelectItem value="spell" disabled>Spell (Placeholder)</SelectItem>
                               <SelectItem value="item" disabled>Item (Placeholder)</SelectItem>
@@ -1522,10 +1748,31 @@ export default function AdvancementManager({
                       title="Choice Preview"
                       subtitle={editingAdv.configuration?.choiceType === 'option-group'
                         ? 'Included options are listed here after exclusions are applied.'
-                        : 'Use this panel to confirm the features available to choose from.'}
+                        : editingAdv.configuration?.choiceType === 'feat'
+                          ? 'Use this panel to confirm the feats available to choose from.'
+                          : 'Use this panel to confirm the features available to choose from.'}
                     >
                       <div className="space-y-4">
-                        {editingAdv.configuration?.choiceType === 'option-group' ? (
+                        {editingAdv.configuration?.choiceType === 'feat' ? (
+                          selectedPoolFeats.length > 0 ? (
+                            <div className="border border-gold/10 rounded-md overflow-hidden">
+                              <div className="grid grid-cols-[minmax(0,1fr)_6rem] px-3 py-2 bg-background/60 border-b border-gold/10">
+                                <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Feat</span>
+                                <span className="text-[9px] uppercase font-black tracking-widest text-gold/60 text-right">Subtype</span>
+                              </div>
+                              <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto custom-scrollbar">
+                                {selectedPoolFeats.map((feat: any) => (
+                                  <div key={feat.id} className="grid grid-cols-[minmax(0,1fr)_6rem] gap-3 px-3 py-2 items-start">
+                                    <span className="text-xs font-bold text-ink">{feat.name}</span>
+                                    <span className="text-right text-[10px] font-black tracking-widest text-ink/45 uppercase">{feat.featSubtype || feat.featType || '—'}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-[10px] italic text-ink/35">Select feats to preview the choice pool.</p>
+                          )
+                        ) : editingAdv.configuration?.choiceType === 'option-group' ? (
                           selectedOptionGroup ? (
                             <div className="space-y-3">
                               <div className="flex items-start justify-between gap-3">
@@ -1652,10 +1899,96 @@ export default function AdvancementManager({
 
                     <fieldset className="config-fieldset bg-background/20 h-full">
                       <legend className="section-label text-gold/60 px-1">
-                        {editingAdv.configuration?.choiceType === 'option-group' ? 'Included Group Items' : 'Choice Features'}
+                        {editingAdv.configuration?.choiceType === 'option-group'
+                          ? 'Included Group Items'
+                          : editingAdv.configuration?.choiceType === 'feat'
+                            ? 'Choice Feats'
+                            : 'Choice Features'}
                       </legend>
                       <div className="border border-gold/10 rounded-md overflow-hidden bg-background/20">
-                        {editingAdv.configuration?.choiceType === 'option-group' ? (
+                        {editingAdv.configuration?.choiceType === 'feat' ? (() => {
+                          const fq = featSearch.trim().toLowerCase();
+                          // Type-scope: default to `feat_type='feat'`
+                          // only. Race + background entries live in
+                          // the same table but pollute the picker by
+                          // default. Toggle opts in for the rare case
+                          // an author wants a racial / background row.
+                          const typeFiltered = includeNonFeatTypes
+                            ? availableFeats
+                            : availableFeats.filter((f: any) => {
+                                const t = String(f?.featType || f?.feat_type || 'feat').toLowerCase();
+                                return t === 'feat';
+                              });
+                          const displayedFeats = fq
+                            ? typeFiltered.filter((f: any) => (f.name || '').toLowerCase().includes(fq))
+                            : typeFiltered;
+                          return (
+                            <>
+                              <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gold/10 bg-background/30">
+                                <Search className="w-3 h-3 text-ink/30 shrink-0" />
+                                <input
+                                  type="text"
+                                  placeholder={fq ? `${displayedFeats.length} result${displayedFeats.length !== 1 ? 's' : ''}` : `${typeFiltered.length} feats — search…`}
+                                  value={featSearch}
+                                  onChange={e => setFeatSearch(e.target.value)}
+                                  className="flex-1 bg-transparent text-xs outline-none placeholder:text-ink/30 text-ink py-0.5"
+                                />
+                                {featSearch && (
+                                  <button type="button" onClick={() => setFeatSearch('')} className="text-ink/30 hover:text-ink/60 text-sm leading-none">×</button>
+                                )}
+                                <label className="flex items-center gap-1.5 cursor-pointer text-[9px] uppercase font-bold tracking-widest text-ink/50 hover:text-ink/80 shrink-0">
+                                  <input
+                                    type="checkbox"
+                                    className="w-3 h-3 rounded border-gold/20 text-gold focus:ring-gold"
+                                    checked={includeNonFeatTypes}
+                                    onChange={(e) => setIncludeNonFeatTypes(e.target.checked)}
+                                  />
+                                  Include race/bg
+                                </label>
+                              </div>
+                              <div className="grid grid-cols-[minmax(0,1fr)] px-3 py-2 bg-gold/5 border-b border-gold/10">
+                                <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Feat</span>
+                              </div>
+                              <div className="divide-y divide-gold/5 max-h-[14rem] overflow-y-auto custom-scrollbar">
+                                {displayedFeats.map((f: any) => {
+                                  const isPicked = (editingAdv.configuration?.pool || []).includes(f.id);
+                                  return (
+                                    <label key={f.id} className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-gold/5 group transition-colors">
+                                      <div className={`w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center transition-all ${
+                                        isPicked ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/60'
+                                      }`}>
+                                        {isPicked && <Check className="w-2.5 h-2.5 text-white" />}
+                                      </div>
+                                      <input
+                                        type="checkbox"
+                                        className="hidden"
+                                        checked={isPicked}
+                                        onChange={e => {
+                                          const pool = [...(editingAdv.configuration?.pool || [])];
+                                          if (e.target.checked) pool.push(f.id);
+                                          else {
+                                            const i = pool.indexOf(f.id);
+                                            if (i !== -1) pool.splice(i, 1);
+                                          }
+                                          setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, pool }});
+                                        }}
+                                      />
+                                      <span className="min-w-0 text-xs font-bold text-ink truncate">
+                                        {f.name}
+                                        {f.featSubtype && <span className="text-ink/40 font-normal"> ({f.featSubtype})</span>}
+                                      </span>
+                                    </label>
+                                  );
+                                })}
+                                {displayedFeats.length === 0 && (
+                                  <p className="px-3 py-4 text-[10px] italic text-ink/30">
+                                    {fq ? `No feats match "${featSearch}".` : 'No feats available — load the feats catalog at this scope.'}
+                                  </p>
+                                )}
+                              </div>
+                            </>
+                          );
+                        })() : editingAdv.configuration?.choiceType === 'option-group' ? (
                           <>
                             {selectedOptionGroup && selectedOptionItems.length > 0 && (
                               <div className="flex flex-wrap gap-2 px-3 py-2 bg-gold/5 border-b border-gold/10">
@@ -2375,6 +2708,44 @@ export default function AdvancementManager({
               {editingAdv.type === 'AbilityScoreImprovement' && (
                 <div className="grid xl:grid-cols-[260px_minmax(0,1fr)] gap-4 items-start">
                   <div className="space-y-3">
+                    {/* Choice discriminator — class-level ASIs typically
+                        expose `either` so players can rebudget stats OR
+                        take a feat. Defaults to `stats` to preserve the
+                        previous behavior on legacy advancements.
+                        Hidden in feat context: an ASI granted by a feat
+                        is always plain stats (feats can't recursively
+                        grant feats through an ASI). */}
+                    {!isFeatContext && (
+                      <fieldset className="border border-gold/10 rounded-md px-4 pt-1 pb-3 space-y-3">
+                        <legend className="section-label text-gold/60 px-1">Player Choice</legend>
+                        <Select
+                          value={editingAdv.configuration?.choiceType || 'stats'}
+                          onValueChange={(val) => setEditingAdv({
+                            ...editingAdv,
+                            configuration: { ...editingAdv.configuration, choiceType: val },
+                          })}
+                        >
+                          <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                            <SelectValue>
+                              {(() => {
+                                const v = editingAdv.configuration?.choiceType || 'stats';
+                                if (v === 'feat') return 'Feat only';
+                                if (v === 'either') return "Player's choice (stats or feat)";
+                                return 'Stats only';
+                              })()}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="stats">Stats only</SelectItem>
+                            <SelectItem value="feat">Feat only</SelectItem>
+                            <SelectItem value="either">Player's choice (stats or feat)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-[10px] text-ink/40">
+                          Controls what the character builder offers at this level. <em>Either</em> shows both buttons; the player picks one path.
+                        </p>
+                      </fieldset>
+                    )}
                     <fieldset className="border border-gold/10 rounded-md px-4 pt-1 pb-3 space-y-3">
                       <legend className="section-label text-gold/60 px-1">Improvement Details</legend>
                       <div className="space-y-1.5">

@@ -1,30 +1,22 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
+import FeatImportWorkbench from '../../components/compendium/FeatImportWorkbench';
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
 import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
 import { actionLabel, applyProposalWrite } from '../../lib/proposalAware';
 import { useProposalReview, resolveReviewPayload, ReviewFieldHighlight } from '../../lib/proposalReview';
-import { TombstoneRow } from '../../components/proposals/TombstoneRow';
 import { CascadeDependentBanner } from '../../components/proposals/CascadeDependentBanner';
 import { TagReplacementPicker } from '../../components/proposals/TagReplacementPicker';
 import { useCascadeDependent } from '../../hooks/useCascadeDependent';
 import { useProposalPreFlushSave } from '../../hooks/useProposalPreFlushSave';
 import { useDraftedEntityIds } from '../../hooks/useDraftedEntityIds';
 import { useEditBaseUnlocks } from '../../hooks/useEditBaseUnlocks';
-import { useBlock } from '../../lib/proposalBlock';
-import {
-  Edit3,
-  Lock,
-  Plus,
-  Save,
-  Scroll,
-  Search,
-  Trash2,
-  ChevronLeft,
-} from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
+import FeatDetailPanel from '../../components/compendium/FeatDetailPanel';
 import { toast } from 'sonner';
 import ActivityEditor from '../../components/compendium/ActivityEditor';
 import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
+import AdvancementManager, { type Advancement } from '../../components/compendium/AdvancementManager';
 import MarkdownEditor from '../../components/MarkdownEditor';
 import RequirementsEditor, { RequirementsEditorLookups } from '../../components/compendium/RequirementsEditor';
 import {
@@ -43,22 +35,21 @@ import { reportClientError, OperationType } from '../../lib/firebase';
 import { upsertFeat, deleteFeat, fetchFeat, denormalizeCompendiumData } from '../../lib/compendium';
 import { fetchCollection } from '../../lib/d1';
 import { slugify, cn } from '../../lib/utils';
-import { Button } from '../../components/ui/button';
-import { Card, CardContent } from '../../components/ui/card';
+import {
+  CompendiumEditorShell,
+  type EditorMode,
+  type EditorSubTab,
+  type TagsSubTab,
+  type EditorListColumn,
+} from '../../components/compendium/CompendiumEditorShell';
 import { Checkbox } from '../../components/ui/checkbox';
 import { ImageUpload } from '../../components/ui/ImageUpload';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import SingleSelectSearch from '../../components/ui/SingleSelectSearch';
-import VirtualizedList from '../../components/ui/VirtualizedList';
 
 // ─── Constants ──────────────────────────────────────────────────────────
 
-// dnd5e 5.x `system.type.value` — the broad document category for a
-// feat-typed item. Authoritative list cross-checked against the
-// Foundry-JSON dumps in E:/DnD/Professional/Foundry-JSON/features/
-// and `CONFIG.DND5E.featureTypes` in dnd5e v5.x. Each value below is
-// the canonical Foundry slug; we surface a label for the dropdown.
 const FEAT_TYPE_VALUES: [string, string][] = [
   ['feat', 'Feat'],
   ['class', 'Class Feature'],
@@ -68,11 +59,6 @@ const FEAT_TYPE_VALUES: [string, string][] = [
   ['monster', 'Monster Feature'],
 ];
 
-// `system.type.subtype` cascading on the value. For `feat` we know the
-// canonical four subtypes Foundry ships (general / origin / fightingStyle
-// / epicBoon — taken straight from PHB / Tasha's authoring conventions).
-// For the others, the subtype is an open identifier (class identifier,
-// race identifier, etc.) — the editor falls through to a free-text input.
 const FEAT_SUBTYPE_OPTIONS_BY_VALUE: Record<string, [string, string][]> = {
   feat: [
     ['', '(None)'],
@@ -81,8 +67,6 @@ const FEAT_SUBTYPE_OPTIONS_BY_VALUE: Record<string, [string, string][]> = {
     ['fightingStyle', 'Fighting Style'],
     ['epicBoon', 'Epic Boon'],
   ],
-  // The others use the free-text path — empty array means "no enumerated
-  // subtypes; let the author type one in".
   class: [],
   subclass: [],
   race: [],
@@ -90,33 +74,17 @@ const FEAT_SUBTYPE_OPTIONS_BY_VALUE: Record<string, [string, string][]> = {
   monster: [],
 };
 
-// Used by the export pipeline (and eventually the import pipeline) to
-// decide which Foundry document shape to mint — most go to a `feat`-typed
-// Item; class/subclass-feature variants land as features attached to a
-// class instead. Kept separate from `feat_type` because the same authored
-// row may want to ship as a feat AND as a class-feature record in the
-// future (Foundry doesn't strictly enforce the distinction).
 const SOURCE_TYPES: [string, string][] = [
   ['feat', 'Feat'],
   ['classFeature', 'Class Feature'],
   ['subclassFeature', 'Subclass Feature'],
 ];
 
-// Recovery rule on item-level uses. Same shape activities use for their
-// per-activity uses.recovery[] — reuse the editor pattern from
-// ConsumptionTabEditor (period / type / formula). Authored as JSON onto
-// `feats.uses_recovery` and lands at `system.uses.recovery[]` on the
-// Foundry-side feat item.
 type UsesRecoveryRule = {
   period: string;
   type: string;
   formula?: string;
 };
-
-// Mirrors the dimensions SpellsEditor uses so the two managers feel
-// visually identical at a glance.
-const MANAGER_LIST_HEIGHT = 720;
-const MANAGER_ROW_HEIGHT = 94;
 
 // ─── Form shape ─────────────────────────────────────────────────────────
 
@@ -127,18 +95,7 @@ type FeatFormData = {
   sourceId: string;
   imageUrl: string;
   description: string;
-  /**
-   * `system.type.value` on the Foundry feat item — the broad category
-   * (feat / class / subclass / race / background / monster).
-   * Stored as `feats.feat_type` in D1.
-   */
   featType: string;
-  /**
-   * `system.type.subtype` on the Foundry feat item — the granular tag.
-   * Cascades on `featType`: enumerated for `feat`, free-text identifier
-   * for the other categories. Stored as `feats.feat_subtype` in D1
-   * (added by migration 20260511-1830).
-   */
   featSubtype: string;
   sourceType: string;
   requirements: string;
@@ -146,31 +103,18 @@ type FeatFormData = {
   uses: {
     max: string;
     spent: number;
-    /**
-     * `system.uses.recovery[]` — items with limited uses publish
-     * how those uses recover (long-rest / short-rest / dawn / etc.).
-     * Each entry mirrors what activity-level `uses.recovery[]` carries:
-     * `{ period, type, formula }`. Stored as JSON on
-     * `feats.uses_recovery` (added by migration 20260511-1830) and
-     * auto-parsed by `d1.ts`'s jsonFields list.
-     */
     recovery: UsesRecoveryRule[];
   };
   activities: any[];
-  /**
-   * Item-level Active Effects authored through the shared
-   * `<ActiveEffectEditor>` — same component class features and
-   * option items use. Round-trips as JSON onto `feats.effects` and
-   * lands at `effects[]` on the Foundry feat item.
-   */
   effects: any[];
-  /**
-   * Compound requirement tree authored via `<RequirementsEditor>`. Stored
-   * separately from the free-text `requirements` field — the two are
-   * surfaced side-by-side so authors can keep the narrative blurb while
-   * adding structured leaves the importer (eventual feats import path)
-   * can evaluate against the actor.
-   */
+  // Foundry-shape `system.advancement` carried as a flat array. The
+  // AdvancementManager (the same one ClassEditor / SubclassEditor
+  // mount) owns the editing UX; runtime resolution lives in
+  // CharacterBuilder's feat walker. Feat advancements default to
+  // `level: 0` (= "always on when feat is owned"); a positive level
+  // gates against the granting class's level (or character total
+  // level for standalone feats) per the locked level-resolution rule.
+  advancements: Advancement[];
   requirementsTree: Requirement | null;
   createdAt?: string;
   updatedAt?: string;
@@ -191,16 +135,10 @@ const FEAT_DEFAULTS: Omit<FeatFormData, 'sourceId'> & { sourceId?: string } = {
   uses: { max: '', spent: 0, recovery: [] },
   activities: [],
   effects: [],
+  advancements: [],
   requirementsTree: EMPTY_REQUIREMENT_TREE,
 };
 
-/**
- * Migrate a legacy `feat_type` slug onto the new value/subtype pair.
- * The migration 20260511-1830 ran the same normalization on the DB
- * side, but defensive in-memory normalization keeps the form sane
- * if anything still arrives with a pre-migration shape (e.g. a stale
- * cached row, or a roundtrip through code that hasn't been redeployed).
- */
 function normalizeLegacyFeatType(legacyType: string | undefined | null): { featType: string; featSubtype: string } {
   const t = String(legacyType ?? '').trim();
   if (t === 'general' || t === 'origin' || t === 'fightingStyle' || t === 'epicBoon') {
@@ -208,9 +146,6 @@ function normalizeLegacyFeatType(legacyType: string | undefined | null): { featT
   }
   if (t === 'classFeature') return { featType: 'class', featSubtype: '' };
   if (!t) return { featType: 'feat', featSubtype: '' };
-  // Already-canonical values (feat / class / subclass / race / background
-  // / monster) pass through unchanged with an empty subtype that the form
-  // can backfill from the row's separate `feat_subtype` column.
   return { featType: t, featSubtype: '' };
 }
 
@@ -223,33 +158,53 @@ function makeInitialFeatForm(sources: any[] = []): FeatFormData {
 
 // ─── Page ───────────────────────────────────────────────────────────────
 
-export default function FeatsEditor({ userProfile }: { userProfile: any }) {
+/**
+ * `scopeFeatType` (optional) — when set, the editor behaves as a
+ * scoped editor for ONLY rows whose `feat_type` matches this value.
+ *  - Filters the list to that type
+ *  - Defaults new entries to that type
+ *  - Routes the back-button to the matching public list
+ *  - Forwards a matching `parentContext` to AdvancementManager
+ *
+ * Default (undefined) preserves the previous all-types editor surface.
+ * The RaceEditor / BackgroundEditor wrappers thread this prop through.
+ */
+type FeatsEditorProps = {
+  userProfile: any;
+  scopeFeatType?: 'feat' | 'race' | 'background';
+};
+
+export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorProps) {
   const location = useLocation();
   const isAdmin = userProfile?.role === 'admin';
-  const isContentCreator =
-    !!userProfile?.permissions &&
+  const isContentCreator = !!userProfile?.permissions &&
     Object.prototype.hasOwnProperty.call(userProfile.permissions, 'content-creator');
   const canManage = isAdmin || isContentCreator;
-
-  // Proposal-mode plumbing — on /proposals/edit/feats the wrapper
-  // mounts above us and the writer queues writes into the active
-  // block; admin direct route on /compendium/feats/manage flows
-  // through the normal upsertFeat path below.
   const isProposalRoute = location.pathname.startsWith('/proposals/edit/');
+  const scopedBackPath = scopeFeatType === 'race'
+    ? '/compendium/races'
+    : scopeFeatType === 'background'
+      ? '/compendium/backgrounds'
+      : '/compendium/feats';
+  const scopedBackLabel = scopeFeatType === 'race'
+    ? 'Back To Races'
+    : scopeFeatType === 'background'
+      ? 'Back To Backgrounds'
+      : 'Back To Feats';
+  const backPath = isProposalRoute ? '/my-proposals' : scopedBackPath;
+  const backLabel = isProposalRoute ? 'Back to My Proposals' : scopedBackLabel;
+
+  // ── Proposal-mode plumbing ────────────────────────────────────
   const featWriter = useProposalAccumulator('feat', userProfile);
   const proposalContext = useProposalContextOptional();
   const isProposalMode = featWriter.mode === 'proposal' || featWriter.mode === 'block';
-  const { drafts: allDrafts, activeBundleId } = useBlock();
   const focusMode = proposalContext?.focusMode ?? 'drafts';
   const focusModeEnabled = proposalContext?.focusModeEnabled ?? false;
-  // Review-mode wiring (see SpellsEditor for the pattern). When the
-  // URL has `?review=<id>` for a feat proposal, we auto-select the
-  // target id and seed its denormalized payload into featDetailsById.
   const reviewMode = useProposalReview();
   const reviewPayload = resolveReviewPayload(reviewMode, 'feat', null);
   const isReviewingFeat = !!reviewMode && !!reviewPayload && reviewMode.entityType === 'feat';
 
-  // Entries + UI state
+  // ── Entries + form state ──────────────────────────────────────
   const [entries, setEntries] = useState<any[]>([]);
   const [featDetailsById, setFeatDetailsById] = useState<Record<string, any>>({});
   const [sources, setSources] = useState<any[]>([]);
@@ -258,29 +213,19 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
   const [search, setSearch] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<FeatFormData>(makeInitialFeatForm());
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
 
-  // Cascade dependent state for tag-delete fanout. Banner appears
-  // above the form when this feat was auto-enrolled as a dependent.
+  // Cascade dependent state.
   const cascadeDep = useCascadeDependent('feat', editingId);
   const [replaceTagPickerOpen, setReplaceTagPickerOpen] = useState(false);
 
-  // editingId / formData mirrors for async callbacks (auto-stage on
-  // switch, pre-flush). Closures registered with the wrapper capture
-  // a snapshot at registration time; refs let us reach the latest.
+  // Refs.
   const editingIdRef = useRef<string | null>(null);
   useEffect(() => { editingIdRef.current = editingId; }, [editingId]);
   const formDataRef = useRef<FeatFormData | null>(null);
-  // Snapshot of the loaded form for dirty detection — set whenever
-  // the load effect repopulates formData (or resetForm runs). The
-  // startEditing handler compares the live formData to this baseline
-  // to decide whether to queue the outgoing feat as a draft before
-  // swapping in the new selection.
   const lastLoadedFormRef = useRef<string>('');
 
-  // Lookups consumed by <RequirementsEditor>. Same shape + load order as
-  // UniqueOptionGroupEditor — every leaf-picker the tree might render
-  // (class / subclass / spellRule / optionItem / proficiency) pulls from
-  // here. Loaded once on mount in parallel with the feats list itself.
+  // RequirementsEditor lookups.
   const [classes, setClasses] = useState<any[]>([]);
   const [subclasses, setSubclasses] = useState<any[]>([]);
   const [spellRules, setSpellRules] = useState<any[]>([]);
@@ -293,8 +238,7 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
     Partial<Record<ProficiencyKind, Array<{ id: string; name: string; hint?: string }>>>
   >({});
 
-  // Initial load — entries + sources + every RequirementsEditor lookup
-  // pool. All in parallel so the page settles in one paint.
+  // ── Initial load ──────────────────────────────────────────────
   useEffect(() => {
     if (!canManage) return;
     let cancelled = false;
@@ -334,19 +278,12 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
         ]);
         if (cancelled) return;
 
-        // Map snake_case → camelCase for the list-row render. Same shape
-        // SpellsEditor's `mapped` produces. requirementsTree is auto-
-        // parsed by d1.ts and arrives as the typed object on the row
-        // already, but parse defensively so older rows survive.
         const mapped = featRows.map((row: any) => {
           const normalized = normalizeLegacyFeatType(row.feat_type);
           return {
             ...row,
             sourceId: row.source_id,
             imageUrl: row.image_url,
-            // featType + featSubtype together represent the canonical
-            // dnd5e `system.type.{value, subtype}` pair. Defensive
-            // normalization runs in case any row predates the migration.
             featType: normalized.featType,
             featSubtype: row.feat_subtype || normalized.featSubtype,
             sourceType: row.source_type,
@@ -360,9 +297,6 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
         setSubclasses(subclassRows);
         setSpellRules(spellRuleRows);
 
-        // Bucket option items into their parent groups — same pattern
-        // UniqueOptionGroupEditor uses for the cascading optionItem
-        // leaf picker.
         const groupsWithItems = optionGroupRows.map((g: any) => ({
           id: g.id,
           name: g.name,
@@ -372,11 +306,6 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
         }));
         setAllOptionGroups(groupsWithItems);
 
-        // Merge per-kind proficiency pools (entries + category rows).
-        // The `identifier` column is the Foundry key and what gets
-        // stored on the leaf; category rows carry a "Category" hint
-        // badge so authors can tell "Martial Weapons" from a specific
-        // weapon at a glance.
         const mergeProf = (
           entriesArr: any[],
           categories: any[],
@@ -407,9 +336,6 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
     };
   }, [canManage]);
 
-  // Pin a default source onto the form once sources have loaded, so a
-  // new-feat draft starts with a valid sourceId. SpellsEditor uses the
-  // same effect.
   useEffect(() => {
     if (editingId) return;
     if (formData.sourceId || sources.length === 0) return;
@@ -427,18 +353,22 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
     [sources],
   );
 
-  // Feat ids with staged work in the active block (CREATE/UPDATE/DELETE).
-  // Drives My-Drafts focus-mode filtering AND the row-highlight in
-  // Browse mode (same wiring as SpellsEditor).
-  const draftedFeatIds = useDraftedEntityIds('feat');
+  const sourceAbbrevById = useMemo(
+    () =>
+      Object.fromEntries(
+        sources.map((source) => [
+          source.id,
+          source.abbreviation || source.shortName || source.name || source.id,
+        ]),
+      ),
+    [sources],
+  );
 
-  // Full payloads for queued/drafted feats, used to merge them into
-  // the displayed catalog so newly-created feats are visible + editable
-  // before they're approved.
+  // Drafted ids + entities for proposal-mode list merge.
+  const draftedFeatIds = useDraftedEntityIds('feat');
   const draftedFeatEntities = useProposalEntityDrafts('feat');
 
-  // Edit-base unlocks + isReadOnly. See useEditBaseUnlocks for the
-  // contract; same wiring as SpellsEditor.
+  // Edit-base unlocks + isReadOnly.
   const {
     unlockedBaseIds,
     unlock: unlockBaseFeat,
@@ -450,12 +380,6 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
     proposalContext,
   });
 
-  // Merge queued/drafted feats into the live catalog so the user can
-  // see + keep editing their in-progress feats before flush/approval.
-  // Same overlay model as SpellsEditor: deleted ids tagged with
-  // __pendingDelete (Phase 1 tombstone UX — rendered with red strike
-  // + undo button below), queued updates merged on top, queued
-  // creates appended.
   const displayEntries = useMemo(() => {
     if (
       draftedFeatEntities.byId.size === 0 &&
@@ -469,9 +393,6 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
       }
       const overlay = draftedFeatEntities.byId.get(String(e.id));
       if (!overlay) return e;
-      // Denormalize the queued snake_case payload to the camelCase
-      // shape the catalog list binds to, preserving the existing
-      // entry's already-denormalized fields under it.
       return { ...e, ...denormalizeCompendiumData(overlay) };
     });
     for (const [draftId, payload] of draftedFeatEntities.byId.entries()) {
@@ -484,7 +405,14 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
   const filteredEntries = useMemo(() => {
     const lowered = search.trim().toLowerCase();
     return displayEntries.filter((entry) => {
-      // Search filter first.
+      // Scope filter — applied before any other check so the RaceEditor
+      // / BackgroundEditor surfaces never show entries of the wrong
+      // type. The feats table is the shared store; the editor wrappers
+      // present a curated view.
+      if (scopeFeatType) {
+        const entryType = String(entry.featType || '').toLowerCase();
+        if (entryType !== scopeFeatType) return false;
+      }
       if (lowered) {
         const sourceLabel = String(sourceNameById[entry.sourceId] || '').toLowerCase();
         const matches =
@@ -495,10 +423,6 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
           || sourceLabel.includes(lowered);
         if (!matches) return false;
       }
-      // Focus mode (My Drafts): show feats the user has staged in
-      // the active block OR has explicitly Edit-Base-d this session.
-      // Browse Base shows everything. No-op when the wrapper isn't
-      // mounted (admin direct route). Mirrors SpellsEditor.
       if (focusModeEnabled && focusMode === 'drafts') {
         const id = String(entry.id);
         const isMyWork = draftedFeatIds.has(id) || unlockedBaseIds.has(id);
@@ -506,11 +430,8 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
       }
       return true;
     });
-  }, [displayEntries, search, sourceNameById, focusModeEnabled, focusMode, draftedFeatIds, unlockedBaseIds]);
+  }, [displayEntries, search, sourceNameById, focusModeEnabled, focusMode, draftedFeatIds, unlockedBaseIds, scopeFeatType]);
 
-  // Lookup the RequirementsEditor + the list-row prereq summary share.
-  // Built once per dependency change so the renderItem callback below
-  // doesn't recompute it on every scroll tick.
   const requirementsLookups: RequirementsEditorLookups = useMemo(() => ({
     classes: classes.map((c: any) => ({ id: c.id, name: c.name })),
     subclasses: subclasses.map((s: any) => ({ id: s.id, name: s.name })),
@@ -530,14 +451,21 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
 
   const resetForm = () => {
     const initial = makeInitialFeatForm(sources);
+    // Scoped editors (RaceEditor / BackgroundEditor) seed `featType`
+    // to their scope so a fresh entry from the New button lands in the
+    // correct type without the user having to remember to flip the
+    // dropdown. Subtype clears because the scoped types have no enum
+    // subtypes today (feat is the only one with origin/general/etc.).
+    if (scopeFeatType) {
+      initial.featType = scopeFeatType;
+      initial.featSubtype = '';
+    }
     setEditingId(null);
     setFormData(initial);
     lastLoadedFormRef.current = JSON.stringify(initial);
   };
 
-  // Review mode: auto-select the proposal's target feat and seed its
-  // denormalized payload into featDetailsById so the load effect below
-  // picks it up via cache hit.
+  // Review mode hydration.
   useEffect(() => {
     if (!isReviewingFeat || !reviewMode?.entityId || !reviewPayload) return;
     setFeatDetailsById((current) =>
@@ -553,26 +481,15 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
     }
   }, [isReviewingFeat, reviewMode?.entityId, reviewPayload, editingId]);
 
-  // Hydrate the form from the picked entry. Mirrors SpellsEditor's
-  // approach: kick a detail fetch when we don't already have the full
-  // row cached, otherwise just rehydrate from cache. Lets the
-  // virtualized list stay cheap (summary only) while the right pane
-  // pulls a full row.
+  // Form hydrate.
   useEffect(() => {
     if (!editingId) return;
-    // Prefer the queued/drafted payload over the live row when the user
-    // has work-in-progress for this feat in the active block. Covers
-    // brand-new CREATEs (no live row, only queue/draft) AND UPDATEs
-    // (loading the live row would clobber the user's pending edits).
-    // Mirrors the SpellsEditor + ClassEditor pattern.
     const draftedOverlay = draftedFeatEntities.byId.get(editingId);
     if (draftedOverlay && !featDetailsById[editingId]) {
       setFeatDetailsById((current) => ({
         ...current,
         [editingId]: denormalizeCompendiumData(draftedOverlay),
       }));
-      // Fall through so the cache-hit branch picks up the seed in the
-      // same effect tick.
     }
     const cached = featDetailsById[editingId];
     if (cached) {
@@ -596,9 +513,6 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
         uses: {
           max: cached.uses?.max ?? cached.usesMax ?? cached.uses_max ?? '',
           spent: Number(cached.uses?.spent ?? cached.usesSpent ?? cached.uses_spent ?? 0) || 0,
-          // `uses_recovery` is in d1.ts's auto-parse list so it arrives
-          // as an array on a fresh fetch; older cached payloads may
-          // still surface the JSON string — parse defensively.
           recovery: Array.isArray(recoveryRaw)
             ? recoveryRaw
             : typeof recoveryRaw === 'string'
@@ -610,21 +524,26 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
           : Array.isArray(cached.activities)
             ? cached.activities
             : [],
-        // d1.ts's jsonFields auto-parses the `effects` column so it
-        // arrives as a typed array on a fresh fetch. Newer rows
-        // always arrive as arrays; we only fall through to the empty
-        // array if the column is missing entirely.
         effects: Array.isArray(cached.automation?.effects)
           ? cached.automation.effects
           : Array.isArray(cached.effects)
             ? cached.effects
+            : [],
+        // Legacy rows pre-migration 20260525-1900 have no `advancements`
+        // column at all; the load path coalesces NULL / undefined / a
+        // raw JSON string into an array. `denormalizeCompendiumData`
+        // already JSON.parses the column (it's in the `jsonColumns`
+        // list), so the array branch is the steady-state shape.
+        advancements: Array.isArray(cached.advancements)
+          ? (cached.advancements as Advancement[])
+          : typeof cached.advancements === 'string'
+            ? (() => { try { return JSON.parse(cached.advancements) as Advancement[]; } catch { return []; } })()
             : [],
         requirementsTree: parseRequirementTree(
           cached.requirementsTree ?? cached.requirements_tree,
         ),
       };
       setFormData(loaded);
-      // Snapshot for dirty detection (auto-stage on switch).
       lastLoadedFormRef.current = JSON.stringify(loaded);
       return;
     }
@@ -645,16 +564,12 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
     };
   }, [editingId, sources, featDetailsById, draftedFeatEntities]);
 
-  // Proposal mode: switching to a different feat auto-stages the
-  // outgoing one into the active block before loading the new
-  // selection. Without this, in-flight edits vanish the instant the
-  // user clicks another row. Dirty detection via lastLoadedFormRef
-  // avoids queueing redundant drafts on clean switches.
-  const startEditing = async (entry: any) => {
+  // ── Switch handler ────────────────────────────────────────────
+  const startEditing = async (id: string) => {
     if (
       isProposalMode &&
       editingIdRef.current &&
-      entry.id !== editingIdRef.current
+      id !== editingIdRef.current
     ) {
       const currentSerialized = JSON.stringify(formDataRef.current ?? formData);
       if (currentSerialized !== lastLoadedFormRef.current) {
@@ -666,7 +581,7 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
         }
       }
     }
-    setEditingId(entry.id);
+    setEditingId(id);
   };
 
   const refreshEntries = async () => {
@@ -686,8 +601,6 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
         };
       });
       setEntries(mapped);
-      // Invalidate the per-feat detail cache so the next select re-reads
-      // the freshly-saved row (no stale activities/effects after edit).
       setFeatDetailsById({});
     } catch (err) {
       console.error('Error refreshing feats:', err);
@@ -707,14 +620,6 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
 
     if (!opts.silent) setSaving(true);
     try {
-      // Payload mirrors what `DevelopmentCompendiumManager` produced for
-      // feats today — `automation: { activities, effects }` is the shape
-      // `normalizeCompendiumData` expects, and the JSON columns get
-      // unwrapped to top-level `activities` / `effects` automatically.
-      // We also write `requirements_tree` as the serialized tree (or null).
-      // Drop empty recovery rows (period AND type AND formula all
-      // blank) so the JSON column doesn't accumulate placeholder
-      // entries from rules the author added then never filled in.
       const cleanedRecovery = (formData.uses.recovery || []).filter(
         (r) => r.period || r.type || (r.formula && r.formula.trim()),
       );
@@ -735,6 +640,11 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
         uses_recovery: cleanedRecovery,
         activities: Array.isArray(formData.activities) ? formData.activities : [],
         effects: Array.isArray(formData.effects) ? formData.effects : [],
+        // `advancements` lands in the feats.advancements TEXT column —
+        // `d1.ts:upsertDocument` JSON-stringifies the array on the way
+        // in (the column is in the `jsonFields` autolist), and
+        // `denormalizeCompendiumData` parses it back to an array on read.
+        advancements: Array.isArray(formData.advancements) ? formData.advancements : [],
         requirements_tree: serializeRequirementTree(formData.requirementsTree),
         updated_at: new Date().toISOString(),
       };
@@ -748,10 +658,6 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
       const entryId = entryIdAtStart || crypto.randomUUID();
 
       if (isProposalMode) {
-        // Proposal route: route through the writer (queues into the
-        // active block) instead of calling upsertFeat. The live row
-        // is unchanged until admin approval. Strip server-managed
-        // timestamps the proposal endpoint also drops.
         const { updated_at: _droppedUpdatedAt, ...proposalPayload } = payload;
         await applyProposalWrite(featWriter, proposalPayload, {
           id: entryId,
@@ -759,24 +665,11 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
           silent: opts.silent,
           submitNow: proposalContext?.submitNow,
         });
-        // Sync the dirty baseline to the just-saved form so a
-        // follow-up Submit Changes (or switch) doesn't re-queue the
-        // same payload as another draft. Critical for CREATE: after
-        // the create lands, the form's content IS the snapshot,
-        // but lastLoadedFormRef still points at the empty initial
-        // state — without this, pre-flush would fire an UPDATE for
-        // a feat that doesn't have a live row yet.
         lastLoadedFormRef.current = JSON.stringify(formDataRef.current ?? formData);
-        // No refreshEntries / resetForm — the live row didn't move
-        // and the user is likely still editing this feat (or about
-        // to switch via auto-stage). Adopt the saved id on create
-        // only when the user hasn't navigated away.
         if (wasCreate && !opts.silent && editingIdRef.current === entryIdAtStart) {
           setEditingId(entryId);
         }
       } else {
-        // Admin direct route — same upsertFeat + refresh + reset
-        // behavior as before this wiring.
         await upsertFeat(entryId, {
           ...payload,
           created_at: formData.createdAt || new Date().toISOString(),
@@ -799,17 +692,10 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
     }
   };
 
-  // Ref-mirrors so async callbacks (pre-flush, switch auto-stage)
-  // always read the latest handleSave + formData. Both are recreated
-  // every render and the registered callback closes over the snapshot
-  // from registration time without these refs.
   const handleSaveRef = useRef(handleSave);
   useEffect(() => { handleSaveRef.current = handleSave; });
   useEffect(() => { formDataRef.current = formData; }, [formData]);
 
-  // Pre-flush: stage the currently-edited feat into the block right
-  // before the wrapper drains. Dirty check mirrors the switch-auto-
-  // stage so an idle Submit doesn't queue a no-op draft.
   useProposalPreFlushSave({
     enabled: isProposalMode,
     proposalContext,
@@ -829,8 +715,6 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
       if (isProposalMode) {
         await featWriter.remove(editingId);
         toast.success(actionLabel(featWriter.mode, 'deleted'));
-        // No live refresh — wrapper's queue + drafts panel reflect
-        // the DELETE entry; the live feat stays until admin approval.
         resetForm();
       } else {
         await deleteFeat(editingId);
@@ -845,700 +729,629 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
     }
   };
 
+  // Identity subtitle.
+  const featTypeSubtitle = (() => {
+    const valueLabel =
+      FEAT_TYPE_VALUES.find(([value]) => value === formData.featType)?.[1] || 'Feat';
+    const subtypeRaw = String(formData.featSubtype || '').trim();
+    if (!subtypeRaw) return valueLabel;
+    const enumLabel = (FEAT_SUBTYPE_OPTIONS_BY_VALUE[formData.featType] || [])
+      .find(([v]) => v === subtypeRaw)?.[1];
+    return `${valueLabel} · ${enumLabel || subtypeRaw}`;
+  })();
+
+  const identitySubtitle = `${featTypeSubtitle}${formData.repeatable ? ' · Repeatable' : ''}`;
+
+  // ── Sub-tabs ──────────────────────────────────────────────────
+  const editorSubTabs: EditorSubTab[] = useMemo(() => [
+    {
+      key: 'basics',
+      label: 'Basics',
+      layout: 'fill',
+      render: () => (
+        <>
+          <div className="grid gap-3 md:grid-cols-[80px_minmax(0,1fr)] shrink-0">
+            <ImageUpload
+              currentImageUrl={formData.imageUrl}
+              storagePath={`images/feats/${editingId || 'draft'}/`}
+              onUpload={(url) => setFormData((prev) => ({ ...prev, imageUrl: url }))}
+              imageType="icon"
+              compact
+              className="h-[80px] w-[80px]"
+            />
+
+            <div className="grid gap-3 grid-cols-2 md:grid-cols-3">
+              <ReviewFieldHighlight columnKey="name" className="space-y-0.5">
+                <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Name</Label>
+                <Input
+                  value={formData.name}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
+                  className="h-8 bg-background/50 border-gold/10 focus:border-gold text-sm"
+                  placeholder="e.g. Great Weapon Master"
+                  required
+                />
+              </ReviewFieldHighlight>
+              <ReviewFieldHighlight columnKey="identifier" className="space-y-0.5">
+                <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Identifier</Label>
+                <Input
+                  value={formData.identifier}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, identifier: e.target.value }))}
+                  className="h-8 bg-background/50 border-gold/10 focus:border-gold font-mono text-sm"
+                  placeholder={slugify(formData.name || 'feat')}
+                />
+              </ReviewFieldHighlight>
+              <ReviewFieldHighlight columnKey="source_id" className="space-y-0.5">
+                <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Source</Label>
+                <select
+                  value={formData.sourceId}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, sourceId: e.target.value }))}
+                  className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                >
+                  <option value="">Select a source</option>
+                  {sources.map((source) => (
+                    <option key={source.id} value={source.id}>{source.name}</option>
+                  ))}
+                </select>
+              </ReviewFieldHighlight>
+              <ReviewFieldHighlight columnKey="feat_type" className="space-y-0.5">
+                <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Feat Type</Label>
+                <select
+                  value={formData.featType || 'feat'}
+                  onChange={(e) => setFormData((prev) => ({
+                    ...prev,
+                    featType: e.target.value,
+                    featSubtype: '',
+                  }))}
+                  className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                >
+                  {FEAT_TYPE_VALUES.map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </ReviewFieldHighlight>
+              <ReviewFieldHighlight columnKey="feat_subtype" className="space-y-0.5">
+                <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Subtype</Label>
+                {(() => {
+                  const subtypeOptions = FEAT_SUBTYPE_OPTIONS_BY_VALUE[formData.featType] || [];
+                  if (subtypeOptions.length > 0) {
+                    return (
+                      <select
+                        value={formData.featSubtype || ''}
+                        onChange={(e) =>
+                          setFormData((prev) => ({ ...prev, featSubtype: e.target.value }))
+                        }
+                        className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                      >
+                        {subtypeOptions.map(([value, label]) => (
+                          <option key={value || '_blank'} value={value}>{label}</option>
+                        ))}
+                      </select>
+                    );
+                  }
+                  return (
+                    <Input
+                      value={formData.featSubtype || ''}
+                      onChange={(e) =>
+                        setFormData((prev) => ({ ...prev, featSubtype: e.target.value }))
+                      }
+                      className="h-8 bg-background/50 border-gold/10 focus:border-gold font-mono text-sm"
+                      placeholder="identifier (e.g. wizard, tiefling)"
+                    />
+                  );
+                })()}
+              </ReviewFieldHighlight>
+              <ReviewFieldHighlight columnKey="source_type" className="space-y-0.5">
+                <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Source Type</Label>
+                <select
+                  value={formData.sourceType || 'feat'}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, sourceType: e.target.value }))}
+                  className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                >
+                  {SOURCE_TYPES.map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </ReviewFieldHighlight>
+            </div>
+          </div>
+
+          <ReviewFieldHighlight columnKey="description" className="flex-1 min-h-0 flex flex-col">
+            <MarkdownEditor
+              key={editingId || 'new-feat'}
+              value={formData.description}
+              onChange={(value) => setFormData((prev) => ({ ...prev, description: value }))}
+              label="Description"
+              placeholder="Describe the feat in player-facing terms. Activities should carry runtime mechanics."
+              fillContainer
+              className="flex-1 min-h-0"
+            />
+          </ReviewFieldHighlight>
+        </>
+      ),
+    },
+    {
+      key: 'mechanics',
+      label: 'Mechanics',
+      render: () => (
+        <div className="space-y-4 border border-gold/10 rounded-md p-4 bg-background/20">
+          <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Foundry Feat Shell</h3>
+          <div className="grid md:grid-cols-2 gap-4">
+            <label className="flex items-center justify-between gap-3 border border-gold/10 rounded-md p-3">
+              <span className="text-xs font-bold uppercase tracking-widest text-ink/60">Repeatable</span>
+              <Checkbox
+                checked={!!formData.repeatable}
+                onCheckedChange={(checked) =>
+                  setFormData((prev) => ({ ...prev, repeatable: !!checked }))
+                }
+              />
+            </label>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Uses Max</Label>
+                <Input
+                  value={formData.uses.max || ''}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      uses: { ...prev.uses, max: e.target.value },
+                    }))
+                  }
+                  className="bg-background/50 border-gold/10 focus:border-gold font-mono"
+                  placeholder="@prof"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Uses Spent</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={formData.uses.spent ?? 0}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      uses: { ...prev.uses, spent: parseInt(e.target.value || '0', 10) || 0 },
+                    }))
+                  }
+                  className="bg-background/50 border-gold/10 focus:border-gold no-number-spin"
+                />
+              </div>
+            </div>
+          </div>
+          <div className="space-y-2 border-t border-gold/8 pt-3">
+            <div className="flex items-baseline justify-between">
+              <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Recovery Rules</Label>
+              <span className="text-[10px] text-ink/40">Lands at <code className="font-mono">system.uses.recovery[]</code></span>
+            </div>
+            <div className="space-y-2">
+              {formData.uses.recovery.map((entry, idx) => (
+                <div
+                  key={idx}
+                  className="flex gap-2 items-center p-2.5 bg-gold/3 border border-gold/8 rounded"
+                >
+                  <SingleSelectSearch
+                    value={entry.period || ''}
+                    onChange={(val) => {
+                      const next = formData.uses.recovery.slice();
+                      next[idx] = { ...entry, period: val };
+                      setFormData((prev) => ({
+                        ...prev,
+                        uses: { ...prev.uses, recovery: next },
+                      }));
+                    }}
+                    options={RECOVERY_PERIOD_OPTIONS.map((o) => ({
+                      id: o.value,
+                      name: o.label,
+                      hint: o.hint,
+                    }))}
+                    placeholder="Period"
+                    triggerClassName="flex-1"
+                  />
+                  <SingleSelectSearch
+                    value={entry.type || ''}
+                    onChange={(val) => {
+                      const next = formData.uses.recovery.slice();
+                      next[idx] = { ...entry, type: val };
+                      setFormData((prev) => ({
+                        ...prev,
+                        uses: { ...prev.uses, recovery: next },
+                      }));
+                    }}
+                    options={RECOVERY_TYPE_OPTIONS.map((o) => ({
+                      id: o.value,
+                      name: o.label,
+                    }))}
+                    placeholder="Type"
+                    triggerClassName="flex-1"
+                  />
+                  <Input
+                    value={entry.formula || ''}
+                    onChange={(e) => {
+                      const next = formData.uses.recovery.slice();
+                      next[idx] = { ...entry, formula: e.target.value };
+                      setFormData((prev) => ({
+                        ...prev,
+                        uses: { ...prev.uses, recovery: next },
+                      }));
+                    }}
+                    className="h-7 text-[10px] font-mono bg-background/40 border-gold/10 flex-1"
+                    placeholder="1d4 or @prof"
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        uses: {
+                          ...prev.uses,
+                          recovery: prev.uses.recovery.filter((_, i) => i !== idx),
+                        },
+                      }))
+                    }
+                    className="text-blood/60 hover:text-blood shrink-0 transition-colors"
+                    aria-label="Remove recovery rule"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+              {formData.uses.recovery.length === 0 && (
+                <p className="text-center py-3 text-ink/30 italic text-[10px]">No recovery rules.</p>
+              )}
+              <button
+                type="button"
+                onClick={() =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    uses: {
+                      ...prev.uses,
+                      recovery: [
+                        ...prev.uses.recovery,
+                        { period: '', type: '', formula: '' },
+                      ],
+                    },
+                  }))
+                }
+                className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[10px] uppercase tracking-widest font-black text-gold/50 hover:text-gold border border-dashed border-gold/15 hover:border-gold/30 rounded transition-colors"
+              >
+                <Plus className="w-3 h-3" /> Add Recovery Rule
+              </button>
+            </div>
+          </div>
+
+          <p className="text-[10px] text-ink/40">
+            This is for general feats first. Class and subclass features still primarily travel through the class feature pipeline, even though they import as Foundry <code className="font-mono">feat</code> items.
+          </p>
+        </div>
+      ),
+    },
+    {
+      key: 'activities',
+      label: 'Activities',
+      render: () => (
+        <div className="border-t border-gold/10 pt-4">
+          <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold mb-2">Activities</h3>
+          <ActivityEditor
+            activities={formData.activities}
+            onChange={(activities) => setFormData((prev) => ({ ...prev, activities }))}
+            availableEffects={formData.effects}
+            context="feat"
+          />
+        </div>
+      ),
+    },
+    {
+      key: 'advancement',
+      label: 'Advancement',
+      layout: 'scroll',
+      render: () => (
+        <div className="border-t border-gold/10 pt-4 space-y-3">
+          <div className="flex items-baseline justify-between gap-3">
+            <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Advancement</h3>
+            <span className="text-[10px] text-ink/40 italic">
+              Default level <span className="font-mono">0</span> = always-on while feat is owned.
+              Set a level &gt; 0 to gate against the granting class's level (or character level
+              for standalone feats).
+            </span>
+          </div>
+          <AdvancementManager
+            advancements={formData.advancements}
+            onChange={(advancements) => setFormData((prev) => ({ ...prev, advancements }))}
+            parentContext={scopeFeatType || 'feat'}
+            // Feats don't have sub-features (their `featureId` slot is
+            // a class-side concept). `availableFeatures` left at the
+            // default `[]` hides the picker; `parentContext="feat"`
+            // ALSO hides it explicitly.
+            availableOptionGroups={allOptionGroups}
+            // Option items aren't needed in the feat add menu today —
+            // ItemGrant / ItemChoice pools resolve against option
+            // GROUPS, not raw items. Leaving the prop empty mirrors the
+            // pattern in ClassEditor where group-level choice is the
+            // primary path.
+            availableOptionItems={[]}
+            // Tasha's-style feats can grant OTHER feats via ItemGrant
+            // (e.g. "Skilled" with sub-feats). The feats list is the
+            // already-loaded catalog (`entries`) — we filter out the
+            // feat currently being edited so an author can't accidentally
+            // make a feat grant itself.
+            availableFeats={entries.filter((e: any) => e.id !== editingId)}
+            // No classId — the option-group filter (which restricts
+            // groups to classIds.includes(classId)) no-ops when classId
+            // is undefined, falling through to all groups. That's the
+            // right default for feats, which aren't class-scoped.
+            defaultLevel={0}
+            referenceContext={{
+              classLabel: formData.name || 'Feat',
+              classIdentifier: formData.identifier || slugify(formData.name || 'feat'),
+            }}
+            referenceSheetTitle="Feat Reference Sheet"
+          />
+        </div>
+      ),
+    },
+    {
+      key: 'effects',
+      label: 'Effects',
+      render: () => (
+        <div className="border-t border-gold/10 pt-4">
+          <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold mb-2">Active Effects</h3>
+          <ActiveEffectEditor
+            effects={formData.effects}
+            onChange={(effects) => setFormData((prev) => ({ ...prev, effects }))}
+            defaultImg={formData.imageUrl || null}
+          />
+        </div>
+      ),
+    },
+  ], [formData, sources, editingId]);
+
+  const tagsSubTabsList: TagsSubTab[] = useMemo(() => [
+    {
+      key: 'prereqs',
+      label: 'Prereqs',
+      render: () => (
+        <div className="space-y-4 border border-gold/10 rounded-md p-4 bg-background/20">
+          <div className="flex items-baseline justify-between">
+            <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Prerequisites</h3>
+            <span className="text-[10px] text-ink/40">Structured tree gates · evaluated at the actor; free-text below is shown on the feat card.</span>
+          </div>
+
+          <div className="space-y-1">
+            <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Free Text (legacy)</Label>
+            <Input
+              value={formData.requirements}
+              onChange={(e) => setFormData((prev) => ({ ...prev, requirements: e.target.value }))}
+              placeholder="e.g. The ability to cast at least one spell"
+              className="bg-background/50 border-gold/10 focus:border-gold text-xs"
+            />
+            <p className="text-[10px] text-ink/40">
+              Free-text fallback for prerequisites that don't fit the tree below. Displayed on the feat card; not machine-checked.
+            </p>
+          </div>
+
+          <RequirementsEditor
+            value={formData.requirementsTree}
+            onChange={(next) => setFormData((prev) => ({ ...prev, requirementsTree: next }))}
+            lookups={requirementsLookups}
+            label="Compound Requirements"
+          />
+
+          {formData.requirementsTree && (
+            <div className="rounded border border-gold/10 bg-background/40 px-3 py-2">
+              <span className="text-[9px] uppercase tracking-widest text-ink/40">Preview · </span>
+              <span className="text-xs italic text-ink/70">
+                {formatRequirementText(formData.requirementsTree, requirementsTextLookup)}
+              </span>
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'tags',
+      label: 'Tags',
+      render: () => (
+        <div className="space-y-2 border border-gold/10 rounded-md p-4 bg-background/20">
+          <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Tags</h3>
+          <p className="text-xs text-ink/40 italic">Tag picker for feats — TODO (follow-up: load tag / tagGroup rows + wire a SpellTagPicker-style component bound to formData.tags / formData.tagIds, mirroring SpellsEditor's Tags sub-tab).</p>
+        </div>
+      ),
+    },
+  ], [formData.requirements, formData.requirementsTree, requirementsLookups, requirementsTextLookup]);
+
+  // ── List columns ──────────────────────────────────────────────
+  const listColumns: EditorListColumn<any>[] = useMemo(() => [
+    {
+      key: 'name',
+      label: 'Name',
+      width: 'minmax(0,1fr)',
+      align: 'start',
+      render: (entry: any) => {
+        if (entry.__pendingDelete) {
+          return (
+            <span className="truncate font-serif text-sm line-through text-blood/70">
+              {entry.name || 'Untitled Feat'}
+            </span>
+          );
+        }
+        const drafted = focusModeEnabled && draftedFeatIds.has(String(entry.id));
+        return (
+          <span className={cn(
+            "truncate font-serif text-sm",
+            drafted ? 'text-archive-blue font-semibold' : 'text-ink',
+          )}>
+            {entry.name || <em className="text-ink/40">Untitled</em>}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'type',
+      label: 'Type',
+      width: '40px',
+      align: 'center',
+      render: (entry: any) => {
+        const valueLabel =
+          FEAT_TYPE_VALUES.find(([value]) => value === entry.featType)?.[1]
+          || entry.featType
+          || 'Feat';
+        const typeShort = valueLabel.split(' ')[0];
+        return (
+          <span className="text-[10px] text-ink/75 text-center truncate">
+            {typeShort}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'src',
+      label: 'Src',
+      width: '52px',
+      align: 'center',
+      render: (entry: any) => {
+        const srcAbbrev = String(sourceAbbrevById[entry.sourceId] || entry.sourceId || '—');
+        return (
+          <span className="text-[10px] font-bold text-gold/80 text-center truncate">
+            {srcAbbrev}
+          </span>
+        );
+      },
+    },
+  ], [sourceAbbrevById, focusModeEnabled, draftedFeatIds]);
+
+  // ── Inert pendingDelete handling ──────────────────────────────
+  const handleListSelect = (id: string) => {
+    const entry = filteredEntries.find((e) => String(e.id) === id);
+    if (entry?.__pendingDelete) return; // tombstones are inert
+    void startEditing(id);
+  };
+
+  // ── List empty-state copy ─────────────────────────────────────
+  const listEmptyContent = useMemo(() => {
+    if (focusModeEnabled && focusMode === 'drafts') {
+      return (
+        <div className="px-6 py-12 text-center text-ink/60 max-w-sm mx-auto space-y-2">
+          <p className="font-bold text-ink/80">No feats in this block yet.</p>
+          <p className="text-xs leading-relaxed text-ink/55">
+            Click <span className="font-bold text-gold">New Feat</span> above to
+            author one from scratch.
+          </p>
+          <p className="text-xs leading-relaxed text-ink/55">
+            To propose changes to an existing feat, switch to
+            <span className="font-bold text-gold"> Full Catalog</span> (top right,
+            next to Submit Changes), open the feat, then click
+            <span className="font-bold text-gold"> Edit Base</span> — it'll move
+            into this list automatically.
+          </p>
+        </div>
+      );
+    }
+    return 'No feats match the current search.';
+  }, [focusModeEnabled, focusMode]);
+
+  // ── Mode tabs ─────────────────────────────────────────────────
+  const modes: EditorMode[] = [
+    ...(isAdmin ? [{
+      key: 'foundry-import',
+      label: 'Foundry Import',
+      adminOnly: true,
+      render: <FeatImportWorkbench userProfile={userProfile} />,
+    } as EditorMode] : []),
+    {
+      key: 'manual-editor',
+      label: 'Manual Editor',
+      render: null,
+    },
+  ];
+
   if (!canManage) {
     return <div className="text-center py-20">Access Denied. Admins or content-creators only.</div>;
   }
 
+  // ── Cascade banner ────────────────────────────────────────────
+  const cascadeBanner = cascadeDep ? (
+    <CascadeDependentBanner
+      description={cascadeDep.description}
+      resolved={cascadeDep.resolved}
+      onAccept={cascadeDep.accept}
+      onReopen={cascadeDep.reopen}
+      onReplace={() => setReplaceTagPickerOpen(true)}
+    />
+  ) : null;
+
   return (
-    <div className="max-w-7xl mx-auto space-y-6 pb-20">
-      <div className="flex items-center gap-4">
-        <Link to="/compendium/feats">
-          <Button variant="ghost" size="sm" className="text-gold gap-2 hover:bg-gold/5">
-            <ChevronLeft className="w-4 h-4" />
-            Back To Feats
-          </Button>
-        </Link>
-      </div>
-
-      <Card className="border-gold/20 bg-card/50 overflow-hidden">
-        <CardContent className="p-0">
-          {/* Header — same gradient stripe the spell manager uses. */}
-          <div className="border-b border-gold/10 bg-[radial-gradient(circle_at_top_left,rgba(192,160,96,0.14),transparent_52%),linear-gradient(180deg,rgba(12,16,24,0.75),rgba(12,16,24,0.98))] p-6">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <div className="space-y-3">
-                <div className="flex items-center gap-3 text-gold">
-                  <Scroll className="h-5 w-5" />
-                  <span className="text-xs font-bold uppercase tracking-[0.3em]">Compendium Development</span>
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-4">
-                    <h2 className="text-3xl font-serif font-bold uppercase tracking-tight text-ink">Feat Manager</h2>
-                  </div>
-                  <p className="max-w-3xl font-serif italic text-ink/60">
-                    Draft and refine feat records using the same master-detail rhythm as the spell manager. Identity and structured requirements live at the root; mechanics ride on activities + effects.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-3">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="gap-2 border-gold/20 bg-background/40 text-ink hover:bg-gold/5"
-                  onClick={resetForm}
-                >
-                  <Plus className="h-4 w-4" />
-                  New Feat
-                </Button>
+    <>
+      <CompendiumEditorShell<any>
+        entityName={{
+          singular: scopeFeatType === 'race'
+            ? 'Race'
+            : scopeFeatType === 'background'
+              ? 'Background'
+              : 'Feat',
+          plural: scopeFeatType === 'race'
+            ? 'Races'
+            : scopeFeatType === 'background'
+              ? 'Backgrounds'
+              : 'Feats',
+        }}
+        backPath={backPath}
+        backLabel={backLabel}
+        modes={modes}
+        defaultModeKey="manual-editor"
+        manualEditorModeKey="manual-editor"
+        isAdmin={isAdmin}
+        listRows={filteredEntries}
+        listColumns={listColumns}
+        listRowHeight={36}
+        loading={loading}
+        selectedId={editingId}
+        onSelect={handleListSelect}
+        onNew={resetForm}
+        getRowId={(row) => String(row.id)}
+        emptyListMessage={listEmptyContent}
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search feat name, type, source, or identifier"
+        activeFilterCount={0}
+        isFilterOpen={isFilterOpen}
+        setIsFilterOpen={setIsFilterOpen}
+        resetFilters={() => setSearch('')}
+        identityName={formData.name}
+        identitySourceAbbrev={formData.sourceId ? String(sourceAbbrevById[formData.sourceId] || formData.sourceId) : undefined}
+        identitySourceFullName={formData.sourceId ? String(sourceNameById[formData.sourceId] || formData.sourceId) : undefined}
+        identitySubtitle={identitySubtitle}
+        onSave={(e) => void handleSave(e)}
+        onDelete={editingId && !isProposalMode ? handleDelete : undefined}
+        onReset={resetForm}
+        saving={saving}
+        formId="feat-manual-editor-form"
+        isReadOnly={isReadOnly}
+        onUnlockBase={editingId ? () => unlockBaseFeat(editingId) : undefined}
+        cascadeBanner={cascadeBanner}
+        proposalMode={!!proposalContext}
+        editorSubTabs={editorSubTabs}
+        tagsSubTabs={tagsSubTabsList}
+        renderPreview={(id) =>
+          id ? (
+            <FeatDetailPanel
+              featId={id}
+              emptyMessage="Loading preview…"
+            />
+          ) : (
+            <div className="h-full flex items-center justify-center px-6 py-12 text-center">
+              <div className="space-y-2 max-w-xs">
+                <p className="text-sm text-ink/60 font-serif italic">
+                  Preview pane
+                </p>
+                <p className="text-[11px] text-ink/40 leading-relaxed">
+                  Select a feat from the list to preview it as it
+                  appears in the public compendium. Pending edits
+                  don't reflect until you save.
+                </p>
               </div>
             </div>
-          </div>
-
-          {/* Master-detail grid. The 360px / fr split is intentional: at
-              that width the list comfortably renders feat name + meta
-              + identifier in the row, and the right pane has enough
-              real estate for the description editor + the activity
-              authoring surface without wrapping. */}
-          <div className="grid gap-6 p-6 xl:grid-cols-[360px_minmax(0,1fr)]">
-            <div className="space-y-4">
-              <div className="space-y-1">
-                <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Search</Label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink/30" />
-                  <Input
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    placeholder="Search feat name, type, source, or identifier"
-                    className="bg-background/50 border-gold/10 pl-9 focus:border-gold"
-                  />
-                </div>
-              </div>
-
-              <Card className="border-gold/10 bg-background/20">
-                <CardContent className="p-0">
-                  <div className="border-b border-gold/10 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-gold/70">
-                    Feat Drafts
-                  </div>
-                  <div className="max-h-[78vh] space-y-2 overflow-y-auto custom-scrollbar p-3 pr-2">
-                    {loading ? (
-                      <div className="px-3 py-8 text-sm text-ink/40 italic">Loading...</div>
-                    ) : filteredEntries.length === 0 ? (
-                      // See SpellsEditor for the rationale — In Block
-                      // mode with zero entries is a teaching state.
-                      focusModeEnabled && focusMode === 'drafts' ? (
-                        <div className="px-4 py-8 text-center text-ink/60 max-w-sm mx-auto space-y-2">
-                          <p className="font-bold text-ink/80 text-sm">No feats in this block yet.</p>
-                          <p className="text-xs leading-relaxed text-ink/55">
-                            Click <span className="font-bold text-gold">New Feat</span> above
-                            to author one from scratch.
-                          </p>
-                          <p className="text-xs leading-relaxed text-ink/55">
-                            To edit an existing feat, switch to
-                            <span className="font-bold text-gold"> Full Catalog</span>
-                            (top right, next to Submit Changes), open the feat, then click
-                            <span className="font-bold text-gold"> Edit Base</span> — it'll
-                            move into this list automatically.
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="px-3 py-8 text-sm text-ink/40 italic">No feats match the current search.</div>
-                      )
-                    ) : (
-                      <VirtualizedList
-                        items={filteredEntries}
-                        height={MANAGER_LIST_HEIGHT}
-                        itemHeight={MANAGER_ROW_HEIGHT}
-                        className="custom-scrollbar overflow-y-auto"
-                        innerClassName="space-y-2"
-                        renderItem={(entry: any) => {
-                          // Tombstone branch — render queued/drafted
-                          // DELETEs as strike-through with Undo.
-                          if (entry.__pendingDelete) {
-                            return (
-                              <TombstoneRow
-                                key={entry.id}
-                                size="sm"
-                                name={entry.name || 'Untitled Feat'}
-                                onUndo={async () => {
-                                  if (proposalContext) await proposalContext.dropEntity(String(entry.id));
-                                }}
-                              >
-                                {entry.featType || 'Feat'}
-                              </TombstoneRow>
-                            );
-                          }
-                          const selected = entry.id === editingId;
-                          const sourceLabel = String(
-                            sourceNameById[entry.sourceId] || entry.sourceId || 'Unknown Source',
-                          );
-                          // Row label shows the canonical type ("Feat" /
-                          // "Class Feature" / etc.) with the optional
-                          // subtype tacked on so authors can tell apart
-                          // "Feat · Fighting Style" from "Feat · Origin"
-                          // at a glance.
-                          const featTypeLabel = (() => {
-                            const valueLabel =
-                              FEAT_TYPE_VALUES.find(([value]) => value === entry.featType)?.[1]
-                              || entry.featType
-                              || 'Feat';
-                            const subtypeRaw = String(entry.featSubtype || '').trim();
-                            if (!subtypeRaw) return valueLabel;
-                            const enumLabel = (
-                              FEAT_SUBTYPE_OPTIONS_BY_VALUE[entry.featType] || []
-                            ).find(([v]) => v === subtypeRaw)?.[1];
-                            return `${valueLabel} · ${enumLabel || subtypeRaw}`;
-                          })();
-                          // A row "has prereqs" if either the legacy free-text
-                          // column carries a value or the structured tree is
-                          // non-empty. Mirrors the lock-icon UX SpellList
-                          // uses for spells with required tags.
-                          const hasFreeTextPrereq = !!(entry.requirements && String(entry.requirements).trim());
-                          const hasTreePrereq = !!entry.requirementsTree;
-                          const hasPrereq = hasFreeTextPrereq || hasTreePrereq;
-                          // Highlight rows the user has staged in the active
-                          // block (or queued locally). Same visual language
-                          // as SpellsEditor — archive-blue accents replace
-                          // the "In this block" panel.
-                          const drafted = focusModeEnabled && draftedFeatIds.has(String(entry.id));
-                          return (
-                            <button
-                              type="button"
-                              key={entry.id}
-                              onClick={() => startEditing(entry)}
-                              title={
-                                drafted
-                                  ? `${entry.name || 'Untitled Feat'} — staged in this block`
-                                  : entry.name || '(Untitled Feat)'
-                              }
-                              className={cn(
-                                'h-[94px] w-full rounded-xl border p-3 text-left transition-colors',
-                                selected
-                                  ? 'border-gold/50 bg-gold/10 shadow-[0_0_0_1px_rgba(192,160,96,0.2)]'
-                                  : drafted
-                                    ? 'border-archive-blue/40 bg-archive-blue/5 hover:border-archive-blue/60 hover:bg-archive-blue/10'
-                                    : 'border-gold/10 bg-background/30 hover:border-gold/30 hover:bg-background/50',
-                              )}
-                            >
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-2">
-                                    <div className={cn(
-                                      "font-serif text-lg truncate",
-                                      drafted && !selected ? 'text-archive-blue font-semibold' : 'text-ink',
-                                    )}>
-                                      {entry.name || '(Untitled Feat)'}
-                                    </div>
-                                    {hasPrereq && (
-                                      <Lock
-                                        className="h-3 w-3 shrink-0 text-gold/60"
-                                        aria-label="Has prerequisites"
-                                      />
-                                    )}
-                                  </div>
-                                  <div className="text-[10px] uppercase tracking-[0.2em] text-gold/70">
-                                    {featTypeLabel}
-                                    {entry.repeatable ? ' · Repeatable' : ''}
-                                  </div>
-                                </div>
-                                <span className="text-[10px] font-mono text-ink/35 shrink-0">{sourceLabel}</span>
-                              </div>
-
-                              <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-ink/55">
-                                <span>
-                                  {(entry.automation?.activities?.length || entry.activities?.length || 0)} activities
-                                </span>
-                                <span className="text-right font-mono">{entry.identifier || '(no identifier)'}</span>
-                              </div>
-                            </button>
-                          );
-                        }}
-                      />
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <Card className="border-gold/20 bg-card/50">
-              <CardContent className="p-0">
-                {/* Right-pane sticky-ish header: name + source pill on
-                    the left, save/reset/delete on the right. Mirrors
-                    SpellsEditor's pattern so the two managers feel
-                    identical. */}
-                <div className="border-b border-gold/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.02),transparent)] px-6 py-5 space-y-4">
-                  {cascadeDep && (
-                    <CascadeDependentBanner
-                      description={cascadeDep.description}
-                      resolved={cascadeDep.resolved}
-                      onAccept={cascadeDep.accept}
-                      onReopen={cascadeDep.reopen}
-                      onReplace={() => setReplaceTagPickerOpen(true)}
-                    />
-                  )}
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-3">
-                        <h3 className="font-serif text-4xl font-bold text-ink">
-                          {editingId ? (formData.name || 'Untitled Feat') : 'New Feat'}
-                        </h3>
-                        {formData.sourceId ? (
-                          <span className="rounded border border-gold/20 bg-gold/10 px-2 py-1 text-xs text-gold">
-                            {String(sourceNameById[formData.sourceId] || formData.sourceId)}
-                          </span>
-                        ) : null}
-                      </div>
-                      <p className="font-serif italic text-ink/70">
-                        {(() => {
-                          const valueLabel =
-                            FEAT_TYPE_VALUES.find(([value]) => value === formData.featType)?.[1] || 'Feat';
-                          const subtypeRaw = String(formData.featSubtype || '').trim();
-                          if (!subtypeRaw) return valueLabel;
-                          const enumLabel = (FEAT_SUBTYPE_OPTIONS_BY_VALUE[formData.featType] || [])
-                            .find(([v]) => v === subtypeRaw)?.[1];
-                          return `${valueLabel} · ${enumLabel || subtypeRaw}`;
-                        })()}
-                        {formData.repeatable ? ' · Repeatable' : ''}
-                      </p>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      {isReadOnly ? (
-                        <Button
-                          type="button"
-                          className="gap-2 bg-gold text-white"
-                          onClick={() => editingId && unlockBaseFeat(editingId)}
-                        >
-                          <Edit3 className="h-4 w-4" />
-                          Edit Base{formData.name ? ` "${formData.name}"` : ' Feat'}
-                        </Button>
-                      ) : (
-                        <>
-                          {editingId && !isProposalMode ? (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="gap-2 border-blood/30 text-blood hover:bg-blood/10"
-                              onClick={handleDelete}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                              Delete Feat
-                            </Button>
-                          ) : null}
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="gap-2 border-gold/20 bg-background/40 text-ink hover:bg-gold/5"
-                            onClick={resetForm}
-                          >
-                            <Edit3 className="h-4 w-4" />
-                            Reset
-                          </Button>
-                          {/* In proposal mode the wrapper's Submit Changes
-                              captures the current feat via pre-flush, so the
-                              per-feat Save button is redundant for existing
-                              entries. New feats keep their explicit Save (the
-                              user expects one-shot create + post-save
-                              editingId hop). */}
-                          {(!isProposalMode || !editingId) && (
-                            <Button
-                              type="submit"
-                              form="feat-manual-editor-form"
-                              className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
-                              disabled={saving}
-                            >
-                              <Save className="h-4 w-4" />
-                              {saving ? 'Saving...' : editingId ? 'Update Feat' : 'Save Feat'}
-                            </Button>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="max-h-[78vh] overflow-y-auto custom-scrollbar px-6 py-5">
-                  <form id="feat-manual-editor-form" onSubmit={handleSave} className="space-y-6">
-                    {/* Image + identity strip. Compact 126px icon to
-                        the left, identity grid (name/identifier/source/
-                        featType/sourceType) to the right. */}
-                    <div className="grid gap-6 lg:grid-cols-[126px_minmax(0,1fr)]">
-                      <ImageUpload
-                        currentImageUrl={formData.imageUrl}
-                        storagePath={`images/feats/${editingId || 'draft'}/`}
-                        onUpload={(url) => setFormData((prev) => ({ ...prev, imageUrl: url }))}
-                        imageType="icon"
-                        compact
-                        className="h-[126px] w-[126px]"
-                      />
-
-                      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                        <ReviewFieldHighlight columnKey="name" className="space-y-1">
-                          <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Name</Label>
-                          <Input
-                            value={formData.name}
-                            onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
-                            className="bg-background/50 border-gold/10 focus:border-gold"
-                            placeholder="e.g. Great Weapon Master"
-                            required
-                          />
-                        </ReviewFieldHighlight>
-                        <ReviewFieldHighlight columnKey="identifier" className="space-y-1">
-                          <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Identifier</Label>
-                          <Input
-                            value={formData.identifier}
-                            onChange={(e) => setFormData((prev) => ({ ...prev, identifier: e.target.value }))}
-                            className="bg-background/50 border-gold/10 focus:border-gold font-mono"
-                            placeholder={slugify(formData.name || 'feat')}
-                          />
-                        </ReviewFieldHighlight>
-                        <ReviewFieldHighlight columnKey="source_id" className="space-y-1">
-                          <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Source</Label>
-                          <select
-                            value={formData.sourceId}
-                            onChange={(e) => setFormData((prev) => ({ ...prev, sourceId: e.target.value }))}
-                            className="w-full h-10 px-3 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
-                          >
-                            <option value="">Select a source</option>
-                            {sources.map((source) => (
-                              <option key={source.id} value={source.id}>{source.name}</option>
-                            ))}
-                          </select>
-                        </ReviewFieldHighlight>
-                        {/* Foundry's `system.type` is a {value, subtype}
-                            pair. Authoring as two cascading fields so
-                            the export drops them straight into the same
-                            slot without translation. */}
-                        <ReviewFieldHighlight columnKey="feat_type" className="space-y-1">
-                          <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Feat Type</Label>
-                          <select
-                            value={formData.featType || 'feat'}
-                            onChange={(e) => setFormData((prev) => ({
-                              ...prev,
-                              featType: e.target.value,
-                              // Reset the subtype when the value changes
-                              // since the enumerated options differ per
-                              // value (and may be invalid for the new
-                              // value's free-text path).
-                              featSubtype: '',
-                            }))}
-                            className="w-full h-10 px-3 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
-                          >
-                            {FEAT_TYPE_VALUES.map(([value, label]) => (
-                              <option key={value} value={value}>{label}</option>
-                            ))}
-                          </select>
-                        </ReviewFieldHighlight>
-                        <ReviewFieldHighlight columnKey="feat_subtype" className="space-y-1">
-                          <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Subtype</Label>
-                          {(() => {
-                            const subtypeOptions = FEAT_SUBTYPE_OPTIONS_BY_VALUE[formData.featType] || [];
-                            if (subtypeOptions.length > 0) {
-                              return (
-                                <select
-                                  value={formData.featSubtype || ''}
-                                  onChange={(e) =>
-                                    setFormData((prev) => ({ ...prev, featSubtype: e.target.value }))
-                                  }
-                                  className="w-full h-10 px-3 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
-                                >
-                                  {subtypeOptions.map(([value, label]) => (
-                                    <option key={value || '_blank'} value={value}>{label}</option>
-                                  ))}
-                                </select>
-                              );
-                            }
-                            // class / subclass / race / background / monster
-                            // — the subtype is a free identifier (e.g.
-                            // "wizard", "tiefling"). Foundry uses these
-                            // strings to drive system.type.subtype's
-                            // display in the item card.
-                            return (
-                              <Input
-                                value={formData.featSubtype || ''}
-                                onChange={(e) =>
-                                  setFormData((prev) => ({ ...prev, featSubtype: e.target.value }))
-                                }
-                                className="bg-background/50 border-gold/10 focus:border-gold font-mono"
-                                placeholder="identifier (e.g. wizard, tiefling)"
-                              />
-                            );
-                          })()}
-                        </ReviewFieldHighlight>
-                        <ReviewFieldHighlight columnKey="source_type" className="space-y-1">
-                          <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Source Type</Label>
-                          <select
-                            value={formData.sourceType || 'feat'}
-                            onChange={(e) => setFormData((prev) => ({ ...prev, sourceType: e.target.value }))}
-                            className="w-full h-10 px-3 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
-                          >
-                            {SOURCE_TYPES.map(([value, label]) => (
-                              <option key={value} value={value}>{label}</option>
-                            ))}
-                          </select>
-                        </ReviewFieldHighlight>
-                      </div>
-                    </div>
-
-                    <ReviewFieldHighlight columnKey="description">
-                      <MarkdownEditor
-                        key={editingId || 'new-feat'}
-                        value={formData.description}
-                        onChange={(value) => setFormData((prev) => ({ ...prev, description: value }))}
-                        label="Description"
-                        placeholder="Describe the feat in player-facing terms. Activities should carry runtime mechanics."
-                        minHeight="300px"
-                        autoSizeToContent={false}
-                      />
-                    </ReviewFieldHighlight>
-
-                    {/* Foundry shell — feat-specific scalar fields that
-                        round-trip onto `system.*` of the embedded
-                        Foundry feat item. Repeatable + Uses already
-                        have well-defined slots; the free-text
-                        Requirements field is the legacy gate (still
-                        what most published feats use). The structured
-                        RequirementsEditor below it is the new path. */}
-                    <div className="space-y-4 border border-gold/10 rounded-md p-4 bg-background/20">
-                      <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Foundry Feat Shell</h3>
-                      <div className="grid md:grid-cols-2 gap-4">
-                        <label className="flex items-center justify-between gap-3 border border-gold/10 rounded-md p-3">
-                          <span className="text-xs font-bold uppercase tracking-widest text-ink/60">Repeatable</span>
-                          <Checkbox
-                            checked={!!formData.repeatable}
-                            onCheckedChange={(checked) =>
-                              setFormData((prev) => ({ ...prev, repeatable: !!checked }))
-                            }
-                          />
-                        </label>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-1">
-                            <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Uses Max</Label>
-                            <Input
-                              value={formData.uses.max || ''}
-                              onChange={(e) =>
-                                setFormData((prev) => ({
-                                  ...prev,
-                                  uses: { ...prev.uses, max: e.target.value },
-                                }))
-                              }
-                              className="bg-background/50 border-gold/10 focus:border-gold font-mono"
-                              placeholder="@prof"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Uses Spent</Label>
-                            <Input
-                              type="number"
-                              min={0}
-                              value={formData.uses.spent ?? 0}
-                              onChange={(e) =>
-                                setFormData((prev) => ({
-                                  ...prev,
-                                  uses: { ...prev.uses, spent: parseInt(e.target.value || '0', 10) || 0 },
-                                }))
-                              }
-                              className="bg-background/50 border-gold/10 focus:border-gold no-number-spin"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                      {/* Recovery rules — drive `system.uses.recovery[]`
-                          on the Foundry feat item. Pattern lifted from
-                          ConsumptionTabEditor's per-activity recovery
-                          editor (same option catalogs, same row layout)
-                          so authors don't have to learn a second UI for
-                          the same concept. Empty list = no recovery
-                          (item uses persist until manually reset). */}
-                      <div className="space-y-2 border-t border-gold/8 pt-3">
-                        <div className="flex items-baseline justify-between">
-                          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Recovery Rules</Label>
-                          <span className="text-[10px] text-ink/40">Lands at <code className="font-mono">system.uses.recovery[]</code></span>
-                        </div>
-                        <div className="space-y-2">
-                          {formData.uses.recovery.map((entry, idx) => (
-                            <div
-                              key={idx}
-                              className="flex gap-2 items-center p-2.5 bg-gold/3 border border-gold/8 rounded"
-                            >
-                              <SingleSelectSearch
-                                value={entry.period || ''}
-                                onChange={(val) => {
-                                  const next = formData.uses.recovery.slice();
-                                  next[idx] = { ...entry, period: val };
-                                  setFormData((prev) => ({
-                                    ...prev,
-                                    uses: { ...prev.uses, recovery: next },
-                                  }));
-                                }}
-                                options={RECOVERY_PERIOD_OPTIONS.map((o) => ({
-                                  id: o.value,
-                                  name: o.label,
-                                  hint: o.hint,
-                                }))}
-                                placeholder="Period"
-                                triggerClassName="flex-1"
-                              />
-                              <SingleSelectSearch
-                                value={entry.type || ''}
-                                onChange={(val) => {
-                                  const next = formData.uses.recovery.slice();
-                                  next[idx] = { ...entry, type: val };
-                                  setFormData((prev) => ({
-                                    ...prev,
-                                    uses: { ...prev.uses, recovery: next },
-                                  }));
-                                }}
-                                options={RECOVERY_TYPE_OPTIONS.map((o) => ({
-                                  id: o.value,
-                                  name: o.label,
-                                }))}
-                                placeholder="Type"
-                                triggerClassName="flex-1"
-                              />
-                              <Input
-                                value={entry.formula || ''}
-                                onChange={(e) => {
-                                  const next = formData.uses.recovery.slice();
-                                  next[idx] = { ...entry, formula: e.target.value };
-                                  setFormData((prev) => ({
-                                    ...prev,
-                                    uses: { ...prev.uses, recovery: next },
-                                  }));
-                                }}
-                                className="h-7 text-[10px] font-mono bg-background/40 border-gold/10 flex-1"
-                                placeholder="1d4 or @prof"
-                              />
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setFormData((prev) => ({
-                                    ...prev,
-                                    uses: {
-                                      ...prev.uses,
-                                      recovery: prev.uses.recovery.filter((_, i) => i !== idx),
-                                    },
-                                  }))
-                                }
-                                className="text-blood/60 hover:text-blood shrink-0 transition-colors"
-                                aria-label="Remove recovery rule"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          ))}
-                          {formData.uses.recovery.length === 0 && (
-                            <p className="text-center py-3 text-ink/30 italic text-[10px]">No recovery rules.</p>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setFormData((prev) => ({
-                                ...prev,
-                                uses: {
-                                  ...prev.uses,
-                                  recovery: [
-                                    ...prev.uses.recovery,
-                                    { period: '', type: '', formula: '' },
-                                  ],
-                                },
-                              }))
-                            }
-                            className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[10px] uppercase tracking-widest font-black text-gold/50 hover:text-gold border border-dashed border-gold/15 hover:border-gold/30 rounded transition-colors"
-                          >
-                            <Plus className="w-3 h-3" /> Add Recovery Rule
-                          </button>
-                        </div>
-                      </div>
-
-                      <p className="text-[10px] text-ink/40">
-                        This is for general feats first. Class and subclass features still primarily travel through the class feature pipeline, even though they import as Foundry <code className="font-mono">feat</code> items.
-                      </p>
-                    </div>
-
-                    {/* Prerequisites — the structured tree authoring
-                        surface, plus a free-text legacy field for
-                        narrative gates that can't fit the tree leaves
-                        (e.g. "DM approval", or 5e PHB-flavor prose). */}
-                    <div className="space-y-4 border border-gold/10 rounded-md p-4 bg-background/20">
-                      <div className="flex items-baseline justify-between">
-                        <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Prerequisites</h3>
-                        <span className="text-[10px] text-ink/40">Structured tree gates · evaluated at the actor; free-text below is shown on the feat card.</span>
-                      </div>
-
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Free Text (legacy)</Label>
-                        <Input
-                          value={formData.requirements}
-                          onChange={(e) => setFormData((prev) => ({ ...prev, requirements: e.target.value }))}
-                          placeholder="e.g. The ability to cast at least one spell"
-                          className="bg-background/50 border-gold/10 focus:border-gold text-xs"
-                        />
-                        <p className="text-[10px] text-ink/40">
-                          Free-text fallback for prerequisites that don't fit the tree below. Displayed on the feat card; not machine-checked.
-                        </p>
-                      </div>
-
-                      {/* Tree editor — same shared component the
-                          UniqueOptionGroupEditor uses. Loaded lookups
-                          (classes/subclasses/spellRules/option groups/
-                          proficiencies) flow in via requirementsLookups
-                          built above. Wiring lives in `feats.requirements_tree`. */}
-                      <RequirementsEditor
-                        value={formData.requirementsTree}
-                        onChange={(next) => setFormData((prev) => ({ ...prev, requirementsTree: next }))}
-                        lookups={requirementsLookups}
-                        label="Compound Requirements"
-                      />
-
-                      {/* Preview the rendered tree so authors see what
-                          the importer + Foundry item card will display
-                          without having to save and reopen. Empty tree
-                          renders nothing. */}
-                      {formData.requirementsTree && (
-                        <div className="rounded border border-gold/10 bg-background/40 px-3 py-2">
-                          <span className="text-[9px] uppercase tracking-widest text-ink/40">Preview · </span>
-                          <span className="text-xs italic text-ink/70">
-                            {formatRequirementText(formData.requirementsTree, requirementsTextLookup)}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Activities + structured Active Effects. Both
-                        share the same authoring surfaces option items
-                        and class features use — ActivityEditor for the
-                        per-activity data, ActiveEffectEditor for the
-                        item-level effects array. `availableEffects` is
-                        passed to ActivityEditor so the "Applied Effects"
-                        list on save/utility/cast activities can pick
-                        from this feat's authored effects by id. */}
-                    <div className="space-y-3">
-                      <div className="border-t border-gold/10 pt-4">
-                        <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold mb-2">Activities</h3>
-                        <ActivityEditor
-                          activities={formData.activities}
-                          onChange={(activities) => setFormData((prev) => ({ ...prev, activities }))}
-                          availableEffects={formData.effects}
-                          context="feat"
-                        />
-                      </div>
-
-                      <div className="border-t border-gold/10 pt-4">
-                        <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold mb-2">Active Effects</h3>
-                        <ActiveEffectEditor
-                          effects={formData.effects}
-                          onChange={(effects) => setFormData((prev) => ({ ...prev, effects }))}
-                          defaultImg={formData.imageUrl || null}
-                        />
-                      </div>
-                    </div>
-                  </form>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </CardContent>
-      </Card>
+          )
+        }
+      />
       {cascadeDep && cascadeDep.parentEntityType === 'tag' && cascadeDep.parentEntityId && (
         <TagReplacementPicker
           open={replaceTagPickerOpen}
@@ -1558,6 +1371,6 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
           }}
         />
       )}
-    </div>
+    </>
   );
 }
