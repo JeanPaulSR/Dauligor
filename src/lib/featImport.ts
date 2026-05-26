@@ -189,10 +189,30 @@ function matchSourceRecord(book: string, rules: string, sources: SourceRecord[])
   const normalizedRules = normalizeRules(rules);
   const variants = new Set<string>();
   if (normalizedBook) {
+    // Original cleaned form, plus a stripped variant that drops a
+    // trailing 14 / 24 / 2014 / 2024 suffix. This covers the common
+    // "PHB'14" → "PHB" case where the source author rolls the
+    // rules year into the book code.
     variants.add(normalizedBook);
     variants.add(normalizedBook.replace(/(2014|2024|14|24)$/u, ''));
   }
 
+  // EXACT MATCH ONLY against the variants. The old prefix-match
+  // (`candidate.startsWith(variant) || variant.startsWith(candidate)`)
+  // routes too aggressively — a book like "GH:CG'14" (cleaned
+  // "GHCG14", stripped "GHCG") would prefix-match a source whose
+  // abbreviation is just "GH", silently routing every Grim Hollow
+  // sub-book to the same source row. With the schema's new
+  // composite UNIQUE(source_id, identifier), that turns every
+  // shared identifier ("Blood Hound", "Witch Hunter", etc.) across
+  // GH:CG and GH:PG into an instant batch failure.
+  //
+  // Exact-match-only is the right behavior:
+  //   - "PHB'14" → "PHB14" → stripped "PHB" → matches source "PHB" ✓
+  //   - "GH:CG'14" → "GHCG14" → "GHCG" → matches ONLY if a source
+  //     with abbreviation "GH:CG" / "GHCG" exists. Otherwise the
+  //     row stays unresolved and the workbench surfaces it for
+  //     manual remap via the per-row source picker.
   const scored = sources
     .map((source) => {
       const candidates = [
@@ -208,9 +228,6 @@ function matchSourceRecord(book: string, rules: string, sources: SourceRecord[])
       for (const variant of variants) {
         if (!variant) continue;
         if (candidates.includes(variant)) score = Math.max(score, 3);
-        else if (candidates.some((candidate) => candidate.startsWith(variant) || variant.startsWith(candidate))) {
-          score = Math.max(score, 2);
-        }
       }
 
       const sourceRules = normalizeRules(String(source.rules ?? ''));

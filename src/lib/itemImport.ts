@@ -259,13 +259,15 @@ function matchSourceRecord(book: string, rules: string, sources: SourceRecord[])
         source.abbreviation, source.shortName, source.slug, source.name,
       ].map((value) => toCleanUpper(String(value ?? ''))).filter(Boolean);
 
+      // EXACT MATCH ONLY — see featImport.ts:matchSourceRecord for
+      // the full rationale. tl;dr the previous prefix-match routed
+      // sub-book codes like "GH:CG'14" to a generic "GH" source,
+      // breaking the composite UNIQUE the schema now enforces on
+      // both feats and items. Variants already strip 14/24 suffix.
       let score = 0;
       for (const variant of variants) {
         if (!variant) continue;
         if (candidates.includes(variant)) score = Math.max(score, 3);
-        else if (candidates.some((candidate) => candidate.startsWith(variant) || variant.startsWith(candidate))) {
-          score = Math.max(score, 2);
-        }
       }
 
       const sourceRules = normalizeRules(String(source.rules ?? ''));

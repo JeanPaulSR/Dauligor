@@ -649,14 +649,28 @@ export default function FeatImportWorkbench({
     // Use the effective sourceResolved (post-overrides) so a row the
     // user just rescued by picking a source no longer gets filtered
     // out of the batch.
-    const resolved = visibleCandidates
-      .map((candidate) => ({
-        candidate,
-        eff: effectiveCandidateValues(candidate, candidateOverrides[candidate.candidateId], existingEntries),
-      }))
-      .filter(({ eff }) => eff.sourceResolved);
+    const allRows = visibleCandidates.map((candidate) => ({
+      candidate,
+      eff: effectiveCandidateValues(candidate, candidateOverrides[candidate.candidateId], existingEntries),
+    }));
+    const resolved = allRows.filter(({ eff }) => eff.sourceResolved);
+    const unresolvedRows = allRows.filter(({ eff }) => !eff.sourceResolved);
+    const unresolvedCount = unresolvedRows.length;
 
-    const unresolvedCount = visibleCandidates.length - resolved.length;
+    // Per-book histogram of unresolved candidates — surfaces which
+    // book labels in the export failed to find a matching `sources`
+    // row. After the matcher tightened to exact-only matching, the
+    // user needs to either (a) add a source row whose abbreviation
+    // matches the book code, or (b) use the per-row source picker
+    // to remap each unresolved feat manually.
+    const unresolvedByBook: Record<string, number> = {};
+    for (const { candidate } of unresolvedRows) {
+      const book = candidate.sourceBook || '(no book)';
+      unresolvedByBook[book] = (unresolvedByBook[book] ?? 0) + 1;
+    }
+    if (unresolvedCount > 0) {
+      console.warn('Unresolved-source candidates (no matching source row), by book:', unresolvedByBook);
+    }
 
     // ── Intra-batch dedup ─────────────────────────────────────
     // The schema enforces UNIQUE(COALESCE(source_id, ''), identifier)
@@ -712,10 +726,25 @@ export default function FeatImportWorkbench({
     }
 
     if (!importable.length) {
-      const msg = unresolvedCount > 0
-        ? `No visible feats are ready to import (${unresolvedCount} have an unresolved source — edit the Source Match dropdown to import them).`
-        : 'No visible feats are ready to import.';
-      toast.error(msg);
+      if (unresolvedCount > 0) {
+        // Show top 3 unresolved books so the user knows which to
+        // create sources for. Full histogram is already in the
+        // console.warn above.
+        const topBooks = Object.entries(unresolvedByBook)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 3)
+          .map(([book, n]) => `${book} (${n})`)
+          .join(', ');
+        const extra = Object.keys(unresolvedByBook).length > 3
+          ? ` + ${Object.keys(unresolvedByBook).length - 3} more book(s)`
+          : '';
+        toast.error(
+          `No visible feats are ready to import. ${unresolvedCount} skipped — no matching source row for: ${topBooks}${extra}. Create the missing sources or use the per-row Source Match dropdown.`,
+          { duration: 10000 },
+        );
+      } else {
+        toast.error('No visible feats are ready to import.');
+      }
       return;
     }
 

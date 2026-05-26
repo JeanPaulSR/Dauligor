@@ -149,13 +149,16 @@ function matchSourceRecord(book: string, rules: string, sources: SourceRecord[])
         .map((value) => toCleanUpper(String(value ?? '')))
         .filter(Boolean);
 
+      // EXACT MATCH ONLY. The previous prefix-fallback silently
+      // routed "GH:CG'14" / "GH:PG'24" to a generic "GH" source,
+      // breaking the composite UNIQUE(source_id, identifier). The
+      // variants already cover the "PHB'14" → "PHB" case via the
+      // 14/24 suffix strip — anything more permissive than that
+      // produces false-positive routing.
       let score = 0;
       for (const variant of variants) {
         if (!variant) continue;
         if (candidates.includes(variant)) score = Math.max(score, 3);
-        else if (candidates.some((candidate) => candidate.startsWith(variant) || variant.startsWith(candidate))) {
-          score = Math.max(score, 2);
-        }
       }
 
       const sourceRules = normalizeRules(String(source.rules ?? ''));
