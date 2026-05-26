@@ -159,10 +159,16 @@ function sanitizeProficiencySelection(
   selection: any,
   {
     uppercase = false,
-    includeCategories = true
+    includeCategories = true,
+    includeWeaponTypeFilters = false
   }: {
     uppercase?: boolean;
     includeCategories?: boolean;
+    /** Weapons-only: also normalize categoryMeleeIds / categoryRangedIds.
+     *  Added 2026-05-26 to support 2014-PHB-style restricted grants like
+     *  "Simple Melee Weapons". Other proficiency types (armor / tools)
+     *  have no melee/ranged dimension so this stays off there. */
+    includeWeaponTypeFilters?: boolean;
   } = {}
 ) {
   const fixedIds = uniqueNormalizedIds(selection?.fixedIds || [], { uppercase });
@@ -178,13 +184,28 @@ function sanitizeProficiencySelection(
     normalized.categoryIds = uniqueNormalizedIds(selection?.categoryIds || []);
   }
 
+  if (includeWeaponTypeFilters) {
+    // Parallel arrays alongside categoryIds. A category id appearing in
+    // categoryIds grants both melee + ranged in that bucket; appearing
+    // in categoryMeleeIds restricts the grant to melee weapons only;
+    // categoryRangedIds restricts to ranged. The class export expands
+    // each entry into the appropriate Foundry trait keys (weapon:simpleM
+    // for melee-only, weapon:simpleR for ranged-only, both for full).
+    normalized.categoryMeleeIds = uniqueNormalizedIds(selection?.categoryMeleeIds || []);
+    normalized.categoryRangedIds = uniqueNormalizedIds(selection?.categoryRangedIds || []);
+  }
+
   return normalized;
 }
 
 function sanitizeProficiencyCollection(raw: any = {}) {
   return {
     armor: sanitizeProficiencySelection(raw.armor, { includeCategories: true }),
-    weapons: sanitizeProficiencySelection(raw.weapons, { includeCategories: true }),
+    // Weapons get the extra includeWeaponTypeFilters flag so the
+    // categoryMeleeIds / categoryRangedIds arrays survive the round-trip
+    // through this normalizer. Other proficiency types don't have a
+    // melee/ranged dimension.
+    weapons: sanitizeProficiencySelection(raw.weapons, { includeCategories: true, includeWeaponTypeFilters: true }),
     tools: sanitizeProficiencySelection(raw.tools, { includeCategories: true }),
     skills: sanitizeProficiencySelection(raw.skills, { includeCategories: false }),
     savingThrows: sanitizeProficiencySelection(raw.savingThrows, { uppercase: true, includeCategories: false }),

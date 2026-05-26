@@ -595,12 +595,25 @@ function normalizeSpellcastingForExport(spellcasting: any, refs: any = {}, {
 function sanitizeNormalizedProficiencyBlock(block: any) {
   const fixedIds = uniqueStrings(asArray(block?.fixedIds));
   const fixedSet = new Set(fixedIds);
-  return {
+  const normalized: any = {
     choiceCount: Number(block?.choiceCount || 0) || 0,
     categoryIds: uniqueStrings(asArray(block?.categoryIds)),
     optionIds: uniqueStrings(asArray(block?.optionIds)).filter((id) => !fixedSet.has(id)),
     fixedIds
   };
+  // 20260526: weapon proficiency blocks may carry melee/ranged-restricted
+  // category arrays. Pass them through verbatim — the module-side bridge
+  // expands each into Foundry trait keys (categoryMeleeIds → weapon:<cat>M,
+  // categoryRangedIds → weapon:<cat>R, categoryIds → both). Other proficiency
+  // types (armor / tools / languages / skills) don't carry these arrays
+  // and the if-blocks below silently no-op for them.
+  if (Array.isArray(block?.categoryMeleeIds)) {
+    normalized.categoryMeleeIds = uniqueStrings(asArray(block.categoryMeleeIds));
+  }
+  if (Array.isArray(block?.categoryRangedIds)) {
+    normalized.categoryRangedIds = uniqueStrings(asArray(block.categoryRangedIds));
+  }
+  return normalized;
 }
 
 function normalizeClassProficiencies(rawProficiencies: any, refs: any) {
@@ -616,6 +629,11 @@ function normalizeClassProficiencies(rawProficiencies: any, refs: any) {
     weapons: sanitizeNormalizedProficiencyBlock({
       choiceCount: Number(raw.weapons?.choiceCount || 0) || 0,
       categoryIds: uniqueStrings(asArray(raw.weapons?.categoryIds).map((id: string) => normalizeMappedId(id, refs.weaponCategoriesById))),
+      // 20260526: melee/ranged restricted category arrays. Resolved through
+      // the same weaponCategoriesById ref-map as categoryIds — they're all
+      // category IDs, the restriction is captured by which array they're in.
+      categoryMeleeIds: uniqueStrings(asArray(raw.weapons?.categoryMeleeIds).map((id: string) => normalizeMappedId(id, refs.weaponCategoriesById))),
+      categoryRangedIds: uniqueStrings(asArray(raw.weapons?.categoryRangedIds).map((id: string) => normalizeMappedId(id, refs.weaponCategoriesById))),
       optionIds: uniqueStrings(asArray(raw.weapons?.optionIds).map((id: string) => normalizeMappedId(id, refs.weaponsById, { preferFoundry: true }))),
       fixedIds: uniqueStrings(asArray(raw.weapons?.fixedIds).map((id: string) => normalizeMappedId(id, refs.weaponsById, { preferFoundry: true })))
     }),
