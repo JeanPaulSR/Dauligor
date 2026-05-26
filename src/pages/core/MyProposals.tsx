@@ -291,15 +291,27 @@ function BlockTabBar({
 /* -------------------------------------------------------------------------- */
 
 function buildReviewRoute(p: Proposal): string | null {
-  // Single-work editors live at a per-instance route; the proposal's
-  // entity_id is the live row id (for updates/deletes) or the user-
-  // minted UUID (for creates — the editor renders an empty form by
-  // default but will pull from the proposed_payload via review mode).
-  if (p.entity_type === 'class' && p.entity_id) {
-    return `/proposals/edit/classes/edit/${p.entity_id}?review=${p.id}`;
+  // Single-work editors live at a per-instance route. For UPDATE/DELETE
+  // proposals the id is `entity_id` (the live row); for CREATE proposals
+  // the server forcibly nulls entity_id and the real id lives in
+  // proposed_payload.id (the entity_id-null fallback, see architecture
+  // doc). Without the fallback, clicking a class CREATE submission in
+  // the queue would dead-end at a null id with no editor link.
+  if (p.entity_type === 'class') {
+    const id = p.entity_id ?? (
+      p.proposed_payload && typeof p.proposed_payload === 'object'
+        ? (p.proposed_payload as any).id
+        : null
+    );
+    if (id) return `/proposals/edit/classes/edit/${id}?review=${p.id}`;
   }
-  if (p.entity_type === 'subclass' && p.entity_id) {
-    return `/proposals/edit/subclasses/edit/${p.entity_id}?review=${p.id}`;
+  if (p.entity_type === 'subclass') {
+    const id = p.entity_id ?? (
+      p.proposed_payload && typeof p.proposed_payload === 'object'
+        ? (p.proposed_payload as any).id
+        : null
+    );
+    if (id) return `/proposals/edit/subclasses/edit/${id}?review=${p.id}`;
   }
   // Multi-work editors live at a single list route; the editor reads
   // ?review from the URL and (eventually) loads the proposed_payload
@@ -1127,6 +1139,24 @@ function ActiveBlockCard({
 /* -------------------------------------------------------------------------- */
 
 // Maps entity_type → the route that lets the user "continue editing".
+// Resolves a draft's "effective" id — the value an editor route should
+// receive as :id. For UPDATE/DELETE drafts this is `entity_id` (the
+// live row's PK). For CREATE drafts `entity_id` is null on the server
+// (the proposal endpoint forcibly nulls it — there's no live row to
+// point at yet); the client-minted UUID lives in `proposed_payload.id`.
+// See docs/architecture/proposal-editor-pattern.md "The entity_id-null
+// fallback".
+function effectiveDraftId(
+  d: import('../../lib/proposalBlock').DraftRevision,
+): string | null {
+  if (d.entity_id) return d.entity_id;
+  const payload = d.proposed_payload;
+  if (payload && typeof payload === 'object' && typeof (payload as any).id === 'string') {
+    return (payload as any).id;
+  }
+  return null;
+}
+
 // Multi-work editors return a single list-editor route (the user picks
 // the entity from inside it). Single-work editors return a function
 // that builds a per-instance route from the draft (since each draft is
@@ -1141,10 +1171,23 @@ const CONTINUE_ROUTE: Record<string, string | ((d: import('../../lib/proposalBlo
   item: '/proposals/edit/items',
   unique_option_group: '/proposals/edit/option-groups',
   unique_option_item: '/proposals/edit/option-groups',
-  // Single-work: per-instance routes. `entity_id` is the live row id
-  // for updates and the pre-minted UUID for creates.
-  class: (d) => `/proposals/edit/classes/edit/${d.entity_id}`,
-  subclass: (d) => `/proposals/edit/subclasses/edit/${d.entity_id}`,
+  // Single-work: per-instance routes. Use the entity_id-null fallback
+  // so CREATE drafts (entity_id=null, real id in proposed_payload.id)
+  // route correctly. Without it, clicking a class CREATE draft would
+  // navigate to /proposals/edit/classes/edit/null and the editor would
+  // load blank.
+  class: (d) => {
+    const id = effectiveDraftId(d);
+    return id
+      ? `/proposals/edit/classes/edit/${id}`
+      : '/proposals/edit/classes';
+  },
+  subclass: (d) => {
+    const id = effectiveDraftId(d);
+    return id
+      ? `/proposals/edit/subclasses/edit/${id}`
+      : '/proposals/edit/subclasses';
+  },
 };
 
 const SINGLE_WORK_ENTITY_TYPES = new Set(['class', 'subclass']);
