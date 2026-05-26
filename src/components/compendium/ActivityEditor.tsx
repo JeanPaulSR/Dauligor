@@ -113,13 +113,12 @@ function formatActivationSummary(activity: SemanticActivity): string {
 const sanitizeActivity = (activity: SemanticActivity): SemanticActivity => {
   const sanitized: SemanticActivity = { ...activity };
 
-  if (sanitized.visibility) {
-    const { requireAttunement, requireIdentification, requireMagic, ...visibility } = sanitized.visibility;
-    void requireAttunement;
-    void requireIdentification;
-    void requireMagic;
-    sanitized.visibility = visibility;
-  }
+  // `visibility.{requireAttunement,requireIdentification,requireMagic}`
+  // round-trip cleanly from Foundry dnd5e v5 — see
+  // E:/DnD/Professional/Foundry-JSON/windows/activity-*.json for the
+  // canonical shape. They used to be stripped here (pre-2026-05-24)
+  // because the editor didn't surface them; now that the Visibility
+  // section has checkboxes for each, the values flow through.
 
   if (sanitized.kind === 'forward') {
     delete sanitized.duration;
@@ -774,6 +773,30 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                             placeholder="Use character level"
                             noEntitiesText="No classes seeded — visibility falls back to character level."
                             triggerClassName="w-full"
+                          />
+                        </FieldRow>
+                        {/* The three require* flags mirror dnd5e v5's
+                            `visibility.{requireAttunement, requireIdentification,
+                            requireMagic}`. They gate the activity on the parent
+                            item being attuned / identified / magical at use
+                            time — useful for magic items whose activities only
+                            fire while wielded properly. */}
+                        <FieldRow label="Requires Attunement" hint="Only available when the parent item is attuned to its wielder." inline>
+                          <Checkbox
+                            checked={!!editingActivity.visibility?.requireAttunement}
+                            onCheckedChange={checked => updateSection('visibility', { requireAttunement: !!checked })}
+                          />
+                        </FieldRow>
+                        <FieldRow label="Requires Identification" hint="Only available when the parent item has been identified." inline>
+                          <Checkbox
+                            checked={!!editingActivity.visibility?.requireIdentification}
+                            onCheckedChange={checked => updateSection('visibility', { requireIdentification: !!checked })}
+                          />
+                        </FieldRow>
+                        <FieldRow label="Requires Magic" hint="Only available when the parent item is magical (has the `mgc` property or non-`none` rarity)." inline>
+                          <Checkbox
+                            checked={!!editingActivity.visibility?.requireMagic}
+                            onCheckedChange={checked => updateSection('visibility', { requireMagic: !!checked })}
                           />
                         </FieldRow>
                       </ActivitySection>

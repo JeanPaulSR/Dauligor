@@ -62,12 +62,17 @@ export interface RangeTargetingEditorProps {
   showsTargeting: boolean;
 }
 
+// Mirrors `CONFIG.DND5E.movementUnits` (the range subset) in dnd5e
+// v5.3.1. `any` is the unrestricted-range marker Foundry uses for
+// effects that have no spatial limit (rare but valid — e.g. Sending,
+// Scrying).
 const RANGE_UNIT_OPTIONS: { value: string; label: string }[] = [
   { value: 'self',  label: 'Self' },
   { value: 'touch', label: 'Touch' },
   { value: 'ft',    label: 'Feet' },
   { value: 'mi',    label: 'Miles' },
   { value: 'spec',  label: 'Special' },
+  { value: 'any',   label: 'Any' },
 ];
 
 const TEMPLATE_UNIT_OPTIONS: { value: string; label: string }[] = [

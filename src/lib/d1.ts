@@ -303,6 +303,13 @@ export async function queryD1<T>(sql: string, params: any[] = [], options: { noC
         // StatusesEditor read path leaves them as raw JSON strings
         // and call sites like `item.implied_ids.join(', ')` blow up.
         'implied_ids', 'impliedStatuses', 'changes',
+        // items/weapons/armor/tools JSON columns added 2026-05-24 to
+        // align with Foundry's nested `system.{weight, price, damage,
+        // range}` shapes (see migration 20260524-1800). The values are
+        // small enough that JSON storage costs nothing vs flat columns,
+        // and the nested shape round-trips to Foundry without
+        // unflattening on export.
+        'weight', 'price', 'damage', 'range',
         // spells.foundry_data — JSON column storing the Foundry system
         // block (activation, range, duration, target, materials, uses,
         // description.value, plus the `_dauligorImport` round-trip

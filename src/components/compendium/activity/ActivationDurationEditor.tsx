@@ -41,22 +41,48 @@ export interface ActivationDurationEditorProps {
   showsDuration: boolean;
 }
 
-const ACTIVATION_TYPE_OPTIONS: { value: string; label: string }[] = [
-  { value: 'action',   label: 'Action' },
-  { value: 'bonus',    label: 'Bonus Action' },
-  { value: 'reaction', label: 'Reaction' },
-  { value: 'minute',   label: 'Minute' },
-  { value: 'hour',     label: 'Hour' },
-  { value: 'special',  label: 'Special' },
+// Mirrors `CONFIG.DND5E.activityActivationTypes` in dnd5e v5.3.1 — see
+// the activity-window exports in `Foundry-JSON/windows/`. The set was
+// expanded from the original 6 to cover the full Foundry vocabulary so
+// authors can express legendary / mythic / lair / crew actions and
+// passive rest-based activations without the slug being silently
+// dropped on round-trip. Optgroups follow Foundry's grouping
+// (Standard / Time / Rest / Combat / Monster / Vehicle / Special).
+const ACTIVATION_TYPE_OPTIONS: { value: string; label: string; group: string }[] = [
+  { value: 'action',    label: 'Action',              group: 'Standard' },
+  { value: 'bonus',     label: 'Bonus Action',        group: 'Standard' },
+  { value: 'reaction',  label: 'Reaction',            group: 'Standard' },
+  { value: 'minute',    label: 'Minute',              group: 'Time' },
+  { value: 'hour',      label: 'Hour',                group: 'Time' },
+  { value: 'day',       label: 'Day',                 group: 'Time' },
+  { value: 'longRest',  label: 'End of a Long Rest',  group: 'Rest' },
+  { value: 'shortRest', label: 'End of a Short Rest', group: 'Rest' },
+  { value: 'encounter', label: 'Start of Encounter',  group: 'Combat' },
+  { value: 'turnStart', label: 'Start of Turn',       group: 'Combat' },
+  { value: 'turnEnd',   label: 'End of Turn',         group: 'Combat' },
+  { value: 'legendary', label: 'Legendary Action',    group: 'Monster' },
+  { value: 'mythic',    label: 'Mythic Action',       group: 'Monster' },
+  { value: 'lair',      label: 'Lair Action',         group: 'Monster' },
+  { value: 'crew',      label: 'Crew Action',         group: 'Vehicle' },
+  { value: 'special',   label: 'Special',             group: 'Special' },
+  { value: 'none',      label: 'None',                group: 'Special' },
 ];
 
+// Mirrors `CONFIG.DND5E.timePeriods` in dnd5e v5.3.1. `turn` is the
+// per-creature beat (1/6 round); `disp`/`dstr`/`perm` are the end-state
+// markers Foundry uses for buffs that last "Until Dispelled",
+// "Until Dispelled or Triggered", and "Permanent" respectively.
 const DURATION_UNIT_OPTIONS: { value: string; label: string }[] = [
   { value: 'inst',   label: 'Instantaneous' },
+  { value: 'turn',   label: 'Turn' },
   { value: 'round',  label: 'Round' },
   { value: 'minute', label: 'Minute' },
   { value: 'hour',   label: 'Hour' },
   { value: 'day',    label: 'Day' },
   { value: 'spec',   label: 'Special' },
+  { value: 'disp',   label: 'Until Dispelled' },
+  { value: 'dstr',   label: 'Until Dispelled or Triggered' },
+  { value: 'perm',   label: 'Permanent' },
 ];
 
 export default function ActivationDurationEditor({

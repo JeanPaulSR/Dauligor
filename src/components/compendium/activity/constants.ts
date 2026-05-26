@@ -23,26 +23,60 @@ export const SPELL_PROPERTIES = ['vocal', 'somatic', 'material'] as const;
 
 /** Recovery periods, grouped Foundry-style into Rests / Combat /
  *  Mechanical so authors can mentally bucket them. The hint is the
- *  category and renders as the picker's right-side badge. */
+ *  category and renders as the picker's right-side badge.
+ *
+ *  Mirrors `CONFIG.DND5E.limitedUsePeriods` in dnd5e v5.3.1 — see
+ *  E:/DnD/Professional/Foundry-JSON/windows/activity-*.json for the
+ *  canonical list. `recharge`/`charges` are Dauligor extensions kept
+ *  for backwards-compat with legacy data; they don't round-trip
+ *  cleanly to native Foundry items. */
 export const RECOVERY_PERIOD_OPTIONS: { value: string; label: string; hint: string }[] = [
-  { value: 'lr',        label: 'Long Rest',   hint: 'Rests' },
-  { value: 'sr',        label: 'Short Rest',  hint: 'Rests' },
-  { value: 'day',       label: 'Day',         hint: 'Rests' },
-  { value: 'dawn',      label: 'Dawn',        hint: 'Rests' },
-  { value: 'dusk',      label: 'Dusk',        hint: 'Rests' },
-  { value: 'turn',      label: 'Turn',        hint: 'Combat' },
-  { value: 'turnStart', label: 'Turn Start',  hint: 'Combat' },
-  { value: 'turnEnd',   label: 'Turn End',    hint: 'Combat' },
-  { value: 'round',     label: 'Round',       hint: 'Combat' },
-  { value: 'recharge',  label: 'Recharge',    hint: 'Mechanical' },
-  { value: 'charges',   label: 'Charges',     hint: 'Mechanical' },
+  { value: 'lr',         label: 'Long Rest',   hint: 'Rests' },
+  { value: 'sr',         label: 'Short Rest',  hint: 'Rests' },
+  { value: 'day',        label: 'Day',         hint: 'Rests' },
+  { value: 'dawn',       label: 'Dawn',        hint: 'Rests' },
+  { value: 'dusk',       label: 'Dusk',        hint: 'Rests' },
+  { value: 'initiative', label: 'Initiative',  hint: 'Combat' },
+  { value: 'turn',       label: 'Each Turn',   hint: 'Combat' },
+  { value: 'turnStart',  label: 'Turn Start',  hint: 'Combat' },
+  { value: 'turnEnd',    label: 'Turn End',    hint: 'Combat' },
+  // `round` is intentionally retained alongside Foundry's set. It was
+  // a Dauligor extension predating the canonical list; keep so legacy
+  // rows still display readable labels.
+  { value: 'round',      label: 'Round',       hint: 'Combat (legacy)' },
+  { value: 'recharge',   label: 'Recharge',    hint: 'Mechanical (legacy)' },
+  { value: 'charges',    label: 'Charges',     hint: 'Mechanical (legacy)' },
 ];
 
-export const RECOVERY_TYPE_OPTIONS: { value: string; label: string }[] = [
-  { value: 'recoverAll', label: 'Recover All' },
-  { value: 'formula',    label: 'Formula' },
-  { value: 'loseAll',    label: 'Lose All' },
+/** Recovery types — mirrors Foundry's `recoverAll` / `recoverPartial`
+ *  / `recovery` (formula-driven). Dauligor previously used `formula`
+ *  as the slug for the formula-driven mode; the canonical Foundry
+ *  slug is `recovery`. We keep `formula` in the dropdown labelled
+ *  "(legacy)" so existing rows display correctly; new saves should
+ *  prefer `recovery`. `loseAll` is a Dauligor extension (Foundry has
+ *  no built-in equivalent) — kept for backwards compatibility. */
+export const RECOVERY_TYPE_OPTIONS: { value: string; label: string; hint?: string }[] = [
+  { value: 'recoverAll',     label: 'Recover All' },
+  { value: 'recoverPartial', label: 'Recover Partial', hint: 'Formula-driven, capped at max' },
+  { value: 'recovery',       label: 'Formula',         hint: 'Roll the formula directly' },
+  { value: 'formula',        label: 'Formula (legacy)', hint: 'Legacy slug; equivalent to "recovery"' },
+  { value: 'loseAll',        label: 'Lose All',        hint: 'Dauligor extension' },
 ];
+
+/** Legacy → canonical map for the recovery-type slug change
+ *  (`formula` → `recovery`). Available for future migrations that
+ *  canonicalise stored data; not auto-applied today so existing rows
+ *  with `type: "formula"` continue to round-trip unchanged. */
+export const RECOVERY_TYPE_LEGACY_ALIASES: Record<string, string> = {
+  formula: 'recovery',
+};
+
+/** Helper: canonicalise a recovery-type slug. Use when writing to
+ *  Foundry or when querying — both `formula` and `recovery` should
+ *  collapse to `recovery` for matching. */
+export function canonicalizeRecoveryType(slug: string): string {
+  return RECOVERY_TYPE_LEGACY_ALIASES[slug] ?? slug;
+}
 
 export const TARGET_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: 'none',     label: 'None' },
@@ -54,14 +88,21 @@ export const TARGET_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: 'space',    label: 'Space' },
 ];
 
+// Mirrors `CONFIG.DND5E.areaTargetTypes` in dnd5e v5.3.1. `radius` is
+// the centered-on-self circular form (vs `sphere` which originates
+// elsewhere); `rect` and `wall` are less-common shapes used by spells
+// like Wall of Fire, Wall of Force.
 export const TEMPLATE_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: 'none',     label: 'None' },
+  { value: 'radius',   label: 'Radius' },
+  { value: 'sphere',   label: 'Sphere' },
+  { value: 'cylinder', label: 'Cylinder' },
   { value: 'cone',     label: 'Cone' },
   { value: 'cube',     label: 'Cube' },
-  { value: 'cylinder', label: 'Cylinder' },
-  { value: 'line',     label: 'Line' },
-  { value: 'sphere',   label: 'Sphere' },
   { value: 'square',   label: 'Square' },
+  { value: 'rect',     label: 'Rectangle' },
+  { value: 'line',     label: 'Line' },
+  { value: 'wall',     label: 'Wall' },
 ];
 
 export const CONSUMPTION_TARGET_TYPES: { value: string; label: string }[] = [
