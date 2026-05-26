@@ -194,15 +194,21 @@ async function importClassBundleToActor(payload, { entry = null, actor = null, t
     return null;
   }
 
-  const supportOptionItems = ensureArray(payload.optionItems).map((item) => {
-    const normalized = normalizeWorldItem(item, payload.source);
-    applyPayloadMetadata(normalized.flags?.[MODULE_ID], { payloadMeta: payload, importMode: "world" });
-    return normalized;
-  });
-  const importedSupportDocs = [];
-  for (const supportItem of supportOptionItems) {
-    importedSupportDocs.push(await upsertWorldItem(supportItem));
-  }
+  // Note: This path used to call `upsertWorldItem(supportItem)` for every
+  // entry in `payload.optionItems`, persisting Fighting Styles / Maneuvers /
+  // Metamagic / Eldritch Invocations / etc. as Item documents in the world
+  // (the sidebar's Items directory) every time a class was imported onto
+  // an actor. The world items existed solely so `prepareEmbeddedActor*Item`
+  // could resolve `system.advancement.configuration.items[].sourceId` /
+  // `.pool[].sourceId` to UUIDs at embed time. That was vestigial — the
+  // actual UUID resolution happens *after* features are embedded, via
+  // `syncActorClassAdvancements` → `buildEmbeddedActorAdvancementStructure`,
+  // which builds `ItemGrant` / `ItemChoice` entries with UUIDs pointing at
+  // the actor-embedded features themselves (Plutonium's pattern — see
+  // their `pAddItemGrantAdvancementLinks`). Class-attribution flags
+  // (`classSourceId`, `grantedByClassSourceId`, `advancementOrigin`) are
+  // all set directly on the actor-embedded items, so removing the world
+  // bleed loses nothing.
 
   if (workflow.requiresSubclassSelection && !workflow.selection.subclassSourceId) {
     notifyWarn(`Choose a subclass for "${workflow.classItem.name}" before importing it onto an actor.`);
@@ -246,7 +252,6 @@ async function importClassBundleToActor(payload, { entry = null, actor = null, t
     existingItem: existingClassItem,
     payloadMeta: payload,
     importSelection: workflow.selection,
-    referencedDocs: importedSupportDocs,
     proficiencyMode: workflow.proficiencyMode
   });
   // Stamp the spell-list endpoint URL on the class item flag so the
@@ -286,8 +291,7 @@ async function importClassBundleToActor(payload, { entry = null, actor = null, t
     const preparedSubclass = prepareEmbeddedActorSubclassItem(workflow.selectedSubclassItem, {
       existingItem: existingSubclassItem,
       payloadMeta: payload,
-      classSourceId,
-      referencedDocs: importedSupportDocs
+      classSourceId
     });
     subclassDoc = await upsertActorItem(targetActor, preparedSubclass);
     if (!subclassDoc) {
@@ -420,8 +424,7 @@ async function importClassBundleToActor(payload, { entry = null, actor = null, t
     toolSelections: workflow.selection.toolSelections,
     savingThrowSelections: workflow.selection.savingThrowSelections,
     languageSelections: workflow.selection.languageSelections,
-    hpResolution,
-    referencedDocs: importedSupportDocs
+    hpResolution
   });
   log("Post-sync class advancement state", {
     actorName: targetActor.name,
@@ -433,8 +436,7 @@ async function importClassBundleToActor(payload, { entry = null, actor = null, t
   if (subclassDoc && workflow.selectedSubclassItem) {
     syncedSubclassDoc = await syncActorClassAdvancements(targetActor, subclassDoc, workflow.selectedSubclassItem.system?.advancement, {
       classSourceId,
-      targetLevel: classLevel,
-      referencedDocs: importedSupportDocs
+      targetLevel: classLevel
     });
   }
   const appliedClassTraits = workflow.isMulticlassImport
@@ -4042,9 +4044,19 @@ function collectGrantedFeatureSourceIds(advancement, targetLevel) {
 }
 
 function filterEmbeddedActorAdvancements(advancement) {
+  // ItemGrant and ItemChoice entries are rebuilt by `syncActorClassAdvancements`
+  // → `buildEmbeddedActorAdvancementStructure` AFTER all features/options are
+  // embedded on the actor, with UUIDs pointing at the actor-embedded items
+  // themselves. Stripping both types here means the class/subclass can embed
+  // without unresolved `configuration.items[].sourceId` / `.pool[].sourceId`
+  // entries that would otherwise violate dnd5e's schema (which requires each
+  // entry to have a real `uuid`). The post-embed sync writes the resolved
+  // structure via `system: { "==advancement": ... }` so the intermediate
+  // empty state is replaced wholesale.
   const filtered = {};
   for (const [id, advancementEntry] of Object.entries(normalizeAdvancementStructure(advancement))) {
-    if (!advancementEntry || advancementEntry.type === "ItemGrant") continue;
+    if (!advancementEntry) continue;
+    if (advancementEntry.type === "ItemGrant" || advancementEntry.type === "ItemChoice") continue;
     filtered[id] = foundry.utils.deepClone(advancementEntry);
   }
   return filtered;
