@@ -489,10 +489,221 @@ export default function AdvancementManager({
         else replacements.delete(item.id);
       }
     });
-    setTraitConfigurationLists(Array.from(fixed), Array.from(options), Array.from(replacements));
+
+    // 20260526: when this is the Fixed column on a weapons trait, also
+    // maintain section-level category arrays so the export carries the
+    // "whole category" semantic — and clear any Melee/Ranged-restricted
+    // state for the same category (canonical whole-category
+    // representation lives only in `categoryIds`). Mirrors
+    // ClassEditor's `buildNextGroupedProficiencyCollection` for the
+    // proficiencies block. Per-item un-ticks below the header don't
+    // sync back to these arrays (same minor desync ClassEditor has),
+    // but re-clicking a pill or the header All re-syncs cleanly.
+    const extraConfig: Record<string, string[]> = {};
+    if (target === 'fixed' && traitType === 'weapons') {
+      const catId = (categoryItems[0] as any)?.category_id
+        ?? (categoryItems[0] as any)?.categoryId
+        ?? null;
+      if (catId) {
+        const inAll = new Set<string>(editingAdv.configuration?.categoryIds || []);
+        const inMelee = new Set<string>(editingAdv.configuration?.categoryMeleeIds || []);
+        const inRanged = new Set<string>(editingAdv.configuration?.categoryRangedIds || []);
+        if (isChecked) {
+          inAll.add(catId);
+          inMelee.delete(catId);
+          inRanged.delete(catId);
+        } else {
+          inAll.delete(catId);
+          inMelee.delete(catId);
+          inRanged.delete(catId);
+        }
+        extraConfig.categoryIds = Array.from(inAll);
+        extraConfig.categoryMeleeIds = Array.from(inMelee);
+        extraConfig.categoryRangedIds = Array.from(inRanged);
+      }
+    }
+
+    setEditingAdv({
+      ...editingAdv,
+      configuration: {
+        ...editingAdv.configuration,
+        ...extraConfig,
+        fixed: Array.from(new Set(Array.from(fixed))),
+        options: Array.from(new Set(Array.from(options))),
+        replacements: Array.from(new Set(Array.from(replacements)))
+      }
+    });
     if (target === 'fixed' && isChecked) {
       setCollapsedTraitCategories(prev => ({ ...prev, [`${traitType}:${category}`]: true }));
     }
+  };
+
+  // ── Weapon-type-filtered category toggle for trait advancements ──
+  // Added 2026-05-26 (C4-UI). Bulk-toggles every weapon in a category
+  // whose weapon_type matches the requested filter ('Melee' | 'Ranged')
+  // into `editingAdv.configuration.fixed` / `.options` / `.replacements`.
+  //
+  // Behaviour per column:
+  //   target='fixed': mutually exclusive with options (matches the
+  //     existing per-item toggleTraitFixed behaviour); ALSO maintains
+  //     section-level `categoryIds` / `categoryMeleeIds` /
+  //     `categoryRangedIds` arrays so the classExport normalizer can
+  //     fan them out into Foundry trait keys (weapon:simpleM /
+  //     weapon:simpleR / both-when-categoryIds).
+  //   target='options': mutually exclusive with fixed; no section-level
+  //     category state (mirrors ClassEditor's optionIds — choice pools
+  //     are inherently per-weapon).
+  //   target='replacements': independent of fixed/options; no
+  //     section-level state.
+  //
+  // "Promote to All" behaviour (Fixed only): clicking Melee while
+  // Ranged is already restricted promotes the category to a whole-
+  // category grant (adds to categoryIds, clears both restricted arrays).
+  // Same for the symmetric case. Existing All header toggle clears
+  // any restricted entries.
+  const toggleTraitCategoryByWeaponType = (
+    categoryItems: any[],
+    categoryId: string | null,
+    weaponType: 'Melee' | 'Ranged',
+    target: 'fixed' | 'options' | 'replacements',
+  ) => {
+    const matchType = (w: any) =>
+      String(w?.weaponType ?? w?.weapon_type ?? '').trim() === weaponType;
+    const matching = (categoryItems || []).filter(matchType);
+    if (matching.length === 0) return;
+    const matchingIds = matching.map((w) => w.id).filter(Boolean) as string[];
+
+    const fixed = new Set<string>(editingAdv.configuration?.fixed || []);
+    const options = new Set<string>(editingAdv.configuration?.options || []);
+    const replacements = new Set<string>(editingAdv.configuration?.replacements || []);
+
+    let targetSet: Set<string>;
+    if (target === 'fixed') targetSet = fixed;
+    else if (target === 'options') targetSet = options;
+    else targetSet = replacements;
+
+    const allMatchingTicked = matchingIds.every((id) => targetSet.has(id));
+
+    if (allMatchingTicked) {
+      matchingIds.forEach((id) => targetSet.delete(id));
+    } else {
+      matchingIds.forEach((id) => {
+        targetSet.add(id);
+        if (target === 'fixed') options.delete(id);
+        else if (target === 'options') fixed.delete(id);
+      });
+    }
+
+    const nextConfig: any = {
+      ...editingAdv.configuration,
+      fixed: Array.from(fixed),
+      options: Array.from(options),
+      replacements: Array.from(replacements),
+    };
+
+    if (target === 'fixed' && categoryId) {
+      const inAll = new Set<string>(editingAdv.configuration?.categoryIds || []);
+      const inMelee = new Set<string>(editingAdv.configuration?.categoryMeleeIds || []);
+      const inRanged = new Set<string>(editingAdv.configuration?.categoryRangedIds || []);
+      const matchingHalf = weaponType === 'Melee' ? inMelee : inRanged;
+      const oppositeHalf = weaponType === 'Melee' ? inRanged : inMelee;
+
+      if (allMatchingTicked) {
+        // Untick: remove from restricted half. Also remove from
+        // categoryIds (whole-category invariant breaks when one half
+        // disappears).
+        matchingHalf.delete(categoryId);
+        inAll.delete(categoryId);
+      } else {
+        // Tick: if the opposite half is already restricted, promote
+        // to "All" (clears both halves, adds to categoryIds).
+        // Otherwise add to the matching restricted half.
+        if (oppositeHalf.has(categoryId)) {
+          oppositeHalf.delete(categoryId);
+          inAll.add(categoryId);
+        } else {
+          matchingHalf.add(categoryId);
+          inAll.delete(categoryId);
+        }
+      }
+      nextConfig.categoryIds = Array.from(inAll);
+      nextConfig.categoryMeleeIds = Array.from(inMelee);
+      nextConfig.categoryRangedIds = Array.from(inRanged);
+    }
+
+    setEditingAdv({ ...editingAdv, configuration: nextConfig });
+  };
+
+  // Renders inline Melee / Ranged pill buttons for a category-header
+  // column on the trait advancement weapon picker. Returns null for
+  // non-weapon trait types and for categories whose items don't carry
+  // any weaponType / weapon_type field — that keeps the call sites
+  // unconditional without polluting non-weapon trait pickers.
+  const renderTraitWeaponTypePills = (
+    items: any[],
+    _category: string,
+    target: 'fixed' | 'options' | 'replacements',
+  ): React.ReactNode => {
+    if (traitType !== 'weapons') return null;
+    if (!items || items.length === 0) return null;
+    const matchType = (w: any) => String(w?.weaponType ?? w?.weapon_type ?? '').trim();
+    const meleeItems = items.filter((w) => matchType(w) === 'Melee');
+    const rangedItems = items.filter((w) => matchType(w) === 'Ranged');
+    if (meleeItems.length === 0 && rangedItems.length === 0) return null;
+
+    // Category ID resolution: rows from fetchCollection are raw SQL
+    // (snake_case category_id). All items in a single group share the
+    // same base category — whether that group splits by weaponType or
+    // not depends on getGroupedTraitEntries (currently doesn't split
+    // because the snake_case field isn't camelCased on read).
+    const catId = (items[0] as any)?.category_id
+      ?? (items[0] as any)?.categoryId
+      ?? null;
+
+    const targetArr = (
+      target === 'fixed' ? editingAdv.configuration?.fixed
+      : target === 'options' ? editingAdv.configuration?.options
+      : editingAdv.configuration?.replacements
+    ) || [];
+    const targetSet = new Set<string>(targetArr as string[]);
+    const meleeActive = meleeItems.length > 0 && meleeItems.every((w) => targetSet.has(w.id));
+    const rangedActive = rangedItems.length > 0 && rangedItems.every((w) => targetSet.has(w.id));
+
+    // Pill colour matches the column accent so the affordance reads as
+    // "scoped to this column": gold = Fixed, sky = Options, purple =
+    // Replacements. Identical to the chevrons on the per-item rows.
+    const pillBase = 'px-1.5 py-0.5 rounded text-[8px] uppercase tracking-widest font-black transition-all border leading-none';
+    const pillOn = target === 'fixed'
+      ? 'bg-gold/80 border-gold/80 text-white'
+      : target === 'options'
+        ? 'bg-sky-500/80 border-sky-500/80 text-white'
+        : 'bg-purple-500/80 border-purple-500/80 text-white';
+    const pillOff = target === 'fixed'
+      ? 'bg-card/40 text-gold/40 border-gold/15 hover:border-gold/40'
+      : target === 'options'
+        ? 'bg-card/40 text-sky-400/40 border-sky-500/15 hover:border-sky-400/50'
+        : 'bg-card/40 text-purple-400/40 border-purple-500/15 hover:border-purple-400/50';
+
+    return (
+      <>
+        {meleeItems.length > 0 && (
+          <button
+            type="button"
+            onClick={() => toggleTraitCategoryByWeaponType(items, catId, 'Melee', target)}
+            className={`${pillBase} ${meleeActive ? pillOn : pillOff}`}
+            title={`Toggle all melee weapons in this category as ${target}`}
+          >M</button>
+        )}
+        {rangedItems.length > 0 && (
+          <button
+            type="button"
+            onClick={() => toggleTraitCategoryByWeaponType(items, catId, 'Ranged', target)}
+            className={`${pillBase} ${rangedActive ? pillOn : pillOff}`}
+            title={`Toggle all ranged weapons in this category as ${target}`}
+          >R</button>
+        )}
+      </>
+    );
   };
   const setAsiFixedValue = (ability: (typeof ABILITY_ORDER)[number], nextValue: number) => {
     const fixed = { ...(editingAdv.configuration?.fixed || {}) };
@@ -2547,7 +2758,7 @@ export default function AdvancementManager({
                                     <span className="text-xs font-bold text-ink truncate">{category}</span>
                                     <span className="text-[9px] text-ink/35">({items.length})</span>
                                   </button>
-                                  <div className="flex justify-center">
+                                  <div className="flex flex-col items-center gap-1">
                                     <label className="cursor-pointer">
                                       <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
                                         allFixed ? 'bg-gold border-gold' : 'border-gold/30 hover:border-gold/50'
@@ -2561,8 +2772,11 @@ export default function AdvancementManager({
                                         onChange={e => toggleTraitCategory(category, 'fixed', e.target.checked)}
                                       />
                                     </label>
+                                    {traitType === 'weapons' && (
+                                      <div className="flex gap-0.5">{renderTraitWeaponTypePills(items as any[], category, 'fixed')}</div>
+                                    )}
                                   </div>
-                                  <div className="flex justify-center">
+                                  <div className="flex flex-col items-center gap-1">
                                     <label className="cursor-pointer">
                                       <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
                                         allOptions ? 'bg-sky-500 border-sky-500' : 'border-gold/30 hover:border-sky-400/50'
@@ -2576,9 +2790,12 @@ export default function AdvancementManager({
                                         onChange={e => toggleTraitCategory(category, 'options', e.target.checked)}
                                       />
                                     </label>
+                                    {traitType === 'weapons' && (
+                                      <div className="flex gap-0.5">{renderTraitWeaponTypePills(items as any[], category, 'options')}</div>
+                                    )}
                                   </div>
                                 {traitAllowsReplacements && (
-                                  <div className="flex justify-center">
+                                  <div className="flex flex-col items-center gap-1">
                                       <label className="cursor-pointer">
                                         <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
                                           allReplacements ? 'bg-purple-500 border-purple-500' : 'border-gold/30 hover:border-purple-400/50'
@@ -2592,6 +2809,9 @@ export default function AdvancementManager({
                                           onChange={e => toggleTraitCategory(category, 'replacements', e.target.checked)}
                                         />
                                       </label>
+                                      {traitType === 'weapons' && (
+                                        <div className="flex gap-0.5">{renderTraitWeaponTypePills(items as any[], category, 'replacements')}</div>
+                                      )}
                                     </div>
                                   )}
                                 </div>

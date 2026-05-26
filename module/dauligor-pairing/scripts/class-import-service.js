@@ -2342,9 +2342,17 @@ function normalizeSemanticFeatureTraitAdvancement(base, advancement, context) {
     return base;
   }
 
-  const grants = ensureArray(configuration?.fixed)
-    .map((entry) => normalizeTraitKey(configuration?.type, entry))
-    .filter(Boolean);
+  const grants = [
+    ...ensureArray(configuration?.fixed)
+      .map((entry) => normalizeTraitKey(configuration?.type, entry))
+      .filter(Boolean),
+    // 20260526: weapons trait advancements may carry category-level
+    // grant arrays alongside the per-weapon `fixed` list. categoryIds
+    // = whole-category grant (dnd5e v5 split into Melee + Ranged where
+    // applicable); categoryMeleeIds / categoryRangedIds = restricted
+    // half-category grants. See expandWeaponCategoryGrants below.
+    ...expandWeaponCategoryGrants(configuration)
+  ];
   const pool = ensureArray(configuration?.options)
     .map((entry) => normalizeTraitKey(configuration?.type, entry))
     .filter(Boolean);
@@ -2541,6 +2549,70 @@ function normalizeTraitKey(type, value) {
     default:
       return raw;
   }
+}
+
+/**
+ * Expand a weapons-trait configuration's category-level grant arrays
+ * (`categoryIds` / `categoryMeleeIds` / `categoryRangedIds`) into
+ * concrete Foundry trait keys. dnd5e v5 splits the Simple / Martial
+ * weapon categories into Melee + Ranged variants (`weapon:simpleM`,
+ * `weapon:simpleR`, `weapon:martialM`, `weapon:martialR`), while other
+ * categories (Natural / Improvised / Siege) stay whole
+ * (`weapon:natural`, etc.).
+ *
+ * Strategy: probe `CONFIG.DND5E.weaponTypes` at runtime to decide which
+ * scheme applies. For whole-category grants we emit BOTH halves when
+ * registered, else fall back to the bare slug. For
+ * categoryMeleeIds / categoryRangedIds we only emit the registered
+ * half — the bare-slug fallback would be wrong because the half-only
+ * grant is meant to be restricted.
+ *
+ * Non-weapons trait types return an empty array so the caller can
+ * unconditionally splat the result. The app-side editors populate
+ * these arrays via inline Melee/Ranged pill buttons (see
+ * `ClassEditor.tsx` + `AdvancementManager.tsx`); the export normalizer
+ * (`src/lib/classExport.ts:normalizeAdvancementForExport`) passes the
+ * arrays through verbatim, so this is the receiving end of that
+ * round-trip.
+ */
+function expandWeaponCategoryGrants(configuration) {
+  if (trimString(configuration?.type).toLowerCase() !== "weapons") return [];
+
+  const weaponTypes = (CONFIG?.DND5E?.weaponTypes) ?? {};
+  const grants = [];
+
+  const expandHalf = (catId, half) => {
+    const slug = slugify(trimString(catId));
+    if (!slug) return null;
+    const key = `${slug}${half}`;
+    // Only emit the half if dnd5e actually knows about it. Pure
+    // half-grants without registration would create dead trait keys.
+    return weaponTypes[key] ? `weapon:${key}` : null;
+  };
+
+  for (const catId of ensureArray(configuration?.categoryIds)) {
+    const slug = slugify(trimString(catId));
+    if (!slug) continue;
+    const meleeKey = `${slug}M`;
+    const rangedKey = `${slug}R`;
+    if (weaponTypes[meleeKey] || weaponTypes[rangedKey]) {
+      if (weaponTypes[meleeKey]) grants.push(`weapon:${meleeKey}`);
+      if (weaponTypes[rangedKey]) grants.push(`weapon:${rangedKey}`);
+    } else {
+      // Non-splitting category (natural / improv / siege / homebrew).
+      // Fall back to the bare slug so the grant still lands.
+      grants.push(`weapon:${slug}`);
+    }
+  }
+  for (const catId of ensureArray(configuration?.categoryMeleeIds)) {
+    const key = expandHalf(catId, "M");
+    if (key) grants.push(key);
+  }
+  for (const catId of ensureArray(configuration?.categoryRangedIds)) {
+    const key = expandHalf(catId, "R");
+    if (key) grants.push(key);
+  }
+  return grants;
 }
 
 /**
