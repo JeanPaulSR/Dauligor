@@ -23,17 +23,41 @@ Fullscreen via the shared `spell-list-fullscreen` body class (same one used by t
 │ [← Back]  [Foundry] [Manual]   ───   [Backfill] [Purge All]            │
 ├─ FilterBar ───────────────────────────────────────────────────────────┤
 │ [search]  [Filters (N)]  [Reset]   539/539   [+ New Spell]            │
-├─ list ──────┬─ editor (middle, widest) ────────────┬─ tags + prereqs ─┤
-│ Name Lv Src │ Spell name + level                    │ Tabs:            │
-│ ─────────── │ Tabs: Basics, Mechanics, Activities,  │   Tags (N)       │
-│ Fireball    │   Effects                             │   Prereqs (N)    │
-│ Frostbite   │ (Save / Delete / Reset Form pinned to │                  │
-│  ↕ 36px rows│  the editor card header)              │ Chip picker with │
-│             │  ↕                                    │ subtag drawers   │
+├─ list ──────┬─ editor (middle, widest) ────────────┬─ preview ────────┤
+│ Name Lv Src │ Spell name + Save / Reset / Delete    │ <SpellDetailPanel│
+│ ─────────── │ Super-tabs: [ Editor ] [ Tags (N) ]   │   spellId={..} /> │
+│ Fireball    │                                       │ Same component   │
+│ Frostbite   │ Editor → 4 sub-tabs:                  │ public browser   │
+│  ↕ 36px rows│   Basics / Mechanics / Activities /   │ uses, so admins  │
+│             │   Effects                             │ see what end-    │
+│             │ Tags   → 3 sub-tabs:                  │ users see.       │
+│             │   Tags (N) / Prereqs (N) / Rules      │ Tracks SAVED     │
+│             │                                       │ spell; pending   │
+│             │                                       │ edits show on Save│
 └─────────────┴───────────────────────────────────────┴──────────────────┘
 ```
 
 Pane heights derive from `window.innerHeight - 200` (the extra 60px vs the browser accounts for the consolidated outer toolbar). Resize listener keeps the panes live.
+
+### Nested-tab architecture
+
+The middle column uses **two-level tabs**:
+
+- **Super-tabs** (`editorView` state, controlled): `Editor` vs `Tags`.
+  - `Editor` super-tab holds the entity-shaped form fields. Per-entity content — for spells it's Basics / Mechanics / Activities / Effects; future ItemsEditor / FeatsEditor copies of this layout will swap these for their own fields.
+  - `Tags` super-tab holds tagging-shaped concerns: descriptive Tags, prerequisite Tags + notes, and Rule Membership.
+- **Sub-tabs** (`editorSubTab` + `tagsSubTab` state, controlled): the inner tab within each super-tab.
+
+**Persistence:** All three tab states persist across compact-list selection changes. If the proposer is on `Tags > Prereqs` editing Fireball and clicks Frostbite, they stay on `Tags > Prereqs` for Frostbite. **Reset semantics:** `resetForm` (triggered by `+ New Spell` and Reset Form) restores `editorView='editor'` + `editorSubTab='basics'`; `tagsSubTab` is untouched because it's irrelevant while Editor is the active super-tab.
+
+**Save flow & forms:** A single `<form id="spell-manual-editor-form">` wraps the entire outer Tabs at the CardContent level — `handleSave` reads from `formData` state (not the DOM), so Save still flushes when the user is on the Tags super-tab even though the form-field `TabsContent` are unmounted there. Each super-tab body wraps its content in a `<fieldset disabled={isReadOnly}>` so base-spell browse mode blocks edits in both Editor and Tags consistently. The Save / Reset / Delete buttons live OUTSIDE both fieldsets (in the shared header above the super-tab strip) so they stay clickable regardless of read-only state or active super-tab.
+
+### Right column — preview
+
+Reuses `<SpellDetailPanel>` from `src/components/compendium/` — the same component the public `/compendium/spells` browser renders for its detail pane. Two consequences:
+
+- **Visual parity guaranteed:** anything the SpellDetailPanel doesn't render (e.g. raw `foundry_data` fields not extracted into the panel's UI) won't render in the editor preview either. If a layout change ships to the public browser, admins see the same change in the editor without separate maintenance.
+- **Tracks the SAVED spell, not pending form edits:** the panel loads by `spellId={editingId}` and runs its own fetch. After Save, the preview reflects the new state on next selection; while editing, the form shows the pending value and the preview shows the last-saved value. Live-tracking via passing `formData` directly is a possible future enhancement; not implemented in this pass.
 
 ### Toolbar row 1 — page chrome
 
@@ -74,9 +98,9 @@ The compact rhythm intentionally drops the rich 94px tall cards the old layout u
 
 ## Middle column — editor
 
-Tabs: **Basics**, **Mechanics**, **Activities**, **Effects**. (Prereqs moved out to the right column.)
+Top-level super-tabs: **Editor** | **Tags**. The Editor super-tab hosts the entity-shaped form sub-tabs (**Basics**, **Mechanics**, **Activities**, **Effects**); the Tags super-tab hosts the tagging-shaped sub-tabs (**Tags**, **Prereqs**, **Rules**) — see the [nested-tab architecture](#nested-tab-architecture) section above for the full state contract.
 
-The editor card has the title + per-spell action buttons (Delete / Reset Form / Save) pinned to its header so a save is one click away regardless of which tab is showing. Inactive tab content unmounts (Radix default); form state lives in `formData` so unmounted fields still contribute on save. No `forceMount` needed.
+The editor card has the title + per-spell action buttons (Delete / Reset Form / Save) pinned to its header so a save is one click away regardless of which super-tab or sub-tab is showing. Inactive tab content unmounts (Radix default); form state lives in `formData` so unmounted fields still contribute on save. No `forceMount` needed.
 
 | Tab | Holds |
 |---|---|
