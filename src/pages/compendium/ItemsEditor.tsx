@@ -1,25 +1,46 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { ChevronLeft, Hammer, X } from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
-import { Button } from '../../components/ui/button';
-import DevelopmentCompendiumManager from '../../components/compendium/DevelopmentCompendiumManager';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
+import { toast } from 'sonner';
+import { X } from 'lucide-react';
 import ItemImportWorkbench from '../../components/compendium/ItemImportWorkbench';
+import ActivityEditor from '../../components/compendium/ActivityEditor';
+import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
+import ItemUsesField from '../../components/compendium/ItemUsesField';
+import MarkdownEditor from '../../components/MarkdownEditor';
+import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
+import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
+import { useProposalPreFlushSave } from '../../hooks/useProposalPreFlushSave';
+import { useDraftedEntityIds } from '../../hooks/useDraftedEntityIds';
+import { useEditBaseUnlocks } from '../../hooks/useEditBaseUnlocks';
+import { useCascadeDependent } from '../../hooks/useCascadeDependent';
+import { actionLabel, applyProposalWrite } from '../../lib/proposalAware';
+import { useProposalReview, resolveReviewPayload, ReviewFieldHighlight } from '../../lib/proposalReview';
+import { CascadeDependentBanner } from '../../components/proposals/CascadeDependentBanner';
+import { TagReplacementPicker } from '../../components/proposals/TagReplacementPicker';
+import { reportClientError, OperationType } from '../../lib/firebase';
+import { upsertItem, deleteItem, fetchItem, denormalizeCompendiumData } from '../../lib/compendium';
+import { fetchCollection } from '../../lib/d1';
+import { slugify, cn } from '../../lib/utils';
+import {
+  CompendiumEditorShell,
+  type EditorMode,
+  type EditorSubTab,
+  type TagsSubTab,
+  type EditorListColumn,
+} from '../../components/compendium/CompendiumEditorShell';
 import { Checkbox } from '../../components/ui/checkbox';
+import { ImageUpload } from '../../components/ui/ImageUpload';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
-import { ActivitySection, FieldRow } from '../../components/compendium/activity/primitives';
 import SingleSelectSearch from '../../components/ui/SingleSelectSearch';
-import ItemUsesField from '../../components/compendium/ItemUsesField';
-import { fetchCollection } from '../../lib/d1';
-import { denormalizeCompendiumData } from '../../lib/compendium';
+import { ActivitySection, FieldRow } from '../../components/compendium/activity/primitives';
 import { ABILITY_OPTIONS, FALLBACK_ABILITY_LABELS, DAMAGE_TYPE_OPTIONS, DAMAGE_DIE_DENOMINATIONS } from '../../components/compendium/activity/constants';
 
 // ─── Vocabularies ──────────────────────────────────────────────────
 //
-// Foundry dnd5e v5 system.type enums. The (value, label) tuples keep
-// the canonical slugs as the value so the export round-trips cleanly
-// to Foundry; UI labels are display-only.
+// Foundry dnd5e v5 system.type enums + the form-side vocab the editor
+// surfaces. Slug values stay Foundry-canonical for round-trip; labels
+// are display-only.
 
 const ITEM_TYPES: [string, string][] = [
   ['weapon', 'Weapon'],
@@ -29,6 +50,9 @@ const ITEM_TYPES: [string, string][] = [
   ['container', 'Container'],
   ['loot', 'Loot / Wondrous'],
 ];
+
+const ITEM_TYPE_LABEL: Record<string, string> =
+  Object.fromEntries(ITEM_TYPES.map(([v, l]) => [v, l]));
 
 const RARITIES: [string, string][] = [
   ['none', 'None'],
@@ -47,21 +71,16 @@ const ATTUNEMENT_OPTIONS: [string, string][] = [
 ];
 
 const DENOMINATIONS: [string, string][] = [
-  ['cp', 'cp'],
-  ['sp', 'sp'],
-  ['ep', 'ep'],
-  ['gp', 'gp'],
-  ['pp', 'pp'],
+  ['cp', 'cp'], ['sp', 'sp'], ['ep', 'ep'], ['gp', 'gp'], ['pp', 'pp'],
 ];
 
 const WEIGHT_UNITS: [string, string][] = [
-  ['lb', 'lb'],
-  ['kg', 'kg'],
+  ['lb', 'lb'], ['kg', 'kg'],
 ];
 
-// dnd5e v5 `system.type.value` enum for equipment items. Armor-bearing
-// subtypes (light/medium/heavy/shield) drive a conditional armor block
-// inside the equipment sub-form.
+// dnd5e v5 `system.type.value` enum for equipment. Armor-bearing
+// subtypes (light/medium/heavy/shield) drive the conditional armor
+// block in the equipment sub-form.
 const EQUIPMENT_SUBTYPES: [string, string][] = [
   ['light', 'Light Armor'],
   ['medium', 'Medium Armor'],
@@ -89,24 +108,6 @@ const CONSUMABLE_SUBTYPES: [string, string][] = [
   ['trinket', 'Trinket'],
 ];
 
-// dnd5e v5 nested `system.type.subtype` enums. Only applicable when the
-// parent type's value drives a second-axis dropdown (poison delivery,
-// ammo physical shape, loot kind).
-const CONSUMABLE_POISON_SUBTYPES: [string, string][] = [
-  ['contact', 'Contact'],
-  ['ingested', 'Ingested'],
-  ['inhaled', 'Inhaled'],
-  ['injury', 'Injury'],
-];
-
-const CONSUMABLE_AMMO_SUBTYPES: [string, string][] = [
-  ['arrow', 'Arrow'],
-  ['bolt', 'Crossbow Bolt'],
-  ['bullet', 'Sling Bullet'],
-  ['energyCell', 'Energy Cell'],
-  ['firearmBullet', 'Firearm Bullet'],
-];
-
 const TOOL_SUBTYPES: [string, string][] = [
   ['art', "Artisan's Tools"],
   ['game', 'Gaming Set'],
@@ -125,11 +126,7 @@ const LOOT_SUBTYPES: [string, string][] = [
 ];
 
 const WEAPON_RANGE_UNITS: [string, string][] = [
-  ['ft', 'feet'],
-  ['mi', 'miles'],
-  ['m', 'meters'],
-  ['km', 'kilometers'],
-  ['spec', 'special'],
+  ['ft', 'feet'], ['mi', 'miles'], ['m', 'meters'], ['km', 'kilometers'], ['spec', 'special'],
 ];
 
 const CAPACITY_TYPES: [string, string][] = [
@@ -138,168 +135,151 @@ const CAPACITY_TYPES: [string, string][] = [
 ];
 
 const CAPACITY_WEIGHT_UNITS: [string, string][] = [
-  ['lb', 'lb'],
-  ['kg', 'kg'],
+  ['lb', 'lb'], ['kg', 'kg'],
 ];
 
-// ─── Page shell ────────────────────────────────────────────────────
-
-/**
- * Outer page shell — mirrors SpellsEditor + FeatsEditor's tabs
- * structure. Top toolbar carries the Back link + tab switcher; tab
- * content delegates to either `ItemImportWorkbench` (admin bulk
- * import from a Foundry export) or `ItemManualEditor` (the
- * DevelopmentCompendiumManager-driven single-row editor with the new
- * type-dispatching form body).
- */
-export default function ItemsEditor({ userProfile }: { userProfile: any }) {
-  const isAdmin = userProfile?.role === 'admin';
-  const location = useLocation();
-  const isProposalRoute = location.pathname.startsWith('/proposals/edit/');
-  const backPath = isProposalRoute ? '/my-proposals' : '/compendium';
-  const backLabel = isProposalRoute ? 'Back to My Proposals' : 'Back to Compendium';
-
-  useEffect(() => {
-    document.body.classList.add('spell-list-fullscreen');
-    return () => document.body.classList.remove('spell-list-fullscreen');
-  }, []);
-
-  return (
-    <Tabs defaultValue="manual-editor" className="h-[calc(100vh-4rem)] flex flex-col gap-2 p-2">
-      <div className="shrink-0 flex items-center gap-2 bg-card p-2 rounded-lg border border-gold/10 shadow-sm flex-wrap">
-        <Link to={backPath}>
-          <Button variant="ghost" size="sm" className="h-8 text-gold gap-2 hover:bg-gold/5">
-            <ChevronLeft className="w-4 h-4" />
-            {backLabel}
-          </Button>
-        </Link>
-        <TabsList variant="line" className="gap-1 bg-transparent p-0">
-          {isAdmin && (
-            <TabsTrigger
-              value="foundry-import"
-              className="h-8 rounded-md border border-gold/15 bg-background/30 px-3 py-1 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold"
-            >
-              Foundry Import
-            </TabsTrigger>
-          )}
-          <TabsTrigger
-            value="manual-editor"
-            className="h-8 rounded-md border border-gold/15 bg-background/30 px-3 py-1 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold"
-          >
-            Manual Editor
-          </TabsTrigger>
-        </TabsList>
-      </div>
-
-      {isAdmin && (
-        <TabsContent value="foundry-import" className="flex-1 min-h-0">
-          <ItemImportWorkbench userProfile={userProfile} />
-        </TabsContent>
-      )}
-
-      <TabsContent value="manual-editor" className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
-        <ItemManualEditor userProfile={userProfile} />
-      </TabsContent>
-    </Tabs>
-  );
+function getSubtypeOptions(itemType: string): [string, string][] | null {
+  switch (itemType) {
+    case 'equipment': return EQUIPMENT_SUBTYPES;
+    case 'consumable': return CONSUMABLE_SUBTYPES;
+    case 'tool': return TOOL_SUBTYPES;
+    case 'loot': return LOOT_SUBTYPES;
+    default: return null;
+  }
 }
 
-// ─── Manual editor ─────────────────────────────────────────────────
+// ─── Form data shape ───────────────────────────────────────────────
 
-function ItemManualEditor({ userProfile }: { userProfile: any }) {
-  return (
-    <DevelopmentCompendiumManager
-      userProfile={userProfile}
-      collectionName="items"
-      entityType="item"
-      title="Item Manager"
-      singularLabel="Item"
-      icon={Hammer}
-      backPath="/compendium"
-      description="Drafting surface for non-spell items. Type-driven body — the item type dropdown swaps the secondary fields (weapon damage, armor AC, container capacity, etc.) so the form only ever shows what's relevant. Activities + effects drive runtime use."
-      defaultData={{
-        // Identity (rendered by the outer shell)
-        name: '',
-        identifier: '',
-        imageUrl: '',
-        description: '',
-        activities: [],
-        effectsStr: '[]',
+type UsesRecoveryRule = { period: string; type: string; formula: string };
 
-        // Type discriminators
-        itemType: 'loot',
-        typeSubtype: '',
+type ItemFormData = {
+  id?: string;
+  // Identity
+  name: string;
+  identifier: string;
+  sourceId: string;
+  page: string;
+  imageUrl: string;
+  description: string;
 
-        // Physical
-        rarity: 'none',
-        quantity: 1,
-        weight: { value: 0, units: 'lb' },
-        price: { value: 0, denomination: 'gp' },
+  // Type discriminators
+  itemType: string;
+  typeSubtype: string;
 
-        // Equippability (attunement is 3-state TEXT post 20260526-1700)
-        attunement: '',
-        equipped: false,
-        identified: true,
-        magical: false,
+  // Physical
+  rarity: string;
+  quantity: number;
+  weight: { value: number; units: string };
+  price: { value: number; denomination: string };
 
-        // Properties pool (slugs)
-        properties: [],
+  // Equippability (attunement is 3-state TEXT post 20260526-1700)
+  attunement: string;
+  equipped: boolean;
+  identified: boolean;
+  magical: boolean;
+  unidentifiedDescription: string;
 
-        // Uses block — new shape from C5 ItemUsesField
-        uses: { max: '', spent: 0, recovery: [], autoDestroy: false },
+  // Properties (slug array)
+  properties: string[];
 
-        // Weapon-specific
-        damage: null,
-        range: null,
-        mastery: '',
-        magicalBonus: 0,
-        ammunition: null,
+  // Uses block
+  uses: { max: string; spent: number; recovery: UsesRecoveryRule[]; autoDestroy: boolean };
 
-        // Armor-specific (equipment with armor subtype)
-        armorValue: 10,
-        armorDex: null,
-        armorMagicalBonus: 0,
-        strength: null,
-        armorType: '',
+  // Weapon-specific
+  damage: any;
+  range: any;
+  mastery: string;
+  magicalBonus: number;
+  ammunition: any;
 
-        // Tool-specific
-        toolType: '',
-        bonus: '',
-        chatFlavor: '',
-        abilityId: '',
+  // Armor-specific
+  armorValue: number;
+  armorDex: number | null;
+  armorMagicalBonus: number;
+  strength: number | null;
+  armorType: string;
 
-        // Container-specific
-        capacity: null,
-        currency: null,
-        containerId: '',
+  // Tool-specific
+  toolType: string;
+  bonus: string;
+  chatFlavor: string;
+  abilityId: string;
 
-        // Base-item FKs (proficiency-table refs)
-        baseWeaponId: '',
-        baseArmorId: '',
-        baseToolId: '',
-        baseItem: '',
+  // Container-specific
+  capacity: any;
+  currency: any;
+  containerId: string;
 
-        // Unidentified copy
-        unidentifiedDescription: '',
-      }}
-      renderSpecificFields={(formData, setFormData) => (
-        <DynamicItemFields formData={formData} setFormData={setFormData} />
-      )}
-      summarizeEntry={(entry) => (
-        <div className="space-y-1">
-          <div>{entry.itemType || 'loot'} item</div>
-          <div className="text-[10px] text-ink/50">
-            {(entry.automation?.activities || []).length || 0} activities
-            {entry.rarity && entry.rarity !== 'none' ? ` • ${entry.rarity}` : ''}
-            {entry.attunement ? ` • ${entry.attunement} attunement` : ''}
-          </div>
-        </div>
-      )}
-    />
-  );
+  // Base-item FKs
+  baseWeaponId: string;
+  baseArmorId: string;
+  baseToolId: string;
+  baseItem: string;
+
+  // Activities + effects
+  activities: any[];
+  effects: any[];
+
+  // Tags
+  tagIds: string[];
+
+  createdAt?: string;
+  updatedAt?: string;
+  [key: string]: any;
+};
+
+const ITEM_DEFAULTS: Omit<ItemFormData, 'sourceId'> & { sourceId?: string } = {
+  name: '',
+  identifier: '',
+  sourceId: '',
+  page: '',
+  imageUrl: '',
+  description: '',
+  itemType: 'loot',
+  typeSubtype: '',
+  rarity: 'none',
+  quantity: 1,
+  weight: { value: 0, units: 'lb' },
+  price: { value: 0, denomination: 'gp' },
+  attunement: '',
+  equipped: false,
+  identified: true,
+  magical: false,
+  unidentifiedDescription: '',
+  properties: [],
+  uses: { max: '', spent: 0, recovery: [], autoDestroy: false },
+  damage: null,
+  range: null,
+  mastery: '',
+  magicalBonus: 0,
+  ammunition: null,
+  armorValue: 10,
+  armorDex: null,
+  armorMagicalBonus: 0,
+  strength: null,
+  armorType: '',
+  toolType: '',
+  bonus: '',
+  chatFlavor: '',
+  abilityId: '',
+  capacity: null,
+  currency: null,
+  containerId: '',
+  baseWeaponId: '',
+  baseArmorId: '',
+  baseToolId: '',
+  baseItem: '',
+  activities: [],
+  effects: [],
+  tagIds: [],
+};
+
+function makeInitialItemForm(sources: any[] = []): ItemFormData {
+  return {
+    ...ITEM_DEFAULTS,
+    sourceId: sources[0]?.id || '',
+  } as ItemFormData;
 }
-
-// ─── Dynamic body ─────────────────────────────────────────────────
 
 type ProficiencyBucket = {
   weapons: any[];
@@ -310,40 +290,92 @@ type ProficiencyBucket = {
 };
 
 const EMPTY_BUCKET: ProficiencyBucket = {
-  weapons: [],
-  armor: [],
-  tools: [],
-  abilities: [],
-  weaponProperties: [],
+  weapons: [], armor: [], tools: [], abilities: [], weaponProperties: [],
 };
 
-/**
- * Top-level form body. Loads the lookup tables that every sub-form
- * needs (weapons / armor / tools for base-item dropdowns, attributes
- * for tool ability, weapon_properties for the properties multiselect)
- * once and passes the bucket down. Each sub-form gets only its own
- * slice of formData + the shared setter.
- */
-function DynamicItemFields({
-  formData,
-  setFormData,
-}: {
-  formData: any;
-  setFormData: React.Dispatch<React.SetStateAction<any>>;
-}) {
-  const [profs, setProfs] = useState<ProficiencyBucket>(EMPTY_BUCKET);
+// ─── Page ─────────────────────────────────────────────────────────
 
+export default function ItemsEditor({ userProfile }: { userProfile: any }) {
+  const location = useLocation();
+  const isAdmin = userProfile?.role === 'admin';
+  const isContentCreator = !!userProfile?.permissions &&
+    Object.prototype.hasOwnProperty.call(userProfile.permissions, 'content-creator');
+  const canManage = isAdmin || isContentCreator;
+  const isProposalRoute = location.pathname.startsWith('/proposals/edit/');
+  const backPath = isProposalRoute ? '/my-proposals' : '/compendium/items';
+  const backLabel = isProposalRoute ? 'Back to My Proposals' : 'Back To Items';
+
+  // ── Proposal-mode plumbing ────────────────────────────────────
+  const itemWriter = useProposalAccumulator('item', userProfile);
+  const proposalContext = useProposalContextOptional();
+  const isProposalMode = itemWriter.mode === 'proposal' || itemWriter.mode === 'block';
+  const focusMode = proposalContext?.focusMode ?? 'drafts';
+  const focusModeEnabled = proposalContext?.focusModeEnabled ?? false;
+  const reviewMode = useProposalReview();
+  const reviewPayload = resolveReviewPayload(reviewMode, 'item', null);
+  const isReviewingItem = !!reviewMode && !!reviewPayload && reviewMode.entityType === 'item';
+
+  // ── State ─────────────────────────────────────────────────────
+  const [entries, setEntries] = useState<any[]>([]);
+  const [itemDetailsById, setItemDetailsById] = useState<Record<string, any>>({});
+  const [sources, setSources] = useState<any[]>([]);
+  const [profs, setProfs] = useState<ProficiencyBucket>(EMPTY_BUCKET);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [formData, setFormData] = useState<ItemFormData>(makeInitialItemForm());
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+
+  // Cascade dependent state (parity with FeatsEditor / SpellsEditor).
+  const cascadeDep = useCascadeDependent('item', editingId);
+  const [replaceTagPickerOpen, setReplaceTagPickerOpen] = useState(false);
+
+  // Refs.
+  const editingIdRef = useRef<string | null>(null);
+  useEffect(() => { editingIdRef.current = editingId; }, [editingId]);
+  const formDataRef = useRef<ItemFormData | null>(null);
+  const lastLoadedFormRef = useRef<string>('');
+
+  // Drafted / Edit-Base unlock state.
+  const draftedItemIds = useDraftedEntityIds('item');
+  const draftedItemEntities = useProposalEntityDrafts('item');
+  const {
+    unlockedBaseIds,
+    unlock: unlockBaseItem,
+    isReadOnly,
+  } = useEditBaseUnlocks({
+    focusModeEnabled,
+    editingId,
+    draftedIds: draftedItemIds,
+    proposalContext,
+  });
+
+  // ── Initial load ──────────────────────────────────────────────
   useEffect(() => {
+    if (!canManage) return;
     let cancelled = false;
-    Promise.all([
-      fetchCollection<any>('weapons'),
-      fetchCollection<any>('armor'),
-      fetchCollection<any>('tools'),
-      fetchCollection<any>('attributes'),
-      fetchCollection<any>('weaponProperties'),
-    ])
-      .then(([weapons, armor, tools, abilities, weaponProperties]) => {
+    (async () => {
+      try {
+        const [itemRows, sourceRows, weapons, armor, tools, abilities, weaponProperties] = await Promise.all([
+          fetchCollection<any>('items', { orderBy: 'name ASC' }),
+          fetchCollection<any>('sources', { orderBy: 'name ASC' }),
+          fetchCollection<any>('weapons', { orderBy: 'name ASC' }),
+          fetchCollection<any>('armor', { orderBy: 'name ASC' }),
+          fetchCollection<any>('tools', { orderBy: 'name ASC' }),
+          fetchCollection<any>('attributes', { orderBy: 'name ASC' }),
+          fetchCollection<any>('weaponProperties', { orderBy: 'name ASC' }),
+        ]);
         if (cancelled) return;
+        const mapped = itemRows.map((row: any) => ({
+          ...row,
+          sourceId: row.source_id,
+          imageUrl: row.image_url,
+          itemType: row.item_type,
+          tagIds: Array.isArray(row.tags) ? row.tags : [],
+        }));
+        setEntries(mapped);
+        setSources(sourceRows);
         setProfs({
           weapons: weapons.map((r) => denormalizeCompendiumData(r)),
           armor: armor.map((r) => denormalizeCompendiumData(r)),
@@ -351,105 +383,859 @@ function DynamicItemFields({
           abilities: abilities.map((r) => denormalizeCompendiumData(r)),
           weaponProperties: weaponProperties.map((r) => denormalizeCompendiumData(r)),
         });
-      })
-      .catch((err) => {
-        console.error('Failed to load item-editor lookup tables', err);
-      });
+        setLoading(false);
+      } catch (err) {
+        console.error('[ItemsEditor] failed to load:', err);
+        if (!cancelled) setLoading(false);
+      }
+    })();
     return () => { cancelled = true; };
-  }, []);
+  }, [canManage]);
 
-  const itemType = formData.itemType || 'loot';
+  // Default source on first New row.
+  useEffect(() => {
+    if (editingId) return;
+    if (formData.sourceId || sources.length === 0) return;
+    setFormData((prev) => ({ ...prev, sourceId: sources[0].id }));
+  }, [editingId, formData.sourceId, sources]);
+
+  const sourceNameById = useMemo(
+    () => Object.fromEntries(sources.map((s) => [s.id, s.name || s.abbreviation || s.id])),
+    [sources],
+  );
+  const sourceAbbrevById = useMemo(
+    () => Object.fromEntries(sources.map((s) => [s.id, s.abbreviation || s.shortName || s.name || s.id])),
+    [sources],
+  );
+
+  // ── Reset form ────────────────────────────────────────────────
+  const resetForm = () => {
+    const initial = makeInitialItemForm(sources);
+    setEditingId(null);
+    setFormData(initial);
+    lastLoadedFormRef.current = JSON.stringify(initial);
+  };
+
+  // ── Review mode hydration ─────────────────────────────────────
+  useEffect(() => {
+    if (!isReviewingItem || !reviewMode?.entityId || !reviewPayload) return;
+    setItemDetailsById((current) =>
+      current[reviewMode.entityId!]
+        ? current
+        : { ...current, [reviewMode.entityId!]: denormalizeCompendiumData(reviewPayload) },
+    );
+    if (editingId !== reviewMode.entityId) {
+      setEditingId(reviewMode.entityId);
+    }
+  }, [isReviewingItem, reviewMode?.entityId, reviewPayload, editingId]);
+
+  // ── Form hydrate when editingId changes ───────────────────────
+  useEffect(() => {
+    if (!editingId) return;
+    const draftedOverlay = draftedItemEntities.byId.get(editingId);
+    if (draftedOverlay && !itemDetailsById[editingId]) {
+      setItemDetailsById((current) => ({
+        ...current,
+        [editingId]: denormalizeCompendiumData(draftedOverlay),
+      }));
+    }
+    const cached = itemDetailsById[editingId];
+    if (cached) {
+      const defaults = makeInitialItemForm(sources);
+      const loaded: ItemFormData = {
+        ...defaults,
+        ...cached,
+        id: cached.id,
+        sourceId: cached.sourceId || cached.source_id || sources[0]?.id || '',
+        page: String(cached.page || ''),
+        imageUrl: cached.imageUrl || cached.image_url || '',
+        description: cached.description || '',
+        itemType: cached.itemType || cached.item_type || 'loot',
+        typeSubtype: cached.typeSubtype || cached.type_subtype || '',
+        rarity: cached.rarity || 'none',
+        quantity: Number(cached.quantity ?? 1) || 1,
+        weight: cached.weight && typeof cached.weight === 'object'
+          ? cached.weight
+          : { value: Number(cached.weight ?? 0) || 0, units: 'lb' },
+        price: cached.price && typeof cached.price === 'object'
+          ? cached.price
+          : { value: 0, denomination: 'gp' },
+        attunement: (() => {
+          const raw = cached.attunement;
+          if (raw === 'required' || raw === 'optional') return raw;
+          if (raw === true || raw === 1) return 'required';
+          return '';
+        })(),
+        equipped: !!cached.equipped,
+        identified: cached.identified !== false,
+        magical: !!cached.magical,
+        unidentifiedDescription: cached.unidentifiedDescription || cached.unidentified_description || '',
+        properties: Array.isArray(cached.properties) ? cached.properties : [],
+        uses: cached.uses && typeof cached.uses === 'object'
+          ? {
+              max: String(cached.uses.max ?? ''),
+              spent: Number(cached.uses.spent ?? 0) || 0,
+              recovery: Array.isArray(cached.uses.recovery) ? cached.uses.recovery : [],
+              autoDestroy: !!cached.uses.autoDestroy,
+            }
+          : { max: '', spent: 0, recovery: [], autoDestroy: false },
+        damage: cached.damage ?? null,
+        range: cached.range ?? null,
+        mastery: cached.mastery || '',
+        magicalBonus: Number(cached.magicalBonus ?? cached.magical_bonus ?? 0) || 0,
+        ammunition: cached.ammunition ?? null,
+        armorValue: Number(cached.armorValue ?? cached.armor_value ?? 10) || 10,
+        armorDex: cached.armorDex ?? cached.armor_dex ?? null,
+        armorMagicalBonus: Number(cached.armorMagicalBonus ?? cached.armor_magical_bonus ?? 0) || 0,
+        strength: cached.strength ?? null,
+        armorType: cached.armorType || cached.armor_type || '',
+        toolType: cached.toolType || cached.tool_type || '',
+        bonus: cached.bonus || '',
+        chatFlavor: cached.chatFlavor || cached.chat_flavor || '',
+        abilityId: cached.abilityId || cached.ability_id || '',
+        capacity: cached.capacity ?? null,
+        currency: cached.currency ?? null,
+        containerId: cached.containerId || cached.container_id || '',
+        baseWeaponId: cached.baseWeaponId || cached.base_weapon_id || '',
+        baseArmorId: cached.baseArmorId || cached.base_armor_id || '',
+        baseToolId: cached.baseToolId || cached.base_tool_id || '',
+        baseItem: cached.baseItem || cached.base_item || '',
+        activities: Array.isArray(cached.automation?.activities)
+          ? cached.automation.activities
+          : Array.isArray(cached.activities) ? cached.activities : [],
+        effects: Array.isArray(cached.automation?.effects)
+          ? cached.automation.effects
+          : Array.isArray(cached.effects) ? cached.effects : [],
+        tagIds: Array.isArray(cached.tagIds) ? cached.tagIds : (Array.isArray(cached.tags) ? cached.tags : []),
+      };
+      setFormData(loaded);
+      lastLoadedFormRef.current = JSON.stringify(loaded);
+      return;
+    }
+    let active = true;
+    (async () => {
+      try {
+        const data = await fetchItem(editingId);
+        if (!active || !data) return;
+        setItemDetailsById((current) => ({ ...current, [editingId]: data }));
+      } catch (err) {
+        console.error('[ItemsEditor] failed to load item details:', err);
+      }
+    })();
+    return () => { active = false; };
+  }, [editingId, sources, itemDetailsById, draftedItemEntities]);
+
+  // ── Switch handler — auto-stage in proposal mode ──────────────
+  const startEditing = async (id: string) => {
+    if (isProposalMode && editingIdRef.current && id !== editingIdRef.current) {
+      const currentSerialized = JSON.stringify(formDataRef.current ?? formData);
+      if (currentSerialized !== lastLoadedFormRef.current) {
+        try {
+          await handleSaveRef.current(undefined, { silent: true });
+        } catch (err) {
+          console.error('[ItemsEditor] auto-stage failed:', err);
+          toast.error('Could not stage previous item — switching anyway.');
+        }
+      }
+    }
+    setEditingId(id);
+  };
+
+  // ── Save / Delete ─────────────────────────────────────────────
+  const refreshEntries = async () => {
+    try {
+      const rows = await fetchCollection<any>('items', { orderBy: 'name ASC' });
+      setEntries(rows.map((row: any) => ({
+        ...row,
+        sourceId: row.source_id,
+        imageUrl: row.image_url,
+        itemType: row.item_type,
+        tagIds: Array.isArray(row.tags) ? row.tags : [],
+      })));
+      setItemDetailsById({});
+    } catch (err) {
+      console.error('[ItemsEditor] failed to refresh entries:', err);
+    }
+  };
+
+  const handleSave = async (e?: React.FormEvent, opts: { silent?: boolean } = {}) => {
+    if (e) e.preventDefault();
+    if (!formData.name.trim()) {
+      if (!opts.silent) toast.error('Item name is required');
+      return;
+    }
+    if (!formData.sourceId) {
+      if (!opts.silent) toast.error('Source is required');
+      return;
+    }
+
+    if (!opts.silent) setSaving(true);
+    try {
+      const cleanedRecovery = (formData.uses.recovery || []).filter(
+        (r) => r.period || r.type || (r.formula && r.formula.trim()),
+      );
+
+      // Build the canonical snake_case row. `upsertItem` runs
+      // normalizeCompendiumData on the way in — we pre-snake some
+      // keys (sourceId / imageUrl / itemType / etc.) but leave the
+      // JSON sub-objects (weight / price / damage / range / uses /
+      // capacity / currency / ammunition) alone since they map to
+      // single-token JSON columns.
+      const payload: Record<string, any> = {
+        name: formData.name,
+        identifier: formData.identifier.trim() || slugify(formData.name),
+        source_id: formData.sourceId,
+        page: formData.page || null,
+        image_url: formData.imageUrl || null,
+        description: formData.description || '',
+        item_type: formData.itemType || 'loot',
+        type_subtype: formData.typeSubtype || null,
+        rarity: formData.rarity || 'none',
+        quantity: Number(formData.quantity) || 1,
+        weight: formData.weight,
+        price: formData.price,
+        attunement: formData.attunement || '',
+        equipped: formData.equipped ? 1 : 0,
+        identified: formData.identified ? 1 : 0,
+        magical: formData.magical ? 1 : 0,
+        unidentified_description: formData.unidentifiedDescription || null,
+        properties: Array.isArray(formData.properties) ? formData.properties : [],
+        uses: {
+          max: formData.uses.max || '',
+          spent: Number(formData.uses.spent) || 0,
+          recovery: cleanedRecovery,
+          autoDestroy: !!formData.uses.autoDestroy,
+        },
+        // Weapon stats — only weapons populate these; null for everything else.
+        damage: formData.itemType === 'weapon' ? formData.damage : null,
+        range: formData.itemType === 'weapon' ? formData.range : null,
+        mastery: formData.mastery || null,
+        magical_bonus: Number(formData.magicalBonus) || 0,
+        ammunition: formData.itemType === 'weapon' ? formData.ammunition : null,
+        // Armor stats — only equipment-armor populate these.
+        armor_value: Number(formData.armorValue) || 0,
+        armor_dex: formData.armorDex,
+        armor_magical_bonus: Number(formData.armorMagicalBonus) || 0,
+        strength: formData.strength,
+        armor_type: formData.armorType || null,
+        // Tool stats.
+        tool_type: formData.toolType || null,
+        bonus: formData.bonus || null,
+        chat_flavor: formData.chatFlavor || null,
+        ability_id: formData.abilityId || null,
+        // Container stats.
+        capacity: formData.itemType === 'container' ? formData.capacity : null,
+        currency: formData.itemType === 'container' ? formData.currency : null,
+        container_id: formData.containerId || null,
+        // Base-item FKs (polymorphic — only one is set per row).
+        base_weapon_id: formData.baseWeaponId || null,
+        base_armor_id: formData.baseArmorId || null,
+        base_tool_id: formData.baseToolId || null,
+        base_item: formData.baseItem || null,
+        // Automation surface (activities + effects).
+        activities: Array.isArray(formData.activities) ? formData.activities : [],
+        effects: Array.isArray(formData.effects) ? formData.effects : [],
+        tagIds: Array.isArray(formData.tagIds) ? formData.tagIds : [],
+        updated_at: new Date().toISOString(),
+      };
+
+      Object.keys(payload).forEach((key) => {
+        if (payload[key] === undefined) delete payload[key];
+      });
+
+      const entryIdAtStart = editingId;
+      const wasCreate = !entryIdAtStart;
+      const entryId = entryIdAtStart || crypto.randomUUID();
+
+      if (isProposalMode) {
+        const { updated_at: _droppedUpdatedAt, ...proposalPayload } = payload;
+        await applyProposalWrite(itemWriter, proposalPayload, {
+          id: entryId,
+          isCreate: wasCreate,
+          silent: opts.silent,
+          submitNow: proposalContext?.submitNow,
+        });
+        lastLoadedFormRef.current = JSON.stringify(formDataRef.current ?? formData);
+        if (wasCreate && !opts.silent && editingIdRef.current === entryIdAtStart) {
+          setEditingId(entryId);
+        }
+      } else {
+        await upsertItem(entryId, {
+          ...payload,
+          created_at: formData.createdAt || new Date().toISOString(),
+        });
+        if (!opts.silent) toast.success(`Item ${entryIdAtStart ? 'updated' : 'created'}`);
+        await refreshEntries();
+        if (!opts.silent) resetForm();
+      }
+    } catch (error) {
+      console.error('[ItemsEditor] failed to save:', error);
+      if (!opts.silent) toast.error('Failed to save item');
+      reportClientError(
+        error,
+        editingId ? OperationType.UPDATE : OperationType.CREATE,
+        `items/${editingId || '(new)'}`,
+      );
+      if (opts.silent) throw error;
+    } finally {
+      if (!opts.silent) setSaving(false);
+    }
+  };
+
+  const handleSaveRef = useRef(handleSave);
+  useEffect(() => { handleSaveRef.current = handleSave; });
+  useEffect(() => { formDataRef.current = formData; }, [formData]);
+
+  useProposalPreFlushSave({
+    enabled: isProposalMode,
+    proposalContext,
+    handleSave,
+    shouldRun: () => {
+      if (!editingIdRef.current) return false;
+      const currentSerialized = JSON.stringify(formDataRef.current ?? formData);
+      return currentSerialized !== lastLoadedFormRef.current;
+    },
+    onError: (err) => console.error('[ItemsEditor] pre-flush stage failed:', err),
+  });
+
+  const handleDelete = async () => {
+    if (!editingId) return;
+    if (!window.confirm('Delete this item?')) return;
+    try {
+      if (isProposalMode) {
+        await itemWriter.remove(editingId);
+        toast.success(actionLabel(itemWriter.mode, 'deleted'));
+        resetForm();
+      } else {
+        await deleteItem(editingId);
+        toast.success('Item deleted');
+        await refreshEntries();
+        resetForm();
+      }
+    } catch (error) {
+      console.error('[ItemsEditor] failed to delete:', error);
+      toast.error('Failed to delete item');
+      reportClientError(error, OperationType.DELETE, `items/${editingId}`);
+    }
+  };
+
+  // ── Filter ────────────────────────────────────────────────────
+  const filteredEntries = useMemo(() => {
+    const lowered = search.trim().toLowerCase();
+    if (!lowered) return entries;
+    return entries.filter((entry) => {
+      const sourceAbbrev = String(sourceAbbrevById[entry.sourceId] || '').toLowerCase();
+      return (
+        String(entry.name || '').toLowerCase().includes(lowered)
+        || String(entry.identifier || '').toLowerCase().includes(lowered)
+        || String(entry.itemType || '').toLowerCase().includes(lowered)
+        || sourceAbbrev.includes(lowered)
+      );
+    });
+  }, [entries, search, sourceAbbrevById]);
+
+  // ── Identity subtitle ─────────────────────────────────────────
+  const identitySubtitle = (() => {
+    const typeLabel = ITEM_TYPE_LABEL[formData.itemType] || formData.itemType || 'Loot';
+    const subParts: string[] = [typeLabel];
+    if (formData.typeSubtype) {
+      const subOpts = getSubtypeOptions(formData.itemType);
+      const subLabel = subOpts?.find(([v]) => v === formData.typeSubtype)?.[1];
+      if (subLabel) subParts.push(subLabel);
+    }
+    if (formData.rarity && formData.rarity !== 'none') {
+      subParts.push(RARITIES.find(([v]) => v === formData.rarity)?.[1] || formData.rarity);
+    }
+    if (formData.attunement === 'required') subParts.push('attunement');
+    return subParts.join(' · ');
+  })();
+
+  // ── Editor sub-tabs ───────────────────────────────────────────
+  const editorSubTabs: EditorSubTab[] = useMemo(() => [
+    {
+      key: 'basics',
+      label: 'Basics',
+      layout: 'fill',
+      render: () => (
+        <BasicsTab
+          formData={formData}
+          setFormData={setFormData}
+          sources={sources}
+          editingId={editingId}
+        />
+      ),
+    },
+    {
+      key: 'mechanics',
+      label: 'Mechanics',
+      layout: 'scroll',
+      render: () => (
+        <MechanicsTab
+          formData={formData}
+          setFormData={setFormData}
+          profs={profs}
+        />
+      ),
+    },
+    {
+      key: 'activities',
+      label: 'Activities',
+      render: () => (
+        <div className="border-t border-gold/10 pt-4">
+          <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold mb-2">Activities</h3>
+          <ActivityEditor
+            activities={formData.activities}
+            onChange={(activities) => setFormData((prev) => ({ ...prev, activities }))}
+            availableEffects={formData.effects}
+            context="feat"
+          />
+        </div>
+      ),
+    },
+    {
+      key: 'effects',
+      label: 'Effects',
+      render: () => (
+        <div className="border-t border-gold/10 pt-4">
+          <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold mb-2">Active Effects</h3>
+          <ActiveEffectEditor
+            effects={formData.effects}
+            onChange={(effects) => setFormData((prev) => ({ ...prev, effects }))}
+            defaultImg={formData.imageUrl || null}
+          />
+        </div>
+      ),
+    },
+  ], [formData, sources, profs, editingId]);
+
+  const tagsSubTabsList: TagsSubTab[] = useMemo(() => [
+    {
+      key: 'tags',
+      label: 'Tags',
+      render: () => (
+        <div className="space-y-2 border border-gold/10 rounded-md p-4 bg-background/20">
+          <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Tags</h3>
+          <p className="text-xs text-ink/40 italic">
+            Tag picker for items — TODO (follow-up: load tag / tagGroup rows + wire
+            a SpellTagPicker-style component bound to formData.tagIds, mirroring
+            SpellsEditor's Tags sub-tab).
+          </p>
+        </div>
+      ),
+    },
+  ], []);
+
+  // ── List columns ──────────────────────────────────────────────
+  const listColumns: EditorListColumn<any>[] = useMemo(() => [
+    {
+      key: 'name',
+      label: 'Name',
+      width: 'minmax(0,1fr)',
+      align: 'start',
+      render: (entry: any) => {
+        if (entry.__pendingDelete) {
+          return (
+            <span className="truncate font-serif text-sm line-through text-blood/70">
+              {entry.name || 'Untitled Item'}
+            </span>
+          );
+        }
+        const drafted = focusModeEnabled && draftedItemIds.has(String(entry.id));
+        return (
+          <span className={cn(
+            'truncate font-serif text-sm',
+            drafted ? 'text-archive-blue font-semibold' : 'text-ink',
+          )}>
+            {entry.name || <em className="text-ink/40">Untitled</em>}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'type',
+      label: 'Type',
+      width: '90px',
+      align: 'center',
+      render: (entry: any) => (
+        <span className="text-[10px] uppercase tracking-widest text-ink/65 truncate">
+          {ITEM_TYPE_LABEL[String(entry.itemType || entry.item_type || 'loot')] || entry.itemType}
+        </span>
+      ),
+    },
+    {
+      key: 'source',
+      label: 'Src',
+      width: '50px',
+      align: 'center',
+      render: (entry: any) => (
+        <span className="text-[10px] font-bold text-gold/80">
+          {sourceAbbrevById[entry.sourceId] || '—'}
+        </span>
+      ),
+    },
+  ], [sourceAbbrevById, focusModeEnabled, draftedItemIds]);
+
+  // ── Empty-state copy ──────────────────────────────────────────
+  const listEmptyContent = useMemo(() => {
+    if (focusModeEnabled && focusMode === 'drafts') {
+      return (
+        <div className="px-6 py-12 text-center text-ink/60 max-w-sm mx-auto space-y-2">
+          <p className="font-bold text-ink/80">No items in this block yet.</p>
+          <p className="text-xs leading-relaxed text-ink/55">
+            Click <span className="font-bold text-gold">New Item</span> above to author
+            one from scratch, or switch to <span className="font-bold text-gold">Full Catalog</span>
+            {' '}and open an existing item to propose changes.
+          </p>
+        </div>
+      );
+    }
+    return 'No items match the current search.';
+  }, [focusModeEnabled, focusMode]);
+
+  // ── Mode tabs ─────────────────────────────────────────────────
+  const modes: EditorMode[] = [
+    ...(isAdmin ? [{
+      key: 'foundry-import',
+      label: 'Foundry Import',
+      adminOnly: true,
+      render: <ItemImportWorkbench userProfile={userProfile} />,
+    } as EditorMode] : []),
+    {
+      key: 'manual-editor',
+      label: 'Manual Editor',
+      render: null,
+    },
+  ];
+
+  if (!canManage) {
+    return <div className="text-center py-20">Access Denied. Admins or content-creators only.</div>;
+  }
+
+  const cascadeBanner = cascadeDep ? (
+    <CascadeDependentBanner
+      description={cascadeDep.description}
+      resolved={cascadeDep.resolved}
+      onAccept={cascadeDep.accept}
+      onReopen={cascadeDep.reopen}
+      onReplace={() => setReplaceTagPickerOpen(true)}
+    />
+  ) : null;
+
+  const handleListSelect = (id: string) => {
+    const entry = filteredEntries.find((e) => String(e.id) === id);
+    if (entry?.__pendingDelete) return;
+    void startEditing(id);
+  };
+
+  // `isReadOnly` already comes from useEditBaseUnlocks — no need to
+  // recompute. `unlockedBaseIds` mirrors FeatsEditor's draft-overlay
+  // wiring; available for future "my work vs full catalog" filtering
+  // (not used directly today since items don't have that toggle yet).
+  void unlockedBaseIds;
+
+  return (
+    <>
+      <CompendiumEditorShell<any>
+        entityName={{ singular: 'Item', plural: 'Items' }}
+        backPath={backPath}
+        backLabel={backLabel}
+        modes={modes}
+        defaultModeKey="manual-editor"
+        manualEditorModeKey="manual-editor"
+        isAdmin={isAdmin}
+        listRows={filteredEntries}
+        listColumns={listColumns}
+        listRowHeight={36}
+        loading={loading}
+        selectedId={editingId}
+        onSelect={handleListSelect}
+        onNew={resetForm}
+        getRowId={(row) => String(row.id)}
+        emptyListMessage={listEmptyContent}
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search item name, type, source, or identifier"
+        activeFilterCount={0}
+        isFilterOpen={isFilterOpen}
+        setIsFilterOpen={setIsFilterOpen}
+        resetFilters={() => setSearch('')}
+        identityName={formData.name}
+        identitySourceAbbrev={formData.sourceId ? String(sourceAbbrevById[formData.sourceId] || formData.sourceId) : undefined}
+        identitySourceFullName={formData.sourceId ? String(sourceNameById[formData.sourceId] || formData.sourceId) : undefined}
+        identitySubtitle={identitySubtitle}
+        onSave={(e) => void handleSave(e)}
+        onDelete={editingId && !isProposalMode ? handleDelete : undefined}
+        onReset={resetForm}
+        saving={saving}
+        formId="item-manual-editor-form"
+        isReadOnly={isReadOnly}
+        onUnlockBase={editingId ? () => unlockBaseItem(editingId) : undefined}
+        cascadeBanner={cascadeBanner}
+        proposalMode={!!proposalContext}
+        editorSubTabs={editorSubTabs}
+        tagsSubTabs={tagsSubTabsList}
+        tagsSuperTabCount={formData.tagIds.length}
+        renderPreview={() => (
+          <div className="px-6 py-12 text-center text-ink/40 italic text-sm">
+            Live preview coming in a follow-up — wire a shared ItemDetailPanel.
+          </div>
+        )}
+      />
+      {cascadeDep && cascadeDep.parentEntityType === 'tag' && cascadeDep.parentEntityId && (
+        <TagReplacementPicker
+          open={replaceTagPickerOpen}
+          onOpenChange={setReplaceTagPickerOpen}
+          deletedTagId={cascadeDep.parentEntityId}
+          onPicked={async (replacementTagId) => {
+            try {
+              await cascadeDep.replace(
+                cascadeDep.parentEntityId!,
+                replacementTagId,
+                'tags',
+              );
+              toast.success('Replacement saved.');
+            } catch (err: any) {
+              toast.error(err?.message || 'Could not replace tag.');
+            }
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+// ─── Basics tab ───────────────────────────────────────────────────
+//
+// Identity + physical fields. The Item Type dropdown sits FIRST so it
+// reads as the discriminator that drives the Mechanics tab's sub-form.
+// Identifier auto-derives from name on initial entry.
+
+function BasicsTab({
+  formData,
+  setFormData,
+  sources,
+  editingId,
+}: {
+  formData: ItemFormData;
+  setFormData: React.Dispatch<React.SetStateAction<ItemFormData>>;
+  sources: any[];
+  editingId: string | null;
+}) {
+  const subtypeOptions = getSubtypeOptions(formData.itemType);
 
   return (
     <div className="space-y-4">
-      <TypeSection formData={formData} setFormData={setFormData} profs={profs} />
-      <PhysicalSection formData={formData} setFormData={setFormData} />
-      {itemType !== 'loot' && (
-        <EquippabilitySection formData={formData} setFormData={setFormData} />
-      )}
-      <PropertiesSection formData={formData} setFormData={setFormData} profs={profs} />
-      {itemType !== 'loot' && itemType !== 'container' && (
-        <ItemUsesField
-          uses={formData.uses}
-          onChange={(next) => setFormData((prev: any) => ({ ...prev, uses: next }))}
-          showAutoDestroy={itemType === 'consumable'}
-        />
-      )}
+      {/* Type discriminator — distinctly styled to signal it drives
+          the Mechanics tab. */}
+      <div className="rounded border-2 border-gold/20 bg-gold/3 p-3 space-y-2">
+        <Label className="text-[10px] font-bold uppercase tracking-widest text-gold/80">
+          Item Type — drives Mechanics tab
+        </Label>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          <SingleSelectSearch
+            value={formData.itemType || 'loot'}
+            onChange={(val) => setFormData((prev) => ({
+              ...prev,
+              itemType: val,
+              // Reset subtype when parent type changes — each type has
+              // its own enum.
+              typeSubtype: '',
+            }))}
+            options={ITEM_TYPES.map(([v, l]) => ({ id: v, name: l }))}
+            triggerClassName="w-full"
+          />
+          {subtypeOptions && (
+            <SingleSelectSearch
+              value={formData.typeSubtype || ''}
+              onChange={(val) => setFormData((prev) => ({ ...prev, typeSubtype: val }))}
+              options={[
+                { id: '', name: '— subtype —' },
+                ...subtypeOptions.map(([v, l]) => ({ id: v, name: l })),
+              ]}
+              triggerClassName="w-full"
+            />
+          )}
+        </div>
+      </div>
 
-      {itemType === 'weapon' && (
-        <WeaponItemFields formData={formData} setFormData={setFormData} profs={profs} />
-      )}
-      {itemType === 'equipment' && (
-        <EquipmentItemFields formData={formData} setFormData={setFormData} profs={profs} />
-      )}
-      {itemType === 'consumable' && (
-        <ConsumableItemFields formData={formData} setFormData={setFormData} />
-      )}
-      {itemType === 'tool' && (
-        <ToolItemFields formData={formData} setFormData={setFormData} profs={profs} />
-      )}
-      {itemType === 'container' && (
-        <ContainerItemFields formData={formData} setFormData={setFormData} />
-      )}
+      {/* Identity row — image + name/identifier/source/page. */}
+      <div className="grid gap-3 md:grid-cols-[80px_minmax(0,1fr)] shrink-0">
+        <ImageUpload
+          currentImageUrl={formData.imageUrl}
+          storagePath={`images/items/${editingId || 'draft'}/`}
+          onUpload={(url) => setFormData((prev) => ({ ...prev, imageUrl: url }))}
+          imageType="icon"
+          compact
+          className="h-[80px] w-[80px]"
+        />
+        <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+          <ReviewFieldHighlight columnKey="name" className="space-y-0.5">
+            <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Name</Label>
+            <Input
+              value={formData.name}
+              onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
+              className="h-8 bg-background/50 border-gold/10 focus:border-gold text-sm"
+              placeholder="e.g. Flame Tongue Greatsword"
+              required
+            />
+          </ReviewFieldHighlight>
+          <ReviewFieldHighlight columnKey="identifier" className="space-y-0.5">
+            <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Identifier</Label>
+            <Input
+              value={formData.identifier}
+              onChange={(e) => setFormData((prev) => ({ ...prev, identifier: e.target.value }))}
+              className="h-8 bg-background/50 border-gold/10 focus:border-gold font-mono text-sm"
+              placeholder={slugify(formData.name || 'item')}
+            />
+          </ReviewFieldHighlight>
+          <ReviewFieldHighlight columnKey="source_id" className="space-y-0.5">
+            <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Source</Label>
+            <select
+              value={formData.sourceId}
+              onChange={(e) => setFormData((prev) => ({ ...prev, sourceId: e.target.value }))}
+              className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+            >
+              <option value="">Select a source</option>
+              {sources.map((source) => (
+                <option key={source.id} value={source.id}>{source.name}</option>
+              ))}
+            </select>
+          </ReviewFieldHighlight>
+          <ReviewFieldHighlight columnKey="page" className="space-y-0.5">
+            <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Page</Label>
+            <Input
+              value={formData.page}
+              onChange={(e) => setFormData((prev) => ({ ...prev, page: e.target.value }))}
+              className="h-8 bg-background/50 border-gold/10 focus:border-gold text-sm"
+              placeholder="207"
+            />
+          </ReviewFieldHighlight>
+        </div>
+      </div>
+
+      {/* Physical grid — rarity / quantity / weight / price / magical. */}
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-5">
+        <div className="space-y-0.5">
+          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Rarity</Label>
+          <SingleSelectSearch
+            value={formData.rarity || 'none'}
+            onChange={(val) => setFormData((prev) => ({ ...prev, rarity: val }))}
+            options={RARITIES.map(([v, l]) => ({ id: v, name: l }))}
+            triggerClassName="w-full"
+          />
+        </div>
+        <div className="space-y-0.5">
+          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Quantity</Label>
+          <Input
+            type="number"
+            min={0}
+            value={formData.quantity ?? 1}
+            onChange={(e) => setFormData((prev) => ({
+              ...prev,
+              quantity: parseInt(e.target.value || '0', 10) || 0,
+            }))}
+            className="h-8 bg-background/50 border-gold/10 focus:border-gold text-sm"
+          />
+        </div>
+        <div className="space-y-0.5">
+          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Weight</Label>
+          <div className="flex gap-1">
+            <Input
+              type="number"
+              step="0.1"
+              value={formData.weight?.value ?? 0}
+              onChange={(e) => setFormData((prev) => ({
+                ...prev,
+                weight: { value: parseFloat(e.target.value) || 0, units: prev.weight?.units || 'lb' },
+              }))}
+              className="h-8 bg-background/50 border-gold/10 focus:border-gold text-sm flex-1"
+            />
+            <SingleSelectSearch
+              value={formData.weight?.units || 'lb'}
+              onChange={(val) => setFormData((prev) => ({
+                ...prev,
+                weight: { value: prev.weight?.value ?? 0, units: val },
+              }))}
+              options={WEIGHT_UNITS.map(([v, l]) => ({ id: v, name: l }))}
+              triggerClassName="w-16"
+            />
+          </div>
+        </div>
+        <div className="space-y-0.5">
+          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Price</Label>
+          <div className="flex gap-1">
+            <Input
+              type="number"
+              step="1"
+              value={formData.price?.value ?? 0}
+              onChange={(e) => setFormData((prev) => ({
+                ...prev,
+                price: { value: parseFloat(e.target.value) || 0, denomination: prev.price?.denomination || 'gp' },
+              }))}
+              className="h-8 bg-background/50 border-gold/10 focus:border-gold text-sm flex-1"
+            />
+            <SingleSelectSearch
+              value={formData.price?.denomination || 'gp'}
+              onChange={(val) => setFormData((prev) => ({
+                ...prev,
+                price: { value: prev.price?.value ?? 0, denomination: val },
+              }))}
+              options={DENOMINATIONS.map(([v, l]) => ({ id: v, name: l }))}
+              triggerClassName="w-16"
+            />
+          </div>
+        </div>
+        <label className="flex items-end gap-2 pb-1">
+          <Checkbox
+            checked={!!formData.magical}
+            onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, magical: !!checked }))}
+          />
+          <span className="text-xs text-ink/70">Magical</span>
+        </label>
+      </div>
+
+      {/* Description — markdown editor takes remaining height via
+          `layout: 'fill'` on the sub-tab. */}
+      <div className="flex-1 flex flex-col min-h-0 space-y-1">
+        <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Description</Label>
+        <MarkdownEditor
+          value={formData.description}
+          onChange={(description) => setFormData((prev) => ({ ...prev, description }))}
+          fillContainer
+        />
+      </div>
     </div>
   );
 }
 
-// ─── Shared sections (apply to every item type) ────────────────────
+// ─── Mechanics tab ────────────────────────────────────────────────
+//
+// Item-type-driven body. Shared sections (equippability, properties,
+// uses) sit alongside the per-type sub-form chosen via the Item Type
+// dropdown on Basics. Loot suppresses everything except the subtype
+// note since loot rows don't carry mechanical state.
 
-function TypeSection({
+function MechanicsTab({
   formData,
   setFormData,
   profs,
 }: {
-  formData: any;
-  setFormData: React.Dispatch<React.SetStateAction<any>>;
+  formData: ItemFormData;
+  setFormData: React.Dispatch<React.SetStateAction<ItemFormData>>;
   profs: ProficiencyBucket;
 }) {
-  const itemType: string = formData.itemType || 'loot';
-
-  // Subtype dropdown options — driven off the parent itemType. Some
-  // types (consumable / equipment / tool / loot) have a second-axis
-  // enum; weapon / container don't.
-  const subtypeOptions = getSubtypeOptions(itemType);
+  const itemType = formData.itemType || 'loot';
 
   return (
-    <ActivitySection label="TYPE">
-      <FieldRow label="Item Type" hint="Drives which secondary fields appear below.">
-        <SingleSelectSearch
-          value={itemType}
-          onChange={(val) => setFormData((prev: any) => ({
-            ...prev,
-            itemType: val,
-            // Reset subtype when the parent type changes — different
-            // types use different second-axis enums.
-            typeSubtype: '',
-          }))}
-          options={ITEM_TYPES.map(([value, label]) => ({ id: value, name: label }))}
-          placeholder="Select type..."
-          triggerClassName="w-full"
-        />
-      </FieldRow>
-      {subtypeOptions && (
-        <FieldRow label="Subtype" hint="Foundry's nested system.type.subtype.">
-          <SingleSelectSearch
-            value={formData.typeSubtype || ''}
-            onChange={(val) => setFormData((prev: any) => ({ ...prev, typeSubtype: val }))}
-            options={subtypeOptions.map(([value, label]) => ({ id: value, name: label }))}
-            placeholder="Select subtype..."
-            triggerClassName="w-full"
-          />
-        </FieldRow>
-      )}
-      {/* Base-item dropdown — proficiency table reference. Only shows
-          when the item shape has an applicable proficiency table. */}
+    <div className="space-y-4 pt-4 border-t border-gold/10">
+      {/* Base-item FK dropdown for shapes that have one. */}
       {itemType === 'weapon' && (
-        <BaseItemRow
+        <BaseItemSection
           label="Base Weapon"
           hint="Links to a row in the weapons proficiency table for character-sheet proficiency resolution."
           options={profs.weapons}
           value={formData.baseWeaponId || ''}
-          onChange={(id) => setFormData((prev: any) => ({
+          onChange={(id) => setFormData((prev) => ({
             ...prev,
             baseWeaponId: id,
             baseArmorId: '',
@@ -459,12 +1245,12 @@ function TypeSection({
         />
       )}
       {itemType === 'equipment' && EQUIPMENT_ARMOR_SUBTYPES.has(formData.typeSubtype) && (
-        <BaseItemRow
+        <BaseItemSection
           label="Base Armor"
           hint="Links to a row in the armor proficiency table."
           options={profs.armor}
           value={formData.baseArmorId || ''}
-          onChange={(id) => setFormData((prev: any) => ({
+          onChange={(id) => setFormData((prev) => ({
             ...prev,
             baseArmorId: id,
             baseWeaponId: '',
@@ -474,12 +1260,12 @@ function TypeSection({
         />
       )}
       {itemType === 'tool' && (
-        <BaseItemRow
+        <BaseItemSection
           label="Base Tool"
           hint="Links to a row in the tools proficiency table."
           options={profs.tools}
           value={formData.baseToolId || ''}
-          onChange={(id) => setFormData((prev: any) => ({
+          onChange={(id) => setFormData((prev) => ({
             ...prev,
             baseToolId: id,
             baseWeaponId: '',
@@ -488,11 +1274,52 @@ function TypeSection({
           }))}
         />
       )}
-    </ActivitySection>
+
+      {/* Equippability — hidden for loot (which is character-side
+          treasure with no equip slot). */}
+      {itemType !== 'loot' && (
+        <EquippabilitySection formData={formData} setFormData={setFormData} />
+      )}
+
+      {/* Properties — hidden for loot. */}
+      {itemType !== 'loot' && (
+        <PropertiesSection formData={formData} setFormData={setFormData} profs={profs} />
+      )}
+
+      {/* Uses block — every shape except loot + container surfaces it.
+          showAutoDestroy gates to consumables (the only shape that
+          self-destructs on empty). */}
+      {itemType !== 'loot' && itemType !== 'container' && (
+        <ItemUsesField
+          uses={formData.uses}
+          onChange={(next) => setFormData((prev) => ({ ...prev, uses: next as any }))}
+          showAutoDestroy={itemType === 'consumable'}
+        />
+      )}
+
+      {/* Type-specific sub-form. */}
+      {itemType === 'weapon' && <WeaponItemFields formData={formData} setFormData={setFormData} />}
+      {itemType === 'equipment' && <EquipmentItemFields formData={formData} setFormData={setFormData} />}
+      {itemType === 'consumable' && <ConsumableItemFields formData={formData} setFormData={setFormData} />}
+      {itemType === 'tool' && <ToolItemFields formData={formData} setFormData={setFormData} profs={profs} />}
+      {itemType === 'container' && <ContainerItemFields formData={formData} setFormData={setFormData} />}
+      {itemType === 'loot' && (
+        <ActivitySection label="LOOT">
+          <p className="text-[10px] text-ink/40 py-2">
+            Loot rows carry no mechanical state — just the subtype (set on
+            Basics) and the standard catalog fields. Use the Activities tab
+            if the loot row should trigger anything when added to an
+            inventory.
+          </p>
+        </ActivitySection>
+      )}
+    </div>
   );
 }
 
-function BaseItemRow({
+// ─── Shared sub-sections ──────────────────────────────────────────
+
+function BaseItemSection({
   label,
   hint,
   options,
@@ -506,113 +1333,17 @@ function BaseItemRow({
   onChange: (id: string) => void;
 }) {
   return (
-    <FieldRow label={label} hint={hint}>
-      <SingleSelectSearch
-        value={value}
-        onChange={onChange}
-        options={[
-          { id: '', name: '— none —' },
-          ...options.map((row) => ({ id: row.id, name: row.name || row.identifier })),
-        ]}
-        placeholder="Select base item..."
-        triggerClassName="w-full"
-      />
-    </FieldRow>
-  );
-}
-
-function getSubtypeOptions(itemType: string): [string, string][] | null {
-  switch (itemType) {
-    case 'equipment': return EQUIPMENT_SUBTYPES;
-    case 'consumable': return CONSUMABLE_SUBTYPES;
-    case 'tool': return TOOL_SUBTYPES;
-    case 'loot': return LOOT_SUBTYPES;
-    default: return null;
-  }
-}
-
-function PhysicalSection({
-  formData,
-  setFormData,
-}: {
-  formData: any;
-  setFormData: React.Dispatch<React.SetStateAction<any>>;
-}) {
-  return (
-    <ActivitySection label="PHYSICAL">
-      <FieldRow label="Rarity">
+    <ActivitySection label="BASE ITEM">
+      <FieldRow label={label} hint={hint}>
         <SingleSelectSearch
-          value={formData.rarity || 'none'}
-          onChange={(val) => setFormData((prev: any) => ({ ...prev, rarity: val }))}
-          options={RARITIES.map(([value, label]) => ({ id: value, name: label }))}
-          placeholder="Select rarity..."
+          value={value}
+          onChange={onChange}
+          options={[
+            { id: '', name: '— none —' },
+            ...options.map((row) => ({ id: row.id, name: row.name || row.identifier })),
+          ]}
+          placeholder="Select base item..."
           triggerClassName="w-full"
-        />
-      </FieldRow>
-      <FieldRow label="Quantity">
-        <Input
-          type="number"
-          min={0}
-          value={formData.quantity ?? 1}
-          onChange={(e) => setFormData((prev: any) => ({
-            ...prev,
-            quantity: parseInt(e.target.value || '0', 10) || 0,
-          }))}
-          className="bg-background/50 border-gold/10 focus:border-gold"
-        />
-      </FieldRow>
-      <FieldRow label="Weight">
-        <div className="flex gap-1">
-          <Input
-            type="number"
-            step="0.1"
-            value={formData.weight?.value ?? 0}
-            onChange={(e) => setFormData((prev: any) => ({
-              ...prev,
-              weight: { value: parseFloat(e.target.value) || 0, units: prev.weight?.units || 'lb' },
-            }))}
-            className="bg-background/50 border-gold/10 focus:border-gold flex-1"
-            placeholder="0.5"
-          />
-          <SingleSelectSearch
-            value={formData.weight?.units || 'lb'}
-            onChange={(val) => setFormData((prev: any) => ({
-              ...prev,
-              weight: { value: prev.weight?.value ?? 0, units: val },
-            }))}
-            options={WEIGHT_UNITS.map(([v, l]) => ({ id: v, name: l }))}
-            triggerClassName="w-20"
-          />
-        </div>
-      </FieldRow>
-      <FieldRow label="Price">
-        <div className="flex gap-1">
-          <Input
-            type="number"
-            step="1"
-            value={formData.price?.value ?? 0}
-            onChange={(e) => setFormData((prev: any) => ({
-              ...prev,
-              price: { value: parseFloat(e.target.value) || 0, denomination: prev.price?.denomination || 'gp' },
-            }))}
-            className="bg-background/50 border-gold/10 focus:border-gold flex-1"
-            placeholder="50"
-          />
-          <SingleSelectSearch
-            value={formData.price?.denomination || 'gp'}
-            onChange={(val) => setFormData((prev: any) => ({
-              ...prev,
-              price: { value: prev.price?.value ?? 0, denomination: val },
-            }))}
-            options={DENOMINATIONS.map(([v, l]) => ({ id: v, name: l }))}
-            triggerClassName="w-20"
-          />
-        </div>
-      </FieldRow>
-      <FieldRow label="Magical" inline hint="True for any rarity above 'common' or via the 'mgc' property.">
-        <Checkbox
-          checked={!!formData.magical}
-          onCheckedChange={(checked) => setFormData((prev: any) => ({ ...prev, magical: !!checked }))}
         />
       </FieldRow>
     </ActivitySection>
@@ -623,8 +1354,8 @@ function EquippabilitySection({
   formData,
   setFormData,
 }: {
-  formData: any;
-  setFormData: React.Dispatch<React.SetStateAction<any>>;
+  formData: ItemFormData;
+  setFormData: React.Dispatch<React.SetStateAction<ItemFormData>>;
 }) {
   return (
     <ActivitySection label="EQUIPABILITY">
@@ -634,7 +1365,7 @@ function EquippabilitySection({
       >
         <SingleSelectSearch
           value={formData.attunement ?? ''}
-          onChange={(val) => setFormData((prev: any) => ({ ...prev, attunement: val }))}
+          onChange={(val) => setFormData((prev) => ({ ...prev, attunement: val }))}
           options={ATTUNEMENT_OPTIONS.map(([v, l]) => ({ id: v, name: l }))}
           placeholder="None"
           triggerClassName="w-full"
@@ -643,13 +1374,13 @@ function EquippabilitySection({
       <FieldRow label="Equipped By Default" inline>
         <Checkbox
           checked={!!formData.equipped}
-          onCheckedChange={(checked) => setFormData((prev: any) => ({ ...prev, equipped: !!checked }))}
+          onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, equipped: !!checked }))}
         />
       </FieldRow>
       <FieldRow label="Identified By Default" inline>
         <Checkbox
           checked={formData.identified !== false}
-          onCheckedChange={(checked) => setFormData((prev: any) => ({ ...prev, identified: !!checked }))}
+          onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, identified: !!checked }))}
         />
       </FieldRow>
       <FieldRow
@@ -658,7 +1389,7 @@ function EquippabilitySection({
       >
         <textarea
           value={formData.unidentifiedDescription || ''}
-          onChange={(e) => setFormData((prev: any) => ({ ...prev, unidentifiedDescription: e.target.value }))}
+          onChange={(e) => setFormData((prev) => ({ ...prev, unidentifiedDescription: e.target.value }))}
           className="w-full min-h-[60px] px-3 py-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
           placeholder="A nondescript [item]…"
         />
@@ -672,17 +1403,11 @@ function PropertiesSection({
   setFormData,
   profs,
 }: {
-  formData: any;
-  setFormData: React.Dispatch<React.SetStateAction<any>>;
+  formData: ItemFormData;
+  setFormData: React.Dispatch<React.SetStateAction<ItemFormData>>;
   profs: ProficiencyBucket;
 }) {
   const properties: string[] = Array.isArray(formData.properties) ? formData.properties : [];
-
-  // Weapon-property catalog from the admin table. Filter on relevance:
-  // weapons show all properties; armor/equipment surfaces only the
-  // armor-applicable ones (notably `stealthDisadvantage`); other shapes
-  // show the full catalog as a fallback so authors can hand-pick.
-  const itemType = formData.itemType || 'loot';
   const propertyCatalog = useMemo(() => {
     const list = Array.isArray(profs.weaponProperties) ? profs.weaponProperties : [];
     return list.map((row) => ({
@@ -693,19 +1418,14 @@ function PropertiesSection({
 
   const addProperty = (slug: string) => {
     if (!slug || properties.includes(slug)) return;
-    setFormData((prev: any) => ({ ...prev, properties: [...properties, slug] }));
+    setFormData((prev) => ({ ...prev, properties: [...properties, slug] }));
   };
-
   const removeProperty = (slug: string) => {
-    setFormData((prev: any) => ({
+    setFormData((prev) => ({
       ...prev,
       properties: properties.filter((p) => p !== slug),
     }));
   };
-
-  // Hide for loot shape — properties don't drive any rules behaviour for
-  // pure-treasure rows.
-  if (itemType === 'loot') return null;
 
   return (
     <ActivitySection label="PROPERTIES">
@@ -755,32 +1475,27 @@ function PropertiesSection({
   );
 }
 
-// ─── Type-specific sub-forms ───────────────────────────────────────
+// ─── Type-specific sub-forms ──────────────────────────────────────
 
 function WeaponItemFields({
   formData,
   setFormData,
 }: {
-  formData: any;
-  setFormData: React.Dispatch<React.SetStateAction<any>>;
-  profs: ProficiencyBucket;
+  formData: ItemFormData;
+  setFormData: React.Dispatch<React.SetStateAction<ItemFormData>>;
 }) {
   const damage = formData.damage || { base: { number: 1, denomination: 6, types: [], bonus: '' } };
   const damageBase = damage.base || { number: 1, denomination: 6, types: [], bonus: '' };
   const range = formData.range || { value: null, long: null, reach: null, units: 'ft' };
 
   const updateDamageBase = (patch: Record<string, any>) => {
-    setFormData((prev: any) => ({
+    setFormData((prev) => ({
       ...prev,
       damage: { ...(prev.damage || {}), base: { ...damageBase, ...patch } },
     }));
   };
-
   const updateRange = (patch: Record<string, any>) => {
-    setFormData((prev: any) => ({
-      ...prev,
-      range: { ...range, ...patch },
-    }));
+    setFormData((prev) => ({ ...prev, range: { ...range, ...patch } }));
   };
 
   return (
@@ -803,7 +1518,7 @@ function WeaponItemFields({
             triggerClassName="w-full"
           />
         </FieldRow>
-        <FieldRow label="Damage Type" hint="First listed type is the canonical one. Hold Cmd/Ctrl to multi-select for choice damage.">
+        <FieldRow label="Damage Type" hint="First listed type is the canonical one.">
           <SingleSelectSearch
             value={(damageBase.types && damageBase.types[0]) || ''}
             onChange={(val) => updateDamageBase({ types: val ? [val] : [] })}
@@ -826,7 +1541,7 @@ function WeaponItemFields({
           <Input
             type="number"
             value={formData.magicalBonus ?? 0}
-            onChange={(e) => setFormData((prev: any) => ({
+            onChange={(e) => setFormData((prev) => ({
               ...prev,
               magicalBonus: parseInt(e.target.value || '0', 10) || 0,
             }))}
@@ -845,7 +1560,7 @@ function WeaponItemFields({
             placeholder="—"
           />
         </FieldRow>
-        <FieldRow label="Long Range" hint="Disadvantage past normal, up to long. Bows / crossbows.">
+        <FieldRow label="Long Range" hint="Disadvantage past normal, up to long.">
           <Input
             type="number"
             value={range.long ?? ''}
@@ -880,9 +1595,8 @@ function EquipmentItemFields({
   formData,
   setFormData,
 }: {
-  formData: any;
-  setFormData: React.Dispatch<React.SetStateAction<any>>;
-  profs: ProficiencyBucket;
+  formData: ItemFormData;
+  setFormData: React.Dispatch<React.SetStateAction<ItemFormData>>;
 }) {
   const subtype = formData.typeSubtype || '';
   const isArmor = EQUIPMENT_ARMOR_SUBTYPES.has(subtype);
@@ -891,8 +1605,8 @@ function EquipmentItemFields({
     return (
       <ActivitySection label="EQUIPMENT">
         <p className="text-[10px] text-ink/40 py-2">
-          Worn gear — no armor stats. Use the Properties section for any
-          item-shape flags ('mgc', 'concentration', custom homebrew slugs).
+          Worn gear — no armor stats. Use the Properties section above for any
+          item-shape flags (mgc / concentration / custom homebrew slugs).
         </p>
       </ActivitySection>
     );
@@ -904,18 +1618,18 @@ function EquipmentItemFields({
         <Input
           type="number"
           value={formData.armorValue ?? 10}
-          onChange={(e) => setFormData((prev: any) => ({
+          onChange={(e) => setFormData((prev) => ({
             ...prev,
             armorValue: parseInt(e.target.value || '0', 10) || 0,
           }))}
           className="bg-background/50 border-gold/10"
         />
       </FieldRow>
-      <FieldRow label="Dex Max" hint="Maximum Dex bonus allowed. Blank = unlimited (light armor); 2 for medium; 0 for heavy.">
+      <FieldRow label="Dex Max" hint="Maximum Dex bonus allowed. Blank = unlimited (light); 2 = medium; 0 = heavy.">
         <Input
           type="number"
           value={formData.armorDex ?? ''}
-          onChange={(e) => setFormData((prev: any) => ({
+          onChange={(e) => setFormData((prev) => ({
             ...prev,
             armorDex: e.target.value === '' ? null : parseInt(e.target.value, 10),
           }))}
@@ -927,18 +1641,18 @@ function EquipmentItemFields({
         <Input
           type="number"
           value={formData.armorMagicalBonus ?? 0}
-          onChange={(e) => setFormData((prev: any) => ({
+          onChange={(e) => setFormData((prev) => ({
             ...prev,
             armorMagicalBonus: parseInt(e.target.value || '0', 10) || 0,
           }))}
           className="bg-background/50 border-gold/10"
         />
       </FieldRow>
-      <FieldRow label="Strength Required" hint="Heavy armor only — character STR must meet this or get -10ft speed.">
+      <FieldRow label="Strength Required" hint="Heavy armor only — character STR must meet this or take −10ft speed.">
         <Input
           type="number"
           value={formData.strength ?? ''}
-          onChange={(e) => setFormData((prev: any) => ({
+          onChange={(e) => setFormData((prev) => ({
             ...prev,
             strength: e.target.value === '' ? null : parseInt(e.target.value, 10),
           }))}
@@ -958,23 +1672,16 @@ function ConsumableItemFields({
   formData,
   setFormData,
 }: {
-  formData: any;
-  setFormData: React.Dispatch<React.SetStateAction<any>>;
+  formData: ItemFormData;
+  setFormData: React.Dispatch<React.SetStateAction<ItemFormData>>;
 }) {
-  // Two-axis consumables (poison delivery: contact/inhaled/etc;
-  // ammo shape: arrow/bolt/etc) — Foundry's `system.type.subtype` —
-  // are currently lost on import + don't have an editor field; the
-  // schema has no inner-subtype column. Flagged for follow-up: add
-  // items.type_inner_subtype or move to a packed-slug convention.
-  // For now, the primary subtype (potion/scroll/poison/ammo/etc.)
-  // lives in the shared Type section above.
   return (
     <ActivitySection label="CONSUMABLE">
       <FieldRow label="Magical Bonus" hint="Flat int added to any damage roll. e.g. 1 for a magical acid vial.">
         <Input
           type="number"
           value={formData.magicalBonus ?? 0}
-          onChange={(e) => setFormData((prev: any) => ({
+          onChange={(e) => setFormData((prev) => ({
             ...prev,
             magicalBonus: parseInt(e.target.value || '0', 10) || 0,
           }))}
@@ -982,9 +1689,9 @@ function ConsumableItemFields({
         />
       </FieldRow>
       <p className="text-[10px] text-ink/40 py-2">
-        Damage rolls (e.g. potion of healing, acid vial) live in the
-        item's Activities — add a Damage activity to author the dice
-        and on-use behaviour.
+        Damage rolls (e.g. potion of healing, acid vial) live in the item's
+        Activities — add a Damage activity to author the dice and on-use
+        behaviour.
       </p>
     </ActivitySection>
   );
@@ -995,8 +1702,8 @@ function ToolItemFields({
   setFormData,
   profs,
 }: {
-  formData: any;
-  setFormData: React.Dispatch<React.SetStateAction<any>>;
+  formData: ItemFormData;
+  setFormData: React.Dispatch<React.SetStateAction<ItemFormData>>;
   profs: ProficiencyBucket;
 }) {
   return (
@@ -1004,12 +1711,10 @@ function ToolItemFields({
       <FieldRow label="Default Ability" hint="Default ability used when rolling a check with this tool. Players can override at roll time.">
         <SingleSelectSearch
           value={formData.abilityId || ''}
-          onChange={(val) => setFormData((prev: any) => ({ ...prev, abilityId: val }))}
+          onChange={(val) => setFormData((prev) => ({ ...prev, abilityId: val }))}
           options={[
             { id: '', name: '— none —' },
             ...profs.abilities.map((a) => ({ id: a.id, name: a.name || a.identifier })),
-            // Foundry-style short slugs as a fallback when the
-            // attributes table is sparse.
             ...ABILITY_OPTIONS.map((slug) => ({
               id: slug,
               name: FALLBACK_ABILITY_LABELS[slug] || slug,
@@ -1021,7 +1726,7 @@ function ToolItemFields({
       <FieldRow label="Check Bonus" hint="Formula added to checks made with this tool. e.g. '+1' or '@prof'.">
         <Input
           value={formData.bonus || ''}
-          onChange={(e) => setFormData((prev: any) => ({ ...prev, bonus: e.target.value }))}
+          onChange={(e) => setFormData((prev) => ({ ...prev, bonus: e.target.value }))}
           className="bg-background/50 border-gold/10 text-xs font-mono"
           placeholder="+1"
         />
@@ -1029,7 +1734,7 @@ function ToolItemFields({
       <FieldRow label="Chat Flavor" hint="Short flavor line that prepends the chat card when the tool is used.">
         <Input
           value={formData.chatFlavor || ''}
-          onChange={(e) => setFormData((prev: any) => ({ ...prev, chatFlavor: e.target.value }))}
+          onChange={(e) => setFormData((prev) => ({ ...prev, chatFlavor: e.target.value }))}
           className="bg-background/50 border-gold/10"
           placeholder="Tinkering away..."
         />
@@ -1042,24 +1747,17 @@ function ContainerItemFields({
   formData,
   setFormData,
 }: {
-  formData: any;
-  setFormData: React.Dispatch<React.SetStateAction<any>>;
+  formData: ItemFormData;
+  setFormData: React.Dispatch<React.SetStateAction<ItemFormData>>;
 }) {
   const capacity = formData.capacity || { type: 'items', value: 0, units: 'lb' };
   const currency = formData.currency || { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0 };
 
   const updateCapacity = (patch: Record<string, any>) => {
-    setFormData((prev: any) => ({
-      ...prev,
-      capacity: { ...capacity, ...patch },
-    }));
+    setFormData((prev) => ({ ...prev, capacity: { ...capacity, ...patch } }));
   };
-
   const updateCurrency = (coin: string, val: number) => {
-    setFormData((prev: any) => ({
-      ...prev,
-      currency: { ...currency, [coin]: val },
-    }));
+    setFormData((prev) => ({ ...prev, currency: { ...currency, [coin]: val } }));
   };
 
   return (
@@ -1103,8 +1801,7 @@ function ContainerItemFields({
       <ActivitySection label="CONTAINER · CURRENCY">
         <div className="py-2">
           <p className="text-[10px] text-ink/40 mb-2">
-            Pre-filled coins inside this container (e.g. a chest in a
-            dungeon). Foundry's 5-coin grid.
+            Pre-filled coins inside this container. Foundry's 5-coin grid.
           </p>
           <div className="grid grid-cols-5 gap-2">
             {DENOMINATIONS.map(([coin, label]) => (
