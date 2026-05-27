@@ -1038,11 +1038,11 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
   }
 
   /**
-   * Resolve a source id (semantic OR legacy) to its short
+   * Resolve a source id (semantic OR legacy opaque) to its short
    * abbreviation. The sources catalog is keyed on both kinds of id,
    * so a single lookup handles both `source-phb-2014` and the legacy
-   * Firestore-style ids `6lJGQvtAIbUSSJ1tG6cg` that the spell summary
-   * currently ships.
+   * opaque ids `6lJGQvtAIbUSSJ1tG6cg` that the spell summary currently
+   * ships.
    */
   _sourceShortName(sourceId) {
     const entry = this._sourcesById?.get(String(sourceId ?? ""));

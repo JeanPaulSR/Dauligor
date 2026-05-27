@@ -13,9 +13,8 @@ import {
 } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
 
-// Firebase Authentication is the only Firebase product Dauligor still uses.
-// All data access has migrated to Cloudflare D1 (see src/lib/d1.ts) and R2.
-// Do not reintroduce `firebase/firestore` imports — that database is gone.
+// Firebase Authentication. Data access lives in Cloudflare D1
+// (src/lib/d1.ts) and R2 (api/_lib/module-export-store.ts).
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 
@@ -40,8 +39,7 @@ export {
   type User,
 };
 
-// Operation label for client-side error reports. Historical name (was used
-// alongside the now-removed `handleFirestoreError`); kept as a small enum so
+// Operation label for client-side error reports. Kept as a small enum so
 // log entries carry a machine-readable verb.
 export enum OperationType {
   CREATE = 'create',
@@ -73,9 +71,6 @@ interface ClientErrorReport {
 
 /**
  * Logs a structured client-side error (with auth context) and rethrows.
- * Replaces the old `handleFirestoreError` after the Firestore migration.
- * The legacy alias is re-exported below for any straggling call sites until
- * they're renamed.
  */
 export function reportClientError(
   error: unknown,

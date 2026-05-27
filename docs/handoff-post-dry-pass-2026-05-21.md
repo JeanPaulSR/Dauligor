@@ -33,7 +33,7 @@ No `vercel.json` exists in the repo. Routing for Pages Functions is file-based u
 
 **Critical context for any future agent touching D1 migrations.**
 
-Production D1's `d1_migrations` tracking table is **empty**. Wrangler has never managed migrations on prod D1 — existing tables were created via the original Firestore→D1 import (a one-shot data load), not via `wrangler d1 migrations apply`. The proposal-system migrations (`worlds`, `user_permissions`, `pending_revisions`, `proposal_bundles`, +5 follow-ups) had only ever been applied to local dev D1.
+Production D1's `d1_migrations` tracking table is **empty**. Wrangler has never managed migrations on prod D1 — existing tables were created via direct one-shot SQL execution, not via `wrangler d1 migrations apply`. The proposal-system migrations (`worlds`, `user_permissions`, `pending_revisions`, `proposal_bundles`, +5 follow-ups) had only ever been applied to local dev D1.
 
 When today's push made the proposal-system code live on prod, `/api/me` immediately started returning 500 with `D1_ERROR: no such table: user_permissions`. The fix was running the 9 missing migrations directly against prod D1:
 

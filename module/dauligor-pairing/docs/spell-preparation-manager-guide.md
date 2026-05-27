@@ -210,10 +210,9 @@ strip's info-row typography.
 | `/api/module/<source>/classes/<class>/spells.json` | Live class spell list (summaries) |
 | `/api/module/spells/<dbId>.json` | Full per-spell payload (BBCode-rendered description) |
 
-All ship **semantic source ids** (`source-phb-2014`) — no legacy
-Firestore-style ids. See `docs/database/README.md` §schema-philosophy
-on why D1 PKs are still legacy strings internally; the export layer
-normalises via `getSemanticSourceId()` in `_classExport.ts`.
+All ship **semantic source ids** (`source-phb-2014`). D1 PKs remain
+opaque strings internally; the export layer normalises via
+`getSemanticSourceId()` in `_classExport.ts`.
 
 ### Files
 

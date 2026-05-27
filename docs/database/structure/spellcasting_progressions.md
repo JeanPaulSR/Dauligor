@@ -36,11 +36,10 @@ The definitive reference for combined casting levels.
 
 ---
 
-## Migration Refinements (The "Fresh Start")
+## Design notes
 
-### 1. Unified Scaling Table
-- **Old Practice**: Firestore used three separate collections (`spellcastingScalings`, `pactMagicScalings`, `spellsKnownScalings`).
-- **Refinement**: These are unified into a single `spellcasting_progressions` table with a `type` discriminator. This makes the Class Editor logic cleaner as it only needs to query one table for all progression needs.
+### 1. Unified scaling table
+A single `spellcasting_progressions` table with a `type` discriminator covers standard slots, pact magic, and known-spell progressions. The Class Editor only needs to query one table for all progression needs.
 
-### 2. Formula Determinism
-- **Refinement**: The `formula` field is strictly validated against a allowed list of MathJS functions (`floor`, `ceil`) to prevent injection during runtime evaluation.
+### 2. Formula determinism
+The `formula` field is strictly validated against an allowed list of MathJS functions (`floor`, `ceil`) to prevent injection during runtime evaluation.

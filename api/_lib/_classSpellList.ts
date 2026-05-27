@@ -200,13 +200,11 @@ export async function buildClassSpellListBundle(
   }
 
   // Resolve each spell's `source_id` to its public semantic id (e.g.
-  // "source-phb-2014") before shipping it as `spellSourceId`. The
-  // D1 column stores the row's PRIMARY KEY (a stable opaque string,
-  // typically the original Firestore document id per
-  // `docs/database/README.md` §schema-philosophy bullet 5). The
-  // public sources catalog endpoint publishes the SEMANTIC id, so
-  // we resolve here to match — that's what lets the Foundry module
-  // join one to the other without legacy-id mapping.
+  // "source-phb-2014") before shipping it as `spellSourceId`. The D1
+  // column stores the row's PRIMARY KEY (a stable opaque string). The
+  // public sources catalog endpoint publishes the SEMANTIC id, so we
+  // resolve here to match — that's what lets the Foundry module join
+  // one to the other without legacy-id mapping.
   //
   // One sources fetch per spell-list request; sources changes are
   // rare and the result is small enough that caching server-side

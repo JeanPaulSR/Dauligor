@@ -1,6 +1,6 @@
 # D1 Architecture
 
-The data layer that replaces Firestore. This doc covers the D1 client API, the three-layer cache, the foundation heartbeat, and migration patterns. Schema details for individual tables live in [../database/structure/](../database/structure/).
+The relational data layer. This doc covers the D1 client API, the three-layer cache, the foundation heartbeat, and migration patterns. Schema details for individual tables live in [../database/structure/](../database/structure/).
 
 ## The pieces
 
@@ -10,11 +10,11 @@ The data layer that replaces Firestore. This doc covers the D1 client API, the t
 | Express dev / Pages Function proxy | [api/_lib/d1-proxy.ts](../../api/_lib/d1-proxy.ts) | Verifies Firebase JWT, forwards to Worker |
 | Worker endpoint | [worker/index.js](../../worker/index.js) (`/query`) | `env.DB.prepare(sql).bind(...).all()` |
 | Schema migrations | [worker/migrations/](../../worker/migrations/) | `0001_phase1_foundation.sql` … `0011_system_metadata.sql` |
-| Historical migration scripts | [scripts/_archive/](../../scripts/_archive/) | Firestore→D1 utilities + codemods from the May 2026 cut. Reference only — not part of any current loop. |
+| Historical scripts | [scripts/_archive/](../../scripts/_archive/) | One-shot importers and codemods. Reference only — not part of any current loop. |
 
 ## Client API
 
-Everything is exported from [src/lib/d1.ts](../../src/lib/d1.ts). Use these instead of any direct `firebase/firestore` calls.
+Everything is exported from [src/lib/d1.ts](../../src/lib/d1.ts).
 
 ### Read
 
@@ -56,7 +56,7 @@ await deleteDocuments('features', 'parent_id = ?', [classId]);
 
 ### Collection-name → table-name resolution
 
-`d1.ts` keeps a `D1_TABLE_MAP` that translates the Firestore-era collection names callers still use into snake_case D1 table names:
+`d1.ts` keeps a `D1_TABLE_MAP` that translates the camelCase collection names used by callers into snake_case D1 table names:
 
 ```ts
 'damageTypes'        → 'damage_types'
@@ -163,7 +163,7 @@ cls.foundry_name   // ← still works; the helper merges, doesn't strip.
 
 ### Auditing existing dual-reads
 
-Several legacy call sites still have `row.snake_case ?? row.camelCase` patterns left over from the Firestore→D1 transition. These are flagged in `memory/project_dual_shape_cleanup.md` as a pending cleanup. New code must not add to that list.
+Several legacy call sites still have `row.snake_case ?? row.camelCase` patterns. These are flagged in `memory/project_dual_shape_cleanup.md` as a pending cleanup. New code must not add to that list.
 
 ### Gotchas
 
@@ -279,6 +279,6 @@ This is intentional — when debugging save flows you can scan the console for t
 - [runtime.md](runtime.md) — overall request flow
 - [auth-firebase.md](auth-firebase.md) — JWT flow that gates D1 access
 - [env-vars.md](env-vars.md) — `R2_WORKER_URL`, `R2_API_SECRET`, etc.
-- [../database/README.md](../database/README.md) — phase status, remaining-Firestore punchlist
+- [../database/README.md](../database/README.md) — D1 schema philosophy + phase status (migration complete)
 - [../database/structure/](../database/structure/) — per-table schema
 - [../operations/local-dev.md](../operations/local-dev.md) — running `wrangler dev`

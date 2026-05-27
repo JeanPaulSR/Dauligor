@@ -438,8 +438,7 @@ export async function batchQueryD1(queries: { sql: string, params?: any[] }[]): 
 }
 
 /**
- * Higher-level helper for standard collection fetching.
- * D1-only — Firestore fallback support was removed at the end of the migration.
+ * Higher-level helper for standard D1 collection fetching.
  */
 export async function fetchCollection<T>(
   collectionName: string,
@@ -466,8 +465,7 @@ export async function fetchCollection<T>(
 }
 
 /**
- * Fetch a single document by ID.
- * D1-only — Firestore fallback support was removed at the end of the migration.
+ * Fetch a single D1 document by ID.
  */
 export async function fetchDocument<T>(
   collectionName: string,

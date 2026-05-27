@@ -4,27 +4,27 @@ The foundation of the Dauligor Wiki. Every article exists here first; specialize
 
 ## Layout Specs
 
-| SQL Column | Type | Firestore Equivalent | Note |
-| :--- | :--- | :--- | :--- |
-| `id` | TEXT (PK) | Document ID | |
-| `title` | TEXT | `title` | |
-| `slug` | TEXT (INDEX) | `slug` | Unique within the category. |
-| `category` | TEXT | `category` | character, location, item, etc. |
-| `folder` | TEXT | `folder` | UI hierarchy path. |
-| `content` | TEXT | `content` | Primary Markdown body. |
-| `excerpt` | TEXT | `excerpt` | Summary for previews. |
-| `parent_id` | TEXT (FK) | `parentId` | For nested wiki pages. |
-| `status` | TEXT | `status` | draft / published. |
-| `author_id` | TEXT | `authorId` | Links to `users.id`. |
-| `dm_notes` | TEXT | `dmData/notes` | Private DM content. |
-| `image_url` | TEXT | `imageUrl` | Header Image URL (R2). |
-| `image_display` | JSON | `imageDisplay` | Focal points. |
-| `card_image_url` | TEXT | `cardImageUrl` | Grid/Card Image URL (R2). |
-| `card_display` | JSON | `cardDisplay` | Focal points. |
-| `preview_image_url`| TEXT | `previewImageUrl`| Hover Image URL (R2). |
-| `preview_display` | JSON | `previewDisplay` | Focal points. |
-| `created_at` | DATETIME | `createdAt` | |
-| `updated_at` | DATETIME | `updatedAt` | |
+| SQL Column | Type | Note |
+| :--- | :--- | :--- |
+| `id` | TEXT (PK) | |
+| `title` | TEXT | |
+| `slug` | TEXT (INDEX) | Unique within the category. |
+| `category` | TEXT | character, location, item, etc. |
+| `folder` | TEXT | UI hierarchy path. |
+| `content` | TEXT | Primary Markdown body. |
+| `excerpt` | TEXT | Summary for previews. |
+| `parent_id` | TEXT (FK) | For nested wiki pages. |
+| `status` | TEXT | draft / published. |
+| `author_id` | TEXT | Links to `users.id`. |
+| `dm_notes` | TEXT | Private DM content. |
+| `image_url` | TEXT | Header Image URL (R2). |
+| `image_display` | JSON | Focal points. |
+| `card_image_url` | TEXT | Grid/Card Image URL (R2). |
+| `card_display` | JSON | Focal points. |
+| `preview_image_url`| TEXT | Hover Image URL (R2). |
+| `preview_display` | JSON | Focal points. |
+| `created_at` | DATETIME | |
+| `updated_at` | DATETIME | |
 
 ## Implementation Notes
 - **Normalization**: Fields like `dm_notes` are moved from sub-collections directly into the base table to reduce query complexity.

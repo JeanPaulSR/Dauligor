@@ -2178,10 +2178,8 @@ export default function CharacterBuilder({
           }
         }
       } else {
-        // Legacy branch: queried Firestore for `featureType` on uniqueOptionItems.
-        // That field never existed on the D1 unique_option_items schema; the
-        // Firestore version returned zero docs in practice. Preserve the
-        // no-op behavior so this code path remains a clean fall-through.
+        // No `featureType` column exists on the unique_option_items table; this
+        // branch is a clean no-op fall-through that clears the options state.
         setAvailableOptions([]);
       }
     } catch (err) {

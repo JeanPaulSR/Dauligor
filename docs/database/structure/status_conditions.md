@@ -4,21 +4,21 @@ Mechanical states and status icons applied to actors.
 
 ## Layout Specs
 
-| SQL Column | Type | Firestore Equivalent | Note |
-| :--- | :--- | :--- | :--- |
-| `id` | TEXT (PK) | Document ID | |
-| `identifier` | TEXT (INDEX) | `identifier` | Foundry key (e.g., `blinded`). This is what goes into an Active Effect's `statuses[]` array on export. |
-| `name` | TEXT | `name` | |
-| `image_url` | TEXT | `img` | R2 URL for the icon. |
-| `reference` | TEXT | `reference` | Foundry compendium path. |
-| `description` | TEXT | `description` | |
-| `order` | INTEGER | `order` | |
-| `implied_ids` | JSON | `impliedStatuses` | Array of condition identifiers. |
-| `changes` | JSON | `changes` | Array of ActiveEffect changes. |
-| `source` | TEXT | `source` | dnd5e, custom, imported. |
-| `category_id` | TEXT (FK) | — | FK to [`condition_categories`](#sister-table-condition_categories). Drives the badge shown next to each condition in the Active Effect editor's Status Conditions picker. Nullable for uncategorised rows. Added by migration `20260511-0043_status_condition_categories.sql`. |
-| `created_at` | DATETIME | `createdAt` | |
-| `updated_at` | DATETIME | `updatedAt` | |
+| SQL Column | Type | Note |
+| :--- | :--- | :--- |
+| `id` | TEXT (PK) | |
+| `identifier` | TEXT (INDEX) | Foundry key (e.g., `blinded`). This is what goes into an Active Effect's `statuses[]` array on export. |
+| `name` | TEXT | |
+| `image_url` | TEXT | R2 URL for the icon. |
+| `reference` | TEXT | Foundry compendium path. |
+| `description` | TEXT | |
+| `order` | INTEGER | |
+| `implied_ids` | JSON | Array of condition identifiers. |
+| `changes` | JSON | Array of ActiveEffect changes. |
+| `source` | TEXT | dnd5e, custom, imported. |
+| `category_id` | TEXT (FK) | FK to [`condition_categories`](#sister-table-condition_categories). Drives the badge shown next to each condition in the Active Effect editor's Status Conditions picker. Nullable for uncategorised rows. Added by migration `20260511-0043_status_condition_categories.sql`. |
+| `created_at` | DATETIME | |
+| `updated_at` | DATETIME | |
 
 ## Implementation Notes
 - **Active Effects**: The `changes` column stores a list of mechanical adjustments (e.g., `{"key": "system.attributes.movement.walk", "mode": 5, "value": "0"}`).

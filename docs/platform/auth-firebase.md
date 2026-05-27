@@ -1,16 +1,14 @@
-# Firebase Authentication (the part of Firebase that stayed)
+# Firebase Authentication
 
-The Firestore-to-D1 migration completed in May 2026; **Firebase Authentication remains the JWT layer** and is the only Firebase service still in use. This doc explains what stayed, why, and the full auth flow end-to-end.
+**Firebase Authentication is the JWT layer** and is the only Firebase service in use. This doc explains the auth surface and the full auth flow end-to-end.
 
-## What's kept vs. what's gone
+## Surface area
 
-| Service | Status | Why |
+| Service | Status | Notes |
 |---|---|---|
-| Firebase Authentication | **Kept** | Solid JWT issuer; user accounts already exist; verification done locally via JWKS, no SDK lock-in |
-| Firestore | Removed | Replaced by Cloudflare D1 (May 2026) |
-| Firebase Storage | Removed | Replaced by Cloudflare R2 |
-| `firebase-admin` SDK on the proxy | **Removed** (May 2026) | Replaced by `jose` (JWKS-based JWT verify) + direct Firebase Identity Toolkit REST calls for admin operations (createUser / updateUser / deleteUser / createCustomToken). Runtime-portable: works in Node and Cloudflare Workers. |
-| Firestore security rules | Removed | Replaced by per-route RBAC checks in `api/_lib/firebase-admin.ts` + the table-aware proxy gate in `api/_lib/d1-proxy.ts`. See [security-gates.md](security-gates.md). |
+| Firebase Authentication | **In use** | Solid JWT issuer; user accounts already exist; verification done locally via JWKS, no SDK lock-in |
+| `firebase-admin` SDK on the proxy | Not used | Server-side JWT verification uses `jose` (JWKS-based) + direct Firebase Identity Toolkit REST calls for admin operations (createUser / updateUser / deleteUser / createCustomToken). Runtime-portable: works in Node and Cloudflare Workers. |
+| Server-side authorization | Per-route gates | RBAC checks in `api/_lib/firebase-admin.ts` + the table-aware proxy gate in `api/_lib/d1-proxy.ts`. See [security-gates.md](security-gates.md). |
 
 ## Pseudo-username identity layer
 

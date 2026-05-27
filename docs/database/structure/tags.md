@@ -4,25 +4,25 @@ System for categorizing all entities (Classes, Spells, Items, Lore).
 
 ## Table: `tag_groups`
 
-| SQL Column | Type | Firestore Equivalent | Note |
-| :--- | :--- | :--- | :--- |
-| `id` | TEXT (PK) | Document ID | |
-| `name` | TEXT NOT NULL | `name` | e.g., "Damage Types". |
-| `category` | TEXT | `category` | (Legacy) First classification. |
-| `classifications`| JSON | `classifications` | Array of system types (spell, lore, etc). |
-| `description` | TEXT | `description` | |
-| `updated_at` | DATETIME | `updatedAt` | |
+| SQL Column | Type | Note |
+| :--- | :--- | :--- |
+| `id` | TEXT (PK) | |
+| `name` | TEXT NOT NULL | e.g., "Damage Types". |
+| `category` | TEXT | (Legacy) First classification. |
+| `classifications`| JSON | Array of system types (spell, lore, etc). |
+| `description` | TEXT | |
+| `updated_at` | DATETIME | |
 
 ## Table: `tags`
 
-| SQL Column | Type | Firestore Equivalent | Note |
-| :--- | :--- | :--- | :--- |
-| `id` | TEXT (PK) | Document ID | |
-| `group_id` | TEXT NOT NULL (FK) | `groupId` | Links to `tag_groups.id`. |
-| `name` | TEXT NOT NULL | `name` | e.g., "Fire". |
-| `slug` | TEXT NOT NULL | `slug` | URL-safe identifier. Unique within `(group_id, parent_tag_id)` — see below. |
-| `parent_tag_id` | TEXT (FK, nullable) | `parentTagId` | When non-NULL, this is a subtag whose direct parent is the referenced tag. NULL = root tag. Added in migration `20260512-1200`. |
-| `updated_at` | DATETIME | `updatedAt` | |
+| SQL Column | Type | Note |
+| :--- | :--- | :--- |
+| `id` | TEXT (PK) | |
+| `group_id` | TEXT NOT NULL (FK) | Links to `tag_groups.id`. |
+| `name` | TEXT NOT NULL | e.g., "Fire". |
+| `slug` | TEXT NOT NULL | URL-safe identifier. Unique within `(group_id, parent_tag_id)` — see below. |
+| `parent_tag_id` | TEXT (FK, nullable) | When non-NULL, this is a subtag whose direct parent is the referenced tag. NULL = root tag. Added in migration `20260512-1200`. |
+| `updated_at` | DATETIME | |
 
 ### Indexes
 

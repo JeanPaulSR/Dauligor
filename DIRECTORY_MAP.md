@@ -42,7 +42,7 @@ File-resolution guide. Pair with [AGENTS.md](AGENTS.md) for the agent briefing a
 |---|---|
 | [src/lib/d1.ts](src/lib/d1.ts) | **D1 client** — `queryD1`, `batchQueryD1`, `fetchCollection`, `fetchDocument`, `upsertDocument`, `upsertDocumentBatch`, `deleteDocument`, in-memory + sessionStorage caches, foundation heartbeat. **Auto-parses a fixed list of JSON columns** before returning rows; downstream remap blocks must pass through already-parsed values (see AGENTS.md §4). |
 | [src/lib/d1Tables.ts](src/lib/d1Tables.ts) | Standalone `D1_TABLE_MAP` + `getTableName` (no other deps; importable from server contexts) |
-| [src/lib/firebase.ts](src/lib/firebase.ts) | **Firebase Authentication only.** `usernameToEmail`, `reportClientError`, `OperationType` enum. Top-of-file guardrail forbids `firebase/firestore` imports. |
+| [src/lib/firebase.ts](src/lib/firebase.ts) | **Firebase Authentication.** `usernameToEmail`, `reportClientError`, `OperationType` enum. |
 | [src/lib/r2.ts](src/lib/r2.ts) | R2 client — `r2Upload`, `r2List`, `r2Delete`, `r2Rename`, `r2MoveFolder` |
 | [src/lib/imageMetadata.ts](src/lib/imageMetadata.ts) | Image metadata CRUD + reference scanning |
 | [src/lib/imageUtils.ts](src/lib/imageUtils.ts) | WebP conversion + center-crop |
@@ -102,7 +102,7 @@ File-resolution guide. Pair with [AGENTS.md](AGENTS.md) for the agent briefing a
 
 ## 5a. Historical scripts ([scripts/_archive/](scripts/_archive/))
 
-The Firestore→D1 migration is complete. The migration utilities + one-shot codemods that supported it live under `scripts/_archive/` for reference material; **none of them are part of the regular dev or deploy loop** and they're not invoked from `package.json`. Contents include the migration runners (`migrate.js`, `migrate_subclasses.js`), the pre-cut sanity check (`check_firestore.js`), the orphan-row cleanup (`cleanup-firestore-orphans.js`), the field-drift audit tools (`_audit-*.py`, `_audit_field_drift.js`), the codemods that retired client-side Firestore patterns (`_rename_error_helper.mjs`, `_rewrite_fetchers.mjs`), and the one-off rename / dedup scripts (`rename-blade-of-disaster.js`, `delete-replaced-sorcerer-set.js`).
+One-shot migration utilities and codemods retained as reference material. **None of them are part of the regular dev or deploy loop** and they're not invoked from `package.json`. Contents include the original data importers (`migrate.js`, `migrate_subclasses.js`), the field-drift audit tools (`_audit-*.py`, `_audit_field_drift.js`), the codemods that retired legacy client patterns (`_rename_error_helper.mjs`, `_rewrite_fetchers.mjs`), and the one-off rename / dedup scripts (`rename-blade-of-disaster.js`, `delete-replaced-sorcerer-set.js`).
 
 ## 6. Foundry pairing module
 
@@ -138,7 +138,7 @@ The Firestore→D1 migration is complete. The migration utilities + one-shot cod
 | Task | Procedure |
 |---|---|
 | **Add a route** | Update `Routes` in `src/App.tsx` and `NAV_ITEMS` in `src/components/Sidebar.tsx` |
-| **Add a D1 query path** | Use helpers in `src/lib/d1.ts`. Never call `firebase/firestore`. See [docs/platform/d1-architecture.md](docs/platform/d1-architecture.md) |
+| **Add a D1 query path** | Use helpers in `src/lib/d1.ts`. See [docs/platform/d1-architecture.md](docs/platform/d1-architecture.md) |
 | **Add a D1 table** | Write migration in `worker/migrations/`; apply locally first; document in `docs/database/structure/`; update `D1_TABLE_MAP` in [src/lib/d1Tables.ts](src/lib/d1Tables.ts) (mirror in `api/_lib/d1-fetchers-server.ts` if the table is needed server-side) |
 | **Add a Pages Function** | Add a `functions/api/<path>.ts` file (single-segment) or `functions/api/<resource>/[[path]].ts` for a catch-all dispatcher. Export `onRequest(context)` returning `Response`. Mirror in `server.ts` for local-dev parity if the route is exercised via `npm run dev`. Shared helpers go in `api/_lib/`. |
 | **Add an R2 upload site** | Use `ImageUpload` in `src/components/ui/ImageUpload.tsx`; storage key under `images/`, `icons/`, or `tokens/` |

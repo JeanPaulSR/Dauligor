@@ -127,8 +127,8 @@ Read-only display:
 
 Today, deleting a class or subclass document in the editor only removes the parent document itself. Its children — features (`features.parent_id`), scaling columns (`scaling_columns.parent_id`), and (for classes) all of the class's subclasses — remain in the database with stale `parent_id` references. They become orphans.
 
-Two real-world incidents from the migration era surfaced this:
-- The original Sorcerer class doc was replaced; the new class was authored as a separate doc but the old children were never removed. The migration script flagged 8 orphaned subclasses, 49 orphaned features (6 base + 43 from those subclasses), and 2 orphaned scaling columns. They had to be cleaned up via a one-off Firestore script.
+Two real-world incidents surfaced this:
+- The original Sorcerer class doc was replaced; the new class was authored as a separate doc but the old children were never removed. Cleanup found 8 orphaned subclasses, 49 orphaned features (6 base + 43 from those subclasses), and 2 orphaned scaling columns. They had to be cleaned up via a one-off cleanup script.
 - A deleted homebrew Barbarian subclass (`PsliJfnVfKCdLj3xApcv`) left behind 3 features (Persevere / Prevail / Beacon of Hope).
 
 **What the editor should do** when an admin deletes a class or subclass:

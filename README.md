@@ -14,7 +14,7 @@ A specialized D&D 5e campaign-management workspace: hierarchical lore wiki, mech
 - **Auth**: Firebase Authentication (JWT layer only — verified server-side via `jose` against Firebase's public JWKS, no Admin SDK)
 - **Hosting**: Cloudflare Pages (SPA static + Pages Functions at `functions/api/**`). Local dev uses Express (`server.ts`) for most routes; `npx wrangler pages dev` for the Pages-only routes (e.g. `/api/module/*`).
 
-The Firestore→D1 migration is complete; the app is live at [dauligor.com](https://www.dauligor.com). See [AGENTS.md](AGENTS.md) for the rules and [docs/database/README.md](docs/database/README.md) for the database layout.
+The app is live at [dauligor.com](https://www.dauligor.com). See [AGENTS.md](AGENTS.md) for the rules and [docs/database/README.md](docs/database/README.md) for the database layout.
 
 ## Run locally
 

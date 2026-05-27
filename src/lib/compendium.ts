@@ -197,10 +197,10 @@ export function normalizeCompendiumData(data: Record<string, any>): Record<strin
   }
 
   // 9. Filter out UI-only or legacy fields that cause SQL errors.
-  // `source` is the legacy Firestore publication-metadata object (book/page/
-  // license/rules/revision); D1 only stores `source_id` (the FK) and `page`
-  // — the rest is dropped. The editor still builds it for back-compat
-  // viewing, but it must not reach the upsert.
+  // `source` is a legacy publication-metadata object (book/page/license/
+  // rules/revision); D1 only stores `source_id` (the FK) and `page` — the
+  // rest is dropped. The editor still builds it for back-compat viewing,
+  // but it must not reach the upsert.
   const forbidden = [
     'effectsStr', 'id', 'automation', 'activitiesStr', 'status', 'usage',
     'configuration', 'sourceType', 'type', '__usesRecoveryDraft',

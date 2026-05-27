@@ -8,9 +8,7 @@ import { fetchCollection } from '../../lib/d1';
 import { Input } from '../../components/ui/input';
 import { SearchInput } from '../../components/ui/SearchInput';
 
-// Page reload helper for the "rebuild cache" buttons. Replaces the historical
-// `resetFirestore()` which existed to clear Firestore's IndexedDB cache; with
-// Firestore gone, a plain reload achieves the same intent.
+// Page reload helper for the "rebuild cache" buttons.
 const reloadPage = () => window.location.reload();
 import { motion, AnimatePresence } from 'motion/react';
 import { exportFullSourceLibrary, exportRawLibraryCatalogJSON } from '../../lib/classExport';

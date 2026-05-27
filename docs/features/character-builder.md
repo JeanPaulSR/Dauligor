@@ -8,7 +8,7 @@ Multi-step character creation with Foundry-VTT-compatible export. The builder is
 |---|---|
 | `/characters/:id` | [src/pages/characters/CharacterBuilder.tsx](../../src/pages/characters/CharacterBuilder.tsx) |
 
-> **Migration status:** all read/write paths on this page are on D1. The historical migration note (this was the largest item on the now-archived Firestore-cut punchlist) is preserved for context only. The `~30` D1 calls in `CharacterBuilder.tsx` were migrated cluster-by-cluster, with the data-loading effect later split into a separate `loadTick` dependents effect to avoid full-page reloads on individual saves.
+> The `~30` D1 calls in `CharacterBuilder.tsx` are organised in clusters; the data-loading effect is split into a separate `loadTick` dependents effect to avoid full-page reloads on individual saves.
 
 ## Data layer
 

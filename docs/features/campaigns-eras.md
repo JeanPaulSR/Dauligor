@@ -47,8 +47,8 @@ A user can be `dm`, `co-dm`, or `player` of a specific campaign — orthogonal t
 
 The DM is the user listed as `campaigns.dm_id`; campaign-level co-DMs come from `campaign_members.role = 'co-dm'`.
 
-### Campaign membership migration
-Original Firestore had `users.campaignIds` arrays. During migration, those arrays were synthesised into `campaign_members` rows along with the campaign's `dmId` field. Going forward, the junction is canonical.
+### Campaign membership
+Campaign membership is stored only in the `campaign_members` junction — there is no array column on `users`. Every `(user_id, campaign_id, role)` triple is one junction row.
 
 ## Active campaign
 

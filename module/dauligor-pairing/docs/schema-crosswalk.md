@@ -403,7 +403,7 @@ Based on `/schemas/classes.md` and the templates provided:
 | **Starting Equipment** | ⚠️ Partial (Markdown) | `startingEquipment.defaultData` |
 | **Class Table Groups** | ❌ Scaling columns are 1:1 | `classTableGroups` (flexible matrices) |
 | **Optional Progression** | ⚠️ uniqueOptionMappings | `optionalfeatureProgression` |
-| **Multi-Source Logic** | ❌ Firestore ID only | `reprintedAs`, `_copy` |
+| **Multi-Source Logic** | ❌ Single ID only (no reprint chain) | `reprintedAs`, `_copy` |
 
 ## Mapping Skills & Proficiencies
 

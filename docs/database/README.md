@@ -15,20 +15,18 @@ Browser → /api/d1/query (Cloudflare Pages Function in prod / Express in local 
 - Schema migrations live in [worker/migrations/](../../worker/migrations/) — `0001_phase1_foundation.sql` through `0017_map_markers.sql`, plus `9999_cleanup.sql` (used to wipe local before re-applying the chain).
 - Production reads/writes hit **remote D1**; local dev uses `wrangler dev` against a local SQLite under `worker/.wrangler/state/`.
 
-## Migration status — complete
+## Domain coverage
 
-The Firestore→D1 migration shipped in 2026-05. Every read/write path on production data goes through Cloudflare D1; image storage is on R2; the app is live at [www.dauligor.com](https://www.dauligor.com).
+Every read/write path on production data goes through Cloudflare D1; image storage is on R2; the app is live at [www.dauligor.com](https://www.dauligor.com). The schema covers every domain end-to-end:
 
-| Phase | Domain | Status |
+| Phase | Domain | Tables |
 |---|---|---|
-| 1 | Foundation & taxonomy | ✅ Complete (sources, tags, categories, attributes, languages, status_conditions, scaling progressions, image_metadata) |
-| 2 | Identity & social | ✅ Complete (users, eras, campaigns, campaign_members) |
-| 3 | Wiki & lore | ✅ Complete (lore_articles + meta + secrets + visibility junctions) |
-| 4 | Compendium | ✅ Complete (classes, subclasses, features, spells, items, feats, scaling_columns, unique_option_groups + items) |
-| 5 | Character builder | ✅ Complete (characters, character_progression, character_selections, character_inventory, character_spells, character_proficiencies) |
-| 6 | System | ✅ Complete (system_metadata heartbeat, maps + map_markers + map_highlights) |
-
-The historical migration plans, the firestore-cut punchlist, and the spell-summary migration walkthrough are archived under [../\_archive/](../\_archive/) for posterity.
+| 1 | Foundation & taxonomy | sources, tags, categories, attributes, languages, status_conditions, scaling progressions, image_metadata |
+| 2 | Identity & social | users, eras, campaigns, campaign_members |
+| 3 | Wiki & lore | lore_articles + meta + secrets + visibility junctions |
+| 4 | Compendium | classes, subclasses, features, spells, items, feats, scaling_columns, unique_option_groups + items |
+| 5 | Character builder | characters, character_progression, character_selections, character_inventory, character_spells, character_proficiencies |
+| 6 | System | system_metadata heartbeat, maps + map_markers + map_highlights |
 
 ## Schema philosophy
 
@@ -38,7 +36,7 @@ Decisions kept consistent across all tables:
 2. **JSON columns for nested rule blocks.** Things that are read as a whole and never queried piecewise stay as JSON. Examples: `proficiencies`, `advancements`, `activities`, `effects`, `image_display`, `metadata_json`.
 3. **Junction tables for many-to-many.** Examples: `campaign_members`, `lore_article_eras`, `lore_article_tags`. No comma-separated strings.
 4. **`snake_case` columns.** Client maps via `D1_TABLE_MAP` ([src/lib/d1Tables.ts](../../src/lib/d1Tables.ts)) and field-by-field aliasing in helpers.
-5. **`id TEXT PRIMARY KEY`** everywhere. Either a UUID (for new rows) or the original Firestore document ID (for rows brought across in the migration).
+5. **`id TEXT PRIMARY KEY`** everywhere — stable opaque PKs, UUIDs for new rows.
 6. **`created_at` / `updated_at` are `TEXT` ISO 8601** strings. SQLite has no native datetime; ISO strings sort correctly and round-trip cleanly.
 7. **JSON auto-parse list lives in `d1.ts:queryD1`.** Adding a JSON column means adding it there too — see [../platform/d1-architecture.md](../platform/d1-architecture.md#json-column-convention). Downstream remap blocks must pass already-parsed values through (see AGENTS.md §4).
 8. **Never `INSERT OR REPLACE`** — it deletes the row and re-inserts, firing `ON DELETE CASCADE` on FK children. Always `INSERT … ON CONFLICT(<pk>) DO UPDATE SET …`. Documented in [../database-memory.md](../database-memory.md#upsert-idiom--never-use-insert-or-replace).

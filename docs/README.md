@@ -38,7 +38,7 @@ Topic-segmented documentation. If you're working on one area, you should not nee
 - [env-vars.md](platform/env-vars.md) — every env var, where it's read, and example values
 
 ### [database/](database/) — D1 schema
-*The SQL data layer. Migration from Firestore is complete; that history lives under [_archive/](_archive/).*
+*The SQL data layer.*
 
 - [README.md](database/README.md) — schema philosophy, migration index, reset workflow
 - [structure/](database/structure/) — one doc per table (sources, classes, characters, lore_articles, …); 16 files
@@ -83,7 +83,7 @@ Topic-segmented documentation. If you're working on one area, you should not nee
 - [permissions-rbac.md](architecture/permissions-rbac.md) — role matrix, `effectiveProfile`, preview mode
 - [foundry-integration.md](architecture/foundry-integration.md) — pairing module philosophy, dual-state functionality
 - [reference-syntax.md](architecture/reference-syntax.md) — `@prof` / `@level` / `@scale.*` formula references and exporter resolution
-- [compendium-editor-patterns.md](architecture/compendium-editor-patterns.md) — the four CRUD patterns in use, decision tree, and **post-migration cleanup roadmap**
+- [compendium-editor-patterns.md](architecture/compendium-editor-patterns.md) — the four CRUD patterns in use, decision tree, and **cleanup roadmap**
 
 ### [operations/](operations/) — running the app
 *Setup, deployment, and what to do when things break.*
@@ -93,11 +93,11 @@ Topic-segmented documentation. If you're working on one area, you should not nee
 - [backup-restore.md](operations/backup-restore.md) — D1 backups, Time Travel recovery, restore workflows
 - [troubleshooting.md](operations/troubleshooting.md) — D1 errors, cache resets, JWT issues, permission failures
 
-### [_archive/](_archive/) — historical / pre-migration
+### [_archive/](_archive/) — historical / superseded
 *Reference only. Do not rely on these for current behaviour.*
 
-- Pre-migration Firestore schema, rules, and session logs (`agent-memory.md`)
-- Phase-by-phase migration plans (`migration-details/`) and the Firestore-cut punchlist
+- Pre-migration schema, rules, and session logs (`agent-memory.md`)
+- Phase-by-phase migration plans (`migration-details/`) and the historical migration punchlist
 - Older versions of consolidated docs
 
 ---

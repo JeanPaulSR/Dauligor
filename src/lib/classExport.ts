@@ -1163,8 +1163,8 @@ export async function exportClassSemantic(
         classIdentifierForLevelRef: classIdentifier,
       })
     }, ['classId', 'excludedOptionIds']);
-    // Empty image variants come through as `""` from migrate (Firestore
-    // didn't carry the field). Drop the pair so output matches canonical.
+    // Empty image variants come through as `""`. Drop the pair so output
+    // matches canonical.
     if (!out.cardImageUrl) { delete out.cardImageUrl; delete out.cardDisplay; }
     if (!out.previewImageUrl) { delete out.previewImageUrl; delete out.previewDisplay; }
     // imageDisplay/cardDisplay/previewDisplay drop naturally via JSON.stringify

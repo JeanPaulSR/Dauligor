@@ -4,19 +4,13 @@ High-level state registry for the Dauligor data layer. Pair with [docs/database/
 
 ## Status
 
-The Firestore→D1 migration is **complete and live**. As of 2026-05-08:
-
-- All app reads and writes go through Cloudflare D1 via the project Worker. `firebase/firestore` imports are forbidden anywhere in the codebase (guardrail comment in [src/lib/firebase.ts](../src/lib/firebase.ts)).
+- All app reads and writes go through Cloudflare D1 via the project Worker.
 - Image storage is on Cloudflare R2 (`https://images.dauligor.com`); image upload, list, rename, delete, and metadata all flow through `worker/index.js`.
 - The deployed app at [www.dauligor.com](https://www.dauligor.com) (Cloudflare Pages) and the Foundry pairing module both consume the same `/api/module/sources` API. On production the Pages Function reads D1 directly via its binding; in local dev the Express proxy forwards through the Cloudflare Worker on `:8787`.
 - Local dev uses `wrangler dev` (port 8787) for D1 + R2 simulation and Express + Vite (port 3000) for the app. See [docs/operations/local-dev.md](operations/local-dev.md).
 - Firebase Authentication is the JWT layer and is staying. The Firebase Admin SDK is still used server-side in 5 places to verify those JWTs — exit plan in `~/.claude/projects/E--DnD-Professional-Dev-Dauligor/memory/project_firebase_auth_exit_plan.md`.
 
-The migration was completed via:
-1. Schema applied to remote D1 (`0001_phase1_foundation.sql` through `0017_map_markers.sql`, plus the cleanup migration).
-2. Local sqlite dump exported with `wrangler d1 export … --no-schema` and replayed against remote.
-3. `worker/wrangler.toml` bindings updated; deployed worker URL set as `R2_WORKER_URL` in the Cloudflare Pages project env (also in `.env` for local dev).
-4. Per-class Foundry endpoint shipped (server-side `exportClassSemantic` in `api/_lib/_classExport.ts` — see [DIRECTORY_MAP §3](../DIRECTORY_MAP.md#3-server--proxy--worker)).
+Schema chain currently applied: `0001_phase1_foundation.sql` through `0017_map_markers.sql`, plus the cleanup migration. Per-class Foundry endpoint runs against server-side `exportClassSemantic` in `api/_lib/_classExport.ts` (see [DIRECTORY_MAP §3](../DIRECTORY_MAP.md#3-server--proxy--worker)).
 
 ## Master Table Registry
 
@@ -66,9 +60,9 @@ Per-table specs in [docs/database/structure/](database/structure/). Migration DD
 | `0014_field_drift_fixes.sql` | features.quantity_column_id / scaling_column_id / icon_url; attributes.description; languages.`order`; campaigns.preview_image_url / card_image_url / background_image_url |
 | `0015_options_created_at.sql` | `created_at` on `unique_option_groups` + `unique_option_items` (backfilled from `updated_at` on existing rows) |
 | `0017_map_markers.sql` | `maps`, `map_markers`, `map_highlights` for the Interactive Map page (era-scoped maps with submap navigation via `parent_marker_id`/`parent_highlight_id`; markers and highlights cascade-delete with their map; article-link FKs use SET NULL to keep regions when the article goes away) |
-| `9999_cleanup.sql` | Drops everything (used to wipe local before re-migrating from a Firestore JSON dump) |
+| `9999_cleanup.sql` | Drops everything (used to wipe local before re-applying the chain from scratch) |
 
-`0016` was a stillborn JSON `map_coordinates` column that lived for ~10 minutes before being collapsed into 0017's relational design (the project rejects JSON-in-D1 carry-overs from the Firestore shape). The file is deleted and the migration chain skips from 0015 to 0017.
+`0016` was a stillborn JSON `map_coordinates` column that lived for ~10 minutes before being collapsed into 0017's relational design (the project does not park nested-document blobs in D1 when a relational shape is reachable). The file is deleted and the migration chain skips from 0015 to 0017.
 
 ## Operating principles
 
@@ -80,7 +74,7 @@ Per-table specs in [docs/database/structure/](database/structure/). Migration DD
 
 D1 has `PRAGMA foreign_keys = ON` by default. SQLite resolves an `INSERT OR REPLACE` PK conflict by **deleting the existing row and inserting a new one**, and that DELETE fires `ON DELETE CASCADE` on referencing rows. Result: every "save" silently nukes that row's FK children.
 
-This caused a real data-loss incident during the migration: saving a class via ClassEditor cascade-deleted every subclass for that class, dropping the table from 65 → 39 rows over several saves. The fix is the canonical SQLite UPSERT idiom:
+This caused a real data-loss incident on `INSERT OR REPLACE`: saving a class via ClassEditor cascade-deleted every subclass for that class, dropping the table from 65 → 39 rows over several saves. The fix is the canonical SQLite UPSERT idiom:
 
 ```sql
 INSERT INTO ${table} (cols...) VALUES (...)

@@ -81,7 +81,7 @@ rm ./remote-dump.sql
 cd ..
 ```
 
-`scripts/_archive/migrate.js` is the historical Firestore→D1 importer; it is **not** part of the regular dev loop and should not be run today. Use the remote-snapshot pattern above to refresh local data instead.
+`scripts/_archive/migrate.js` is the original one-shot data importer; it is **not** part of the regular dev loop and should not be run today. Use the remote-snapshot pattern above to refresh local data instead.
 
 ## For Claude Code agents
 
@@ -283,7 +283,7 @@ Active scripts in [scripts/](../../scripts/):
 | `_repro_progression_loop.mjs` | Headless regression harness for the character-builder normalize/build loop. Run with `npx tsx scripts/_repro_progression_loop.mjs`. |
 | `install-nightly-backup.ps1` / `uninstall-nightly-backup.ps1` | Windows scheduled-task installer for nightly backups. |
 
-The historical Firestore→D1 migration utilities and one-shot codemods live in [scripts/_archive/](../../scripts/_archive/) for reference. None of them are part of the dev loop; they're documented in [../../DIRECTORY_MAP.md §5a](../../DIRECTORY_MAP.md).
+One-shot import utilities and codemods live in [scripts/_archive/](../../scripts/_archive/) for reference. None of them are part of the dev loop; they're documented in [../../DIRECTORY_MAP.md §5a](../../DIRECTORY_MAP.md).
 
 ## Related docs
 

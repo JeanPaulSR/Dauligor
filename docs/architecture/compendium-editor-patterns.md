@@ -1,12 +1,10 @@
 # Compendium Editor Patterns
 
-How CRUD currently works in the app, the four patterns in use, and the post-migration cleanup roadmap.
-
-> **Migration status:** The Firestore→D1 cut is complete. Any references to the "Firestore-cut punchlist" or `firebaseFallback` patterns in the rest of this document are historical — the linked punchlist now lives under [docs/_archive/](../_archive/). Read those notes for context, not as current TODO.
+How CRUD currently works in the app, the four patterns in use, and the cleanup roadmap.
 
 > **When to read this doc:**
 > - You're adding a new editor for a new entity type → use the [Decision tree](#decision-tree).
-> - You're refactoring an existing editor → check [Post-migration cleanup roadmap](#post-migration-cleanup-roadmap).
+> - You're refactoring an existing editor → check [Cleanup roadmap](#cleanup-roadmap).
 
 ---
 
@@ -121,14 +119,11 @@ If your new entity has 0 junctions and just sits in a table, pick A or C. If it 
 4. **No type safety on D1 rows.** Most reads are typed `<any>`. The schema lives in `worker/migrations/*.sql` and `docs/database/structure/*.md` but nothing enforces TypeScript types match.
 5. **No optimistic UI.** Editors call `loadEntries()` after every save. Works but burns a round-trip.
 6. **Default API doesn't push toward transactions.** `upsertDocument(name, id, data)` is one query. Multi-table writes require remembering to use `batchQueryD1`. Easy to forget.
-7. **Migration script and editor save logic duplicate column knowledge.** `migrate.js` mappers (`mapClass`, `mapFeature`, etc.) mirror the editor save shape. Add a column to one without the other → silent drift.
-8. **Schema knowledge spans ~5 files for a new column.** SQL migration → migrate.js mapper → `normalizeCompendiumData` → `denormalizeCompendiumData` → editor form state → `D1_TABLE_MAP` (if JSON) → JSON auto-parse list. Easy to miss one.
+7. **Schema knowledge spans ~4 files for a new column.** SQL migration → `normalizeCompendiumData` → `denormalizeCompendiumData` → editor form state → `D1_TABLE_MAP` (if JSON) → JSON auto-parse list. Easy to miss one.
 
 ---
 
-## Post-migration cleanup roadmap
-
-> The Firestore cut shipped in 2026-05. This roadmap is now eligible to start; see Priority 7 below for the closure record.
+## Cleanup roadmap
 
 Estimated total effort: 1 focused week, broken across the priorities below.
 
@@ -177,39 +172,23 @@ Estimated total effort: 1 focused week, broken across the priorities below.
 
 - [ ] Class editor cascade-delete prompt (already documented in [features/compendium-classes.md](../features/compendium-classes.md)). The editor should run `scanForReferences` on delete and offer cascade / reparent / cancel.
 - [ ] Migrate JSON-array tag references (`classes.tag_ids`, `feats.tags`, `items.tags`, `spells.tags`) into proper junction tables. Enables queries like "find all classes with the Combat tag" without LIKE-on-JSON. Phase 4e architecture doc explicitly defers this.
-- [ ] Schema-vs-code lint: a CI check that ensures `migrate.js` mappers and editor save payloads agree with `worker/migrations/*.sql`. Or: delete `migrate.js` once Firestore is gone (the only reason it exists).
+- [ ] Schema-vs-code lint: a CI check that ensures editor save payloads agree with `worker/migrations/*.sql`.
 - [ ] **Adopt `<name-slug>-<source-slug>` identifier convention for source-specific entities.** Today most identifiers are bare `<name-slug>` (e.g., `blade-of-disaster`, `wall-of-force`). When a spell/feat/class appears in multiple source books with mechanical differences, this collides under D1's `UNIQUE` constraint and silently drops the loser.
   - Discovered when the Foundry import collapsed two `Blade of Disaster` versions (FRHF vs TCE) into the same identifier. Resolved one-off via `scripts/_archive/rename-blade-of-disaster.js`.
   - **Going forward**: identifiers for source-specific entities should be `<name-slug>-<source-slug>` (e.g., `blade-of-disaster-tce`, `blade-of-disaster-frhof`). The bare `<name-slug>` form is reserved for unambiguous entities or canonical/core-rules versions.
   - **Implementation paths to update**:
     - [src/lib/spellImport.ts](../../src/lib/spellImport.ts) — Foundry spell folder importer should append the source slug to the identifier when creating a candidate.
     - `slugify` callers in editors — when an editor auto-generates an identifier from name (e.g., [src/components/compendium/DevelopmentCompendiumManager.tsx](../../src/components/compendium/DevelopmentCompendiumManager.tsx) at save time), append the source slug if the entity has a `sourceId`.
-  - **Migration path for existing identifiers**: a sweep-and-rename script that scans for collision-prone identifiers, resolves the source for each, and rewrites in place. Same pattern as `scripts/_archive/rename-blade-of-disaster.js` but generalised across spells/feats/items/classes/subclasses. The Firestore cut already shipped, so a future generalised version would be a D1-only sweep.
+  - **Sweep for existing identifiers**: a script that scans for collision-prone identifiers, resolves the source for each, and rewrites in place. Same pattern as `scripts/_archive/rename-blade-of-disaster.js` but generalised across spells/feats/items/classes/subclasses.
 
-### Priority 7 — Final Firestore-removal cleanup ✅
-
-The Firestore-cut shipped in 2026-05. This section's tasks are complete:
-
-- [x] [src/lib/firebase.ts](../../src/lib/firebase.ts) is auth-only with a guardrail comment forbidding `firebase/firestore` imports.
-- [x] Every `firebase/firestore` import is gone from `src/`, `api/`, and `server.ts`.
-- [x] `firestore.rules`, `firebase.json`, `firebase-blueprint.json`, `storage.rules` deleted.
-- [x] `migration-firebase-side/` deleted (it was field-level Firestore captures used during migration).
-- [x] [AGENTS.md](../../AGENTS.md) updated: post-migration framing throughout, no-firestore-imports kept as a permanent rule.
-- [x] [docs/_archive/firestore-cut-punchlist.md](../_archive/firestore-cut-punchlist.md) and [docs/_archive/migration-walkthrough-spellsummary.md](../_archive/migration-walkthrough-spellsummary.md) archived.
-- [x] [docs/database/README.md](../database/README.md) rewritten as a current-state document (no punchlist; all phases marked complete).
-
-Still open as a follow-up:
+### Priority 7 — Follow-up auth and recompute work
 
 - [ ] **Trim the Firebase Admin SDK surface (stage 1 of the auth exit plan).** Replace the 5 `auth.verifyIdToken()` calls in `api/_lib/firebase-admin.ts` and `server.ts` with manual JWKS verification via [`jose`](https://github.com/panva/jose) (~1 day). This removes the SDK from the JWT-verify path; the read-side stops needing the service-account JSON loaded. **The SDK does NOT go away** — `api/admin/users.ts` still uses `auth.createUser` / `updateUser` / `deleteUser` / `createCustomToken` for user CRUD, and `api/me.ts` uses `auth.updateUser` for the username-to-email sync. Service-account JSON is still required for those calls. Full removal is stage 2 (~3-5 days) — self-rolled auth on the Cloudflare stack, see `~/.claude/projects/E--DnD-Professional-Dev-Dauligor/memory/project_firebase_auth_exit_plan.md`.
-- [ ] **Move M4 closer to closure (spell-rules recompute DoS).** `recomputeAppliedRulesForSpell` runs ~5 raw queryD1 calls from the client whenever `upsertSpell` saves; a staff user could DoS the recompute path by repeatedly saving. Closing requires moving the recompute server-side — either by adding a `/api/spells` endpoint family or by folding a thin `POST /api/spell-rules/recompute` into an existing dispatcher. Deferred during the May 2026 audit pass because the risk is staff-only DoS (no privacy leak) and the scope (new endpoint surface) outweighs the value.
+- [ ] **Move M4 closer to closure (spell-rules recompute DoS).** `recomputeAppliedRulesForSpell` runs ~5 raw queryD1 calls from the client whenever `upsertSpell` saves; a staff user could DoS the recompute path by repeatedly saving. Closing requires moving the recompute server-side — either by adding a `/api/spells` endpoint family or by folding a thin `POST /api/spell-rules/recompute` into an existing dispatcher. Risk is staff-only DoS (no privacy leak) so the work has been parked while higher-impact items ship.
 
 ---
 
 ## Tracking and reminders
-
-This doc is intentionally short on cross-references to keep it usable. The **single trigger to revisit it**:
-
-> When [docs/_archive/firestore-cut-punchlist.md](../_archive/firestore-cut-punchlist.md) is fully checked off (every box ticked), open this file and start at Priority 1.
 
 Each priority section has independent checkboxes. You can pick them off in any order, though Priority 1 (pattern consolidation) is what makes the others easier.
 
@@ -217,7 +196,6 @@ When a priority is complete, move its checkbox section into a "Completed" subsec
 
 ## Related docs
 
-- [../_archive/firestore-cut-punchlist.md](../_archive/firestore-cut-punchlist.md) — the migration we're finishing first
 - [../platform/d1-architecture.md](../platform/d1-architecture.md) — the foundation this all builds on
 - [../features/compendium-classes.md](../features/compendium-classes.md) — class-editor specifics, including the cascade-delete TODO
 - [../features/compendium-spells.md](../features/compendium-spells.md), [compendium-feats-items.md](../features/compendium-feats-items.md), [compendium-options.md](../features/compendium-options.md), [compendium-scaling.md](../features/compendium-scaling.md) — per-entity feature docs

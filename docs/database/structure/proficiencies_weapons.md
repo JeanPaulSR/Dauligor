@@ -4,31 +4,28 @@ The mechanical templates for weapon proficiencies and base items.
 
 ## Layout Specs
 
-| SQL Column | Type | Firestore Equivalent | Note |
-| :--- | :--- | :--- | :--- |
-| `id` | TEXT (PK) | Document ID | |
-| `name` | TEXT | `name` | |
-| `identifier` | TEXT UNIQUE NOT NULL | `identifier` | Slug (e.g., `longsword`). |
-| `category_id` | TEXT (FK) | `categoryId` | Links to `weapon_categories.id`. |
-| `weapon_type` | TEXT | `weaponType` | Melee or Ranged. |
-| `ability_id` | TEXT (FK) | `ability` | Links to `attributes.id`. |
-| `foundry_alias` | TEXT | `foundryAlias` | 3-letter code (e.g., `lng`). |
-| `description` | TEXT | `description` | Markdown content. |
-| `property_ids` | JSON | `propertyIds` | Array of `weapon_properties.id`. |
-| `source` | TEXT | `source` | |
-| `page` | INTEGER | `page` | |
-| `basic_rules` | BOOLEAN | `basicRules` | |
-| `updated_at` | DATETIME | `updatedAt` | |
+| SQL Column | Type | Note |
+| :--- | :--- | :--- |
+| `id` | TEXT (PK) | |
+| `name` | TEXT | |
+| `identifier` | TEXT UNIQUE NOT NULL | Slug (e.g., `longsword`). |
+| `category_id` | TEXT (FK) | Links to `weapon_categories.id`. |
+| `weapon_type` | TEXT | Melee or Ranged. |
+| `ability_id` | TEXT (FK) | Links to `attributes.id`. |
+| `foundry_alias` | TEXT | 3-letter code (e.g., `lng`). |
+| `description` | TEXT | Markdown content. |
+| `property_ids` | JSON | Array of `weapon_properties.id`. |
+| `source` | TEXT | |
+| `page` | INTEGER | |
+| `basic_rules` | BOOLEAN | |
+| `updated_at` | DATETIME | |
 
-## Migration Refinements
+## Schema notes
 
-### 1. Complex Property Mapping
-- **Refinement**: Weapon properties are stored as a JSON array of IDs. The migration script ensures these IDs exist in the `weapon_properties` table.
+### Property references
+`property_ids` is a JSON array of FK row IDs against `weapon_properties`. The relationship is intentionally JSON rather than a junction table — properties on a weapon are read as a whole and never queried piecewise.
 
-### 2. Multi-Key Normalization
-- **Refinement**: Simultaneously resolves `category_id`, `ability_id`, and `property_ids` during the migration pass.
-
-### 3. Foundry slug alignment (20260526-1700)
+### Foundry slug alignment (20260526-1700)
 
 Migration `20260526-1700_items_completeness_and_proficiency_source.sql` renamed
 the 11 standard 5e `weapon_properties.identifier` values to match dnd5e's

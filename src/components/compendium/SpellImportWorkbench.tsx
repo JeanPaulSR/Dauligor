@@ -121,8 +121,8 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
 
         setSources(sourcesData);
         // tagGroups carries `classifications` as a JSON array (auto-parsed by queryD1).
-        // The Firestore query previously filtered server-side; D1 has only a few rows
-        // so client-side filtering for the 'spell' classification is the simpler call.
+        // Few rows total, so client-side filtering for the 'spell' classification is
+        // the simpler call.
         setTagGroups(tagGroupsData.filter((g: any) => Array.isArray(g.classifications) && g.classifications.includes('spell')));
         setAllTags(tagsData);
 

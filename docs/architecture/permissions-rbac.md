@@ -202,9 +202,9 @@ See [../features/admin-users.md](../features/admin-users.md) for the UI flow.
 
 The same endpoint also auto-creates the `users` row on first sign-in (with role = `user` unless one of the bootstrap rules above fires) and auto-picks the user's first `campaign_members` row as `active_campaign_id` when it's null. The intent is to make the system bootstrap-friendly: a fresh deploy with no users can still be administrated by signing in as one of these three accounts.
 
-## Why Firebase Auth still gates D1
+## Why Firebase Auth gates D1
 
-Firestore is gone but Firebase **Authentication** stayed — it's a solid JWT issuer with existing user accounts and a working Admin SDK. The D1 proxy verifies tokens via `firebase-admin` and reads the role from D1 `users.role`. See [../platform/auth-firebase.md](../platform/auth-firebase.md) for the full chain.
+Firebase **Authentication** is the JWT issuer — a solid layer with existing user accounts and a working Admin SDK. The D1 proxy verifies tokens via `firebase-admin` and reads the role from D1 `users.role`. See [../platform/auth-firebase.md](../platform/auth-firebase.md) for the full chain.
 
 ## Related docs
 

@@ -65,7 +65,7 @@ Both are normalized by the importer, and both should use the same structure:
 
 ## Naming Conventions the Parser Expects
 
-The parser now relies on semantic `sourceId` values rather than Firestore ids.
+The parser relies on semantic `sourceId` values.
 
 Expected prefixes:
 

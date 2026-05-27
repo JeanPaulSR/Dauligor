@@ -93,11 +93,10 @@ async function startServer() {
   // helpers should chunk further.
   app.use(express.json({ limit: '50mb' }));
 
-  // JSON Endpoint for Character Pairings
-  // In a real app we'd fetch from Firestore here. 
-  // For the applet, we can't easily fetch user-specific private data from the server 
-  // without service account keys.
-  // However, we can provide the static sample for now as a proof of concept endpoint.
+  // JSON Endpoint for Character Pairings — placeholder stub.
+  // Character JSON export lives behind authenticated routes in the app's
+  // Character Builder; this local-server endpoint returns a guidance
+  // message instead of doing an unauthenticated lookup.
   app.get("/api/characters/:id/json", (req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE");
@@ -106,7 +105,7 @@ async function startServer() {
     // This is a placeholder that correctly sets content-type for the foundry module
     res.json({
       error: "Authentication required via Archive interface. Use 'View JSON' in Character Builder.",
-      hint: "To fetch live data, the server requires Firestore Admin SDK configuration."
+      hint: "Use the authenticated Character Builder to export character JSON."
     });
   });
 
@@ -128,10 +127,8 @@ async function startServer() {
       const temporaryPassword = createTemporaryPassword();
       const { auth } = getAdminServices();
       await auth.updateUser(targetUserId, { password: temporaryPassword });
-      // Note: the legacy Firestore write of `mustChangePassword` /
-      // `temporaryPasswordGeneratedAt` / `temporaryPasswordGeneratedBy` is gone.
-      // The temp-password lifecycle is now handled entirely by Firebase Auth
-      // and the returned password value below; D1 has no columns for it.
+      // The temp-password lifecycle is handled entirely by Firebase Auth and
+      // the returned password value below; D1 stores no columns for it.
 
       return res.json({
         temporaryPassword,

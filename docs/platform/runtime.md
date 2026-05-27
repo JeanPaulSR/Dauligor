@@ -41,7 +41,7 @@ This doc explains where each piece of the application runs, how requests flow be
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-Authentication is handled by **Firebase**, but Firebase Authentication is only used as a JWT issuer. Firestore was decommissioned in May 2026 and replaced by Cloudflare D1. See [auth-firebase.md](auth-firebase.md).
+Authentication is handled by **Firebase**, but Firebase Authentication is only used as a JWT issuer. The data layer is Cloudflare D1. See [auth-firebase.md](auth-firebase.md).
 
 ## Local dev vs production
 
@@ -117,13 +117,13 @@ The Worker is intentionally stateless and trusts only the proxy-layer auth. **Th
 | [api/_lib/](../../api/_lib/) | Both Pages Functions and local Express | Shared runtime-portable proxy logic + JWT verification (jose) + Identity Toolkit REST helpers |
 | [server.ts](../../server.ts) | Local dev only | Express server that wires equivalent routes for `npm run dev` + Vite middleware (`/api/module/*` excluded — use `wrangler pages dev` for that) |
 | [worker/](../../worker/) | Cloudflare Worker | The stateless gateway to D1 and R2 |
-| [scripts/](../../scripts/) | Node CLI | Active operational scripts (D1 backup / restore / Time Travel; the headless `_repro_progression_loop.mjs` regression harness) — never deployed. Historical Firestore migration utilities live under [scripts/_archive/](../../scripts/_archive/). |
+| [scripts/](../../scripts/) | Node CLI | Active operational scripts (D1 backup / restore / Time Travel; the headless `_repro_progression_loop.mjs` regression harness) — never deployed. Historical one-shot utilities live under [scripts/_archive/](../../scripts/_archive/). |
 | [worker/migrations/](../../worker/migrations/) | wrangler CLI | D1 schema migrations |
 
 ## Process boundaries / what runs where
 
 - **Firebase token verification** runs only on the proxy (Express / Pages Functions), never in the Worker. The Worker has no Firebase dependency. The proxy uses `jose` to verify ID tokens against Firebase's public JWKS (no Admin SDK); admin user-management calls Identity Toolkit REST directly.
-- **No Firestore client.** The `firebase/firestore` package is no longer imported anywhere in the codebase; D1 fully replaced it. See [d1-architecture.md](d1-architecture.md) for the current data layer.
+- **All data access goes through D1** — see [d1-architecture.md](d1-architecture.md).
 - **R2 operations** never touch the proxy's filesystem. Uploads stream from browser through the proxy to the Worker.
 
 ## Environment configuration

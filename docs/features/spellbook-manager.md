@@ -576,7 +576,6 @@ here, not silently propagated:
 
 - Don't touch `module/dauligor-pairing/` or `api/module*` / `src/lib/classExport.ts` — another agent
   owns the export pipeline and the Foundry pairing module right now.
-- Don't reintroduce `firebase/firestore` imports anywhere (per `AGENTS.md`).
 
 ## Post-Layer-6 polish (May 2026)
 
