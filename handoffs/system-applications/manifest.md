@@ -2,7 +2,7 @@
 
 Started: 2026-05-27
 Owner: Claude
-Goal: Multi-step. **First step (now)**: BBCode audit-and-fix pass + cross-reference authoring (add missing `[ref|…]` kinds + editor picker UI). **Then**: original branch scope — Phase 1.5 hash-on-upsert, article-system schema revamp, Phase 2 live viewer of the live-content bridge.
+Goal: Wire Phase 1.5 hash-on-upsert, complete the article-system schema revamp, then ship Phase 2 of the live-content bridge (read-only live viewer + DauligorViewer + custom enrichers + endpoints).
 Status: **active** (branch created 2026-05-27 off `main`)
 
 ## Background
