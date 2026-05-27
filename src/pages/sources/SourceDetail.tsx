@@ -7,6 +7,7 @@ import { fetchDocument, fetchCollection } from '../../lib/d1';
 import BBCodeRenderer from '../../components/BBCodeRenderer';
 import { motion } from 'motion/react';
 import { exportSourceForFoundry, exportRawSourceJSON } from '../../lib/classExport';
+import { buildClassSlug } from '../../lib/useClassRouteId';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -221,14 +222,20 @@ export default function SourceDetail({ userProfile }: { userProfile: any }) {
                 </h4>
                 {linkedClasses.length > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {linkedClasses.map(cls => (
-                      <Link key={cls.id} to={`/compendium/classes/view/${cls.id}`}>
+                    {linkedClasses.map(cls => {
+                      const slug = buildClassSlug(
+                        { identifier: cls.identifier },
+                        source?.abbreviation || source?.shortName || source?.abbreviation_short,
+                      );
+                      return (
+                      <Link key={cls.id} to={`/compendium/classes/view/${slug ?? cls.id}`}>
                         <div className="p-3 rounded-lg bg-card/30 border border-gold/10 hover:border-gold/30 hover:bg-gold/5 transition-all flex items-center justify-between group">
                           <span className="h3-title text-lg group-hover:text-gold transition-colors">{cls.name}</span>
                           <Badge variant="outline" className="label-text h-4 px-1.5 border-gold/10">View</Badge>
                         </div>
                       </Link>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <p className="muted-text italic">No classes linked to this source yet.</p>
