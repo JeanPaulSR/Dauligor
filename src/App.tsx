@@ -252,9 +252,9 @@ export default function App() {
                   
                   <Route path="/compendium" element={<Compendium userProfile={effectiveProfile} />} />
                   <Route path="/compendium/classes" element={<ClassList userProfile={effectiveProfile} />} />
-                  <Route path="/compendium/classes/view/:id" element={<ClassView userProfile={effectiveProfile} />} />
+                  <Route path="/compendium/classes/view/:slug" element={<ClassView userProfile={effectiveProfile} />} />
                   <Route path="/compendium/classes/new" element={<ClassEditor userProfile={effectiveProfile} />} />
-                  <Route path="/compendium/classes/edit/:id" element={<ClassEditor userProfile={effectiveProfile} />} />
+                  <Route path="/compendium/classes/edit/:slug" element={<ClassEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/subclasses/new" element={<SubclassEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/subclasses/edit/:id" element={<SubclassEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/spells" element={<SpellList userProfile={effectiveProfile} />} />
