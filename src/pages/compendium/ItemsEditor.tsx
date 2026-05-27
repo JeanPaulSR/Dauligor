@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { X } from 'lucide-react';
 import ItemImportWorkbench from '../../components/compendium/ItemImportWorkbench';
@@ -33,6 +33,7 @@ import {
   type TagsSubTab,
   type EditorListColumn,
 } from '../../components/compendium/CompendiumEditorShell';
+import ScalingColumnsPanel from '../../components/compendium/ScalingColumnsPanel';
 import { SectionFilterPanel, type FilterSection } from '../../components/compendium/SectionFilterPanel';
 import { Checkbox } from '../../components/ui/checkbox';
 import { ImageUpload } from '../../components/ui/ImageUpload';
@@ -371,13 +372,68 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
-  const [editingId, setEditingId] = useState<string | null>(null);
+  // URL-backed editingId — mirrors FeatsEditor so navigating
+  // away (e.g. + Add on a scaling column → ScalingEditor →
+  // navigate(-1)) returns here with the row still selected.
+  // ?editingId=<uuid> is the persistent slot; the useState
+  // initializer hydrates from URL on mount, the two effects
+  // below keep state and URL in sync.
+  const [urlSearchParams, setUrlSearchParams] = useSearchParams();
+  const initialEditingId = urlSearchParams.get('editingId');
+  const [editingId, setEditingId] = useState<string | null>(initialEditingId);
   const [formData, setFormData] = useState<ItemFormData>(makeInitialItemForm());
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
   // Cascade dependent state (parity with FeatsEditor / SpellsEditor).
   const cascadeDep = useCascadeDependent('item', editingId);
   const [replaceTagPickerOpen, setReplaceTagPickerOpen] = useState(false);
+
+  // Scaling columns owned by the currently-edited item. Mirrors
+  // FeatsEditor's pattern: rows in `scaling_columns` with
+  // parent_type='item'. An item like Amulet of the Devout authors
+  // a column (e.g. "Channel Divinity Bonus" = +1 at all levels)
+  // and ScaleValue or activity formulas reference
+  // `@scale.<item-identifier>.<column>` to surface the bump.
+  const [scalingColumns, setScalingColumns] = useState<any[]>([]);
+  const [scalingLoadTick, setScalingLoadTick] = useState(0);
+
+  // Outgoing sync: editingId -> URL. `replace: true` keeps the
+  // back stack clean while row-clicking. See FeatsEditor for the
+  // matching pattern + rationale.
+  useEffect(() => {
+    const current = urlSearchParams.get('editingId');
+    if (editingId && editingId !== current) {
+      setUrlSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set('editingId', editingId);
+          return next;
+        },
+        { replace: true },
+      );
+    } else if (!editingId && current) {
+      setUrlSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete('editingId');
+          return next;
+        },
+        { replace: true },
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingId]);
+
+  // Inbound sync: URL -> editingId (back/forward, address-bar
+  // edits). The equality guard prevents a feedback loop with the
+  // outgoing effect.
+  useEffect(() => {
+    const urlEditingId = urlSearchParams.get('editingId');
+    if ((urlEditingId || null) !== editingId) {
+      setEditingId(urlEditingId || null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlSearchParams]);
 
   // Refs.
   const editingIdRef = useRef<string | null>(null);
@@ -660,6 +716,32 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
     })();
     return () => { active = false; };
   }, [editingId, sources, itemDetailsById, draftedItemEntities]);
+
+  // Scaling columns owned by the currently-edited item. Loaded
+  // by (parent_id, parent_type='item') just like classes load
+  // their own and feats load theirs — same shared
+  // `scaling_columns` table, just a different parent_type.
+  useEffect(() => {
+    if (!editingId) {
+      setScalingColumns([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await fetchCollection<any>('scaling_columns', {
+          where: 'parent_id = ? AND parent_type = ?',
+          params: [editingId, 'item'],
+          orderBy: 'name ASC',
+        });
+        if (cancelled) return;
+        setScalingColumns(rows.map((r: any) => denormalizeCompendiumData(r)));
+      } catch (err) {
+        console.error('[ItemsEditor] scaling_columns load failed:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [editingId, scalingLoadTick]);
 
   // ── Switch handler — auto-stage in proposal mode ──────────────
   const startEditing = async (id: string) => {
@@ -988,6 +1070,41 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
       ),
     },
     {
+      key: 'scaling',
+      label: 'Scaling',
+      render: () => (
+        <div className="border-t border-gold/10 pt-4 space-y-3">
+          <div className="flex items-baseline justify-between gap-3">
+            <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Item Columns</h3>
+            <span className="text-[10px] text-ink/40 italic">
+              Per-level progression tables this item owns. Activity formulas
+              can reference them as <span className="font-mono">@scale.&lt;identifier&gt;.&lt;column&gt;</span>
+              — e.g. Amulet of the Devout adding +1 to Channel Divinity charges.
+            </span>
+          </div>
+          {editingId ? (
+            <ScalingColumnsPanel
+              parentId={editingId}
+              parentType="item"
+              columns={scalingColumns}
+              onColumnsChanged={() => setScalingLoadTick((t) => t + 1)}
+              label="Item Columns"
+            />
+          ) : (
+            // Same placeholder pattern FeatsEditor uses for unsaved
+            // drafts — columns FK against parent_id, so the panel
+            // can't appear until the item has a stable id.
+            <div className="p-4 border border-gold/10 bg-card/30 rounded-xl space-y-2">
+              <p className="text-[11px] text-ink/50 italic leading-relaxed">
+                Save this item first to add scaling columns. Columns appear
+                here once the row has a stable id to attach to.
+              </p>
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
       key: 'effects',
       label: 'Effects',
       render: () => (
@@ -1001,7 +1118,7 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
         </div>
       ),
     },
-  ], [formData, sources, profs, editingId]);
+  ], [formData, sources, profs, editingId, scalingColumns]);
 
   const tagsSubTabsList: TagsSubTab[] = useMemo(() => [
     {
