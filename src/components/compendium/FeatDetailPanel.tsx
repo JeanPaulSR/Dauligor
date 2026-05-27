@@ -204,13 +204,19 @@ export default function FeatDetailPanel({
     return bbcodeToHtml(raw);
   })();
 
-  // Prerequisites: prefer the structured `requirementsTree` rendered
-  // by the compact formatter (resolves slugs to display names via
-  // `prereqLookup`), fall back to the raw free-text `requirements`
-  // field. Italic, no box — matches the "Feat is presented as a body
-  // of text, not a card" UX direction.
-  const requirementsLine = formatRequirementShort(feat.requirementsTree ?? null, prereqLookup);
-  const prereqDisplay = requirementsLine || String(feat.requirements ?? '').trim();
+  // Prerequisites: two-layer resolution for the detail surface —
+  // the free-text `requirements` field, if set, OVERRIDES the
+  // structured tree (some prereqs read better as prose than as a
+  // formatted leaf chain). When free text is empty, the compound
+  // tree formats through `formatRequirementShort` with slug
+  // resolution. The list-only `requirementsShortText` override is
+  // intentionally NOT consulted here — the detail surface has
+  // space for the full text and authors expect to see the
+  // structured / verbose version. Italic, no box — matches the
+  // "Feat is presented as a body of text, not a card" UX direction.
+  const freeText = String(feat.requirements ?? '').trim();
+  const compoundLine = formatRequirementShort(feat.requirementsTree ?? null, prereqLookup);
+  const prereqDisplay = freeText || compoundLine;
 
   // Feat Category surfaces a single italic line under the name. The
   // category is admin-managed (table populated via /admin/feat-

@@ -140,7 +140,12 @@ type FeatFormData = {
   // "no category assigned"; the public detail view simply hides
   // the category line in that case.
   featCategoryId: string;
+  // Three-layer prerequisite display. Resolution priority in the
+  // FeatList compact column: `requirementsShortText` →
+  // `requirements` → formatted `requirementsTree`. The detail panel
+  // skips the short layer and uses `requirements` → tree.
   requirements: string;
+  requirementsShortText: string;
   repeatable: boolean;
   uses: {
     max: string;
@@ -174,6 +179,7 @@ const FEAT_DEFAULTS: Omit<FeatFormData, 'sourceId'> & { sourceId?: string } = {
   sourceType: 'feat',
   featCategoryId: '',
   requirements: '',
+  requirementsShortText: '',
   repeatable: false,
   uses: { max: '', spent: 0, recovery: [] },
   activities: [],
@@ -624,6 +630,7 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
         sourceType: cached.sourceType || cached.source_type || 'feat',
         featCategoryId: cached.featCategoryId || cached.feat_category_id || '',
         requirements: cached.requirements || '',
+        requirementsShortText: cached.requirementsShortText || cached.requirements_short_text || '',
         repeatable: !!cached.repeatable,
         uses: {
           max: cached.uses?.max ?? cached.usesMax ?? cached.uses_max ?? '',
@@ -753,6 +760,7 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
         // none option.
         feat_category_id: formData.featCategoryId || null,
         requirements: formData.requirements || null,
+        requirements_short_text: formData.requirementsShortText || null,
         repeatable: formData.repeatable ? 1 : 0,
         uses_max: formData.uses.max || null,
         uses_spent: Number(formData.uses.spent) || 0,
@@ -1192,11 +1200,39 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
         <div className="space-y-4 border border-gold/10 rounded-md p-4 bg-background/20">
           <div className="flex items-baseline justify-between">
             <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Prerequisites</h3>
-            <span className="text-[10px] text-ink/40">Structured tree gates · evaluated at the actor; free-text below is shown on the feat card.</span>
+            <span className="text-[10px] text-ink/40">
+              Three layers · short text → free text → compound tree
+            </span>
           </div>
 
+          {/* Layer 1 — Short Text. Highest priority, used ONLY by
+              the FeatList compact column. Detail panel ignores
+              this layer. Author writes a tight micro-label
+              ("Outlander", "Dragonmark") when the formatted tree
+              or free text is too long for a column cell. */}
           <div className="space-y-1">
-            <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Free Text (legacy)</Label>
+            <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">
+              Short Text <span className="text-ink/35 normal-case tracking-normal">— compact column only</span>
+            </Label>
+            <Input
+              value={formData.requirementsShortText}
+              onChange={(e) => setFormData((prev) => ({ ...prev, requirementsShortText: e.target.value }))}
+              placeholder="e.g. Outlander, Lvl 4, Dragonmark"
+              className="bg-background/50 border-gold/10 focus:border-gold text-xs"
+            />
+            <p className="text-[10px] text-ink/40">
+              Compact override. When set, this replaces both the free text and the formatted tree in the FeatList Prerequisite column. The detail panel still uses the layers below.
+            </p>
+          </div>
+
+          {/* Layer 2 — Free Text. Overrides the compound tree on
+              both the FeatList AND the detail panel. Use for
+              prereqs that read better as prose than as a structured
+              chain ("Adopted by a dragon during character creation"). */}
+          <div className="space-y-1">
+            <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">
+              Free Text <span className="text-ink/35 normal-case tracking-normal">— overrides the compound tree</span>
+            </Label>
             <Input
               value={formData.requirements}
               onChange={(e) => setFormData((prev) => ({ ...prev, requirements: e.target.value }))}
@@ -1204,10 +1240,15 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
               className="bg-background/50 border-gold/10 focus:border-gold text-xs"
             />
             <p className="text-[10px] text-ink/40">
-              Free-text fallback for prerequisites that don't fit the tree below. Displayed on the feat card; not machine-checked.
+              Free-text override for prereqs that don't fit the structured tree. When set, it replaces the compound tree in both the FeatList and the detail panel. Not machine-checked.
             </p>
           </div>
 
+          {/* Layer 3 — Compound Tree. The default — structured
+              prereqs that get formatted at render time and (in
+              future) machine-checked against the actor. Lowest
+              priority; the two text overrides above replace it
+              when set. */}
           <RequirementsEditor
             value={formData.requirementsTree}
             onChange={(next) => setFormData((prev) => ({ ...prev, requirementsTree: next }))}
@@ -1215,14 +1256,36 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
             label="Compound Requirements"
           />
 
-          {formData.requirementsTree && (
-            <div className="rounded border border-gold/10 bg-background/40 px-3 py-2">
-              <span className="text-[9px] uppercase tracking-widest text-ink/40">Preview · </span>
-              <span className="text-xs italic text-ink/70">
-                {formatRequirementText(formData.requirementsTree, requirementsTextLookup)}
+          {/* Live preview of the resolution chain. Shows what the
+              FeatList row + detail panel will actually display so
+              authors don't have to context-switch to verify the
+              override behavior. */}
+          <div className="rounded border border-gold/10 bg-background/40 px-3 py-2 space-y-1.5">
+            <div>
+              <span className="text-[9px] uppercase tracking-widest text-ink/40">List column · </span>
+              <span className="text-xs italic text-ink/80">
+                {(() => {
+                  const shortText = formData.requirementsShortText.trim();
+                  const freeText = formData.requirements.trim();
+                  return shortText
+                    || freeText
+                    || formatRequirementText(formData.requirementsTree, requirementsTextLookup)
+                    || '—';
+                })()}
               </span>
             </div>
-          )}
+            <div>
+              <span className="text-[9px] uppercase tracking-widest text-ink/40">Detail panel · </span>
+              <span className="text-xs italic text-ink/80">
+                {(() => {
+                  const freeText = formData.requirements.trim();
+                  return freeText
+                    || formatRequirementText(formData.requirementsTree, requirementsTextLookup)
+                    || '—';
+                })()}
+              </span>
+            </div>
+          </div>
         </div>
       ),
     },
@@ -1236,7 +1299,7 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
         </div>
       ),
     },
-  ], [formData.requirements, formData.requirementsTree, requirementsLookups, requirementsTextLookup]);
+  ], [formData.requirements, formData.requirementsShortText, formData.requirementsTree, requirementsLookups, requirementsTextLookup]);
 
   // ── List columns ──────────────────────────────────────────────
   const listColumns: EditorListColumn<any>[] = useMemo(() => [

@@ -54,11 +54,11 @@ type FeatRow = {
   featSubtype?: string;
   featCategoryId?: string;
   repeatable?: boolean;
+  // Three-layer prerequisite display. Resolution order in the
+  // column: requirementsShortText → requirements (free text) →
+  // formatRequirementShort(requirementsTree).
   requirements?: string;
-  // Pre-parsed requirements_tree + derived fields for the Ability /
-  // Prerequisite columns. Computing these once at load keeps the
-  // render cheap and prevents every row re-parsing JSON on filter
-  // recompute.
+  requirementsShortText?: string;
   requirementsTree?: Requirement | null;
   abilityScoreLeaves?: Array<{ ability: string; min: number }>;
   repeatableFlag?: boolean;
@@ -128,6 +128,8 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
             featSubtype: row.feat_subtype || '',
             featCategoryId: row.feat_category_id || '',
             repeatable: !!row.repeatable,
+            requirements: String(row.requirements ?? ''),
+            requirementsShortText: String(row.requirements_short_text ?? ''),
             requirementsTree: tree,
             abilityScoreLeaves,
             repeatableFlag: flags.repeatable,
@@ -283,17 +285,19 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
       label: 'Prerequisite',
       width: 'minmax(160px,4fr)',
       render: (feat) => {
-        // `proficiencyOnly` strips the "Proficiency" suffix —
-        // "Athletics" / "Martial Weapon" / "Elvish" are clearer in
-        // a column already labeled Prerequisite. Detail panel keeps
-        // the suffix for unambiguous reads when context is missing.
-        const text = formatRequirementShort(
+        // Three-layer resolution: short text overrides everything,
+        // free text overrides the structured tree, structured tree
+        // is the fallback (formatted compact, proficiencyOnly).
+        // Each layer is the author's deliberate override of the
+        // one below it.
+        const shortText = String(feat.requirementsShortText ?? '').trim();
+        const freeText = String(feat.requirements ?? '').trim();
+        const compoundText = formatRequirementShort(
           feat.requirementsTree ?? null,
           prereqLookup,
           { proficiencyOnly: true },
         );
-        const fallback = String(feat.requirements ?? '').trim();
-        const display = text || fallback;
+        const display = shortText || freeText || compoundText;
         return display ? (
           <span className="text-[11px] text-ink truncate" title={display}>{display}</span>
         ) : (

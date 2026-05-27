@@ -1,0 +1,31 @@
+-- Phase: three-layer prerequisite display on feats
+-- ============================================================
+-- The compendium feat view + the FeatList column both pull from
+-- the structured `requirements_tree` today, falling back to the
+-- existing free-text `requirements` column when the tree is empty.
+-- Authors asked for two improvements over that two-layer model:
+--
+--   1. `requirements` should override the tree, not just fill in
+--      when it's missing. Some prereqs ("Adopted by a dragon
+--      patron during character creation") read better as prose
+--      than as a structured chain of leaves. (No schema change
+--      needed — only the display priority in the consumers.)
+--
+--   2. The compact column needs an even tighter override for
+--      cases where neither the formatted tree nor the free-text
+--      paragraph fits the cell ("Lvl 4 · Outlander origin" might
+--      shorten to "Outlander"). This new `requirements_short_text`
+--      column carries that author-curated micro-label, used only
+--      in compact display contexts (FeatList column, future row-
+--      density surfaces). Detail views ignore it.
+--
+-- Display resolution chain:
+--   Detail panel: requirements (free)  →  requirements_tree (compound)
+--   List column:  requirements_short_text  →  requirements (free)
+--                  →  requirements_tree (compound, proficiencyOnly)
+--
+-- Nullable column, no default — feats without a short label fall
+-- through to the lower layers. No backfill needed; existing rows
+-- behave exactly as before until an author writes a short label.
+
+ALTER TABLE feats ADD COLUMN requirements_short_text TEXT;
