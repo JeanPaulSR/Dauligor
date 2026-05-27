@@ -380,7 +380,22 @@ const ABILITY_ABBR: Record<AbilityKey, string> = {
  * (e.g. `skillNameById['ath'] = 'Athletics'`). When the lookup is
  * empty or the slug is missing, falls back to the slug verbatim.
  */
-function formatLeafShort(leaf: RequirementLeaf, lookup: RequirementFormatLookup): string {
+/**
+ * Display tweaks for the compact formatter. The detail panel uses
+ * the defaults; the FeatList row passes `proficiencyOnly: true` so
+ * the column reads as just "Athletics" / "Martial Weapon" / "Elvish"
+ * — the resolved name already communicates "this is a proficiency",
+ * and dropping the suffix recovers ~12 characters per row.
+ */
+export type FormatRequirementShortOpts = {
+  proficiencyOnly?: boolean;
+};
+
+function formatLeafShort(
+  leaf: RequirementLeaf,
+  lookup: RequirementFormatLookup,
+  options: FormatRequirementShortOpts = {},
+): string {
   switch (leaf.type) {
     case 'level':
       // Match 5etools' "Lvl 4" — 6 fewer characters than "Level 4+"
@@ -420,7 +435,12 @@ function formatLeafShort(leaf: RequirementLeaf, lookup: RequirementFormatLookup)
         leaf.category === 'language' ? lookup.languageNameById :
         undefined;
       const resolved = map?.[leaf.identifier] ?? leaf.identifier;
-      return `${resolved} Proficiency`;
+      // `proficiencyOnly` mode drops the trailing "Proficiency" word
+      // — the FeatList row uses this since the column header is
+      // "Prerequisite" and the resolved name (Athletics / Martial
+      // Weapon / Elvish) self-describes. Detail panel keeps the
+      // suffix for unambiguous reads.
+      return options.proficiencyOnly ? resolved : `${resolved} Proficiency`;
     }
     case 'string':
       return leaf.value;
@@ -439,10 +459,11 @@ function formatLeafShort(leaf: RequirementLeaf, lookup: RequirementFormatLookup)
 export function formatRequirementShort(
   tree: Requirement | null | undefined,
   lookup: RequirementFormatLookup = {},
+  options: FormatRequirementShortOpts = {},
   _nested = false,
 ): string {
   if (!tree) return '';
-  if (isLeaf(tree)) return formatLeafShort(tree, lookup);
+  if (isLeaf(tree)) return formatLeafShort(tree, lookup, options);
 
   const joinerByKind: Record<RequirementGroupKind, string> = {
     all: ', ',
@@ -452,9 +473,9 @@ export function formatRequirementShort(
 
   const children = tree.children.filter(Boolean) as Requirement[];
   if (children.length === 0) return '';
-  if (children.length === 1) return formatRequirementShort(children[0], lookup, _nested);
+  if (children.length === 1) return formatRequirementShort(children[0], lookup, options, _nested);
 
-  const parts = children.map((c) => formatRequirementShort(c, lookup, true));
+  const parts = children.map((c) => formatRequirementShort(c, lookup, options, true));
   const joined = parts.join(joinerByKind[tree.kind]);
   return _nested ? `(${joined})` : joined;
 }

@@ -283,7 +283,15 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
       label: 'Prerequisite',
       width: 'minmax(160px,4fr)',
       render: (feat) => {
-        const text = formatRequirementShort(feat.requirementsTree ?? null, prereqLookup);
+        // `proficiencyOnly` strips the "Proficiency" suffix —
+        // "Athletics" / "Martial Weapon" / "Elvish" are clearer in
+        // a column already labeled Prerequisite. Detail panel keeps
+        // the suffix for unambiguous reads when context is missing.
+        const text = formatRequirementShort(
+          feat.requirementsTree ?? null,
+          prereqLookup,
+          { proficiencyOnly: true },
+        );
         const fallback = String(feat.requirements ?? '').trim();
         const display = text || fallback;
         return display ? (
