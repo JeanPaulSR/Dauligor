@@ -273,49 +273,22 @@ export default function SpellDetailPanel({
         // the CharacterBuilder spell manager.
         size === "compact" ? "px-4 py-3" : "px-6 py-5",
       )}>
+        {/* Header layout matches FeatDetailPanel: name + italic
+            metadata fill the left, source abbreviation + favorite
+            stack on the right. Source is no longer inline with the
+            title — it lives on the right side and the favorite
+            button hangs below it. Author scan: name → meta on the
+            left, identity (where + favorite) on the right. */}
         <div className="flex items-start justify-between gap-4">
-          <div className="space-y-2 min-w-0">
-            <div className="flex items-center gap-3 flex-wrap">
-              <h2
-                className={cn(
-                  "font-serif font-bold uppercase tracking-tight text-gold",
-                  // `compact` uses a noticeably smaller title (xl on
-                  // small screens, 2xl on xl+) so the header doesn't
-                  // dominate the narrow detail column in the
-                  // CharacterBuilder spell manager. `normal` keeps the
-                  // splashy compendium-page treatment.
-                  size === "compact" ? "text-xl xl:text-2xl" : "text-3xl xl:text-4xl",
-                )}
-              >
-                {spell.name}
-              </h2>
-              {/* Source abbreviation links through to the source's
-                  detail page. Native `title` shows the full source
-                  name on hover. Matches the FeatDetailPanel pattern. */}
-              {spell.sourceId ? (
-                <Link
-                  to={`/sources/view/${spell.sourceId}`}
-                  className={cn(
-                    "font-bold text-gold/70 hover:text-gold underline-offset-2 hover:underline transition-colors",
-                    size === "compact" ? "text-xs" : "text-sm",
-                  )}
-                  title={String(sourceById[String(spell.sourceId ?? '')]?.name || sourceById[String(spell.sourceId ?? '')]?.shortName || renderSourceAbbreviation(spell))}
-                >
-                  {renderSourceAbbreviation(spell)}
-                </Link>
-              ) : (
-                <span className={cn(
-                  "font-bold text-gold/70",
-                  size === "compact" ? "text-xs" : "text-sm",
-                )}>{renderSourceAbbreviation(spell)}</span>
+          <div className="space-y-2 min-w-0 flex-1">
+            <h2
+              className={cn(
+                "font-serif font-bold uppercase tracking-tight text-gold",
+                size === "compact" ? "text-xl xl:text-2xl" : "text-3xl xl:text-4xl",
               )}
-              {(spell.page || (spell as any).foundryShell?.source?.page) ? (
-                <span className={cn(
-                  "text-ink/35",
-                  size === "compact" ? "text-xs" : "text-sm",
-                )}>p{spell.page || (spell as any).foundryShell?.source?.page}</span>
-              ) : null}
-            </div>
+            >
+              {spell.name}
+            </h2>
             <p className={cn(
               "font-serif italic text-ink/70",
               size === "compact" && "text-sm",
@@ -324,22 +297,52 @@ export default function SpellDetailPanel({
               {SCHOOL_LABELS[String(spell.school ?? '')] || String(spell.school ?? '').toUpperCase()}
             </p>
           </div>
-          {onToggleFavorite && (
-            <button
-              type="button"
-              onClick={() => onToggleFavorite(spell.id)}
-              className={cn(
-                'shrink-0 inline-flex items-center justify-center h-9 w-9 rounded-full border transition-colors',
-                isFavorite
-                  ? 'border-gold/50 bg-gold/15 text-gold hover:bg-gold/25'
-                  : 'border-gold/20 text-ink/40 hover:border-gold/40 hover:text-gold'
-              )}
-              title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-              aria-pressed={isFavorite}
-            >
-              <Star className={cn('w-4 h-4', isFavorite ? 'fill-gold/80' : '')} />
-            </button>
-          )}
+          <div className="flex flex-col items-end gap-2 shrink-0">
+            {/* Source abbreviation top-right. Hover shows the full
+                source name; click navigates to the source's detail
+                page. Page number rides next to it when present. */}
+            {spell.sourceId ? (
+              <Link
+                to={`/sources/view/${spell.sourceId}`}
+                className={cn(
+                  "font-bold text-gold/70 hover:text-gold underline-offset-2 hover:underline transition-colors",
+                  size === "compact" ? "text-xs" : "text-sm",
+                )}
+                title={String(sourceById[String(spell.sourceId ?? '')]?.name || sourceById[String(spell.sourceId ?? '')]?.shortName || renderSourceAbbreviation(spell))}
+              >
+                {renderSourceAbbreviation(spell)}
+                {(spell.page || (spell as any).foundryShell?.source?.page) ? (
+                  <span className="text-ink/35 font-normal ml-1">p{spell.page || (spell as any).foundryShell?.source?.page}</span>
+                ) : null}
+              </Link>
+            ) : (
+              <span className={cn(
+                "font-bold text-gold/70",
+                size === "compact" ? "text-xs" : "text-sm",
+              )}>
+                {renderSourceAbbreviation(spell)}
+                {(spell.page || (spell as any).foundryShell?.source?.page) ? (
+                  <span className="text-ink/35 font-normal ml-1">p{spell.page || (spell as any).foundryShell?.source?.page}</span>
+                ) : null}
+              </span>
+            )}
+            {onToggleFavorite && (
+              <button
+                type="button"
+                onClick={() => onToggleFavorite(spell.id)}
+                className={cn(
+                  'shrink-0 inline-flex items-center justify-center h-9 w-9 rounded-full border transition-colors',
+                  isFavorite
+                    ? 'border-gold/50 bg-gold/15 text-gold hover:bg-gold/25'
+                    : 'border-gold/20 text-ink/40 hover:border-gold/40 hover:text-gold'
+                )}
+                title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                aria-pressed={isFavorite}
+              >
+                <Star className={cn('w-4 h-4', isFavorite ? 'fill-gold/80' : '')} />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

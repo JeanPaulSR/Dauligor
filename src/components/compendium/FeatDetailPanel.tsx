@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BookOpen } from 'lucide-react';
+import { BookOpen, ChevronDown, ChevronUp, Star, Tag } from 'lucide-react';
 import { bbcodeToHtml } from '../../lib/bbcode';
 import { cn } from '../../lib/utils';
 import { fetchCollection, fetchDocument } from '../../lib/d1';
@@ -9,8 +9,7 @@ import {
   formatRequirementText,
   type Requirement,
 } from '../../lib/requirements';
-import { FEAT_TYPE_LABELS, type FeatTypeValue } from '../../lib/featFilters';
-import { RECOVERY_PERIOD_OPTIONS, RECOVERY_TYPE_OPTIONS } from './activity/constants';
+import { StatusEmblem } from '../ui/StatusEmblem';
 
 /**
  * Read-only detail panel mirroring `SpellDetailPanel`'s shape: a
@@ -45,39 +44,59 @@ type FeatRecord = {
   requirements?: string;
   requirementsTree?: Requirement | null;
   repeatable?: boolean;
-  uses?: { max?: string; spent?: number; recovery?: any[] };
-  usesMax?: string;
-  usesSpent?: number;
-  usesRecovery?: any[];
-  activities?: any[];
-  effects?: any[];
+  tagIds?: string[];
   page?: string;
+  [key: string]: any;
+};
+
+type TagRecord = {
+  id: string;
+  name?: string;
+  groupId?: string | null;
   [key: string]: any;
 };
 
 type Props = {
   featId: string | null;
   emptyMessage?: string;
+  // Optional favorite affordance. When both are provided, a star
+  // button renders under the source abbreviation in the header.
+  // Omit them on read-only surfaces (e.g. the editor's review pane).
+  isFavorite?: boolean;
+  onToggleFavorite?: (featId: string) => void;
 };
 
 export default function FeatDetailPanel({
   featId,
   emptyMessage = 'Select a feat from the list to view its details.',
+  isFavorite,
+  onToggleFavorite,
 }: Props) {
   const [sources, setSources] = useState<SourceRecord[]>([]);
+  const [tags, setTags] = useState<TagRecord[]>([]);
+  const [tagGroups, setTagGroups] = useState<Array<{ id: string; name: string }>>([]);
+  const [showTags, setShowTags] = useState(false);
   const [featsById, setFeatsById] = useState<Record<string, FeatRecord>>({});
   const [loading, setLoading] = useState(false);
 
-  // Sources load once. Small static foundation data; the d1 cache makes
-  // repeated mounts essentially free.
+  // Sources + tag foundation load once. Small static foundation data;
+  // the d1 cache makes repeated mounts essentially free. Tag groups
+  // are filtered to those classified as feat-relevant so the Show
+  // Tags disclosure doesn't bucket spell-only or world-only groups.
   useEffect(() => {
     let active = true;
-    fetchCollection<any>('sources', { orderBy: 'name ASC' })
-      .then((data) => {
+    Promise.all([
+      fetchCollection<any>('sources', { orderBy: 'name ASC' }),
+      fetchCollection<any>('tags', { orderBy: 'name ASC' }),
+      fetchCollection<any>('tagGroups', { where: "classifications LIKE '%feat%'" }),
+    ])
+      .then(([sourcesData, tagsData, groupsData]) => {
         if (!active) return;
-        setSources(data);
+        setSources(sourcesData);
+        setTags(tagsData.map((t: any) => ({ ...t, groupId: t.group_id ?? t.groupId ?? null })));
+        setTagGroups(groupsData.map((g: any) => ({ id: g.id, name: g.name })));
       })
-      .catch((err) => console.error('[FeatDetailPanel] failed to load sources:', err));
+      .catch((err) => console.error('[FeatDetailPanel] failed to load foundation data:', err));
     return () => {
       active = false;
     };
@@ -103,16 +122,7 @@ export default function FeatDetailPanel({
           featSubtype: data.feat_subtype || '',
           sourceType: data.source_type,
           repeatable: !!data.repeatable,
-          // d1.ts auto-parses `uses_recovery` so it arrives as an
-          // array — defend against an older cached payload that may
-          // surface it as a string.
-          usesRecovery: Array.isArray(data.uses_recovery)
-            ? data.uses_recovery
-            : typeof data.uses_recovery === 'string'
-              ? safeJsonArray(data.uses_recovery)
-              : [],
-          usesMax: data.uses_max ?? data.usesMax ?? '',
-          usesSpent: Number(data.uses_spent ?? data.usesSpent ?? 0) || 0,
+          tagIds: Array.isArray(data.tags) ? data.tags : [],
           requirementsTree: parseRequirementTree(data.requirements_tree ?? data.requirementsTree),
         };
         setFeatsById((prev) => ({ ...prev, [featId]: mapped }));
@@ -150,10 +160,6 @@ export default function FeatDetailPanel({
     || sourceRecord?.name
     || '—';
 
-  const valueLabel = FEAT_TYPE_LABELS[feat.featType as FeatTypeValue] || feat.featType || 'Feat';
-  const subtypeRaw = String(feat.featSubtype || '').trim();
-  const typeLine = subtypeRaw ? `${valueLabel} · ${subtypeRaw}` : valueLabel;
-
   const descriptionHtml = (() => {
     const raw = String(feat.description || '').trim();
     if (!raw) return '<p class="italic text-ink/40">No description authored yet.</p>';
@@ -164,111 +170,173 @@ export default function FeatDetailPanel({
     return bbcodeToHtml(raw);
   })();
 
+  // Prerequisites: prefer the structured `requirementsTree` rendered
+  // by the shared formatter (resolves slugs to display names), fall
+  // back to the raw free-text `requirements` field. Italic, no box —
+  // matches the "Feat is presented as a body of text, not a card" UX
+  // direction.
   const requirementsLine = formatRequirementText(feat.requirementsTree ?? null);
-  const recovery = Array.isArray(feat.usesRecovery) ? feat.usesRecovery : [];
+  const prereqDisplay = requirementsLine || String(feat.requirements ?? '').trim();
+
+  // Feat Category surfaces a single italic line under the name. The
+  // category is admin-managed (P4) — until that taxonomy table lands,
+  // the field is null on every feat and this block stays empty.
+  // Tolerates either `featCategoryName` (denormalized read) or a
+  // future `featCategory` object payload.
+  const categoryLabel =
+    (feat as any).featCategoryName
+    || (feat as any).featCategory?.name
+    || '';
+
+  // Tag-grouping mirrors SpellDetailPanel exactly so the two
+  // disclosures feel identical to the author. Tags assigned to the
+  // feat that don't have a feat-classified group land under "Other".
+  const tagsForThisFeat = (() => {
+    const ids = feat.tagIds || (feat as any).tags || [];
+    const idSet = new Set(Array.isArray(ids) ? ids.map(String) : []);
+    return tags.filter((t) => idSet.has(t.id));
+  })();
+  const groupedTags: Array<{ group: { id: string; name: string }; tags: TagRecord[] }> = [];
+  const groupBuckets = new Map<string, TagRecord[]>();
+  for (const tag of tagsForThisFeat) {
+    const gid = (tag.groupId as string) || '__other__';
+    if (!groupBuckets.has(gid)) groupBuckets.set(gid, []);
+    groupBuckets.get(gid)!.push(tag);
+  }
+  for (const group of tagGroups) {
+    const bucket = groupBuckets.get(group.id);
+    if (bucket && bucket.length > 0) {
+      groupedTags.push({ group: { id: group.id, name: group.name }, tags: bucket });
+      groupBuckets.delete(group.id);
+    }
+  }
+  const otherTags: TagRecord[] = [];
+  for (const bucket of groupBuckets.values()) otherTags.push(...bucket);
+  if (otherTags.length > 0) {
+    groupedTags.push({ group: { id: '__other__', name: 'Other' }, tags: otherTags });
+  }
 
   return (
-    <div className="space-y-0">
+    // Flex column at full panel height so the Show Tags disclosure
+    // can pin itself to the bottom (mt-auto). Mirrors
+    // SpellDetailPanel's structure exactly.
+    <div className="flex flex-col min-h-full">
+      {/* Header: image left, name + italic category + italic
+          prerequisites in the middle, source abbreviation + favorite
+          stacked on the right. No bordered card, no info-row strip
+          — the user-facing detail panel reads as a single body of
+          text, not a stat-block. */}
       <div className="border-b border-gold/10 px-6 py-5">
-        <div className="flex items-start justify-between gap-4">
-          <div className="space-y-2">
-            <div className="flex items-center gap-3 flex-wrap">
-              <h2 className="font-serif text-3xl xl:text-4xl font-bold uppercase tracking-tight text-gold">
-                {feat.name}
-              </h2>
-              {/* Source abbreviation links through to the source's
-                  detail page. Native `title` attribute provides the
-                  full source name on hover — chose native over the
-                  shadcn Tooltip to keep the header lightweight; we
-                  can promote later if more controls want it. */}
-              {feat.sourceId ? (
-                <Link
-                  to={`/sources/view/${feat.sourceId}`}
-                  className="text-sm font-bold text-gold/70 hover:text-gold underline-offset-2 hover:underline transition-colors"
-                  title={String(sourceRecord?.name || sourceRecord?.shortName || sourceAbbrev)}
-                >
-                  {sourceAbbrev}
-                </Link>
-              ) : (
-                <span className="text-sm font-bold text-gold/70">{sourceAbbrev}</span>
-              )}
-              {feat.page ? (
-                <span className="text-sm text-ink/35">p{feat.page}</span>
-              ) : null}
-            </div>
-            <p className="font-serif italic text-ink/70">
-              {typeLine}
-              {feat.repeatable ? ' · Repeatable' : ''}
-            </p>
+        <div className="flex items-start gap-5">
+          <FeatArtPreview src={feat.imageUrl} alt={feat.name || 'Feat'} size={96} />
+          <div className="flex-1 min-w-0 space-y-1.5">
+            <h2 className="font-serif text-3xl xl:text-4xl font-bold uppercase tracking-tight text-gold leading-tight">
+              {feat.name}
+            </h2>
+            {categoryLabel ? (
+              <p className="font-serif italic text-ink/70 text-sm">{categoryLabel}</p>
+            ) : null}
+            {prereqDisplay ? (
+              // Italic prerequisites line. No box / no border / no
+              // "character-level gate" subtitle — the italic styling
+              // is enough to read this as a precondition.
+              <p className="italic text-ink/75 text-sm">
+                <span className="font-bold not-italic text-ink/55 mr-1">Prerequisite:</span>
+                {prereqDisplay}
+              </p>
+            ) : null}
+          </div>
+          <div className="flex flex-col items-end gap-2 shrink-0">
+            {/* Source abbreviation top-right. Hover shows full source
+                name; click navigates to the source's detail page. */}
+            {feat.sourceId ? (
+              <Link
+                to={`/sources/view/${feat.sourceId}`}
+                className="text-sm font-bold text-gold/70 hover:text-gold underline-offset-2 hover:underline transition-colors"
+                title={String(sourceRecord?.name || sourceRecord?.shortName || sourceAbbrev)}
+              >
+                {sourceAbbrev}
+                {feat.page ? <span className="text-ink/35 font-normal ml-1">p{feat.page}</span> : null}
+              </Link>
+            ) : (
+              <span className="text-sm font-bold text-gold/70">
+                {sourceAbbrev}
+                {feat.page ? <span className="text-ink/35 font-normal ml-1">p{feat.page}</span> : null}
+              </span>
+            )}
+            {onToggleFavorite ? (
+              <button
+                type="button"
+                onClick={() => onToggleFavorite(feat.id)}
+                className={cn(
+                  'shrink-0 inline-flex items-center justify-center h-9 w-9 rounded-full border transition-colors',
+                  isFavorite
+                    ? 'border-gold/50 bg-gold/15 text-gold hover:bg-gold/25'
+                    : 'border-gold/20 text-ink/40 hover:border-gold/40 hover:text-gold'
+                )}
+                title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                aria-pressed={!!isFavorite}
+              >
+                <Star className={cn('w-4 h-4', isFavorite ? 'fill-gold/80' : '')} />
+              </button>
+            ) : null}
           </div>
         </div>
       </div>
 
-      {/* Identity + image strip — same 126px compact icon position the
-          spell detail uses, so the two browsers feel consistent. */}
-      <div className="border-b border-gold/10 px-6 py-5">
-        <div className="grid gap-6 lg:grid-cols-[126px_minmax(0,1fr)]">
-          <FeatArtPreview src={feat.imageUrl} alt={feat.name || 'Feat'} size={126} />
-          <div className="grid gap-y-3 text-sm text-ink md:grid-cols-2 md:gap-x-8">
-            <FeatInfoRow label="Identifier" value={feat.identifier || '—'} mono />
-            <FeatInfoRow label="Source Type" value={feat.sourceType || '—'} />
-            {feat.usesMax ? (
-              <FeatInfoRow label="Uses Max" value={String(feat.usesMax)} mono />
-            ) : null}
-            {recovery.length ? (
-              <FeatInfoRow
-                label="Recovery"
-                value={recovery
-                  .map((r: any) => formatRecoveryRule(r))
-                  .filter(Boolean)
-                  .join(' · ')}
-              />
-            ) : null}
-          </div>
-        </div>
-      </div>
-
-      <div className="space-y-6 px-6 py-5">
+      {/* Description fills the body. No bordered card, no
+          activities/effects rollup, no bottom source strip — the
+          feat description is the whole content. */}
+      <div className="px-6 py-5">
         <div
           className="prose max-w-none prose-p:text-ink/90 prose-strong:text-ink prose-em:text-ink/80 prose-li:text-ink/85 prose-headings:text-ink"
           dangerouslySetInnerHTML={{ __html: descriptionHtml }}
         />
-
-        {(feat.requirements || requirementsLine) ? (
-          <div className="border border-blood/30 bg-blood/[0.04] rounded-md px-4 py-3 space-y-2">
-            <div className="flex items-baseline gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-blood/80">Prerequisites</span>
-              <span className="text-[9px] uppercase tracking-widest text-ink/35">character-level gate</span>
-            </div>
-            {requirementsLine ? (
-              <div className="text-sm text-ink/85">{requirementsLine}</div>
-            ) : null}
-            {feat.requirements ? (
-              <div className="text-sm text-ink/85 italic">{feat.requirements}</div>
-            ) : null}
-          </div>
-        ) : null}
-
-        <div className="border-t border-gold/10 pt-4 text-sm text-ink/70 space-y-2">
-          <div>
-            <span className="font-bold text-ink">Source:</span>{' '}
-            {sourceAbbrev}
-            {feat.page ? `, page ${feat.page}` : ''}
-          </div>
-          <div className="text-xs text-ink/40 italic">
-            {(feat.activities?.length || 0)} activities · {(feat.effects?.length || 0)} active effects
-          </div>
-        </div>
       </div>
-    </div>
-  );
-}
 
-function FeatInfoRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
-  return (
-    <div>
-      <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-gold/70">{label}</div>
-      <div className={`mt-1 text-sm text-ink/90 ${mono ? 'font-mono' : ''}`}>{value || '—'}</div>
+      {/* Show Tags disclosure pinned to the bottom of the panel via
+          mt-auto, matching SpellDetailPanel. Nothing else lives in
+          this footer band — sources, identifiers, activities, and
+          effects all moved out of the public view. */}
+      <div className="mt-auto px-6 py-4 space-y-3">
+        {groupedTags.length > 0 && (
+          <>
+            <button
+              type="button"
+              onClick={() => setShowTags((s) => !s)}
+              className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded border border-gold/10 bg-gold/[0.03] hover:bg-gold/[0.07] text-[10px] font-bold uppercase tracking-[0.18em] text-gold/70 transition-colors"
+              aria-expanded={showTags}
+            >
+              <span className="flex items-center gap-2">
+                <Tag className="w-3 h-3" />
+                {showTags ? 'Hide tags' : 'Show tags'}
+                <span className="text-ink/45 normal-case tracking-normal font-normal">
+                  ({groupedTags.reduce((sum, g) => sum + g.tags.length, 0)})
+                </span>
+              </span>
+              {showTags ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+            {showTags && (
+              <div className="space-y-3">
+                {groupedTags.map(({ group, tags: groupTagList }) => (
+                  <div key={group.id} className="space-y-1.5">
+                    <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-ink/45">
+                      {group.name}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {groupTagList.map((t) => (
+                        <StatusEmblem key={t.id} tone="neutral" size="md">
+                          {t.name || t.id}
+                        </StatusEmblem>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -346,21 +414,3 @@ function FeatArtPreview({ src, alt, size }: { src?: string; alt: string; size: n
   );
 }
 
-function safeJsonArray(raw: string): any[] {
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function formatRecoveryRule(r: any): string {
-  const period = String(r?.period ?? '').trim();
-  const type = String(r?.type ?? '').trim();
-  const formula = String(r?.formula ?? '').trim();
-  const periodLabel = RECOVERY_PERIOD_OPTIONS.find((o) => o.value === period)?.label || period;
-  const typeLabel = RECOVERY_TYPE_OPTIONS.find((o) => o.value === type)?.label || type;
-  if (!periodLabel && !typeLabel && !formula) return '';
-  return [periodLabel, typeLabel, formula].filter(Boolean).join(' / ');
-}

@@ -315,7 +315,13 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
       onToggleFavorite={toggleFavorite}
       favoritesRowRender={favoritesRowRender}
       favoritesEmptyMessage="Star a feat to pin it here."
-      detailPanel={<FeatDetailPanel featId={selectedFeatId || null} />}
+      detailPanel={
+        <FeatDetailPanel
+          featId={selectedFeatId || null}
+          isFavorite={selectedFeatId ? isFavorite(selectedFeatId) : false}
+          onToggleFavorite={toggleFavorite}
+        />
+      }
       emptyMessage="No feats match the current search and filters."
       trailingActions={
         <>
