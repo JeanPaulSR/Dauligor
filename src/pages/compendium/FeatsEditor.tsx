@@ -878,65 +878,14 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
                   ))}
                 </select>
               </ReviewFieldHighlight>
-              <ReviewFieldHighlight columnKey="feat_type" className="space-y-0.5">
-                <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Feat Type</Label>
-                <select
-                  value={formData.featType || 'feat'}
-                  onChange={(e) => setFormData((prev) => ({
-                    ...prev,
-                    featType: e.target.value,
-                    featSubtype: '',
-                  }))}
-                  className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
-                >
-                  {FEAT_TYPE_VALUES.map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
-              </ReviewFieldHighlight>
-              <ReviewFieldHighlight columnKey="feat_subtype" className="space-y-0.5">
-                <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Subtype</Label>
-                {(() => {
-                  const subtypeOptions = FEAT_SUBTYPE_OPTIONS_BY_VALUE[formData.featType] || [];
-                  if (subtypeOptions.length > 0) {
-                    return (
-                      <select
-                        value={formData.featSubtype || ''}
-                        onChange={(e) =>
-                          setFormData((prev) => ({ ...prev, featSubtype: e.target.value }))
-                        }
-                        className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
-                      >
-                        {subtypeOptions.map(([value, label]) => (
-                          <option key={value || '_blank'} value={value}>{label}</option>
-                        ))}
-                      </select>
-                    );
-                  }
-                  return (
-                    <Input
-                      value={formData.featSubtype || ''}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, featSubtype: e.target.value }))
-                      }
-                      className="h-8 bg-background/50 border-gold/10 focus:border-gold font-mono text-sm"
-                      placeholder="identifier (e.g. wizard, tiefling)"
-                    />
-                  );
-                })()}
-              </ReviewFieldHighlight>
-              <ReviewFieldHighlight columnKey="source_type" className="space-y-0.5">
-                <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Source Type</Label>
-                <select
-                  value={formData.sourceType || 'feat'}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, sourceType: e.target.value }))}
-                  className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
-                >
-                  {SOURCE_TYPES.map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
-              </ReviewFieldHighlight>
+              {/* feat_type / feat_subtype / source_type fields used
+                  to live here. They've been dropped from the editor
+                  per the new "a feat is always a feat" UX direction
+                  — Foundry import still populates the underlying
+                  columns from `system.type.value` so re-export round-
+                  trips work, but the author never sees the controls.
+                  Feat Category (admin-managed taxonomy, P4) will
+                  occupy the equivalent slot once it lands. */}
             </div>
           </div>
 
