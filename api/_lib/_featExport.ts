@@ -31,7 +31,11 @@
 //   flags.dauligor-pairing: { dbId, sourceId, sourceType, ... }
 
 import type { ExportFetchers } from "./_classExport.js";
-import { getSemanticSourceId } from "./_classExport.js";
+import {
+  getSemanticSourceId,
+  denormalizeScalingColumnRow,
+  normalizeScaleValueAdvancement,
+} from "./_classExport.js";
 import { bbcodeToHtml } from "./_bbcode.js";
 import {
   collectFeatRequirementReferences,
@@ -111,7 +115,7 @@ export async function buildFeatItemBundle(
   featId: string,
   fetchers: ExportFetchers,
 ): Promise<FeatItemBundle | null> {
-  const { fetchDocument } = fetchers;
+  const { fetchDocument, fetchCollection } = fetchers;
   const row: any = await fetchDocument<any>("feats", featId);
   if (!row) return null;
 
@@ -128,6 +132,62 @@ export async function buildFeatItemBundle(
   const usesRecoveryArr = Array.isArray(row.uses_recovery)
     ? row.uses_recovery
     : parseJsonField(row.uses_recovery, []) || [];
+
+  // Load scaling columns owned by this feat (Phase B of the
+  // non-class scaling track). `scaling_columns` is polymorphic via
+  // (parent_id, parent_type); when an author adds columns under a
+  // feat via the FeatsEditor "Feat Columns" panel, those rows have
+  // parent_type='feat' / 'race' / 'background' depending on the
+  // feat's featType. Class features (feat_type='class'/'subclass')
+  // intentionally have no rows — they inherit from the parent
+  // class — so this query simply returns [] for them.
+  //
+  // The owner parent_type matches the feat's runtime classification:
+  // 'feat' / 'race' / 'background'. We map feat_type='monster' to
+  // 'feat' since monsters share the generic feat scaling slot today.
+  const featTypeForScaling = String(row.feat_type ?? "").toLowerCase();
+  const scalingParentType = featTypeForScaling === "race" || featTypeForScaling === "background"
+    ? featTypeForScaling
+    : (featTypeForScaling === "class" || featTypeForScaling === "subclass")
+      ? null // class features don't own scaling
+      : "feat"; // 'feat', 'monster', or anything else → generic feat scaling slot
+  let scalingColumnsRaw: any[] = [];
+  if (scalingParentType) {
+    try {
+      const rows = await fetchCollection<any>("scaling_columns", {
+        where: "parent_id = ? AND parent_type = ?",
+        params: [String(row.id), scalingParentType],
+        orderBy: "name ASC",
+      });
+      scalingColumnsRaw = (rows || []).map(denormalizeScalingColumnRow);
+    } catch {
+      // Defensive: if the query fails (legacy index quirk, etc.),
+      // export proceeds without scale normalization. The
+      // ScaleValue's raw configuration still ships, and authors can
+      // catch broken @scale references in Foundry play.
+      scalingColumnsRaw = [];
+    }
+  }
+  // Map column PK -> column row, for the helper to consult.
+  const scalingById = Object.fromEntries(
+    scalingColumnsRaw.map((column) => [column.id, column]),
+  );
+
+  // Normalize each ScaleValue advancement against the loaded columns.
+  // The class export pipeline runs the same helper inside its bigger
+  // normalize step; for feats the only normalization we need today
+  // is ScaleValue, since Trait / ItemGrant / ItemChoice scaling
+  // refs are class-features features today. Foundry resolves
+  // `@scale.<feat.identifier>.<column-identifier>` automatically
+  // from the feat's `system.identifier` once the advancement lands
+  // on the item — no module-side wiring required.
+  const normalizedAdvancements = advancementsArr.map((adv: any) => {
+    if (!adv || typeof adv !== "object") return adv;
+    if (trimString(adv.type) === "ScaleValue") {
+      return normalizeScaleValueAdvancement(adv, scalingById) || adv;
+    }
+    return adv;
+  });
 
   const sourceId = trimString(row.identifier) || `feat-${row.id}`;
   const featType = trimString(row.feat_type) || "feat";
@@ -194,7 +254,7 @@ export async function buildFeatItemBundle(
     // activities. See the top-of-file comment for the conversion
     // convention (preserves `_id` keys when present).
     activities: arrayToFoundryMap(activitiesArr),
-    advancement: arrayToFoundryMap(advancementsArr),
+    advancement: arrayToFoundryMap(normalizedAdvancements),
     prerequisites: {
       items: [],
       repeatable: Number(row.repeatable || 0) ? true : false,

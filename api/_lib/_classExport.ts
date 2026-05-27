@@ -301,7 +301,7 @@ function denormalizeFeatureRow(row: any) {
   return out;
 }
 
-function denormalizeScalingColumnRow(row: any) {
+export function denormalizeScalingColumnRow(row: any) {
   if (!row) return row;
   return dropSnakeKeys({
     ...row,
@@ -830,6 +830,94 @@ function normalizeTraitCategory(kind: string, value: string, refs: any) {
   }
 }
 
+/**
+ * Normalize a ScaleValue advancement for Foundry export by filling
+ * in the per-level scale map from the linked `scaling_columns` row.
+ *
+ * Used by class export (the original consumer) AND by feat / race /
+ * background / item exports — all owners share the same scale-map
+ * conversion, so the helper is exported. The advancement's
+ * `configuration.scalingColumnId` is the editor-side D1 PK; the
+ * helper looks up the column row in `scalingById`, copies over
+ * `type` / `values` / `distanceUnits`, and emits the dnd5e
+ * ScaleValueAdvancement schema shape:
+ *   - per-level map at `configuration.scale` (not `values`)
+ *   - `{ value }` entries for string / number / cr / distance
+ *   - `{ number, faces, modifiers }` entries for dice
+ *   - `distance.units` unconditionally present (dnd5e validates
+ *     the SchemaField regardless of type)
+ *
+ * Returns a NEW normalized advancement object; caller's input is
+ * deep-cloned at the boundary by `normalizeAdvancementForExport`,
+ * but when used standalone the helper assumes the caller already
+ * passed a safe-to-mutate copy.
+ *
+ * Foundry resolves `@scale.<owner-identifier>.<advancement-identifier>`
+ * from the owning item's `system.identifier` — so the helper does
+ * NOT need to know which entity owns the advancement. Get the
+ * identifier right on the item itself and the namespace falls out
+ * automatically.
+ */
+export function normalizeScaleValueAdvancement(
+  advancement: any,
+  scalingById: Record<string, any>,
+): any {
+  const normalized: any = advancement && typeof advancement === 'object'
+    ? JSON.parse(JSON.stringify(advancement))
+    : null;
+  if (!normalized) return null;
+  const configuration = { ...(normalized.configuration || {}) };
+  const linkedScale = scalingById[configuration.scalingColumnId];
+
+  const scaleType = trimString(linkedScale?.type) || trimString(configuration.type) || 'number';
+  const rawScale = linkedScale?.values || configuration.scale || configuration.values || {};
+  const scaleMap: Record<string, any> = {};
+  for (const [level, raw] of Object.entries(rawScale)) {
+    if (raw == null) continue;
+    // Pass through entries already in dnd5e-native object shape.
+    if (typeof raw === 'object' && !Array.isArray(raw)) {
+      scaleMap[level] = raw;
+      continue;
+    }
+    const trimmed = String(raw).trim();
+    if (!trimmed) continue;
+
+    if (scaleType === 'dice') {
+      const parsed = parseDiceScaleEntry(trimmed);
+      if (parsed) scaleMap[level] = parsed;
+      // If parse failed (malformed input — e.g. a stray "—" placeholder),
+      // skip the level rather than ship an invalid entry that dnd5e
+      // would reject during validation.
+    } else {
+      scaleMap[level] = { value: trimmed };
+    }
+  }
+
+  normalized.configuration = {
+    ...configuration,
+    type: scaleType,
+    identifier: trimString(configuration.identifier) || trimString(linkedScale?.identifier) || slugify(normalized.title || 'scale'),
+    scale: scaleMap,
+  };
+  delete (normalized.configuration as any).values;
+
+  // distance.units is only meaningful for type=distance, but dnd5e's
+  // schema declares the SchemaField unconditionally — a non-string in
+  // there fails validation. Always emit a placeholder string and let
+  // dnd5e ignore it for non-distance types.
+  const distanceUnits = trimString(linkedScale?.distanceUnits) || trimString((configuration as any)?.distance?.units) || '';
+  normalized.configuration.distance = { units: scaleType === 'distance' ? (distanceUnits || 'ft') : '' };
+
+  if (linkedScale?.sourceId) {
+    normalized.configuration.scalingColumnId = linkedScale.sourceId;
+    normalized.sourceScaleId = linkedScale.sourceId;
+  } else {
+    delete normalized.configuration.scalingColumnId;
+  }
+  if (!trimString(normalized.title) && linkedScale?.name) normalized.title = linkedScale.name;
+  return normalized;
+}
+
 function normalizeAdvancementForExport(advancement: any, context: any) {
   if (!advancement || typeof advancement !== 'object') return null;
 
@@ -949,65 +1037,19 @@ function normalizeAdvancementForExport(advancement: any, context: any) {
     if (selectedSizeIds[0]) normalized.configuration.size = selectedSizeIds[0];
     else delete normalized.configuration.size;
   } else if (type === 'ScaleValue') {
-    const linkedScale = context.scalingById[configuration.scalingColumnId];
-    // dnd5e's ScaleValueAdvancement schema:
-    //   - per-level map is `scale` (not `values`)
-    //   - `type` is one of "string" | "number" | "cr" | "dice" | "distance"
-    //   - each entry's shape varies by type:
-    //       string  / number / cr / distance → `{ value }`
-    //       dice                              → `{ number, faces, modifiers }`
-    //   - `distance.units` is required on the advancement when type=distance
-    //
-    // Authoring stores the `type` on the scaling column and a raw string
-    // per level. We dispatch the per-level shape here so dnd5e's roll-data
-    // layer can surface `@scale.<class>.<id>` correctly — including dice
-    // expressions like Sneak Attack damage and Superiority Dice.
-    const scaleType = trimString(linkedScale?.type) || trimString(configuration.type) || 'number';
-    const rawScale = linkedScale?.values || configuration.scale || configuration.values || {};
-    const scaleMap: Record<string, any> = {};
-    for (const [level, raw] of Object.entries(rawScale)) {
-      if (raw == null) continue;
-      // Pass through entries already in dnd5e-native object shape.
-      if (typeof raw === 'object' && !Array.isArray(raw)) {
-        scaleMap[level] = raw;
-        continue;
-      }
-      const trimmed = String(raw).trim();
-      if (!trimmed) continue;
-
-      if (scaleType === 'dice') {
-        const parsed = parseDiceScaleEntry(trimmed);
-        if (parsed) scaleMap[level] = parsed;
-        // If parse failed (malformed input — e.g. a stray "—" placeholder),
-        // skip the level rather than ship an invalid entry that dnd5e
-        // would reject during validation.
-      } else {
-        scaleMap[level] = { value: trimmed };
-      }
+    // Delegate the scale-map conversion to the shared helper above.
+    // The class flow keeps its featureId / sourceFeatureId mapping
+    // (handled earlier in this function); we then copy the helper's
+    // computed configuration + sourceScaleId + title onto `normalized`
+    // so the function's end-of-block cleanup (`delete normalized.isBase`)
+    // and the return-`normalized` shape stay in lockstep with the
+    // other branches.
+    const updated = normalizeScaleValueAdvancement(normalized, context.scalingById);
+    if (updated) {
+      normalized.configuration = updated.configuration;
+      if (updated.sourceScaleId !== undefined) normalized.sourceScaleId = updated.sourceScaleId;
+      if (updated.title !== undefined) normalized.title = updated.title;
     }
-
-    normalized.configuration = {
-      ...configuration,
-      type: scaleType,
-      identifier: trimString(configuration.identifier) || trimString(linkedScale?.identifier) || slugify(normalized.title || 'scale'),
-      scale: scaleMap
-    };
-    delete (normalized.configuration as any).values;
-
-    // distance.units is only meaningful for type=distance, but dnd5e's
-    // schema declares the SchemaField unconditionally — a non-string in
-    // there fails validation. Always emit a placeholder string and let
-    // dnd5e ignore it for non-distance types.
-    const distanceUnits = trimString(linkedScale?.distanceUnits) || trimString((configuration as any)?.distance?.units) || '';
-    normalized.configuration.distance = { units: scaleType === 'distance' ? (distanceUnits || 'ft') : '' };
-
-    if (linkedScale?.sourceId) {
-      normalized.configuration.scalingColumnId = linkedScale.sourceId;
-      normalized.sourceScaleId = linkedScale.sourceId;
-    } else {
-      delete normalized.configuration.scalingColumnId;
-    }
-    if (!trimString(normalized.title) && linkedScale?.name) normalized.title = linkedScale.name;
   } else {
     normalized.configuration = configuration;
   }
