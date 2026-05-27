@@ -8,10 +8,13 @@ import {
   RequirementGroupKind,
   AbilityKey,
   ProficiencyKind,
+  RequirementFormatLookup,
   emptyGroup,
   emptyLeaf,
   isGroup,
   isLeaf,
+  formatRequirementShort,
+  formatRequirementText,
 } from '../../lib/requirements';
 import SingleSelectSearch from '../ui/SingleSelectSearch';
 
@@ -69,6 +72,36 @@ export interface RequirementsEditorProps {
   lookups?: RequirementsEditorLookups;
   /** Inline label. Default: "Requirements". */
   label?: string;
+
+  // ─── Optional override layers ───────────────────────────────
+  //
+  // The component supports a three-layer model where author-curated
+  // text can override the structured tree on either the full-text
+  // surface (free text) or in compact column contexts (short text).
+  // Resolution chain consumers should follow:
+  //
+  //   compact column:   shortText  →  freeText  →  formatted tree
+  //   detail surface:                freeText  →  formatted tree
+  //
+  // Each override layer is opt-in per consumer. Presence of the
+  // matching `on*Change` callback is what enables the input —
+  // UniqueOptionGroupEditor only needs the tree, so it omits both
+  // pairs and the override section doesn't render. FeatsEditor
+  // passes all four to host the full three-layer authoring surface
+  // in one component.
+  freeText?: string;
+  onFreeTextChange?: (next: string) => void;
+  shortText?: string;
+  onShortTextChange?: (next: string) => void;
+  /**
+   * Slug → display-name lookup for the live preview. Passes through
+   * to `formatRequirementShort` so proficiency leaves render with
+   * resolved names ("Athletics") rather than slugs ("ath"). Optional
+   * — without it, the preview shows slugs verbatim. Should match
+   * what the consuming surface (list / detail) will use at render
+   * time so authors see exactly what they'll get.
+   */
+  previewLookup?: RequirementFormatLookup;
 }
 
 // All leaf types in the order the dropdown renders them. Top section is
@@ -128,6 +161,11 @@ export default function RequirementsEditor({
   onChange,
   lookups = {},
   label = 'Requirements',
+  freeText,
+  onFreeTextChange,
+  shortText,
+  onShortTextChange,
+  previewLookup = {},
 }: RequirementsEditorProps) {
   const seedWithGroup = (kind: RequirementGroupKind) => {
     onChange({ kind, children: [] });
@@ -137,6 +175,24 @@ export default function RequirementsEditor({
     // for on Modular Option Group items (Pact-of-X chains, invocation tiers).
     onChange(emptyLeaf('optionItem'));
   };
+
+  // Presence-of-callback detection. A consumer that only edits the
+  // tree (UniqueOptionGroupEditor) won't pass these and the
+  // override section stays hidden — keeps the component
+  // backward-compatible without an explicit feature flag.
+  const showFreeText = typeof onFreeTextChange === 'function';
+  const showShortText = typeof onShortTextChange === 'function';
+  const showOverrides = showFreeText || showShortText;
+
+  // Live preview values mirroring the resolution chain consumers
+  // follow. Only renders when at least one override layer is active
+  // — for tree-only consumers the preview block is hidden.
+  const trimmedShort = String(shortText ?? '').trim();
+  const trimmedFree = String(freeText ?? '').trim();
+  const compoundPreview = formatRequirementText(value, previewLookup);
+  const compoundShortPreview = formatRequirementShort(value, previewLookup, { proficiencyOnly: true });
+  const listPreview = trimmedShort || trimmedFree || compoundShortPreview || '—';
+  const detailPreview = trimmedFree || compoundPreview || '—';
 
   return (
     <div className="space-y-2">
@@ -152,6 +208,50 @@ export default function RequirementsEditor({
           </button>
         )}
       </div>
+
+      {/* Short Text override (compact contexts only). Highest
+          priority in column / row surfaces; detail surfaces ignore
+          it. Authors use this when the structured tree or free text
+          is too long for a tight cell ("Outlander origin" instead
+          of "Lvl 4 · Outlander origin"). */}
+      {showShortText && (
+        <div className="space-y-1">
+          <label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">
+            Short Text <span className="text-ink/35 normal-case tracking-normal">— compact column only</span>
+          </label>
+          <input
+            type="text"
+            value={shortText ?? ''}
+            onChange={(e) => onShortTextChange!(e.target.value)}
+            placeholder="e.g. Outlander, Lvl 4, Dragonmark"
+            className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs"
+          />
+          <p className="text-[10px] text-ink/40">
+            Replaces the free text and the formatted tree in compact column displays. Detail surfaces use the layers below.
+          </p>
+        </div>
+      )}
+
+      {/* Free Text override (all surfaces). Overrides the structured
+          tree on both compact and detail surfaces — use when the
+          prereq reads better as prose than as a leaf chain. */}
+      {showFreeText && (
+        <div className="space-y-1">
+          <label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">
+            Free Text <span className="text-ink/35 normal-case tracking-normal">— overrides the compound tree</span>
+          </label>
+          <input
+            type="text"
+            value={freeText ?? ''}
+            onChange={(e) => onFreeTextChange!(e.target.value)}
+            placeholder="e.g. The ability to cast at least one spell"
+            className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs"
+          />
+          <p className="text-[10px] text-ink/40">
+            Free-text override for prereqs that don't fit the structured tree. Replaces the compound tree in both compact and detail surfaces. Not machine-checked.
+          </p>
+        </div>
+      )}
 
       {!value ? (
         <div className="border border-gold/10 border-dashed rounded-md bg-background/20 px-3 py-4 space-y-2">
@@ -190,6 +290,27 @@ export default function RequirementsEditor({
           onDelete={() => onChange(null)}
           lookups={lookups}
         />
+      )}
+
+      {/* Live resolution preview — only renders when an override
+          layer is active. Two lines, mirroring the two consumer
+          chains (compact column, detail surface) so authors can
+          verify their override behavior without context-switching
+          to the public-side surfaces. Hidden entirely for tree-
+          only consumers like UniqueOptionGroupEditor. */}
+      {showOverrides && (
+        <div className="rounded border border-gold/10 bg-background/40 px-3 py-2 space-y-1.5">
+          {showShortText && (
+            <div>
+              <span className="text-[9px] uppercase tracking-widest text-ink/40">Compact column · </span>
+              <span className="text-xs italic text-ink/80">{listPreview}</span>
+            </div>
+          )}
+          <div>
+            <span className="text-[9px] uppercase tracking-widest text-ink/40">Detail surface · </span>
+            <span className="text-xs italic text-ink/80">{detailPreview}</span>
+          </div>
+        </div>
       )}
     </div>
   );

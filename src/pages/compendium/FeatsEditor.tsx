@@ -1205,87 +1205,25 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
             </span>
           </div>
 
-          {/* Layer 1 — Short Text. Highest priority, used ONLY by
-              the FeatList compact column. Detail panel ignores
-              this layer. Author writes a tight micro-label
-              ("Outlander", "Dragonmark") when the formatted tree
-              or free text is too long for a column cell. */}
-          <div className="space-y-1">
-            <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">
-              Short Text <span className="text-ink/35 normal-case tracking-normal">— compact column only</span>
-            </Label>
-            <Input
-              value={formData.requirementsShortText}
-              onChange={(e) => setFormData((prev) => ({ ...prev, requirementsShortText: e.target.value }))}
-              placeholder="e.g. Outlander, Lvl 4, Dragonmark"
-              className="bg-background/50 border-gold/10 focus:border-gold text-xs"
-            />
-            <p className="text-[10px] text-ink/40">
-              Compact override. When set, this replaces both the free text and the formatted tree in the FeatList Prerequisite column. The detail panel still uses the layers below.
-            </p>
-          </div>
-
-          {/* Layer 2 — Free Text. Overrides the compound tree on
-              both the FeatList AND the detail panel. Use for
-              prereqs that read better as prose than as a structured
-              chain ("Adopted by a dragon during character creation"). */}
-          <div className="space-y-1">
-            <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">
-              Free Text <span className="text-ink/35 normal-case tracking-normal">— overrides the compound tree</span>
-            </Label>
-            <Input
-              value={formData.requirements}
-              onChange={(e) => setFormData((prev) => ({ ...prev, requirements: e.target.value }))}
-              placeholder="e.g. The ability to cast at least one spell"
-              className="bg-background/50 border-gold/10 focus:border-gold text-xs"
-            />
-            <p className="text-[10px] text-ink/40">
-              Free-text override for prereqs that don't fit the structured tree. When set, it replaces the compound tree in both the FeatList and the detail panel. Not machine-checked.
-            </p>
-          </div>
-
-          {/* Layer 3 — Compound Tree. The default — structured
-              prereqs that get formatted at render time and (in
-              future) machine-checked against the actor. Lowest
-              priority; the two text overrides above replace it
-              when set. */}
+          {/* RequirementsEditor now hosts all three layers itself —
+              passing the freeText / shortText pairs activates the
+              corresponding inputs + the live resolution preview.
+              FeatsEditor just owns the state shape; the layout and
+              the override semantics live inside the component so
+              every consumer (UniqueOptionGroupEditor and future
+              ones) gets the same affordances by passing the same
+              prop set. */}
           <RequirementsEditor
             value={formData.requirementsTree}
             onChange={(next) => setFormData((prev) => ({ ...prev, requirementsTree: next }))}
             lookups={requirementsLookups}
             label="Compound Requirements"
+            freeText={formData.requirements}
+            onFreeTextChange={(next) => setFormData((prev) => ({ ...prev, requirements: next }))}
+            shortText={formData.requirementsShortText}
+            onShortTextChange={(next) => setFormData((prev) => ({ ...prev, requirementsShortText: next }))}
+            previewLookup={requirementsTextLookup}
           />
-
-          {/* Live preview of the resolution chain. Shows what the
-              FeatList row + detail panel will actually display so
-              authors don't have to context-switch to verify the
-              override behavior. */}
-          <div className="rounded border border-gold/10 bg-background/40 px-3 py-2 space-y-1.5">
-            <div>
-              <span className="text-[9px] uppercase tracking-widest text-ink/40">List column · </span>
-              <span className="text-xs italic text-ink/80">
-                {(() => {
-                  const shortText = formData.requirementsShortText.trim();
-                  const freeText = formData.requirements.trim();
-                  return shortText
-                    || freeText
-                    || formatRequirementText(formData.requirementsTree, requirementsTextLookup)
-                    || '—';
-                })()}
-              </span>
-            </div>
-            <div>
-              <span className="text-[9px] uppercase tracking-widest text-ink/40">Detail panel · </span>
-              <span className="text-xs italic text-ink/80">
-                {(() => {
-                  const freeText = formData.requirements.trim();
-                  return freeText
-                    || formatRequirementText(formData.requirementsTree, requirementsTextLookup)
-                    || '—';
-                })()}
-              </span>
-            </div>
-          </div>
         </div>
       ),
     },
