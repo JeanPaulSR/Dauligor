@@ -101,6 +101,22 @@ The owner's columns should be selectable inside any advancement type that refere
 - [ ] **Re-import the same feat**: the column doesn't duplicate. The existing row updates in place.
 - [ ] If the existing column was renamed by the author, the rename is **preserved** (only `type`, `values`, `distance_units` get refreshed).
 
+## H'. Item Importer round-trip (Phase B.3 items — follow-up to `3cf87a3`)
+
+The item importer now extracts ScaleValue advancements off
+`sourceDocument.system.advancement` and persists them as
+`scaling_columns` rows owned by the item.
+
+- [ ] In Foundry, attach a `ScaleValue` advancement to an item (Amulet of the Devout, etc.) with a per-level scale (e.g. +1 channel-divinity charge from level 1 onward).
+- [ ] Export the item via the folder-export workflow.
+- [ ] In the app, open `/compendium/items/manage` → **Foundry Import** tab → drop the JSON.
+- [ ] Resolve source mapping, hit Import.
+- [ ] After import, open the item in the Manual Editor.
+- [ ] The **Scaling** sub-tab shows the new "Item Column" matching the ScaleValue's identifier.
+- [ ] Matrix editor for that column matches the Foundry-side per-level data.
+- [ ] **Re-import**: column doesn't duplicate. Existing row updates in place.
+- [ ] Author-side rename of the column persists across re-import (only `type`, `values`, `distance_units` get refreshed).
+
 ## H. Verifying the parent_type mapping
 
 The importer's mapping of `feat_type` → `parent_type` matters for cross-direction consistency.

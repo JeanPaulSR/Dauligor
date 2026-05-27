@@ -19,31 +19,32 @@ Conventions:
 
 The first slices of the "advancements outside classes" track shipped on `feat/scaling-non-class-owners` (commits `f1e4f6b` … `10fa13c`). What's still open:
 
-### Phase B.2 — Item Foundry round-trip
-**Status**: blocked on canonical-contract decision · **Priority**: low
+### Phase B.2 — Item Foundry export endpoint (app → Foundry)
+**Status**: open · **Priority**: low
 
 Races + backgrounds were always covered by the feat-export path (commit `10fa13c`) since they're stored as feats with `feat_type='race'`/`'background'`. The feat exporter maps that to `parent_type` correctly. ✅
 
-What's left is **items**. Items have two structural blocks:
+What's left is **items moving app → Foundry**. The structural gap: no `/api/module/items/<id>.json` server endpoint exists (parallel to `/api/module/feats/<id>.json`, `/api/module/spells/<id>.json`, `/api/module/<source>/classes/<class>.json`). Today items are Foundry-authored and flow Foundry → app only.
 
-1. **No app → Foundry server endpoint**: `/api/module/spells/<id>.json`, `/api/module/feats/<id>.json`, and `/api/module/<source>/classes/<class>.json` all exist; `/api/module/items/<id>.json` doesn't. Items are Foundry-authored and flow Foundry → app via `buildItemFolderExport()` (the reverse direction).
-
-2. **Canonical contract intentionally omits item advancements**: `module/dauligor-pairing/docs/item-folder-export-contract.md` lines 275–278 explicitly state advancements are "intentionally not in the entry." That's a deliberate design call — owner-gated to change per the `dauligor-guardian` skill protocol.
-
-If we want app-authored items to ship to Foundry with their `scaling_columns` baked into `system.advancement`, the work is:
-- New server-built `_itemExport.ts` paralleling `_featExport.ts` (loads columns via `(parent_id, parent_type='item')`, runs them through `normalizeScaleValueAdvancement`).
+To complete the round-trip:
+- New server-built `_itemExport.ts` paralleling `_featExport.ts`. Needs to cover the full Foundry item shape across all item_types (weapon / equipment / armor / consumable / tool / loot / container) — substantial mapping work because the items table is unified but Foundry expects type-specific `system.*` blocks.
+- Synthesize `ScaleValue` advancements from owner-scoped `scaling_columns` rows (`parent_type='item'`) and embed them in the exported `system.advancement`. The synthesis pattern is already established for classes; the helper just needs to mint stable `_id`s for items the same way.
 - New `/api/module/items/<dbId>.json` route in `functions/api/module/[[path]].ts`.
-- Module-side fetcher to consume the new endpoint when the user picks an item from the importer.
-- Canonical contract update (item-folder-export-contract.md, schema-crosswalk.md) to acknowledge advancements as a valid field.
+- Module-side fetcher to consume the new endpoint when the user picks an item from the importer (requires module-side companion work).
+- Canonical contract clarification in `item-import-contract.md` to acknowledge advancements as a valid field. (Note: the canonical doc *already* supports `system.activities` / `effects`; advancements would be an extension following the same pattern.)
 
-Items already work app-side (scaling columns author, persist, are visible in the editor). The Foundry path is the gap.
+Items already work app-side (scaling columns author, persist, surface in the editor). The forward Foundry path is the only remaining gap.
 
 ### Phase B.3 — Importer side: ScaleValue → `scaling_columns` rows
-**Status**: shipped for feats (covers races + backgrounds) on `<commit>` · **Priority**: medium for items
+**Status**: shipped for feats + items on `<commit>` and `<followup-commit>` · **Priority**: complete for in-scope owners
 
-Foundry → app reverse direction. When a feat (or race / background, since they share the feats table) lands in the import workbench with `ScaleValue` advancements, the importer now extracts each one into a `scaling_columns` row owned by the imported entity and patches the advancement's `configuration.scalingColumnId` to link to that row. Means the FeatsEditor's "Feat Columns" / "Race Columns" / "Background Columns" panel shows the imported scaling immediately, and re-exports through `normalizeScaleValueAdvancement` rebuild the same scale map. Touches: [src/lib/scalingImport.ts](../src/lib/scalingImport.ts) (new shared helper) + [src/components/compendium/FeatImportWorkbench.tsx](../src/components/compendium/FeatImportWorkbench.tsx).
+Foundry → app reverse direction.
 
-Items are still open here — but per the contract, items don't carry advancements through `buildItemFolderExport()`, so there's no data to extract until B.2's contract decision lands. The shared `extractAndPersistScalingColumns` helper in `scalingImport.ts` is already parameterized on `parentType`, so wiring the item importer is a one-line call once items start carrying advancements.
+- **Feats** (covers races + backgrounds, since they share the feats table): when a feat lands in `FeatImportWorkbench` with `ScaleValue` advancements, the importer extracts each one into a `scaling_columns` row owned by the imported entity and patches the advancement's `configuration.scalingColumnId` to link to that row. FeatsEditor's "Feat Columns" / "Race Columns" / "Background Columns" panel shows the imported scaling immediately, and re-exports through `normalizeScaleValueAdvancement` rebuild the same scale map.
+
+- **Items**: same flow in `ItemImportWorkbench`. `sourceDocument.system.advancement` is preserved by the canonical folder-export contract (the "intentionally omitted" line in `item-folder-export-contract.md` § "What's intentionally not in the entry" applies only to the slim `itemSummary` projection — the full doc round-trips). The importer pulls advancements off `sourceDocument`, walks ScaleValue entries, persists them as `scaling_columns` rows with `parent_type='item'`. The items table itself doesn't grow an `advancements` column — advancements aren't authored on items app-side; scaling columns are the canonical surface.
+
+Touches: [src/lib/scalingImport.ts](../src/lib/scalingImport.ts) (shared helper) + [src/components/compendium/FeatImportWorkbench.tsx](../src/components/compendium/FeatImportWorkbench.tsx) + [src/components/compendium/ItemImportWorkbench.tsx](../src/components/compendium/ItemImportWorkbench.tsx).
 
 ### Phase B.4 — Module canonical contract updates
 **Status**: open · **Priority**: low · **Owner-gated**: requires explicit per-doc permission per the `dauligor-guardian` skill protocol

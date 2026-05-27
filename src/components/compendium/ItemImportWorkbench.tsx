@@ -17,6 +17,7 @@ import { AlertTriangle, BookOpen, Download, FileJson, Layers3, Shield, Sparkles,
 import { toast } from 'sonner';
 import { reportClientError, OperationType } from '../../lib/firebase';
 import { upsertItemBatch } from '../../lib/compendium';
+import { extractAndPersistScalingColumns } from '../../lib/scalingImport';
 import { fetchCollection } from '../../lib/d1';
 import { cn } from '../../lib/utils';
 import {
@@ -420,12 +421,21 @@ export default function ItemImportWorkbench({ userProfile }: { userProfile: any 
       // Single-target architecture: every candidate writes to the items
       // table. The save payload already covers weapon / armor / tool
       // shape columns + the polymorphic base_*_id FKs.
+      //
+      // Phase B.3 (items): item id is minted upfront so we can persist
+      // ScaleValue advancements (carried on `sourceDocument.system.advancement`
+      // per the folder-export contract) as `scaling_columns` rows
+      // owned by the imported item BEFORE the item upsert lands.
+      // The items table itself doesn't store advancements (no column);
+      // their scale data lives in `scaling_columns` and authors edit it
+      // through ItemsEditor's Scaling tab.
       const now = new Date().toISOString();
-      const entries = importable.map((candidate) => {
+      const entries = await Promise.all(importable.map(async (candidate) => {
         const existingRow = candidate.existingEntryId
           ? existingItems.find((r: any) => r.id === candidate.existingEntryId)
           : null;
         const createdAt = existingRow?.createdAt || existingRow?.created_at || now;
+        const itemId = candidate.existingEntryId || crypto.randomUUID();
         const payload: Record<string, any> = {
           ...candidate.savePayload,
           updated_at: now,
@@ -434,13 +444,41 @@ export default function ItemImportWorkbench({ userProfile }: { userProfile: any 
         Object.keys(payload).forEach((key) => {
           if (payload[key] === undefined) delete payload[key];
         });
-        return { id: candidate.existingEntryId || null, data: payload };
-      });
+
+        // Pull advancements off the Foundry `sourceDocument` and
+        // run them through the shared extractor. Foundry stores
+        // `system.advancement` as a `{ <_id>: Advancement }` keyed
+        // map; the extractor only cares about the ScaleValue
+        // entries. Failures here are caught + logged so the item
+        // upsert still proceeds.
+        const rawAdvancement = candidate.sourceDocument?.system?.advancement;
+        const incomingAdvancements = Array.isArray(rawAdvancement)
+          ? rawAdvancement
+          : rawAdvancement && typeof rawAdvancement === 'object'
+            ? Object.values(rawAdvancement)
+            : [];
+        if (incomingAdvancements.length > 0) {
+          try {
+            await extractAndPersistScalingColumns({
+              parentId: itemId,
+              parentType: 'item',
+              advancements: incomingAdvancements,
+            });
+          } catch (err) {
+            console.error('[ItemImportWorkbench] batch scaling extraction failed:', err);
+          }
+        }
+
+        return { id: itemId, data: payload };
+      }));
 
       try {
         await upsertItemBatch(entries);
-        const created = entries.filter((e) => !e.id).length;
-        const updated = entries.filter((e) => !!e.id).length;
+        // Create-vs-update count: every entry has a non-null `id`
+        // after the upfront mint, so derive from the original
+        // `importable` array via `existingEntryId`.
+        const created = importable.filter((c) => !c.existingEntryId).length;
+        const updated = importable.filter((c) => !!c.existingEntryId).length;
         toast.success(`Imported ${entries.length} items (${created} new, ${updated} updated).`);
       } catch (err) {
         console.error('Error importing items:', err);
@@ -466,6 +504,7 @@ export default function ItemImportWorkbench({ userProfile }: { userProfile: any 
         ? existingItems.find((r: any) => r.id === selectedCandidate.existingEntryId)
         : null;
       const createdAt = existingRow?.createdAt || existingRow?.created_at || now;
+      const itemId = selectedCandidate.existingEntryId || crypto.randomUUID();
       const payload: Record<string, any> = {
         ...selectedCandidate.savePayload,
         updated_at: now,
@@ -475,7 +514,29 @@ export default function ItemImportWorkbench({ userProfile }: { userProfile: any 
         if (payload[key] === undefined) delete payload[key];
       });
 
-      const entries = [{ id: selectedCandidate.existingEntryId || null, data: payload }];
+      // Same scaling-column extraction as the batch path above.
+      // Pulls ScaleValue entries off `sourceDocument.system.advancement`
+      // and persists them as `scaling_columns` rows owned by the
+      // imported item. See `src/lib/scalingImport.ts` for the helper.
+      const rawAdvancement = selectedCandidate.sourceDocument?.system?.advancement;
+      const incomingAdvancements = Array.isArray(rawAdvancement)
+        ? rawAdvancement
+        : rawAdvancement && typeof rawAdvancement === 'object'
+          ? Object.values(rawAdvancement)
+          : [];
+      if (incomingAdvancements.length > 0) {
+        try {
+          await extractAndPersistScalingColumns({
+            parentId: itemId,
+            parentType: 'item',
+            advancements: incomingAdvancements,
+          });
+        } catch (err) {
+          console.error('[ItemImportWorkbench] scaling extraction failed:', err);
+        }
+      }
+
+      const entries = [{ id: itemId, data: payload }];
       await upsertItemBatch(entries);
 
       toast.success(`${selectedCandidate.name} ${selectedCandidate.existingEntryId ? 'updated' : 'imported'}.`);

@@ -116,7 +116,7 @@ nudges authors to save first.
 - **Covers races + backgrounds**: those are stored as feats with
   `feat_type='race'/'background'`, so the same export path handles them.
 
-### Phase B.3 (feat path): importer side
+### Phase B.3: importer side (feats + items)
 - New `src/lib/scalingImport.ts` exposes
   `extractAndPersistScalingColumns({ parentId, parentType, advancements })`
   and `scalingOwnerTypeForFeatType(featType)`. Reverses
@@ -125,12 +125,32 @@ nudges authors to save first.
   on identifier for idempotent re-imports), patches
   `configuration.scalingColumnId` so the editor + future re-exports see the
   linkage.
-- `FeatImportWorkbench.tsx` wires both the single-import and batch-import
-  commit paths through the helper. UUIDs are minted upfront for new feats so
-  scaling rows can FK against them.
-- Failures during scaling extraction are logged but don't block the feat
-  upsert — the row lands; the author can re-author columns manually if
-  needed.
+- **Feats**: `FeatImportWorkbench.tsx` wires both single-import and
+  batch-import paths through the helper. Covers races + backgrounds since
+  they share the feats table.
+- **Items**: `ItemImportWorkbench.tsx` wires both paths similarly. The
+  items table doesn't store advancements (no column); incoming
+  ScaleValue entries land only in `scaling_columns` rows. Confirmed against
+  the canonical folder-export contract — `sourceDocument.system.advancement`
+  IS preserved through the export; only the slim `itemSummary` projection
+  omits it.
+- UUIDs are minted upfront for new feats/items so scaling rows can FK
+  against them. Failures during scaling extraction are logged but don't
+  block the parent upsert — the row lands; the author can re-author
+  columns manually if needed.
+
+### Doc corrections noted in B.3 work
+
+A previous version of the handoff said items "don't carry advancements per
+the contract." That conflated two contract sections. The accurate read:
+
+> The `itemSummary` is a slim projection… Anything not in the summary
+> (full description HTML, every activity, every active effect, advancement
+> entries, container contents) is recoverable from `sourceDocument`.
+> — `item-folder-export-contract.md` § "What's intentionally not in the entry"
+
+So the folder-export contract supports the round-trip; the gap is purely
+on the forward direction (app → Foundry), where no server endpoint exists.
 
 ---
 
@@ -139,19 +159,17 @@ nudges authors to save first.
 See [roadmap entry](roadmap.md#scaling-columns-for-non-class-owners--follow-ups)
 for the canonical list. Briefly:
 
-- **B.2** (items only) — blocked on canonical-contract decision. The
-  `item-folder-export-contract.md` intentionally omits advancements, and no
-  `/api/module/items/<dbId>.json` server endpoint exists. Wiring items
-  through requires a contract update + new server-built export + module-side
-  fetcher. Races + backgrounds were always covered by the feat path.
-- **B.3** (items only) — items don't carry advancements per the same
-  contract, so there's no data to extract. The `extractAndPersistScalingColumns`
-  helper is already parametric on `parentType`, so wiring is one line once
-  B.2's contract decision lands.
+- **B.2** (forward export for items) — no `/api/module/items/<dbId>.json`
+  endpoint exists. Building one requires the full Foundry item-shape
+  envelope (per-item_type `system.*` blocks: weapon damage, armor AC,
+  consumable destroy-on-empty, etc.) plus a module-side fetcher. The
+  scaling synthesis itself reuses the existing helper — that's the easy
+  part — but the surrounding envelope is substantial mapping work.
 - **B.4** — module canonical contract doc updates. Owner-gated per
   `dauligor-guardian` protocol — flagged in roadmap, not edited.
-- **C** — `ItemBumpUses` advancement type. The actual new mechanic; everything
-  prior was scaffolding. Full implementation outline lives in the roadmap entry.
+- **C** — `ItemBumpUses` advancement type. The actual new mechanic;
+  everything prior was scaffolding. Full implementation outline lives in
+  the roadmap entry.
 
 ---
 
