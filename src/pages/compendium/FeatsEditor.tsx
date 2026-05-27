@@ -171,6 +171,10 @@ type FeatFormData = {
   // gates against the granting class's level (or character total
   // level for standalone feats) per the locked level-resolution rule.
   advancements: Advancement[];
+  // Tag system — same shape as SpellsEditor / ItemsEditor.
+  // `upsertFeat` remaps `tagIds → tags` on save; the load path reads
+  // the `tags` JSON column back into `tagIds`.
+  tagIds: string[];
   requirementsTree: Requirement | null;
   createdAt?: string;
   updatedAt?: string;
@@ -194,6 +198,7 @@ const FEAT_DEFAULTS: Omit<FeatFormData, 'sourceId'> & { sourceId?: string } = {
   activities: [],
   effects: [],
   advancements: [],
+  tagIds: [],
   requirementsTree: EMPTY_REQUIREMENT_TREE,
 };
 
