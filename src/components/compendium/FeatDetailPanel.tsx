@@ -65,6 +65,12 @@ type Props = {
   // Omit them on read-only surfaces (e.g. the editor's review pane).
   isFavorite?: boolean;
   onToggleFavorite?: (featId: string) => void;
+  // Cache-bust signal — increment / change this whenever the feat row
+  // has been updated externally (e.g. FeatsEditor's save handler) so
+  // the panel re-fetches instead of serving the stale cached entry.
+  // Stays optional + nullable so read-only surfaces (FeatList) don't
+  // have to wire it.
+  cacheBustKey?: number | string;
 };
 
 export default function FeatDetailPanel({
@@ -72,6 +78,7 @@ export default function FeatDetailPanel({
   emptyMessage = 'Select a feat from the list to view its details.',
   isFavorite,
   onToggleFavorite,
+  cacheBustKey,
 }: Props) {
   const [sources, setSources] = useState<SourceRecord[]>([]);
   const [tags, setTags] = useState<TagRecord[]>([]);
@@ -81,7 +88,13 @@ export default function FeatDetailPanel({
   // formatter so "ath" reads as "Athletics" in the panel.
   const [prereqLookup, setPrereqLookup] = useState<RequirementFormatLookup>({});
   const [showTags, setShowTags] = useState(false);
-  const [featsById, setFeatsById] = useState<Record<string, FeatRecord>>({});
+  // Cache entries carry the `cacheBustKey` they were fetched under so
+  // a later prop-change can detect a stale entry without us having to
+  // wipe the whole map. Editor-driven invalidation lives entirely in
+  // the bust key (one prop change in, one refetch out).
+  const [featsById, setFeatsById] = useState<
+    Record<string, FeatRecord & { __bustKey?: number | string }>
+  >({});
   const [loading, setLoading] = useState(false);
 
   // Sources + tag foundation load once. Small static foundation data;
@@ -135,19 +148,23 @@ export default function FeatDetailPanel({
     };
   }, []);
 
-  // Fetch the full feat when the selected ID changes. Cache invalidates
-  // on prop change (different featId → new fetch) but stays warm across
-  // repeated selections of the same row.
+  // Fetch the full feat when the selected ID changes. Cache stays
+  // warm across repeated selections of the same row; a `cacheBustKey`
+  // change forces a refetch (used by FeatsEditor after save so the
+  // preview reflects the just-persisted shape without a page reload).
   useEffect(() => {
     if (!featId) return;
-    if (featsById[featId]) return;
+    const cached = featsById[featId];
+    // Cache hit only counts if the entry was fetched under the
+    // current bust key — otherwise it's stale and we refetch.
+    if (cached && cached.__bustKey === cacheBustKey) return;
 
     let active = true;
     setLoading(true);
     fetchDocument<any>('feats', featId)
       .then((data) => {
         if (!active || !data) return;
-        const mapped: FeatRecord = {
+        const mapped: FeatRecord & { __bustKey?: number | string } = {
           ...data,
           sourceId: data.source_id,
           imageUrl: data.image_url,
@@ -158,6 +175,7 @@ export default function FeatDetailPanel({
           tagIds: Array.isArray(data.tags) ? data.tags : [],
           featCategoryId: data.feat_category_id || '',
           requirementsTree: parseRequirementTree(data.requirements_tree ?? data.requirementsTree),
+          __bustKey: cacheBustKey,
         };
         setFeatsById((prev) => ({ ...prev, [featId]: mapped }));
       })
@@ -168,7 +186,7 @@ export default function FeatDetailPanel({
     return () => {
       active = false;
     };
-  }, [featId, featsById]);
+  }, [featId, featsById, cacheBustKey]);
 
   const sourceById = useMemo(
     () => Object.fromEntries(sources.map((s) => [s.id, s])) as Record<string, SourceRecord>,

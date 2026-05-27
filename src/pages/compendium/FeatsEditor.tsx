@@ -299,6 +299,12 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
   const [editingId, setEditingId] = useState<string | null>(initialEditingId);
   const [formData, setFormData] = useState<FeatFormData>(makeInitialFeatForm());
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  // FeatDetailPanel (rendered as the preview pane) caches the loaded
+  // feat by id. Incrementing this counter after a successful save
+  // flips the `cacheBustKey` prop on the panel, evicting the stale
+  // cached entry and forcing a refetch — so the preview reflects the
+  // just-persisted shape without the user having to refresh the page.
+  const [previewBustKey, setPreviewBustKey] = useState(0);
 
   // Outgoing sync: when editingId changes from any code path
   // (startEditing, save promotions, reviewMode hydration, the
@@ -985,6 +991,11 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
         });
         if (!opts.silent) toast.success(`Feat ${entryIdAtStart ? 'updated' : 'created'}`);
         await refreshEntries();
+        // Bump the preview pane's cache-bust signal so FeatDetailPanel
+        // refetches the just-persisted feat instead of serving its
+        // stale cached entry. Without this the preview shows the
+        // pre-save shape until the user reloads the page.
+        setPreviewBustKey((n) => n + 1);
         if (!opts.silent) {
           // Stay on the just-saved feat rather than resetting back to
           // a fresh form — the editor previously jumped the user
@@ -1754,6 +1765,7 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
             <FeatDetailPanel
               featId={id}
               emptyMessage="Loading preview…"
+              cacheBustKey={previewBustKey}
             />
           ) : (
             <div className="h-full flex items-center justify-center px-6 py-12 text-center">
