@@ -983,6 +983,12 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
         });
         lastLoadedFormRef.current = JSON.stringify(formDataRef.current ?? formData);
         if (wasCreate && !opts.silent && editingIdRef.current === entryIdAtStart) {
+          // Same scroll-preservation as the direct path below — without
+          // markSaving(), the editingId promotion null → entryId bumps
+          // sessionKey and remounts the MarkdownEditor, scrolling back
+          // to the top and wiping undo history. The proposal save path
+          // needs the same protection.
+          markSaving();
           setEditingId(entryId);
         }
       } else {
