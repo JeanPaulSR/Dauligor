@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Star, ChevronDown, ChevronUp, Tag } from 'lucide-react';
 import { bbcodeToHtml } from '../../lib/bbcode';
 import { fetchCollection, fetchDocument } from '../../lib/d1';
@@ -289,10 +289,26 @@ export default function SpellDetailPanel({
               >
                 {spell.name}
               </h2>
-              <span className={cn(
-                "font-bold text-gold/70",
-                size === "compact" ? "text-xs" : "text-sm",
-              )}>{renderSourceAbbreviation(spell)}</span>
+              {/* Source abbreviation links through to the source's
+                  detail page. Native `title` shows the full source
+                  name on hover. Matches the FeatDetailPanel pattern. */}
+              {spell.sourceId ? (
+                <Link
+                  to={`/sources/view/${spell.sourceId}`}
+                  className={cn(
+                    "font-bold text-gold/70 hover:text-gold underline-offset-2 hover:underline transition-colors",
+                    size === "compact" ? "text-xs" : "text-sm",
+                  )}
+                  title={String(sourceById[String(spell.sourceId ?? '')]?.name || sourceById[String(spell.sourceId ?? '')]?.shortName || renderSourceAbbreviation(spell))}
+                >
+                  {renderSourceAbbreviation(spell)}
+                </Link>
+              ) : (
+                <span className={cn(
+                  "font-bold text-gold/70",
+                  size === "compact" ? "text-xs" : "text-sm",
+                )}>{renderSourceAbbreviation(spell)}</span>
+              )}
               {(spell.page || (spell as any).foundryShell?.source?.page) ? (
                 <span className={cn(
                   "text-ink/35",

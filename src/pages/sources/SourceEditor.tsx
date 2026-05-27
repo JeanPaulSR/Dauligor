@@ -178,12 +178,18 @@ export default function SourceEditor({ userProfile }: { userProfile: any }) {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="abbreviation">Abbreviation</Label>
-                  <Input 
+                  {/* No `uppercase` CSS transform — source authors
+                      sometimes ship mixed-case abbreviations like
+                      "GH:CG" or "PHB'14" and force-uppercasing them
+                      visually was misleading the importer's exact
+                      source match (it normalizes on its side, but
+                      the field shouldn't lie about what's stored). */}
+                  <Input
                     id="abbreviation"
                     value={formData.abbreviation}
                     onChange={e => setFormData({...formData, abbreviation: e.target.value})}
                     placeholder="e.g. VSS"
-                    className="bg-card/50 border-gold/10 uppercase"
+                    className="bg-card/50 border-gold/10"
                   />
                 </div>
                 <div className="space-y-2">

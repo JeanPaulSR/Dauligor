@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { BookOpen } from 'lucide-react';
 import { bbcodeToHtml } from '../../lib/bbcode';
 import { cn } from '../../lib/utils';
@@ -175,7 +176,22 @@ export default function FeatDetailPanel({
               <h2 className="font-serif text-3xl xl:text-4xl font-bold uppercase tracking-tight text-gold">
                 {feat.name}
               </h2>
-              <span className="text-sm font-bold text-gold/70">{sourceAbbrev}</span>
+              {/* Source abbreviation links through to the source's
+                  detail page. Native `title` attribute provides the
+                  full source name on hover — chose native over the
+                  shadcn Tooltip to keep the header lightweight; we
+                  can promote later if more controls want it. */}
+              {feat.sourceId ? (
+                <Link
+                  to={`/sources/view/${feat.sourceId}`}
+                  className="text-sm font-bold text-gold/70 hover:text-gold underline-offset-2 hover:underline transition-colors"
+                  title={String(sourceRecord?.name || sourceRecord?.shortName || sourceAbbrev)}
+                >
+                  {sourceAbbrev}
+                </Link>
+              ) : (
+                <span className="text-sm font-bold text-gold/70">{sourceAbbrev}</span>
+              )}
               {feat.page ? (
                 <span className="text-sm text-ink/35">p{feat.page}</span>
               ) : null}

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Lock, Sparkles, Star, X, RotateCcw } from 'lucide-react';
+import { Lock, Star, X } from 'lucide-react';
 import { auth } from '../../lib/firebase';
 import { fetchCollection } from '../../lib/d1';
 import { cn } from '../../lib/utils';
@@ -251,17 +251,12 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
         </span>
       ),
     },
-    {
-      key: 'flags',
-      label: 'Flags',
-      width: '52px',
-      render: (feat) => (
-        <div className="flex items-center gap-0.5 justify-self-center text-ink/50">
-          {feat.hasActivities && <Sparkles className="w-3 h-3 text-gold/60" aria-label="Activities" />}
-          {feat.hasUses && <RotateCcw className="w-3 h-3 text-sky-400/70" aria-label="Uses" />}
-        </div>
-      ),
-    },
+    // The legacy "Flags" column with Sparkles/RotateCcw indicators is
+    // gone — it cluttered the row without telling the author anything
+    // they couldn't see by clicking through. SpellList already follows
+    // this pattern; FeatList now matches it. The favorite star + the
+    // prerequisite lock chip in the name column are the only row
+    // affordances retained.
   ]), [isFavorite, sourceById]);
 
   // ─── Favorites pane row render ──────────────────────────────
