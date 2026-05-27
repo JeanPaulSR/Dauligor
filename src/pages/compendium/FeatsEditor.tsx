@@ -1309,6 +1309,21 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
                   onColumnsChanged={() => setScalingLoadTick((t) => t + 1)}
                   label={scalingLabel}
                 />
+              ) : scalingAllowed ? (
+                // Placeholder so the column-authoring affordance is
+                // visible BEFORE first save. The real panel needs a
+                // saved parent_id to FK against, so we render an
+                // inert hint card until the user saves the feat.
+                // Without this, the entire feature was invisible to
+                // anyone who hadn't already saved a draft.
+                <div className="p-4 border border-gold/10 bg-card/30 rounded-xl space-y-2">
+                  <h2 className="text-[10px] font-bold uppercase tracking-[0.16em] text-gold/70">{scalingLabel}</h2>
+                  <p className="text-[11px] text-ink/50 italic leading-relaxed">
+                    Save this {ft === 'race' ? 'race' : ft === 'background' ? 'background' : 'feat'} first
+                    to add scaling columns. Columns appear here once the row
+                    has a stable id to attach to.
+                  </p>
+                </div>
               ) : null}
             </div>
           </div>
