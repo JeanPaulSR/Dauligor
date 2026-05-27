@@ -1,7 +1,112 @@
 import { MODULE_ID } from "./constants.js";
 
 const ENTITY_REFERENCE_PATTERN = /@(?<kind>class|subclass|feature|option|source)\[(?<id>[^[\]]+)\](?:\{(?<label>[^{}]*)\})?/gi;
-const SCALAR_REFERENCE_PATTERN = /@(?:prof(?:\.(?:term|flat|dice|multiplier))?|level|ability\.(?:str|dex|con|int|wis|cha)\.(?:score|mod)|attr\.hp\.(?:value|max|temp|tempmax)|class\.[a-z0-9-]+\.(?:level|tier|hit-die|hit-die-faces|hit-die-number)|subclass\.[a-z0-9-]+\.level|scale\.[a-z0-9-]+\.[a-z0-9-]+(?:\.(?:number|die|faces|denom))?)/gi;
+
+// ─── Shorthand vocabularies ──────────────────────────────────────────
+//
+// Keep these in sync with `src/lib/referenceSyntax.ts` and
+// `api/_lib/_referenceSyntax.ts`. The three files are hand-mirrored —
+// the app-side reference sheet documents what the user types, the
+// app-side resolver matches the editor preview, and THIS module
+// resolves at Foundry import time. If the three drift the user will
+// see the shortcut resolve in the editor but Foundry will choke.
+
+const SKILL_SHORTCUTS = {
+  acrobatics: "acr",
+  "animal-handling": "ani",
+  arcana: "arc",
+  athletics: "ath",
+  deception: "dec",
+  history: "his",
+  insight: "ins",
+  intimidation: "itm",
+  investigation: "inv",
+  medicine: "med",
+  nature: "nat",
+  perception: "prc",
+  performance: "prf",
+  persuasion: "per",
+  religion: "rel",
+  "sleight-of-hand": "slt",
+  stealth: "ste",
+  survival: "sur"
+};
+
+const TOOL_SHORTCUTS = {
+  "alchemists-supplies": "alch",
+  "brewers-supplies": "brew",
+  "calligraphers-supplies": "call",
+  "carpenters-tools": "carp",
+  "cartographers-tools": "cart",
+  "cobblers-tools": "cobb",
+  "cooks-utensils": "cook",
+  "disguise-kit": "disg",
+  "forgery-kit": "forg",
+  "glassblowers-tools": "glas",
+  "herbalism-kit": "herb",
+  "jewelers-tools": "jewl",
+  "land-vehicles": "land",
+  "leatherworkers-tools": "leat",
+  "masons-tools": "maso",
+  "navigators-tools": "navg",
+  "painters-supplies": "pain",
+  "poisoners-kit": "pois",
+  "potters-tools": "pott",
+  "smiths-tools": "smit",
+  "thieves-tools": "thie",
+  "tinkers-tools": "tink",
+  "water-vehicles": "watr",
+  "weavers-tools": "weav",
+  "woodcarvers-tools": "wood"
+};
+
+const LANGUAGE_SHORTCUTS = {
+  abyssal: "abyssal",
+  celestial: "celestial",
+  common: "common",
+  // `deep-speech` is the natural English; `deep` mirrors Foundry's stem.
+  "deep-speech": "deep",
+  deep: "deep",
+  draconic: "draconic",
+  dwarvish: "dwarvish",
+  elvish: "elvish",
+  giant: "giant",
+  gnomish: "gnomish",
+  goblin: "goblin",
+  halfling: "halfling",
+  infernal: "infernal",
+  orc: "orc",
+  primordial: "primordial",
+  sylvan: "sylvan",
+  undercommon: "undercommon"
+};
+
+// Negative lookahead `(?![a-z0-9.-])` on each shorthand alternative
+// prevents partial matches — `@stealth` must not match inside
+// `@stealthy` or `@stealth.foo`. Same discipline applied app-side.
+function buildAlternation(keys) {
+  return keys.map((k) => k.replace(/-/g, "\\-")).join("|");
+}
+const SKILL_ALTERNATION = buildAlternation(Object.keys(SKILL_SHORTCUTS));
+const TOOL_ALTERNATION = buildAlternation(Object.keys(TOOL_SHORTCUTS));
+const LANGUAGE_ALTERNATION = buildAlternation(Object.keys(LANGUAGE_SHORTCUTS));
+
+const SCALAR_REFERENCE_PATTERN = new RegExp(
+  "@(?:" +
+    "prof(?:\\.(?:term|flat|dice|multiplier))?" +
+    "|level" +
+    "|ability\\.(?:str|dex|con|int|wis|cha)\\.(?:score|mod)" +
+    "|(?:str|dex|con|int|wis|cha)\\.(?:score|mod)(?![a-z0-9.-])" +
+    "|attr\\.hp\\.(?:value|max|temp|tempmax)" +
+    "|class\\.[a-z0-9-]+\\.(?:level|tier|hit-die|hit-die-faces|hit-die-number)" +
+    "|subclass\\.[a-z0-9-]+\\.level" +
+    "|scale\\.[a-z0-9-]+\\.[a-z0-9-]+(?:\\.(?:number|die|faces|denom))?" +
+    "|(?:" + SKILL_ALTERNATION + ")(?![a-z0-9.-])" +
+    "|(?:" + TOOL_ALTERNATION + ")(?![a-z0-9.-])" +
+    "|(?:" + LANGUAGE_ALTERNATION + ")(?![a-z0-9.-])" +
+  ")",
+  "gi"
+);
 
 const TEXT_REFERENCE_PATH_PATTERNS = [
   /^system\.description\.(value|chat)$/u,
@@ -107,14 +212,88 @@ function normalizeTextReferences(text, context) {
     const resolved = resolveScalarReference(match, context, { mode: "text" });
     return resolved ?? match;
   });
+  normalized = applyClassColumnShorthand(normalized, context, { mode: "text" });
   return normalized;
 }
 
 function normalizeFormulaReferences(text, context) {
-  return String(text ?? "").replace(SCALAR_REFERENCE_PATTERN, (match) => {
+  let normalized = String(text ?? "").replace(SCALAR_REFERENCE_PATTERN, (match) => {
     const resolved = resolveScalarReference(match, context, { mode: "formula" });
     return resolved ?? match;
   });
+  normalized = applyClassColumnShorthand(normalized, context, { mode: "formula" });
+  return normalized;
+}
+
+/**
+ * Second-pass shorthand for class scale columns.
+ *
+ * When the current item is a class (or a feature/option embedded on a
+ * class), bare `@<column-identifier>` resolves to
+ * `@scale.<classIdentifier>.<column>`. We can only do this when we
+ * know which class the item belongs to AND we have that class's
+ * column list — otherwise we'd be guessing what `@foo` means.
+ *
+ * Runs AFTER the scalar pattern pass so global tokens (skills /
+ * tools / languages / abilities) win over class-local column names —
+ * a class shouldn't author a column called `acrobatics` and expect it
+ * to mean its own scale rather than the actor's skill.
+ */
+function applyClassColumnShorthand(text, context, { mode = "formula" } = {}) {
+  if (!text || typeof text !== "string" || !text.includes("@")) return text;
+  const classDoc = findParentClassForCurrentItem(context);
+  if (!classDoc) return text;
+  const classIdentifier = getDocumentIdentifier(classDoc);
+  if (!classIdentifier) return text;
+  const columnIds = getClassColumnIdentifiers(classDoc);
+  if (!columnIds.size) return text;
+  const slugClass = slugify(classIdentifier);
+
+  // Match any `@<slug>` (optionally with `.number`/`.die`/`.faces`/
+  // `.denom`). Negative lookahead keeps `@foo-bar` from partial-
+  // matching as `@foo` and the `-` keeps multi-word column ids whole.
+  const pattern = /@([a-z][a-z0-9-]*)(?:\.(number|die|faces|denom))?(?![a-z0-9.-])/gi;
+  return text.replace(pattern, (match, slug, suffix) => {
+    const slugLower = String(slug).toLowerCase();
+    if (!columnIds.has(slugLower)) return match;
+    const sfx = suffix ? `.${suffix}` : "";
+    return formatScalarResolution(`@scale.${slugClass}.${slugLower}${sfx}`, mode);
+  });
+}
+
+function findParentClassForCurrentItem(context) {
+  const current = context?.currentItem;
+  if (!current) return null;
+
+  // The item IS the class.
+  if (getDocumentType(current) === "class") return current;
+
+  // Embedded feature/option/etc. — look for the parent class via the
+  // canonical sourceId chain in our module's flags. Falls back to a
+  // direct type === "class" candidate if no flag exists yet (older
+  // exports won't have the `classSourceId` flag stamped on every
+  // child item).
+  const classSourceId = getFlag(current, "classSourceId");
+  const candidates = getDocumentCandidates(context);
+  if (classSourceId) {
+    const matched = candidates.find((document) =>
+      getDocumentType(document) === "class" && getDocumentSourceId(document) === classSourceId
+    );
+    if (matched) return matched;
+  }
+  return candidates.find((document) => getDocumentType(document) === "class") ?? null;
+}
+
+function getClassColumnIdentifiers(classDoc) {
+  const ids = new Set();
+  if (!classDoc) return ids;
+  const advancements = normalizeAdvancementStructure(getDocumentProperty(classDoc, "system.advancement"));
+  for (const advancement of Object.values(advancements)) {
+    if (advancement?.type !== "ScaleValue") continue;
+    const identifier = trimString(advancement?.configuration?.identifier);
+    if (identifier) ids.add(slugify(identifier));
+  }
+  return ids;
 }
 
 function resolveEntityReference(match, kind, sourceId, label, context) {
@@ -136,6 +315,16 @@ function resolveScalarReference(reference, context, { mode = "formula" } = {}) {
   if (ref === "@level") return formatScalarResolution("@details.level", mode);
 
   let match = /^@ability\.(str|dex|con|int|wis|cha)\.(score|mod)$/u.exec(ref);
+  if (match) {
+    const [, ability, property] = match;
+    const nativePath = property === "score"
+      ? `@abilities.${ability}.value`
+      : `@abilities.${ability}.mod`;
+    return formatScalarResolution(nativePath, mode);
+  }
+
+  // Short ability form: `@str.mod` / `@str.score`.
+  match = /^@(str|dex|con|int|wis|cha)\.(score|mod)$/u.exec(ref);
   if (match) {
     const [, ability, property] = match;
     const nativePath = property === "score"
@@ -167,6 +356,20 @@ function resolveScalarReference(reference, context, { mode = "formula" } = {}) {
   if (match) {
     const [, parentIdentifier, scaleIdentifier, property] = match;
     return resolveScaleReference(parentIdentifier, scaleIdentifier, property ?? null, context, { mode });
+  }
+
+  // Bare-name shorthand — skills, tools, languages. All collapse to a
+  // single Foundry path; the regex already validated the token is in
+  // one of the dictionaries, so a hit here is a guaranteed lookup.
+  const bare = ref.replace(/^@/, "");
+  if (Object.prototype.hasOwnProperty.call(SKILL_SHORTCUTS, bare)) {
+    return formatScalarResolution(`@skills.${SKILL_SHORTCUTS[bare]}.total`, mode);
+  }
+  if (Object.prototype.hasOwnProperty.call(TOOL_SHORTCUTS, bare)) {
+    return formatScalarResolution(`@tools.${TOOL_SHORTCUTS[bare]}.total`, mode);
+  }
+  if (Object.prototype.hasOwnProperty.call(LANGUAGE_SHORTCUTS, bare)) {
+    return formatScalarResolution(`@traits.languages.value.${LANGUAGE_SHORTCUTS[bare]}`, mode);
   }
 
   return null;

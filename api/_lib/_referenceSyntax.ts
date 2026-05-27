@@ -59,8 +59,197 @@ const ABILITY_LABELS: Record<(typeof ABILITY_ORDER)[number], string> = {
   cha: "Charisma",
 };
 
-const SCALAR_REFERENCE_PATTERN =
-  /@(?:prof(?:\.(?:term|flat|dice|multiplier))?|level|ability\.(?:str|dex|con|int|wis|cha)\.(?:score|mod)|attr\.hp\.(?:value|max|temp|tempmax)|class\.[a-z0-9-]+\.(?:level|tier|hit-die|hit-die-faces|hit-die-number)|subclass\.[a-z0-9-]+\.level|scale\.[a-z0-9-]+\.[a-z0-9-]+(?:\.(?:number|die|faces|denom))?)/gi;
+// ─── Shorthand vocabularies ──────────────────────────────────────────
+//
+// Each map keys the short authoring form (what the user types) to the
+// Foundry-native fragment. Anything in these maps is recognised by the
+// scalar regex and resolved at export / display time. Keep these as
+// the single source of truth: the sheet UI, the regex builder, and
+// the resolver all read from these constants — keeping them in sync
+// is a manual edit on every site otherwise.
+//
+// Naming convention:
+//   - Skills: full human name, hyphen-separated (`animal-handling`).
+//   - Tools : possessive dropped (`alchemists-supplies`, not
+//             `alchemist-s-supplies`) so the shortcut reads naturally.
+//   - Lang  : Foundry's stem (`deep`) plus an alias for the natural
+//             name (`deep-speech` → also resolves to `deep`).
+
+const SKILL_SHORTCUTS: Record<string, string> = {
+  acrobatics: "acr",
+  "animal-handling": "ani",
+  arcana: "arc",
+  athletics: "ath",
+  deception: "dec",
+  history: "his",
+  insight: "ins",
+  intimidation: "itm",
+  investigation: "inv",
+  medicine: "med",
+  nature: "nat",
+  perception: "prc",
+  performance: "prf",
+  persuasion: "per",
+  religion: "rel",
+  "sleight-of-hand": "slt",
+  stealth: "ste",
+  survival: "sur",
+};
+
+const TOOL_SHORTCUTS: Record<string, string> = {
+  "alchemists-supplies": "alch",
+  "brewers-supplies": "brew",
+  "calligraphers-supplies": "call",
+  "carpenters-tools": "carp",
+  "cartographers-tools": "cart",
+  "cobblers-tools": "cobb",
+  "cooks-utensils": "cook",
+  "disguise-kit": "disg",
+  "forgery-kit": "forg",
+  "glassblowers-tools": "glas",
+  "herbalism-kit": "herb",
+  "jewelers-tools": "jewl",
+  "land-vehicles": "land",
+  "leatherworkers-tools": "leat",
+  "masons-tools": "maso",
+  "navigators-tools": "navg",
+  "painters-supplies": "pain",
+  "poisoners-kit": "pois",
+  "potters-tools": "pott",
+  "smiths-tools": "smit",
+  "thieves-tools": "thie",
+  "tinkers-tools": "tink",
+  "water-vehicles": "watr",
+  "weavers-tools": "weav",
+  "woodcarvers-tools": "wood",
+};
+
+const LANGUAGE_SHORTCUTS: Record<string, string> = {
+  abyssal: "abyssal",
+  celestial: "celestial",
+  common: "common",
+  // "Deep Speech" — natural English alias maps to Foundry's stem `deep`.
+  "deep-speech": "deep",
+  deep: "deep",
+  draconic: "draconic",
+  dwarvish: "dwarvish",
+  elvish: "elvish",
+  giant: "giant",
+  gnomish: "gnomish",
+  goblin: "goblin",
+  halfling: "halfling",
+  infernal: "infernal",
+  orc: "orc",
+  primordial: "primordial",
+  sylvan: "sylvan",
+  undercommon: "undercommon",
+};
+
+/**
+ * Display labels for the reference sheet — keyed by Foundry stem so a
+ * single map covers both `deep` and `deep-speech` aliases.
+ */
+const LANGUAGE_LABELS: Record<string, string> = {
+  abyssal: "Abyssal",
+  celestial: "Celestial",
+  common: "Common",
+  deep: "Deep Speech",
+  draconic: "Draconic",
+  dwarvish: "Dwarvish",
+  elvish: "Elvish",
+  giant: "Giant",
+  gnomish: "Gnomish",
+  goblin: "Goblin",
+  halfling: "Halfling",
+  infernal: "Infernal",
+  orc: "Orc",
+  primordial: "Primordial",
+  sylvan: "Sylvan",
+  undercommon: "Undercommon",
+};
+
+const SKILL_LABELS: Record<string, string> = {
+  acrobatics: "Acrobatics",
+  "animal-handling": "Animal Handling",
+  arcana: "Arcana",
+  athletics: "Athletics",
+  deception: "Deception",
+  history: "History",
+  insight: "Insight",
+  intimidation: "Intimidation",
+  investigation: "Investigation",
+  medicine: "Medicine",
+  nature: "Nature",
+  perception: "Perception",
+  performance: "Performance",
+  persuasion: "Persuasion",
+  religion: "Religion",
+  "sleight-of-hand": "Sleight of Hand",
+  stealth: "Stealth",
+  survival: "Survival",
+};
+
+const TOOL_LABELS: Record<string, string> = {
+  "alchemists-supplies": "Alchemist's Supplies",
+  "brewers-supplies": "Brewer's Supplies",
+  "calligraphers-supplies": "Calligrapher's Supplies",
+  "carpenters-tools": "Carpenter's Tools",
+  "cartographers-tools": "Cartographer's Tools",
+  "cobblers-tools": "Cobbler's Tools",
+  "cooks-utensils": "Cook's Utensils",
+  "disguise-kit": "Disguise Kit",
+  "forgery-kit": "Forgery Kit",
+  "glassblowers-tools": "Glassblower's Tools",
+  "herbalism-kit": "Herbalism Kit",
+  "jewelers-tools": "Jeweler's Tools",
+  "land-vehicles": "Land Vehicles",
+  "leatherworkers-tools": "Leatherworker's Tools",
+  "masons-tools": "Mason's Tools",
+  "navigators-tools": "Navigator's Tools",
+  "painters-supplies": "Painter's Supplies",
+  "poisoners-kit": "Poisoner's Kit",
+  "potters-tools": "Potter's Tools",
+  "smiths-tools": "Smith's Tools",
+  "thieves-tools": "Thieves' Tools",
+  "tinkers-tools": "Tinker's Tools",
+  "water-vehicles": "Water Vehicles",
+  "weavers-tools": "Weaver's Tools",
+  "woodcarvers-tools": "Woodcarver's Tools",
+};
+
+// ─── Scalar regex ────────────────────────────────────────────────────
+//
+// Build the SCALAR_REFERENCE_PATTERN from the constants above so adding
+// a new skill / tool / language only requires editing one place. The
+// negative lookahead `(?![a-z0-9.-])` on each shorthand alternative
+// prevents partial matches into longer tokens — `@stealth` must not
+// be matched inside `@stealthy` or `@stealth.foo`.
+
+function buildAlternation(keys: string[]): string {
+  return keys.map((k) => k.replace(/-/g, "\\-")).join("|");
+}
+
+const SHORT_ABILITY_ALTERNATION = "(?:str|dex|con|int|wis|cha)\\.(?:score|mod)";
+const SKILL_ALTERNATION = buildAlternation(Object.keys(SKILL_SHORTCUTS));
+const TOOL_ALTERNATION = buildAlternation(Object.keys(TOOL_SHORTCUTS));
+const LANGUAGE_ALTERNATION = buildAlternation(Object.keys(LANGUAGE_SHORTCUTS));
+
+const SCALAR_REFERENCE_PATTERN = new RegExp(
+  "@(?:" +
+    "prof(?:\\.(?:term|flat|dice|multiplier))?" +
+    "|level" +
+    "|ability\\.(?:str|dex|con|int|wis|cha)\\.(?:score|mod)" +
+    "|" + SHORT_ABILITY_ALTERNATION + "(?![a-z0-9.-])" +
+    "|attr\\.hp\\.(?:value|max|temp|tempmax)" +
+    "|class\\.[a-z0-9-]+\\.(?:level|tier|hit-die|hit-die-faces|hit-die-number)" +
+    "|subclass\\.[a-z0-9-]+\\.level" +
+    "|scale\\.[a-z0-9-]+\\.[a-z0-9-]+(?:\\.(?:number|die|faces|denom))?" +
+    "|(?:" + SKILL_ALTERNATION + ")(?![a-z0-9.-])" +
+    "|(?:" + TOOL_ALTERNATION + ")(?![a-z0-9.-])" +
+    "|(?:" + LANGUAGE_ALTERNATION + ")(?![a-z0-9.-])" +
+  ")",
+  "gi",
+);
 
 export function slugifyReferenceSegment(value: string | undefined | null): string {
   return String(value ?? "")
@@ -73,11 +262,24 @@ export function slugifyReferenceSegment(value: string | undefined | null): strin
 export function normalizeSemanticReferenceText(
   value: string | undefined | null,
   mode: ReferenceMode = "formula",
+  context?: ReferenceContext,
 ): string {
-  return String(value ?? "").replace(SCALAR_REFERENCE_PATTERN, (match) => {
+  let normalized = String(value ?? "").replace(SCALAR_REFERENCE_PATTERN, (match) => {
     const resolved = resolveScalarReference(match, mode);
     return resolved ?? match;
   });
+
+  // Class-column shorthand — context-dependent, runs after the scalar
+  // pass so global tokens (skills / tools / languages / abilities) win
+  // over class-local column names. Only activates when we have BOTH a
+  // class identifier AND a list of known columns for it; otherwise we
+  // never speculate about what `@<slug>` might mean. The user has to
+  // use the full `@scale.<class>.<col>` form outside the class context.
+  if (context?.classIdentifier && context.classColumns?.length) {
+    normalized = applyClassColumnShorthand(normalized, mode, context);
+  }
+
+  return normalized;
 }
 
 export function normalizeSpellFormulaShortcuts(
@@ -113,6 +315,35 @@ export function normalizeSpellFormulaShortcuts(
   return normalized;
 }
 
+function applyClassColumnShorthand(
+  value: string,
+  mode: ReferenceMode,
+  context: ReferenceContext,
+): string {
+  const classIdentifier = slugifyReferenceSegment(context.classIdentifier) || "";
+  if (!classIdentifier) return value;
+
+  // Build the set of valid column identifiers for THIS class. Anything
+  // not in this set is left alone (an unknown `@foo` may be a typo, a
+  // future shortcut, or content we shouldn't touch — better to no-op
+  // than to silently rewrite into a nonexistent scale path).
+  const validColumns = new Set<string>();
+  for (const column of context.classColumns ?? []) {
+    const slug = getColumnIdentifier(column);
+    if (slug) validColumns.add(slug);
+  }
+  if (!validColumns.size) return value;
+
+  // Same negative-lookahead discipline as the scalar regex: don't
+  // partial-match `@cantrip-damage-bonus` as `@cantrip-damage`.
+  const pattern = /@([a-z][a-z0-9-]*)(?![a-z0-9.-])/gi;
+  return value.replace(pattern, (match, slug) => {
+    const normalized = String(slug).toLowerCase();
+    if (!validColumns.has(normalized)) return match;
+    return formatForMode(`@scale.${classIdentifier}.${normalized}`, mode);
+  });
+}
+
 function resolveScalarReference(reference: string, mode: ReferenceMode): string | null {
   const ref = reference.trim().toLowerCase();
 
@@ -124,6 +355,18 @@ function resolveScalarReference(reference: string, mode: ReferenceMode): string 
   if (ref === "@level") return formatForMode("@details.level", mode);
 
   let match = /^@ability\.(str|dex|con|int|wis|cha)\.(score|mod)$/u.exec(ref);
+  if (match) {
+    const [, ability, property] = match;
+    return formatForMode(
+      property === "score" ? `@abilities.${ability}.value` : `@abilities.${ability}.mod`,
+      mode,
+    );
+  }
+
+  // Short ability form: `@str.mod` / `@str.score`. Same Foundry target
+  // as the long `@ability.X.Y` form above — both authoring shapes are
+  // supported so existing content keeps working.
+  match = /^@(str|dex|con|int|wis|cha)\.(score|mod)$/u.exec(ref);
   if (match) {
     const [, ability, property] = match;
     return formatForMode(
@@ -168,6 +411,20 @@ function resolveScalarReference(reference: string, mode: ReferenceMode): string 
     return formatForMode(next, mode);
   }
 
+  // Bare-name shortcuts — skills, tools, languages. These all collapse
+  // to a single Foundry path with no parameters, so the regex matched
+  // the full token and we just need to look it up.
+  const bare = ref.replace(/^@/, "");
+  if (Object.prototype.hasOwnProperty.call(SKILL_SHORTCUTS, bare)) {
+    return formatForMode(`@skills.${SKILL_SHORTCUTS[bare]}.total`, mode);
+  }
+  if (Object.prototype.hasOwnProperty.call(TOOL_SHORTCUTS, bare)) {
+    return formatForMode(`@tools.${TOOL_SHORTCUTS[bare]}.total`, mode);
+  }
+  if (Object.prototype.hasOwnProperty.call(LANGUAGE_SHORTCUTS, bare)) {
+    return formatForMode(`@traits.languages.value.${LANGUAGE_SHORTCUTS[bare]}`, mode);
+  }
+
   return null;
 }
 
@@ -197,15 +454,15 @@ export function buildReferenceExamples(context: ReferenceContext = {}): Referenc
     },
     {
       label: `${spellcastingAbility.toUpperCase()} Modifier`,
-      semantic: `@ability.${spellcastingAbility}.mod`,
+      semantic: `@${spellcastingAbility}.mod`,
       native: `@abilities.${spellcastingAbility}.mod`,
-      description: "Best default for spellcasting ability modifiers and limited uses.",
+      description: "Short form. Best default for spellcasting ability modifiers and limited uses.",
     },
     {
       label: "Ability Score",
-      semantic: "@ability.int.score",
+      semantic: "@int.score",
       native: "@abilities.int.value",
-      description: "Raw score instead of modifier.",
+      description: "Raw score instead of modifier. (Long form `@ability.int.score` also accepted.)",
     },
     {
       label: "Current HP",
@@ -290,14 +547,12 @@ export function buildReferenceSheetSections(
 ): ReferenceSheetSection[] {
   const {
     classIdentifier,
-    classLabel,
     subclassIdentifier,
-    subclassLabel,
-    spellcastingAbility,
     scaleIdentifier,
   } = getReferenceIdentifiers(context);
 
   const columns = buildClassColumnRows(context.classColumns || [], classIdentifier);
+  const columnHasShorthand = Boolean(context.classIdentifier && context.classColumns?.length);
 
   return [
     {
@@ -365,21 +620,16 @@ export function buildReferenceSheetSections(
       id: "attributes",
       title: "Attributes",
       description:
-        "The following are the reference to each attribute. You can reference the score and modifier to each one with the following formulas. Replace [ATTR] with the 3-letter ability identifier.",
+        "Short form drops the `ability.` prefix entirely. Replace [ATTR] with the 3-letter ability identifier (str, dex, con, int, wis, cha).",
       rows: [
         {
-          label: "Ability Identifiers",
-          authoring: "str, dex, con, int, wis, cha",
-          foundry: "str, dex, con, int, wis, cha",
-        },
-        {
           label: "Ability Score",
-          authoring: "@ability.[ATTR].score",
+          authoring: "@[ATTR].score",
           foundry: "@abilities.[ATTR].value",
         },
         {
           label: "Ability Modifier",
-          authoring: "@ability.[ATTR].mod",
+          authoring: "@[ATTR].mod",
           foundry: "@abilities.[ATTR].mod",
         },
         {
@@ -393,132 +643,112 @@ export function buildReferenceSheetSections(
           foundry: "@attributes.ac.base",
         },
       ],
+      notes: [
+        "Long form `@ability.[ATTR].mod` / `@ability.[ATTR].score` is still accepted for existing content.",
+      ],
     },
     {
       id: "skills",
       title: "Skills",
-      description: "Skill references currently follow Foundry-native roll-data paths.",
+      description:
+        "Type the skill name. The exporter translates to Foundry's 3-letter code automatically.",
       isDropdown: true,
       isSplit: true,
-      rows: [
-        { label: "Acrobatics", authoring: "@skills.acr.total", foundry: "@skills.acr.total" },
-        { label: "Animal Handling", authoring: "@skills.ani.total", foundry: "@skills.ani.total" },
-        { label: "Arcana", authoring: "@skills.arc.total", foundry: "@skills.arc.total" },
-        { label: "Athletics", authoring: "@skills.ath.total", foundry: "@skills.ath.total" },
-        { label: "Deception", authoring: "@skills.dec.total", foundry: "@skills.dec.total" },
-        { label: "History", authoring: "@skills.his.total", foundry: "@skills.his.total" },
-        { label: "Insight", authoring: "@skills.ins.total", foundry: "@skills.ins.total" },
-        { label: "Intimidation", authoring: "@skills.itm.total", foundry: "@skills.itm.total" },
-        { label: "Investigation", authoring: "@skills.inv.total", foundry: "@skills.inv.total" },
-        { label: "Medicine", authoring: "@skills.med.total", foundry: "@skills.med.total" },
-        { label: "Nature", authoring: "@skills.nat.total", foundry: "@skills.nat.total" },
-        { label: "Perception", authoring: "@skills.prc.total", foundry: "@skills.prc.total" },
-        { label: "Performance", authoring: "@skills.prf.total", foundry: "@skills.prf.total" },
-        { label: "Persuasion", authoring: "@skills.per.total", foundry: "@skills.per.total" },
-        { label: "Religion", authoring: "@skills.rel.total", foundry: "@skills.rel.total" },
-        { label: "Sleight of Hand", authoring: "@skills.slt.total", foundry: "@skills.slt.total" },
-        { label: "Stealth", authoring: "@skills.ste.total", foundry: "@skills.ste.total" },
-        { label: "Survival", authoring: "@skills.sur.total", foundry: "@skills.sur.total" },
-      ],
+      rows: Object.keys(SKILL_SHORTCUTS).map((slug) => ({
+        label: SKILL_LABELS[slug] || slug,
+        authoring: `@${slug}`,
+        foundry: `@skills.${SKILL_SHORTCUTS[slug]}.total`,
+      })),
     },
     {
       id: "tools",
       title: "Tools",
-      description: "Tool references follow Foundry-native roll-data paths.",
+      description:
+        "Type the tool's slug (drop the apostrophe). The exporter maps to Foundry's 4-letter code.",
       isDropdown: true,
       isSplit: true,
-      rows: [
-        { label: "Alchemist's Supplies", authoring: "@tools.alch.total", foundry: "@tools.alch.total" },
-        { label: "Brewer's Supplies", authoring: "@tools.brew.total", foundry: "@tools.brew.total" },
-        { label: "Calligrapher's Supplies", authoring: "@tools.call.total", foundry: "@tools.call.total" },
-        { label: "Carpenter's Tools", authoring: "@tools.carp.total", foundry: "@tools.carp.total" },
-        { label: "Cartographer's Tools", authoring: "@tools.cart.total", foundry: "@tools.cart.total" },
-        { label: "Cobbler's Tools", authoring: "@tools.cobb.total", foundry: "@tools.cobb.total" },
-        { label: "Cook's Utensils", authoring: "@tools.cook.total", foundry: "@tools.cook.total" },
-        { label: "Disguise Kit", authoring: "@tools.disg.total", foundry: "@tools.disg.total" },
-        { label: "Forgery Kit", authoring: "@tools.forg.total", foundry: "@tools.forg.total" },
-        { label: "Glassblower's Tools", authoring: "@tools.glas.total", foundry: "@tools.glas.total" },
-        { label: "Herbalism Kit", authoring: "@tools.herb.total", foundry: "@tools.herb.total" },
-        { label: "Jeweler's Tools", authoring: "@tools.jewl.total", foundry: "@tools.jewl.total" },
-        { label: "Land Vehicles", authoring: "@tools.land.total", foundry: "@tools.land.total" },
-        { label: "Leatherworker's Tools", authoring: "@tools.leat.total", foundry: "@tools.leat.total" },
-        { label: "Mason's Tools", authoring: "@tools.maso.total", foundry: "@tools.maso.total" },
-        { label: "Navigator's Tools", authoring: "@tools.navg.total", foundry: "@tools.navg.total" },
-        { label: "Painter's Supplies", authoring: "@tools.pain.total", foundry: "@tools.pain.total" },
-        { label: "Poisoner's Kit", authoring: "@tools.pois.total", foundry: "@tools.pois.total" },
-        { label: "Potter's Tools", authoring: "@tools.pott.total", foundry: "@tools.pott.total" },
-        { label: "Smith's Tools", authoring: "@tools.smit.total", foundry: "@tools.smit.total" },
-        { label: "Thieves' Tools", authoring: "@tools.thie.total", foundry: "@tools.thie.total" },
-        { label: "Tinker's Tools", authoring: "@tools.tink.total", foundry: "@tools.tink.total" },
-        { label: "Water Vehicles", authoring: "@tools.watr.total", foundry: "@tools.watr.total" },
-        { label: "Weaver's Tools", authoring: "@tools.weav.total", foundry: "@tools.weav.total" },
-        { label: "Woodcarver's Tools", authoring: "@tools.wood.total", foundry: "@tools.wood.total" },
-      ],
+      rows: Object.keys(TOOL_SHORTCUTS).map((slug) => ({
+        label: TOOL_LABELS[slug] || slug,
+        authoring: `@${slug}`,
+        foundry: `@tools.${TOOL_SHORTCUTS[slug]}.total`,
+      })),
     },
     {
       id: "languages",
       title: "Languages",
-      description: "Language knowledge references.",
+      description:
+        "Type the language name. `@deep-speech` resolves to the same Foundry stem as `@deep`.",
       isDropdown: true,
       isSplit: true,
-      rows: [
-        { label: "Abyssal", authoring: "@traits.languages.value.abyssal", foundry: "@traits.languages.value.abyssal" },
-        { label: "Celestial", authoring: "@traits.languages.value.celestial", foundry: "@traits.languages.value.celestial" },
-        { label: "Common", authoring: "@traits.languages.value.common", foundry: "@traits.languages.value.common" },
-        { label: "Deep Speech", authoring: "@traits.languages.value.deep", foundry: "@traits.languages.value.deep" },
-        { label: "Draconic", authoring: "@traits.languages.value.draconic", foundry: "@traits.languages.value.draconic" },
-        { label: "Dwarvish", authoring: "@traits.languages.value.dwarvish", foundry: "@traits.languages.value.dwarvish" },
-        { label: "Elvish", authoring: "@traits.languages.value.elvish", foundry: "@traits.languages.value.elvish" },
-        { label: "Giant", authoring: "@traits.languages.value.giant", foundry: "@traits.languages.value.giant" },
-        { label: "Gnomish", authoring: "@traits.languages.value.gnomish", foundry: "@traits.languages.value.gnomish" },
-        { label: "Goblin", authoring: "@traits.languages.value.goblin", foundry: "@traits.languages.value.goblin" },
-        { label: "Halfling", authoring: "@traits.languages.value.halfling", foundry: "@traits.languages.value.halfling" },
-        { label: "Infernal", authoring: "@traits.languages.value.infernal", foundry: "@traits.languages.value.infernal" },
-        { label: "Orc", authoring: "@traits.languages.value.orc", foundry: "@traits.languages.value.orc" },
-        { label: "Primordial", authoring: "@traits.languages.value.primordial", foundry: "@traits.languages.value.primordial" },
-        { label: "Sylvan", authoring: "@traits.languages.value.sylvan", foundry: "@traits.languages.value.sylvan" },
-        { label: "Undercommon", authoring: "@traits.languages.value.undercommon", foundry: "@traits.languages.value.undercommon" },
-      ],
+      rows: Object.keys(LANGUAGE_SHORTCUTS)
+        // Hide the bare `deep` alias from the sheet — show `deep-speech`
+        // as the canonical row and keep both resolving identically.
+        .filter((slug) => slug !== "deep")
+        .map((slug) => {
+          const stem = LANGUAGE_SHORTCUTS[slug];
+          return {
+            label: LANGUAGE_LABELS[stem] || stem,
+            authoring: `@${slug}`,
+            foundry: `@traits.languages.value.${stem}`,
+          };
+        }),
     },
     {
       id: "features",
       title: "Class Features",
       description:
-        "Entity references should stay semantic in authoring and become UUID links during import when matching documents exist.",
+        "Entity references stay semantic in authoring and become UUID links at import time when matching documents exist. Use the feature / option `identifier` (the stable slug), not the display name.",
       rows: [
         {
           label: "Feature Skeleton",
-          authoring: `@feature[identifier]{Name}`,
-          foundry: "@UUID[...]",
+          authoring: `@feature[identifier]{Display Name}`,
+          foundry: "@UUID[Compendium...Item.<id>]{Display Name}",
         },
         {
           label: "Feature Example",
-          authoring: `@feature[wild-shape]{Wild Shape}`,
-          foundry: "@UUID[...]",
+          authoring: `@feature[action-surge]{Action Surge}`,
+          foundry: "@UUID[...action-surge...]{Action Surge}",
+        },
+        {
+          label: "Feature Example",
+          authoring: `@feature[second-wind]{Second Wind}`,
+          foundry: "@UUID[...second-wind...]{Second Wind}",
         },
         {
           label: "Option Skeleton",
-          authoring: `@option[identifier]{Name}`,
-          foundry: "@UUID[...]",
+          authoring: `@option[identifier]{Display Name}`,
+          foundry: "@UUID[Compendium...Item.<id>]{Display Name}",
         },
         {
           label: "Option Example",
-          authoring: `@option[infusion-enhanced-defense]{Enhanced Defense}`,
-          foundry: "@UUID[...]",
+          authoring: `@option[distant-spell]{Distant Spell}`,
+          foundry: "@UUID[...distant-spell...]{Distant Spell}",
+        },
+        {
+          label: "Option Example",
+          authoring: `@option[trip-attack]{Trip Attack}`,
+          foundry: "@UUID[...trip-attack...]{Trip Attack}",
         },
       ],
       notes: [
+        "Examples pulled from live data: Action Surge / Second Wind (Fighter features), Distant Spell (Sorcerer metamagic), Trip Attack (Battle Master maneuver).",
         "Do not author raw world UUIDs or embedded actor item ids directly in Dauligor source text.",
       ],
     },
     {
       id: "columns",
       title: "Class Columns",
-      description:
-        "Columns should resolve from the linked ScaleValue or scaling identifier, not just the visible column label shown in the UI.",
-      rows: columns.length > 0 ? columns : buildDefaultClassColumnRows(classIdentifier, scaleIdentifier),
+      description: columnHasShorthand
+        ? `Inside this class you can use the column identifier directly. Outside the class (e.g. a feat referencing another class's column) use the full \`@scale.<class>.<column>\` form to avoid identifier collisions.`
+        : "Reference a class scale column. Use the column's stable identifier, not its display label.",
+      rows: columns.length > 0
+        ? columns
+        : buildDefaultClassColumnRows(classIdentifier, scaleIdentifier, columnHasShorthand),
       notes: [
         "The displayed column name is for humans. The identifier is what formulas and import normalization should target.",
+        ...(columnHasShorthand
+          ? ["Shorthand `@<column>` resolves only inside this class. The full form works anywhere."]
+          : ["Open this sheet from inside a class editor to see the in-class shorthand form."]),
       ],
     },
   ];
@@ -553,7 +783,11 @@ function buildClassColumnRows(
       const displayName = String(column.name || identifier).trim() || identifier;
       return {
         label: displayName,
-        authoring: `@scale.${classIdentifier}.${identifier}`,
+        // In-class shorthand for the "Dauligor" column; full form for
+        // "Foundry" so the sheet shows both — the author sees the
+        // shorthand they should type AND the canonical path it expands
+        // to (handy when copy-pasting into a feat outside this class).
+        authoring: `@${identifier}`,
         foundry: `@scale.${classIdentifier}.${identifier}`,
       };
     })
@@ -563,21 +797,25 @@ function buildClassColumnRows(
 function buildDefaultClassColumnRows(
   classIdentifier: string,
   scaleIdentifier: string,
+  hasShorthand: boolean,
 ): ReferenceSheetRow[] {
+  const authoringPrefix = hasShorthand
+    ? `@${scaleIdentifier}`
+    : `@scale.${classIdentifier}.${scaleIdentifier}`;
   return [
     {
       label: "Column Value",
-      authoring: `@scale.${classIdentifier}.${scaleIdentifier}`,
+      authoring: authoringPrefix,
       foundry: `@scale.${classIdentifier}.${scaleIdentifier}`,
     },
     {
       label: "Column Number",
-      authoring: `@scale.${classIdentifier}.${scaleIdentifier}.number`,
+      authoring: `${authoringPrefix}.number`,
       foundry: `@scale.${classIdentifier}.${scaleIdentifier}.number`,
     },
     {
       label: "Column Die Faces",
-      authoring: `@scale.${classIdentifier}.${scaleIdentifier}.faces`,
+      authoring: `${authoringPrefix}.faces`,
       foundry: `@scale.${classIdentifier}.${scaleIdentifier}.faces`,
     },
   ];

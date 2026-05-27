@@ -42,9 +42,13 @@ export default function ReferenceSyntaxHelp({
 }) {
   const rows =
     examples && examples.length > 0 ? examples : buildReferenceExamples(context);
+  // Pass `context` to the default normalizer so the inline preview can
+  // resolve context-dependent shortcuts (e.g. class-column shorthand
+  // `@cantrip-damage` → `@scale.druid.cantrip-damage`). Callers with a
+  // custom `normalize` (spell formula field) handle context themselves.
   const normalizedValue = normalize
     ? normalize(value)
-    : normalizeSemanticReferenceText(value, mode);
+    : normalizeSemanticReferenceText(value, mode, context);
   const hasPreview = Boolean(value?.trim());
   const previewChanged = hasPreview && normalizedValue !== value;
 
