@@ -35,6 +35,7 @@ import { expandTagsWithAncestors } from '../../lib/tagHierarchy';
 import ActivityEditor from '../../components/compendium/ActivityEditor';
 import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
 import MarkdownEditor from '../../components/MarkdownEditor';
+import { useEditorFormSession } from '../../components/compendium/useEditorFormSession';
 import { reportClientError, OperationType } from '../../lib/firebase';
 import { upsertSpell, deleteSpell, fetchSpell, purgeAllSpells, prepareSpellPayloadForWrite, denormalizeCompendiumData } from '../../lib/compendium';
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
@@ -299,6 +300,14 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
   const lastLoadedFormRef = useRef<string>('');
   const loadedIdRef = useRef<string | null>(null);
   const formDataRef = useRef<SpellFormData | null>(null);
+
+  // Editor-body session key (see useEditorFormSession). Keyed on
+  // this token instead of `editingId` so the MarkdownEditor / TipTap
+  // body doesn't remount when a save promotes editingId from
+  // `null → newId` — that remount was the "save jumps the editor
+  // to the top" behavior we got bug reports about. The session
+  // still bumps on explicit row switches / resets.
+  const { sessionKey, markSaving } = useEditorFormSession(editingId);
 
   // ── Admin maintenance handlers ────────────────────────────────
   const handleBackfillDescriptions = async () => {
@@ -1002,6 +1011,12 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
       }
 
       if (!opts.silent && editingIdRef.current === editingIdAtStart) {
+        // For new-spell saves, editingId transitions `null → savedId`.
+        // Mark the next id change as a save promotion so the editor
+        // body's `sessionKey` stays stable across it — without
+        // this, TipTap remounts and the MarkdownEditor scrolls back
+        // to the top mid-flow.
+        if (wasCreate) markSaving();
         setEditingId(savedId);
       }
     } catch (error) {
@@ -1234,7 +1249,7 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
 
           <ReviewFieldHighlight columnKey="description" className="flex-1 min-h-0 flex flex-col">
             <MarkdownEditor
-              key={editingId || 'new-spell'}
+              key={sessionKey}
               value={formData.description}
               onChange={value => setFormData(prev => ({ ...prev, description: value }))}
               label="Description"

@@ -19,6 +19,7 @@ import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
 import AdvancementManager, { type Advancement } from '../../components/compendium/AdvancementManager';
 import MarkdownEditor from '../../components/MarkdownEditor';
 import RequirementsEditor, { RequirementsEditorLookups } from '../../components/compendium/RequirementsEditor';
+import { useEditorFormSession } from '../../components/compendium/useEditorFormSession';
 import {
   EMPTY_REQUIREMENT_TREE,
   parseRequirementTree,
@@ -285,6 +286,14 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
   useEffect(() => { editingIdRef.current = editingId; }, [editingId]);
   const formDataRef = useRef<FeatFormData | null>(null);
   const lastLoadedFormRef = useRef<string>('');
+
+  // Editor-body session key (see useEditorFormSession). Keyed on
+  // this token instead of `editingId` so the MarkdownEditor / TipTap
+  // body doesn't remount when a save promotes editingId from
+  // `null → newId` — that remount was the "save jumps the editor
+  // to the top" behavior we got bug reports about. The session
+  // still bumps on explicit row switches / resets.
+  const { sessionKey, markSaving } = useEditorFormSession(editingId);
 
   // RequirementsEditor lookups.
   const [classes, setClasses] = useState<any[]>([]);
@@ -826,8 +835,14 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
           // away from their work, which felt like data loss even
           // though the save succeeded. For new-feat saves we promote
           // `editingId` to the freshly-minted id so the next save
-          // updates rather than creates a second row.
-          if (wasCreate) setEditingId(entryId);
+          // updates rather than creates a second row. Calling
+          // markSaving() right before the promotion keeps
+          // `sessionKey` stable across it so the MarkdownEditor
+          // body doesn't remount + scroll back to top.
+          if (wasCreate) {
+            markSaving();
+            setEditingId(entryId);
+          }
           // Mark the current form as clean (it now matches what's
           // persisted). The cache-eviction in refreshEntries() will
           // trigger a re-fetch through the editingId useEffect, so
@@ -977,7 +992,7 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
 
           <ReviewFieldHighlight columnKey="description" className="flex-1 min-h-0 flex flex-col">
             <MarkdownEditor
-              key={editingId || 'new-feat'}
+              key={sessionKey}
               value={formData.description}
               onChange={(value) => setFormData((prev) => ({ ...prev, description: value }))}
               label="Description"
