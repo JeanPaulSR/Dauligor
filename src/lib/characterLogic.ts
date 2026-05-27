@@ -999,3 +999,312 @@ export function areStringListsEqual(left: any[] = [], right: any[] = []) {
     normalizedLeft.every((value, index) => value === normalizedRight[index])
   );
 }
+
+// ─── ItemBumpUses resolution (Phase C — bake-time uses.max bump) ────
+//
+// Shared walker used by the CharacterBuilder runtime + the Foundry
+// actor exporter. Both surfaces need to walk the same set of authored
+// advancements (class / subclass / feature / feat) and produce the
+// same `(target → applied bumps[])` map. We extract the logic here so
+// the two consumers can't drift.
+//
+// Design notes:
+//
+// - Targets are referenced by `{ kind: 'feature' | 'feat', id }`. We
+//   key the bump map by `${kind}:${id}` so feature-id and feat-id
+//   namespaces stay distinct even if a future migration shares ids.
+//
+// - Effective-level gating mirrors the existing feat-advancement
+//   walker in CharacterBuilder (around line 2780). Feat advancements
+//   typically use `level: 0` ("always on while owned"); only levels
+//   > 0 get gated against the granting class's level.
+//
+// - Target presence is gated by class level for class features
+//   (a feature with `level > classLevel` is not present) and by
+//   the owned-feats list for feats. A bump that targets an absent
+//   entity returns as a warning, not as an applied bump.
+//
+// - Amount strings are stored verbatim. The Foundry side resolves
+//   `@scale.<owner>.<col>`, `@prof`, etc. at play time. App-side we
+//   only normalize the leading sign when stitching multiple bumps
+//   onto an existing `uses.max` formula via `combineUsesMaxWithBumps`.
+
+export type ItemBumpTargetKind = 'feature' | 'feat';
+export type ItemBumpSourceKind = 'class' | 'subclass' | 'feature' | 'feat';
+
+export interface ItemBumpEntry {
+  amount: string;
+  sourceKind: ItemBumpSourceKind;
+  sourceId: string;
+  sourceName: string;
+  sourceAdvancementId: string;
+  level?: number;
+}
+
+export interface ItemBumpWarning {
+  targetKind: ItemBumpTargetKind;
+  targetId: string;
+  sourceKind: ItemBumpSourceKind;
+  sourceId: string;
+  sourceName: string;
+  sourceAdvancementId: string;
+  amount: string;
+  reason: 'target-not-present' | 'target-missing-id';
+}
+
+export interface CollectedItemBumps {
+  bumps: Record<string, ItemBumpEntry[]>;
+  warnings: ItemBumpWarning[];
+}
+
+export function itemBumpKey(kind: ItemBumpTargetKind, id: string) {
+  return `${kind}:${String(id).trim()}`;
+}
+
+function isItemBumpUsesAdvancement(adv: any): boolean {
+  return !!adv && adv.type === 'ItemBumpUses';
+}
+
+function gateAdvancementByLevel(advLevel: number, effectiveLevel: number) {
+  if (!Number.isFinite(advLevel) || advLevel <= 0) return true;
+  return advLevel <= effectiveLevel;
+}
+
+export function collectItemBumpUses({
+  progression,
+  classCache,
+  subclassCache,
+  featureCache,
+  ownedFeats,
+  totalCharacterLevel,
+}: {
+  progression: any[];
+  classCache: Record<string, any>;
+  subclassCache: Record<string, any>;
+  featureCache: Record<string, any[]>;
+  ownedFeats: any[];
+  totalCharacterLevel: number;
+}): CollectedItemBumps {
+  const bumps: Record<string, ItemBumpEntry[]> = {};
+  const warnings: ItemBumpWarning[] = [];
+
+  const safeProgression = Array.isArray(progression) ? progression : [];
+  const safeOwnedFeats = Array.isArray(ownedFeats) ? ownedFeats : [];
+
+  const classGroups = buildProgressionClassGroups(
+    safeProgression,
+    classCache,
+    subclassCache,
+  );
+
+  // Build presence sets keyed by feature/feat id.
+  const presentFeatureIds = new Set<string>();
+  classGroups.forEach((group: any) => {
+    const classDoc = group.classDocument
+      || classCache[group.classKey || '']
+      || null;
+    if (!classDoc) return;
+    const classLevel = Number(group.classLevel || 0) || 0;
+    if (classLevel <= 0) return;
+
+    const classFeatures = (featureCache[classDoc.id] || []).filter(
+      (f: any) => (Number(f?.level || 1) || 1) <= classLevel,
+    );
+    classFeatures.forEach((f: any) => {
+      const fid = String(f?.id || '');
+      if (fid) presentFeatureIds.add(fid);
+    });
+
+    const subclassDoc = group.subclassId && subclassCache[group.subclassId]?.classId === classDoc.id
+      ? subclassCache[group.subclassId]
+      : null;
+    if (subclassDoc) {
+      const subFeatures = (featureCache[subclassDoc.id] || []).filter(
+        (f: any) => (Number(f?.level || 1) || 1) <= classLevel,
+      );
+      subFeatures.forEach((f: any) => {
+        const fid = String(f?.id || '');
+        if (fid) presentFeatureIds.add(fid);
+      });
+    }
+  });
+
+  const presentFeatIds = new Set<string>();
+  safeOwnedFeats.forEach((feat: any) => {
+    const fid = String(feat?.id || '');
+    if (fid) presentFeatIds.add(fid);
+  });
+
+  const processAdvancement = (
+    adv: any,
+    sourceKind: ItemBumpSourceKind,
+    sourceId: string,
+    sourceName: string,
+    effectiveLevel: number,
+  ) => {
+    if (!isItemBumpUsesAdvancement(adv)) return;
+    const cfg = adv.configuration || {};
+    const target = cfg.target;
+    const amount = String(cfg.amount ?? '').trim();
+    const advancementId = String(adv._id || '');
+    const advLevel = Number(adv.level || 0) || 0;
+
+    if (!gateAdvancementByLevel(advLevel, effectiveLevel)) return;
+    if (!amount) return;
+
+    const targetKind = (target?.kind === 'feat' ? 'feat' : 'feature') as ItemBumpTargetKind;
+    const targetId = String(target?.id || '').trim();
+    if (!target || !targetId) {
+      warnings.push({
+        targetKind,
+        targetId: '',
+        sourceKind,
+        sourceId,
+        sourceName,
+        sourceAdvancementId: advancementId,
+        amount,
+        reason: 'target-missing-id',
+      });
+      return;
+    }
+
+    const presenceSet = targetKind === 'feat' ? presentFeatIds : presentFeatureIds;
+    if (!presenceSet.has(targetId)) {
+      warnings.push({
+        targetKind,
+        targetId,
+        sourceKind,
+        sourceId,
+        sourceName,
+        sourceAdvancementId: advancementId,
+        amount,
+        reason: 'target-not-present',
+      });
+      return;
+    }
+
+    const key = itemBumpKey(targetKind, targetId);
+    const entry: ItemBumpEntry = {
+      amount,
+      sourceKind,
+      sourceId,
+      sourceName,
+      sourceAdvancementId: advancementId,
+      level: advLevel > 0 ? advLevel : undefined,
+    };
+    if (!bumps[key]) bumps[key] = [];
+    bumps[key].push(entry);
+  };
+
+  classGroups.forEach((group: any) => {
+    const classDoc = group.classDocument
+      || classCache[group.classKey || '']
+      || null;
+    if (!classDoc) return;
+    const classLevel = Number(group.classLevel || 0) || 0;
+    if (classLevel <= 0) return;
+
+    const className = String(classDoc.name || classDoc.id || 'Class');
+    (classDoc.advancements || []).forEach((adv: any) => {
+      processAdvancement(adv, 'class', String(classDoc.id || ''), className, classLevel);
+    });
+
+    const subclassDoc = group.subclassId && subclassCache[group.subclassId]?.classId === classDoc.id
+      ? subclassCache[group.subclassId]
+      : null;
+    if (subclassDoc) {
+      const subclassName = String(subclassDoc.name || subclassDoc.id || 'Subclass');
+      (subclassDoc.advancements || []).forEach((adv: any) => {
+        processAdvancement(adv, 'subclass', String(subclassDoc.id || ''), subclassName, classLevel);
+      });
+
+      const subFeatures = (featureCache[subclassDoc.id] || []).filter(
+        (f: any) => (Number(f?.level || 1) || 1) <= classLevel,
+      );
+      subFeatures.forEach((feature: any) => {
+        const featureName = String(feature.name || feature.id || 'Feature');
+        (feature.advancements || []).forEach((adv: any) => {
+          processAdvancement(adv, 'feature', String(feature.id || ''), featureName, classLevel);
+        });
+      });
+    }
+
+    const classFeatures = (featureCache[classDoc.id] || []).filter(
+      (f: any) => (Number(f?.level || 1) || 1) <= classLevel,
+    );
+    classFeatures.forEach((feature: any) => {
+      const featureName = String(feature.name || feature.id || 'Feature');
+      (feature.advancements || []).forEach((adv: any) => {
+        processAdvancement(adv, 'feature', String(feature.id || ''), featureName, classLevel);
+      });
+    });
+  });
+
+  const classLevelByKey: Record<string, number> = {};
+  classGroups.forEach((group: any) => {
+    const key = String(group.classKey || group.classId || '');
+    if (key) classLevelByKey[key] = Number(group.classLevel || 0) || 0;
+  });
+
+  safeOwnedFeats.forEach((feat: any) => {
+    const featAdvancements = Array.isArray(feat?.advancements) ? feat.advancements : [];
+    if (featAdvancements.length === 0) return;
+
+    const featName = String(feat?.name || feat?.id || 'Feat');
+    const grantedByType = String(feat?.grantedByType || '').toLowerCase();
+    const grantedById = String(feat?.grantedById || '');
+    let effectiveLevel = totalCharacterLevel;
+    if (grantedByType === 'class' || grantedByType === 'subclass') {
+      const grantingClassDoc = classCache[grantedById]
+        || (grantedByType === 'subclass'
+          ? classCache[subclassCache[grantedById]?.classId || ''] || null
+          : null);
+      const grantingKey = String(grantingClassDoc?.id || grantedById);
+      effectiveLevel = classLevelByKey[grantingKey] ?? totalCharacterLevel;
+    }
+
+    featAdvancements.forEach((adv: any) => {
+      processAdvancement(adv, 'feat', String(feat?.id || ''), featName, effectiveLevel);
+    });
+  });
+
+  return { bumps, warnings };
+}
+
+/**
+ * Stitches an array of ItemBumpEntry amounts onto a target's existing
+ * `uses.max` formula. Returns a single Foundry-roll-engine-compatible
+ * formula string with normalized signs.
+ */
+export function combineUsesMaxWithBumps(
+  base: string | number | null | undefined,
+  bumpEntries: ItemBumpEntry[] = [],
+): string {
+  const normalizedBase = String(base ?? '').trim();
+  const sanitized = bumpEntries
+    .map((b) => String(b?.amount ?? '').trim())
+    .filter(Boolean);
+
+  if (sanitized.length === 0) return normalizedBase;
+
+  const parts = sanitized.map((value) => {
+    if (/^[+-]/.test(value)) return value;
+    return `+ ${value}`;
+  });
+
+  if (!normalizedBase) {
+    const first = parts[0].replace(/^\+\s*/, '');
+    const rest = parts.slice(1).join(' ');
+    return rest ? `${first} ${rest}` : first;
+  }
+
+  return `${normalizedBase} ${parts.join(' ')}`;
+}
+
+export function describeItemBumpWarning(w: ItemBumpWarning): string {
+  const source = `${w.sourceName} (${w.sourceKind})`;
+  if (w.reason === 'target-missing-id') {
+    return `${source} → ItemBumpUses advancement has no target picked.`;
+  }
+  return `${source} → target ${w.targetKind} ${w.targetId} not present on the character.`;
+}
