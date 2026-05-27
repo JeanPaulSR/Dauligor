@@ -22,6 +22,12 @@ import {
   deriveFeatPropertyFlags,
   type FeatTypeValue,
 } from '../../lib/featFilters';
+import {
+  parseRequirementTree,
+  formatRequirementText,
+  extractAbilityScoreLeaves,
+  type Requirement,
+} from '../../lib/requirements';
 
 /**
  * Public feat browser — thin wrapper around `CompendiumBrowserShell`.
@@ -58,6 +64,12 @@ type FeatRow = {
   featCategoryId?: string;
   repeatable?: boolean;
   requirements?: string;
+  // Pre-parsed requirements_tree + derived fields for the Ability /
+  // Prerequisite columns. Computing these once at load keeps the
+  // render cheap and prevents every row re-parsing JSON on filter
+  // recompute.
+  requirementsTree?: Requirement | null;
+  abilityScoreLeaves?: Array<{ ability: string; min: number }>;
   repeatableFlag?: boolean;
   hasUses?: boolean;
   hasActivities?: boolean;
@@ -113,6 +125,14 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
         const rows = await fetchCollection<any>('feats', { orderBy: 'name ASC' });
         const mapped: FeatRow[] = rows.map((row: any) => {
           const flags = deriveFeatPropertyFlags(row);
+          // Parse the structured requirements tree once and derive
+          // the ability-score leaves the Ability column reads.
+          // requirements_tree lands as the parsed object (d1.ts auto-
+          // parses known JSON columns) — defend against the rare
+          // string passthrough case anyway.
+          const treeRaw = row.requirements_tree ?? row.requirementsTree;
+          const tree = parseRequirementTree(treeRaw);
+          const abilityScoreLeaves = extractAbilityScoreLeaves(tree);
           return {
             ...row,
             sourceId: row.source_id,
@@ -120,6 +140,8 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
             featSubtype: row.feat_subtype || '',
             featCategoryId: row.feat_category_id || '',
             repeatable: !!row.repeatable,
+            requirementsTree: tree,
+            abilityScoreLeaves,
             repeatableFlag: flags.repeatable,
             hasUses: flags.hasUses,
             hasActivities: flags.hasActivities,
@@ -262,6 +284,54 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
         const label = categoryNameById[String(feat.featCategoryId ?? '')] || '';
         return label ? (
           <span className="text-xs text-ink/80 truncate">{label}</span>
+        ) : (
+          <span className="text-xs text-ink/30">—</span>
+        );
+      },
+    },
+    {
+      key: 'ability',
+      label: 'Ability',
+      width: '100px',
+      render: (feat) => {
+        // Roll the abilityScore leaves from the requirements tree
+        // up into a tight glance. Multiple leaves with the same min
+        // collapse: "STR/DEX 13"; differing mins render each one:
+        // "STR 13 · WIS 11". The attributes-table abbreviation is
+        // always SCREAMING_CASE (per /admin/proficiencies), so the
+        // raw slug.toUpperCase() matches the canonical label without
+        // a join.
+        const leaves = (feat.abilityScoreLeaves || []) as Array<{ ability: string; min: number }>;
+        if (!leaves.length) return <span className="text-xs text-ink/30">—</span>;
+        // Group by min so "STR/DEX/CON 13" collapses cleanly.
+        const byMin = new Map<number, string[]>();
+        for (const l of leaves) {
+          const k = Number(l.min) || 0;
+          if (!byMin.has(k)) byMin.set(k, []);
+          byMin.get(k)!.push(String(l.ability).toUpperCase());
+        }
+        const parts = [...byMin.entries()]
+          .sort((a, b) => b[0] - a[0])
+          .map(([min, abilities]) => `${abilities.join('/')} ${min}`);
+        return <span className="text-xs text-ink/80 truncate">{parts.join(' · ')}</span>;
+      },
+    },
+    {
+      key: 'prerequisite',
+      label: 'Prerequisite',
+      width: '220px',
+      render: (feat) => {
+        // Render the full requirements line via formatRequirementText
+        // — the same helper the detail view uses. Slugs (class IDs,
+        // skill IDs, etc.) won't resolve to display names here
+        // because we don't pass a lookup; for the list we accept the
+        // slug fallback since it's still readable ("ath", "wizard").
+        // Authors get the resolved labels in the detail panel.
+        const text = formatRequirementText(feat.requirementsTree ?? null);
+        const fallback = String(feat.requirements ?? '').trim();
+        const display = text || fallback;
+        return display ? (
+          <span className="text-xs text-ink/75 truncate" title={display}>{display}</span>
         ) : (
           <span className="text-xs text-ink/30">—</span>
         );

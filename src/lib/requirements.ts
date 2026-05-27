@@ -352,6 +352,29 @@ export function formatRequirementText(
   return _nested ? `(${joined})` : joined;
 }
 
+/**
+ * Walk a requirements tree and return every `abilityScore` leaf as a
+ * flat array. Used by the FeatList's Ability column to render
+ * something like "Wis 13" without re-rendering the rest of the
+ * prerequisite chain (which lives in the Prerequisite column).
+ *
+ * Returns `[]` when the tree is null/empty/has no ability leaves.
+ */
+export function extractAbilityScoreLeaves(
+  tree: Requirement | null | undefined,
+): Array<{ ability: AbilityKey; min: number }> {
+  if (!tree) return [];
+  if (isLeaf(tree)) {
+    if (tree.type === 'abilityScore') return [{ ability: tree.ability, min: tree.min }];
+    return [];
+  }
+  const out: Array<{ ability: AbilityKey; min: number }> = [];
+  for (const child of tree.children ?? []) {
+    if (child) out.push(...extractAbilityScoreLeaves(child));
+  }
+  return out;
+}
+
 // ─── Factory helpers ─────────────────────────────────────────────────────
 
 /** Construct an empty group of the given kind — handy for editor "Add Group". */
