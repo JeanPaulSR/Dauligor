@@ -77,50 +77,63 @@ The Express server reads `R2_WORKER_URL=http://localhost:8787` from `.env` and p
 ## Multi-agent coordination
 
 Multiple agents work this repo in parallel via worktrees under
-`.claude/worktrees/<branch-name>/`. The rules below keep merge
-conflicts mechanical instead of semantic. Update this section whenever
-branches start or finish.
+`.claude/worktrees/<branch-name>/`. Coordination state lives in the
+[`handoffs/`](handoffs/) folder rather than in this section — that
+folder scales to N parallel branches and keeps per-branch journals
+alongside the live registry.
 
-### Active branches & file ownership
+### Handoff folder protocol
 
-Each branch claims a primary domain. **If you're working on a file in
-another branch's domain, stop and check first** — either rebase that
-branch's work onto yours, or hand the change off via a small main-bound
-commit, or ask the user to coordinate.
+The [`handoffs/`](handoffs/) folder has two surfaces:
 
-| Branch | Owns |
-|---|---|
-| `claude/pedantic-antonelli-ce1c7f` | Class importer + advancement system + option groups + class export pipeline (`module/dauligor-pairing/**`, `api/_lib/_classExport.ts`, `src/lib/classExport.ts`, `src/lib/advancementState.ts`, `src/components/compendium/AdvancementManager.tsx`, `src/pages/compendium/UniqueOptionGroup*.tsx`). Other branches may make small **additive, commented** edits to `AdvancementManager.tsx` and `advancementState.ts` to register new advancement types — keep them on the contributing branch through merge rather than relaying via main. |
+- [`handoffs/BRANCH_REGISTRY.md`](handoffs/BRANCH_REGISTRY.md) — **live
+  coordination.** A table of every in-progress branch + the files it's
+  currently touching. Read this before editing any file you didn't
+  write yourself. Add your row when you start a branch; update it as
+  scope evolves; remove it when the branch lands on main.
+- [`handoffs/<branch-slug>/`](handoffs/) — **per-branch journal.** Each
+  active branch gets a folder (slashes in the branch name become
+  hyphens). Inside:
+  - `manifest.md` — what the branch is doing, what files it claims
+    exclusively, what files it touches in append-only mode, open
+    requests to other branches. Template at
+    [`handoffs/_template/manifest.md`](handoffs/_template/manifest.md).
+  - `YYYY-MM-DD-<topic>.md` — handoff docs that accumulate over the
+    branch's life. Preserves context across session resets and agent
+    hand-offs.
 
-### Recently merged (no active owner)
+Full convention details + lifecycle in
+[`handoffs/README.md`](handoffs/README.md).
 
-Domain shape preserved here so future agents picking up these files
-know the scope without re-deriving it.
+### The shared-files protocol
 
-| Domain | Files |
-|---|---|
-| Spell list manager + spell rules + spellbook authoring (merged via `claude/kind-maxwell-bfa076`, 2026-05-09) | `src/pages/compendium/SpellList*.tsx`, `src/pages/compendium/SpellRules*.tsx`, `src/components/compendium/Spell*.tsx`, `src/lib/spell*.ts`, `src/lib/characterTags.ts`, `src/hooks/useSpellFilters.ts`, `src/lib/classSpellLists.ts`, `src/components/ui/EntityPicker.tsx` |
+When you need to edit a file owned by another branch's `manifest.md`:
 
-> **Open hand-back to `claude/pedantic-antonelli-ce1c7f`:** Foundry export
-> round-trip for spells. The 6 attribution columns on `character_spells`
-> (`granted_by_*`, `counts_as_class_id`, `doesnt_count_against_*`),
-> `character_spell_list_extensions`, and `character_spell_loadouts` +
-> `loadout_membership` need to surface in the actor bundle. Schema
-> crosswalk in [docs/handoff-spellbook-to-importer.md](docs/handoff-spellbook-to-importer.md).
+1. **Do not edit directly.** Find the owning branch in
+   `BRANCH_REGISTRY.md`.
+2. **File an "Open request"** in your own branch's `manifest.md` under
+   "Open requests to other branches."
+3. **Notify the owning agent/human** — leave a note in the owning
+   branch's most recent handoff doc, or in chat with the user.
+4. **The owning branch makes the change** on its own branch and
+   commits.
+5. **Owning branch records the result** in its handoff log.
+6. **Requesting branch rebases** to pick up the change once it lands.
 
-### Shared utility files (append-only discipline)
+This avoids two branches editing the same file in non-mergeable ways,
+and keeps one source of truth per file. The owning branch's edit is
+canonical; the requesting branch consumes the result.
 
-Both branches may add to these. Conflicts at merge are mechanical
-(same kind of entry, different lines). Treat them like log files —
-**never reorder, never collapse other branches' entries**.
+### Append-only shared files
 
-- `src/lib/compendium.ts` — `normalizeCompendiumData` mapping table,
-  `denormalizeCompendiumData` mapping table, forbidden list,
-  `upsertX` helpers
-- `src/lib/d1.ts` — `jsonFields` auto-parse list inside `queryD1`
-- `src/lib/d1Tables.ts` — table-name registry
-- `src/App.tsx` — route definitions
-- `src/components/Sidebar.tsx` — nav links
+Some files are routinely touched by multiple branches as long as edits
+stay strictly additive (new entries in a registry, new branches in a
+switch, new cases in a normalizer). These don't need to be requested
+through the protocol above — just declare them under "Shared files
+(append-only)" in your branch manifest. See
+[`BRANCH_REGISTRY.md § "Shared files (append-only) examples"`](handoffs/BRANCH_REGISTRY.md#shared-files-append-only-examples)
+for the current canonical list. Treat them like log files — **never
+reorder, never collapse other branches' entries.**
 
 ### Migration filename convention
 

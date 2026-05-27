@@ -1,0 +1,41 @@
+# Branch Registry
+
+Live record of in-progress branches and the files they're touching.
+
+**Read this before editing any shared file.** If another branch already owns it, follow the shared-files protocol in [README.md § "The shared-files protocol"](README.md#the-shared-files-protocol) instead of editing directly.
+
+**Add your row when you start a branch.** Update it as scope evolves. Remove your row when the branch lands on main.
+
+## Active branches
+
+| Branch | Started | Owner | Status | Primary files (exclusive) | Shared files (append-only) | Manifest |
+|---|---|---|---|---|---|---|
+| _(none)_ |  |  |  |  |  |  |
+
+## Status legend
+
+- **active** — branch is currently being worked on
+- **paused** — branch is on hold; shared files OK for others to claim
+- **ready-to-merge** — branch is feature-complete, awaiting review
+
+## "Shared files (append-only)" examples
+
+Some files are routinely touched by multiple branches at once. As long as edits stay additive (new entries in a registry, new branches in a switch, new cases in a normalizer), parallel changes merge mechanically. These are flagged in a branch's manifest under "Shared files" rather than "Primary files":
+
+- `src/lib/compendium.ts` — `normalizeCompendiumData` / `denormalizeCompendiumData` mapping tables, forbidden list, `upsertX` helpers
+- `src/lib/d1.ts` — `jsonFields` auto-parse list inside `queryD1`
+- `src/lib/d1Tables.ts` — table-name registry
+- `src/App.tsx` — route definitions
+- `src/components/Sidebar.tsx` — nav links
+- `worker/migrations/` — new migration files (use timestamp-based filenames to avoid collision)
+
+A branch CAN claim one of these as exclusive if it's doing a structural refactor of that file. In that case, mark it under "Primary files" in your manifest and notify other active branches.
+
+## Recently merged (last 7 days, FYI only)
+
+Removed entries land here briefly so other agents can see what just changed before doing a `git pull` rebase. Move to git history after a week.
+
+| Branch | Merged | Touched files |
+|---|---|---|
+| `claude/class-slug-routes` | 2026-05-27 → `a3ebb4f` | `src/lib/useClassRouteId.ts` (new), `src/App.tsx`, `src/pages/compendium/{ClassEditor,ClassList,ClassView,SpellList,SubclassEditor}.tsx`, `src/pages/sources/SourceDetail.tsx` |
+| `claude/phase1-foundation` | 2026-05-27 → `2b7dea4` | `worker/migrations/20260527-{1400,1410,1420}_*.sql` (new), `module/dauligor-pairing/scripts/foundry-id.js` (new), `docs/roadmap.md` |
