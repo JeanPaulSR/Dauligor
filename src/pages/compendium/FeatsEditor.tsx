@@ -439,11 +439,15 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
           // ties. ProficiencyEntityShell already produces this exact
           // ordering on its list page.
           fetchCollection<any>('featCategories', { orderBy: '"order", name ASC' }),
-          // Tag system — same fetch pattern SpellsEditor / ItemsEditor
-          // use. `normalizeTagRow` runs on each row below to project
-          // the shape TagPicker expects.
+          // Tag system — same fetch pattern SpellsEditor uses.
+          // `normalizeTagRow` runs on each row below to project the
+          // shape TagPicker expects. The tagGroups fetch is scoped by
+          // `classifications LIKE '%feat%'` so only feat-relevant
+          // groups surface in the picker (matches SpellsEditor's
+          // `'%spell%'` scoping). TagPicker filters tags by groupId
+          // at render time, so unscoped tags drop out naturally.
           fetchCollection<any>('tags', { orderBy: 'name ASC' }),
-          fetchCollection<any>('tagGroups', { orderBy: 'name ASC' }),
+          fetchCollection<any>('tagGroups', { where: "classifications LIKE '%feat%'" }),
         ]);
         if (cancelled) return;
 
