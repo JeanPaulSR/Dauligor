@@ -130,7 +130,7 @@ async function getOrBuild<T>(
 }
 
 const VALID_KINDS: ReadonlySet<ExportEntityKind> = new Set([
-  "class", "subclass", "feature", "scalingColumn", "optionGroup", "optionItem", "source",
+  "class", "subclass", "feature", "scalingColumn", "optionGroup", "optionItem", "source", "feat",
 ]);
 
 function parseEntityFromBody(body: any): { kind: ExportEntityKind; id: string } | null {

@@ -472,6 +472,15 @@ async function rebakeOptionItem(itemId: string): Promise<string[]> {
   return rebakeOptionGroup(groupId);
 }
 
+async function rebakeFeat(_featId: string): Promise<string[]> {
+  // Feats only affect the top-level catalog's `counts.feats` +
+  // `supportedImportTypes`. There's no per-source-feat bundle the
+  // Foundry importer reads from R2 — the per-source feat list at
+  // `/api/module/<source>/feats.json` is live-built, not cached. So
+  // rebuild only the top-level catalog and call it a day.
+  return rebakeTopLevelCatalog();
+}
+
 async function rebakeSource(sourceId: string): Promise<string[]> {
   // Source rename/abbreviation/slug change ripples into per-class bundles
   // (sourceBookId references) and the catalogs.
@@ -505,6 +514,7 @@ export async function rebakeBundle(kind: ExportEntityKind, id: string): Promise<
       case "optionGroup": return await rebakeOptionGroup(id);
       case "optionItem": return await rebakeOptionItem(id);
       case "source": return await rebakeSource(id);
+      case "feat": return await rebakeFeat(id);
       default:
         console.warn("[pipeline] unknown entity kind", { kind, id });
         return [];

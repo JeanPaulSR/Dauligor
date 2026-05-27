@@ -35,6 +35,7 @@ import {
 } from '../../components/compendium/activity/constants';
 import { reportClientError, OperationType } from '../../lib/firebase';
 import { upsertFeat, deleteFeat, fetchFeat, denormalizeCompendiumData } from '../../lib/compendium';
+import { queueRebake } from '../../lib/moduleExport';
 import { fetchCollection } from '../../lib/d1';
 import { slugify, cn } from '../../lib/utils';
 import { matchesSingleAxisFilter, matchesMultiAxisFilter } from '../../lib/spellFilters';
@@ -996,6 +997,14 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
         // stale cached entry. Without this the preview shows the
         // pre-save shape until the user reloads the page.
         setPreviewBustKey((n) => n + 1);
+        // Enqueue a rebake of the top-level source catalog so the
+        // Foundry importer's wizard sees the updated feat counts +
+        // `supportedImportTypes`. Fire-and-forget — a failure here
+        // doesn't roll back the save. Debounced server-side; the
+        // catalog rebakes ~1h after the last edit on this feat, or
+        // immediately when an opportunistic GET to `/api/module/*`
+        // pops the queue entry as due.
+        void queueRebake('feat', entryId);
         if (!opts.silent) {
           // Stay on the just-saved feat rather than resetting back to
           // a fresh form — the editor previously jumped the user

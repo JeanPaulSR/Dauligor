@@ -19,7 +19,12 @@ export type ExportEntityKind =
   | 'scalingColumn'
   | 'optionGroup'
   | 'optionItem'
-  | 'source';
+  | 'source'
+  // General feats — feat saves enqueue a rebake of the top-level
+  // source catalog so the Foundry importer's wizard sees the updated
+  // `counts.feats` + `supportedImportTypes` (otherwise it reports
+  // "no feats-capable sources" until someone manually rebakes).
+  | 'feat';
 
 async function authHeaders(): Promise<HeadersInit | null> {
   if (!auth.currentUser) return null;

@@ -24,7 +24,14 @@ export type ExportEntityKind =
   | "scalingColumn"
   | "optionGroup"
   | "optionItem"
-  | "source";
+  | "source"
+  // General feats (the `feats` table, not the per-class `features`
+  // table). Editor saves enqueue a rebake so the top-level source
+  // catalog's `counts.feats` + `supportedImportTypes` stay in sync —
+  // without it, the Foundry importer wizard reports "no feats-capable
+  // sources" even when the per-source `/feats.json` endpoint serves
+  // real data.
+  | "feat";
 
 const DEBOUNCE_MS = 60 * 60 * 1000; // 1 hour after last edit
 
