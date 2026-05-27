@@ -30,6 +30,10 @@ import { AlertTriangle, BookOpen, Download, FileJson, Layers3, Search, Sparkles,
 import { toast } from 'sonner';
 import { reportClientError, OperationType } from '../../lib/firebase';
 import { upsertFeat, upsertFeatBatch } from '../../lib/compendium';
+import {
+  extractAndPersistScalingColumns,
+  scalingOwnerTypeForFeatType,
+} from '../../lib/scalingImport';
 import { fetchCollection } from '../../lib/d1';
 import { cn } from '../../lib/utils';
 import {
@@ -593,21 +597,51 @@ export default function FeatImportWorkbench({
       if (payload[key] === undefined) delete payload[key];
     });
 
+    // Determine the final feat id + parent_type up front so we can
+    // persist scaling columns BEFORE the feat upsert. `eff.existingEntryId`
+    // identifies an update; otherwise we mint a fresh UUID and pass
+    // the same id to both `extractAndPersistScalingColumns` and the
+    // final `upsertFeat` call below.
+    const featId = eff.existingEntryId || crypto.randomUUID();
+    const featTypeForScaling = scalingOwnerTypeForFeatType(payload.feat_type);
+    const incomingAdvancements = Array.isArray(payload.advancements)
+      ? payload.advancements
+      : [];
+    let advancementsWithColumnLinks = incomingAdvancements;
+    if (featTypeForScaling && incomingAdvancements.length > 0) {
+      try {
+        const result = await extractAndPersistScalingColumns({
+          parentId: featId,
+          parentType: featTypeForScaling,
+          advancements: incomingAdvancements,
+        });
+        advancementsWithColumnLinks = result.scaledAdvancements;
+      } catch (err) {
+        console.error('[FeatImportWorkbench] scaling extraction failed:', err);
+        // Fall through with the original advancements — better to
+        // commit the feat row than to fail the whole import over a
+        // scaling-column write. The author can re-author columns
+        // manually in the FeatsEditor sidebar.
+      }
+    }
+
     if (eff.existingEntryId) {
       const existingCreatedAt = existingEntries.find((entry) => entry.id === eff.existingEntryId)?.createdAt
         || existingEntries.find((entry) => entry.id === eff.existingEntryId)?.created_at
         || new Date().toISOString();
       const updatedPayload = {
         ...payload,
+        advancements: advancementsWithColumnLinks,
         tagIds: candidateTagIds[candidate.candidateId] || [],
         created_at: existingCreatedAt,
       };
-      await upsertFeat(eff.existingEntryId, updatedPayload);
+      await upsertFeat(featId, updatedPayload);
       return 'updated';
     }
 
-    await upsertFeat(crypto.randomUUID(), {
+    await upsertFeat(featId, {
       ...payload,
+      advancements: advancementsWithColumnLinks,
       tagIds: candidateTagIds[candidate.candidateId] || [],
       created_at: new Date().toISOString(),
     });
@@ -750,9 +784,17 @@ export default function FeatImportWorkbench({
 
     setSaving(true);
     try {
-      const entries = importable.map(({ candidate, eff }) => {
+      // Mint final feat ids upfront so scaling-column rows can FK
+      // against them before the batch upsert lands. `upsertFeatBatch`
+      // would mint a UUID itself for any entry with id=null, but
+      // that's too late for our scaling extraction (which needs the
+      // parent_id to write scaling_columns rows with the correct
+      // ownership). Doing it here keeps the two writes in the same
+      // logical transaction.
+      const entries = await Promise.all(importable.map(async ({ candidate, eff }) => {
         const existing = existingEntries.find((entry) => entry.id === eff.existingEntryId);
         const existingCreatedAt = existing?.createdAt || existing?.created_at || new Date().toISOString();
+        const featId = eff.existingEntryId || crypto.randomUUID();
         const payload = {
           ...candidate.savePayload,
           name: eff.name,
@@ -767,16 +809,43 @@ export default function FeatImportWorkbench({
           if (payload[key] === undefined) delete payload[key];
         });
 
+        // Extract scaling columns + patch advancements. Non-class-
+        // feature feat_types only (class features inherit columns
+        // from their parent class). Failures here are logged but
+        // don't block the import — see the single-row commit path
+        // for the same try/catch pattern.
+        const featTypeForScaling = scalingOwnerTypeForFeatType(payload.feat_type);
+        const incomingAdvancements = Array.isArray(payload.advancements)
+          ? payload.advancements
+          : [];
+        if (featTypeForScaling && incomingAdvancements.length > 0) {
+          try {
+            const result = await extractAndPersistScalingColumns({
+              parentId: featId,
+              parentType: featTypeForScaling,
+              advancements: incomingAdvancements,
+            });
+            payload.advancements = result.scaledAdvancements;
+          } catch (err) {
+            console.error('[FeatImportWorkbench] batch scaling extraction failed:', err);
+          }
+        }
+
         return {
-          id: eff.existingEntryId || null,
+          id: featId,
           data: payload,
         };
-      });
+      }));
 
       await upsertFeatBatch(entries);
 
-      const createdCount = entries.filter((e) => !e.id).length;
-      const updatedCount = entries.filter((e) => !!e.id).length;
+      // Create-vs-update count: we mint UUIDs upfront for new feats
+      // (so scaling-column FKs can write before the feat row), which
+      // means every entry's `id` is non-null here. Derive the count
+      // from the original `importable` array, where `eff.existingEntryId`
+      // is still the authoritative create/update signal.
+      const createdCount = importable.filter(({ eff }) => !eff.existingEntryId).length;
+      const updatedCount = importable.filter(({ eff }) => !!eff.existingEntryId).length;
 
       // Compose a success message that also accounts for skipped
       // rows (unresolved source + intra-batch duplicates) so the

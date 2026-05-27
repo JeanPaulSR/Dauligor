@@ -103,7 +103,7 @@ nudges authors to save first.
 - ItemsEditor grows a new "Scaling" sub-tab between Activities and Effects.
   Same panel, `parentType='item'`.
 
-### Phase B v1 — `10fa13c`: feat Foundry round-trip
+### Phase B v1 — `10fa13c`: feat Foundry round-trip (export side)
 - Extracted `normalizeScaleValueAdvancement(advancement, scalingById)` from
   `api/_lib/_classExport.ts` as an exported helper. Class export delegates to
   it — zero behavior change.
@@ -113,6 +113,24 @@ nudges authors to save first.
   derived from feat_type), normalizes each ScaleValue advancement, ships the
   filled-in `system.advancement` map to Foundry. Foundry's dnd5e resolves
   `@scale.<feat>.<column>` automatically.
+- **Covers races + backgrounds**: those are stored as feats with
+  `feat_type='race'/'background'`, so the same export path handles them.
+
+### Phase B.3 (feat path): importer side
+- New `src/lib/scalingImport.ts` exposes
+  `extractAndPersistScalingColumns({ parentId, parentType, advancements })`
+  and `scalingOwnerTypeForFeatType(featType)`. Reverses
+  `normalizeScaleValueAdvancement`: walks `ScaleValue` entries in incoming
+  advancements, persists `scaling_columns` rows owned by the parent (matched
+  on identifier for idempotent re-imports), patches
+  `configuration.scalingColumnId` so the editor + future re-exports see the
+  linkage.
+- `FeatImportWorkbench.tsx` wires both the single-import and batch-import
+  commit paths through the helper. UUIDs are minted upfront for new feats so
+  scaling rows can FK against them.
+- Failures during scaling extraction are logged but don't block the feat
+  upsert — the row lands; the author can re-author columns manually if
+  needed.
 
 ---
 
@@ -121,11 +139,15 @@ nudges authors to save first.
 See [roadmap entry](roadmap.md#scaling-columns-for-non-class-owners--follow-ups)
 for the canonical list. Briefly:
 
-- **B.2** — item / race / background Foundry export wiring. Items have no
-  server export; races + backgrounds have none either. Each needs its own
-  decision on server-built vs module-side injection.
-- **B.3** — importer side: ScaleValue advancements landing in `scaling_columns`
-  rows on import. Foundry → app reverse direction.
+- **B.2** (items only) — blocked on canonical-contract decision. The
+  `item-folder-export-contract.md` intentionally omits advancements, and no
+  `/api/module/items/<dbId>.json` server endpoint exists. Wiring items
+  through requires a contract update + new server-built export + module-side
+  fetcher. Races + backgrounds were always covered by the feat path.
+- **B.3** (items only) — items don't carry advancements per the same
+  contract, so there's no data to extract. The `extractAndPersistScalingColumns`
+  helper is already parametric on `parentType`, so wiring is one line once
+  B.2's contract decision lands.
 - **B.4** — module canonical contract doc updates. Owner-gated per
   `dauligor-guardian` protocol — flagged in roadmap, not edited.
 - **C** — `ItemBumpUses` advancement type. The actual new mechanic; everything
