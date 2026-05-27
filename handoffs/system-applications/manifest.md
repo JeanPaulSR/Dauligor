@@ -1,4 +1,4 @@
-# Branch: `feat/system-applications`
+# Branch: `system-applications`
 
 Started: 2026-05-27
 Owner: TBD (next agent to pick up the live-content bridge work)
