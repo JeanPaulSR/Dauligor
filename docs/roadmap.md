@@ -55,23 +55,25 @@ The following module canonical docs treat scaling as class-only; they need a pas
 - [module/dauligor-pairing/docs/class-feature-activity-contract.md](../module/dauligor-pairing/docs/class-feature-activity-contract.md) — line 1013 references Sorcerer-owned ScaleValue specifically
 
 ### Phase C — `ItemBumpUses` advancement type
-**Status**: v1 authoring surface shipped on `<commit>` · runtime application + items support open · **Priority**: high (the actual new mechanic the user asked for; Phase A/B was scaffolding) · **Pick-up doc**: [handoff-phase-c-itembumpuses.md](handoff-phase-c-itembumpuses.md)
+**Status**: v1 end-to-end shipped on `feat/itembumpuses-advancement` (authoring + CharacterBuilder runtime + Foundry actor export) · feat-authored bumps on server export + items as authors still open · **Pick-up doc**: [handoff-phase-c-itembumpuses.md](handoff-phase-c-itembumpuses.md)
 
 A separate advancement type that lets a feat or item upgrade an existing feature on a character — bumping its `uses.max` is the first mode. Design call: separate type (not a flag on `ItemGrant`), per [the design call in this conversation](handoff-scaling-non-class-owners.md#phase-c-design-decisions).
 
-**What shipped (Phase C v1 — authoring surface)**:
+**What shipped (Phase C v1 — end-to-end)**:
 - New `'ItemBumpUses'` entry in [src/components/compendium/AdvancementManager.tsx](../src/components/compendium/AdvancementManager.tsx)'s `AdvancementType` union, plus a `Plus`-iconed teal entry in `ADVANCEMENT_INFO` and a compact list-row subtitle string.
 - New default-configuration + normalizer branch in [src/lib/advancementState.ts](../src/lib/advancementState.ts): `{ target: { kind: 'feature'|'feat', id } | null, amount: string }`. Kind is restricted to `feature` / `feat`; everything else is coerced to `null`.
 - Editor UI block in AdvancementManager: kind picker (Class Feature / Feat) + `SingleSelectSearch` bound to `availableFeatures` / `availableFeats`, plus a formula input for the bump amount. Includes a help card explaining bake-time resolution + the target-not-found warning behavior.
-- Verification covered in [§ J of verification-scaling-non-class-owners.md](verification-scaling-non-class-owners.md#j-itembumpuses-authoring-surface-phase-c-v1).
+- Shared resolver `collectItemBumpUses` in [src/lib/characterLogic.ts](../src/lib/characterLogic.ts) — walks class / subclass / feature / feat advancements, gates by effective level, produces `{ bumps: Record<key, ItemBumpEntry[]>, warnings: ItemBumpWarning[] }`. `combineUsesMaxWithBumps` stitches multiple bumps onto a base `uses.max` formula with normalized signs.
+- Character builder runtime: a new effect in [CharacterBuilder.tsx](../src/pages/characters/CharacterBuilder.tsx) derives `character.derivedItemBumpUses` from the walker. New warnings toast (deduped via a ref-tracked seen set) so authors can pass orphan info to their DM.
+- Foundry actor export: [characterShared.ts](../src/lib/characterShared.ts) fetches feature rows, calls the same walker, and bakes the bumps into each feature item's `system.uses.max`. Per-item `flags['dauligor-pairing'].itemBumpUses` and a top-level `actor.flags['dauligor-pairing'].itemBumpUses` audit trail let the module side surface "where did this bump come from" without re-walking.
+- Verification covered in [§ J of verification-scaling-non-class-owners.md](verification-scaling-non-class-owners.md#j-itembumpuses-end-to-end-phase-c-v1).
 
 **What's still open**:
-4. **Character builder integration** in [src/pages/characters/CharacterBuilder.tsx](../src/pages/characters/CharacterBuilder.tsx): walk advancements, find target on character, add bump to its `uses.max`. Warn the user when the target isn't present so they can pass info to the DM (per the design call). The synthesis-walker pattern around line 2895 is the closest template.
-5. **Foundry export integration**: bake-time application (find the target item in the exported actor data and patch its `uses.max` statically). Avoids needing a runtime Active Effect. May not need new logic if (4) lands first — the actor data would already carry the bumped value.
-6. **Items as bump authors**: items don't have an `advancements` column today, so ItemBumpUses can only be authored on classes / subclasses / feats in v1. Schema migration + ItemsEditor wiring is needed before items (Amulet of the Devout, etc.) can author bumps app-side.
-7. **Future modes**: `'addToChoice'` (extend a target ItemChoice's pool) and `'replace'` (full feature overwrite). Out of scope; treat as Phase D / E.
+- **Feat-authored bumps in server export**. The export pipeline reconstructs the character from D1 via `rebuildCharacterFromSql`, which doesn't synthesize `character.feats` (the client-side synthesis walker owns that). Feat-authored bumps work app-side (runtime + warnings) but are silently dropped from the exported actor data. Unblocks once a server-side feat synthesizer ports the relevant slice of the client walker.
+- **Items as bump authors**: items don't have an `advancements` column today, so ItemBumpUses can only be authored on classes / subclasses / feats in v1. Schema migration + ItemsEditor wiring is needed before items (Amulet of the Devout, etc.) can author bumps app-side.
+- **Future modes**: `'addToChoice'` (extend a target ItemChoice's pool) and `'replace'` (full feature overwrite). Out of scope; treat as Phase D / E.
 
-Created 2026-05-27. v1 surface shipped on `feat/itembumpuses-advancement`.
+Created 2026-05-27. v1 end-to-end shipped on `feat/itembumpuses-advancement` (commits `fe71fdd` authoring + `656d96c` walker + `e709888` builder runtime + `960a99d` export).
 
 ---
 

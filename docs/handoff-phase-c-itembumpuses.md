@@ -1,16 +1,17 @@
 # Handoff — Phase C: `ItemBumpUses` advancement type
 
-Pick-up doc for the next session. Phase A + Phase B of the
-"advancements outside classes" track shipped on
-`feat/scaling-non-class-owners` (10 commits, all on origin/main).
-The Phase C **authoring surface** then shipped on
-`feat/itembumpuses-advancement` (one commit, branch only — not on
-main). This file is the single entry point for resuming the
-**runtime application** work that's still queued.
+Pick-up doc. Phase A + Phase B of the "advancements outside classes"
+track shipped on `feat/scaling-non-class-owners` (10 commits, all on
+origin/main). Phase C v1 — authoring + character-builder runtime +
+Foundry actor export — then shipped on `feat/itembumpuses-advancement`
+(four commits, branch only). This file documents what landed + the
+remaining slices.
 
-> **Status**: v1 authoring surface shipped (type definition,
-> default config, normalizer, editor UI). Runtime application
-> (character builder + Foundry export) is the next slice.
+> **Status**: v1 end-to-end shipped — authors create the
+> advancement, the character builder derives `character.derivedItemBumpUses`
+> and toasts orphan warnings, and the Foundry actor export bakes the
+> bumps into feature items' `system.uses.max`. Server-side feat-
+> authored bumps + items as bump authors remain queued.
 
 ## Read these first
 
@@ -121,61 +122,61 @@ The list-row subtitle for an `ItemBumpUses` advancement reads
 so authors can write `+1`, `1`, `@prof`, or `-1` and the prefix
 stays sensible).
 
-### 4. Character builder integration (open — next slice)
-**File**: [src/pages/characters/CharacterBuilder.tsx](../src/pages/characters/CharacterBuilder.tsx)
+### 4. Character builder integration ✅ shipped
+**Files**: [src/lib/characterLogic.ts](../src/lib/characterLogic.ts) + [src/pages/characters/CharacterBuilder.tsx](../src/pages/characters/CharacterBuilder.tsx)
 
-This is the big one. The closest template inside this file is the
-synthesis walker around line 2895 that builds `character.feats`
-from class / subclass / feature ItemGrant advancements — same
-"walk progression, collect refs, materialize" shape. Walk the
-character's chosen advancements; for every `ItemBumpUses` entry:
-1. Resolve the target via the requirements-tree leaf (the existing
-   `resolveRequirementLeaf` or equivalent — check existing call
-   sites for the pattern).
-2. Find the target feature / feat in the character's currently-
-   embedded items.
-3. If found: parse the `amount` formula, evaluate against the
-   character's roll data, and add to the target's `uses.max`.
-4. If NOT found: append a warning to a per-character build log
-   that surfaces in the character sheet (or via toast). User can
-   pass the warning to the DM.
+A shared resolver `collectItemBumpUses({ progression, classCache,
+subclassCache, featureCache, ownedFeats, totalCharacterLevel })`
+walks every authored advancement on classes / subclasses /
+features / feats at the character's effective levels and returns
+`{ bumps: Record<key, ItemBumpEntry[]>, warnings: ItemBumpWarning[] }`.
+Targets are keyed `${kind}:${id}` so feature-id and feat-id
+namespaces stay distinct. Effective-level gating mirrors the
+existing feat-trait pass (class advancements gate on class level,
+feat advancements gate on the granting class's level if granted
+by a class/subclass, else on total character level).
 
-Test cases the builder needs to handle:
-- Target is a class feature granted by another advancement in the
-  same character — order of operations matters (parent must
-  resolve BEFORE the bumper).
-- Target's `uses.max` is a formula already (`@prof`) — sum the
-  two formulas: `(@prof) + 1`.
-- Target's `uses.max` is empty — skip + warn (the user said
-  "Part of the feat usually to have a requirement that fits a
-  class with the target" — so this is an edge case but real).
-- Bumper applied twice (e.g. character has both Amulet of the
-  Devout AND a feat that bumps the same feature) — both bumps
-  apply additively.
+The CharacterBuilder effect (right after the synthesis walker)
+stores the result on `character.derivedItemBumpUses` and emits a
+deduped toast for each new warning. The dedupe is keyed by
+`${sourceAdvancementId}|${targetKind}:${targetId}|${reason}` via a
+ref-tracked Set so the toast doesn't re-fire on unrelated
+re-renders but does surface NEW orphans.
 
-### 5. Foundry export integration
-**File**: [api/_lib/_classExport.ts](../api/_lib/_classExport.ts) (or wherever the actor export lives)
+### 5. Foundry export integration ✅ shipped
+**File**: [src/lib/characterShared.ts](../src/lib/characterShared.ts)
 
-Apply the bake-time bump when exporting a character to Foundry.
-Same logic as the builder integration — walk the character's
-advancements, mutate target item's `uses.max` in the exported
-JSON. The Foundry-side actor data carries the bumped value
-statically; no runtime hook needed.
+`buildCharacterExport` now fetches feature rows from D1 alongside
+class / subclass docs, builds a minimal `featureCacheMap` keyed
+by `parent_id`, and calls the same `collectItemBumpUses` helper.
+Each owned-feature item gets its bumps baked in via
+`combineUsesMaxWithBumps(baseFeatureRow.usesMax, bumps)` and emits
+`system.uses = { max, spent: 0, recovery }` when there's content.
 
-If the character builder applies the bump app-side and the
-actor data already reflects it, the export might not need any
-new logic — verify which layer owns `uses.max` resolution.
+Audit trails:
+- Per-item: `flags['dauligor-pairing'].itemBumpUses = [...]` —
+  one entry per applied bump on that specific feature.
+- Top-level: `actor.flags['dauligor-pairing'].itemBumpUses =
+  { bumps, warnings }` — the whole-actor map so the module side
+  doesn't have to re-walk.
 
-### 6. Verification doc + roadmap update
+**Server-export caveat** — feat-authored bumps silently drop in
+the export because `rebuildCharacterFromSql` (the API loader)
+doesn't reconstruct `character.feats`. The synthesis lives entirely
+in the client-side builder. Feat-authored bumps work in the runtime
+toast + UI state but won't reach Foundry until a server-side feat
+synthesizer ports the relevant slice. Class / subclass / feature
+advancements ARE walked correctly because their advancements live
+on the class/subclass/feature rows directly.
 
-Once shipped:
-- Add Phase C section to
-  [docs/verification-scaling-non-class-owners.md](verification-scaling-non-class-owners.md):
-  step-by-step checklist for authoring an ItemBumpUses, applying
-  to a character, confirming the bumped value lands in both
-  app-side display and Foundry export, target-not-found warning.
-- Move Phase C entry in [docs/roadmap.md](roadmap.md) to "Shipped"
-  section with the commit hash.
+### 6. Verification doc + roadmap update ✅ shipped
+
+- Phase C section landed in
+  [docs/verification-scaling-non-class-owners.md § J](verification-scaling-non-class-owners.md#j-itembumpuses-end-to-end-phase-c-v1)
+  with J.1 (authoring), J.2 (builder runtime), J.3 (Foundry export),
+  J.4 (known limitations).
+- Phase C roadmap entry updated to "v1 end-to-end shipped" with
+  pointers to what's still open.
 
 ---
 
