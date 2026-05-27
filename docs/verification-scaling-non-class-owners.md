@@ -158,6 +158,36 @@ Things that should NOT regress.
 - [ ] FeatList hash deep-link (`#bloodlust_abh`) still works at the public-browser level.
 - [ ] No new TypeScript errors when running `npx tsc --noEmit` — only the 7 pre-existing ones.
 
+## J. ItemBumpUses authoring surface (Phase C v1)
+
+The `ItemBumpUses` advancement type lands as **authoring-only** in this
+pass — authors can add the advancement to a class / subclass / feat and
+the configuration round-trips through save/reload, but the runtime
+application (mutating the target's `uses.max` on the character sheet
+and in Foundry export) is still queued. See
+[handoff-phase-c-itembumpuses.md § Implementation scope](handoff-phase-c-itembumpuses.md)
+sections 4 + 5 for the open pieces.
+
+What to verify in this pass:
+
+- [ ] Open a class editor (e.g. Cleric) → Advancement tab → "+ Add Row".
+- [ ] In the modal's **Advancement Type** dropdown, "Bump Uses" appears in the list.
+- [ ] Pick "Bump Uses". The editor body shows two fieldsets:
+  - **Target**: a kind picker (Class Feature / Feat) + an entity dropdown.
+  - **Bump Amount**: a formula input + a "Resolution" help card.
+- [ ] Default target kind is "Class Feature". Switching to "Feat" repopulates the dropdown with the catalog passed via `availableFeats`.
+- [ ] Pick a target (e.g. "Channel Divinity" feature on Cleric) and type an amount (e.g. `+1`).
+- [ ] Save the advancement. The list row shows the title (or default label "Bump Uses") with the subtitle `+1 to a feature's uses`.
+- [ ] Reopen the advancement — the kind / target / amount survive the round-trip.
+- [ ] Try the same in a **feat editor** (`/compendium/feats/manage` → pick a feat with `feat_type='feat'` → Advancement sub-tab). "Bump Uses" should appear in the type list there too.
+- [ ] **Out of scope for v1**: the character builder does NOT yet apply the bump. Selecting the granting feat / class on a character does not change the target feature's uses_max. This is the next slice.
+
+What's not in this slice (call out if you want it sooner):
+
+1. **Runtime application**: walking the character's authored advancements, finding the target, mutating `uses.max`. Lives in [src/pages/characters/CharacterBuilder.tsx](../src/pages/characters/CharacterBuilder.tsx) — the synthesis-walker pattern around line 2895 is the closest template.
+2. **Items as bump authors**: items don't have an `advancements` column yet. A schema migration + ItemsEditor wiring is needed before Amulet of the Devout can author a bump app-side. Today an item's bump would have to be authored as a feat with `feat_type='item-equivalent'` (which we don't have).
+3. **Foundry export pass-through**: if the builder applies the bump app-side, the exported actor data inherits it for free. If the builder doesn't, the exporter needs to walk advancements at bake time. Decide once the builder pass lands.
+
 ---
 
 ## When something fails

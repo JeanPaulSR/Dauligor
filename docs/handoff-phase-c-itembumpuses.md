@@ -2,11 +2,15 @@
 
 Pick-up doc for the next session. Phase A + Phase B of the
 "advancements outside classes" track shipped on
-`feat/scaling-non-class-owners` (9 commits, all pushed). This
-file is the single entry point for resuming **Phase C** — the
-actual new mechanic everything prior was scaffolding for.
+`feat/scaling-non-class-owners` (10 commits, all on origin/main).
+The Phase C **authoring surface** then shipped on
+`feat/itembumpuses-advancement` (one commit, branch only — not on
+main). This file is the single entry point for resuming the
+**runtime application** work that's still queued.
 
-> **Status**: not started. Branch + design calls captured.
+> **Status**: v1 authoring surface shipped (type definition,
+> default config, normalizer, editor UI). Runtime application
+> (character builder + Foundry export) is the next slice.
 
 ## Read these first
 
@@ -69,54 +73,62 @@ The user answered these in the design phase; don't re-prompt:
 
 ## Implementation scope
 
-Six files. Two of them are large (AdvancementManager + CharacterBuilder);
-the rest are small.
+Six pieces. Sections 1-3 (authoring surface) **shipped on
+`feat/itembumpuses-advancement`**. Sections 4-6 are still open.
 
-### 1. Type definition
+### 1. Type definition ✅ shipped
 **File**: [src/components/compendium/AdvancementManager.tsx](../src/components/compendium/AdvancementManager.tsx)
 
-Add `'ItemBumpUses'` to the `AdvancementType` union (around line
-23-35). The union is exported, so it propagates automatically.
+`'ItemBumpUses'` is in the `AdvancementType` union and the
+exported `CanonicalAdvancementType` (advancementState.ts) too.
+ADVANCEMENT_INFO entry uses the `Plus` icon + teal accent.
 
-### 2. Default configuration
+### 2. Default configuration ✅ shipped
 **File**: [src/lib/advancementState.ts](../src/lib/advancementState.ts)
 
-Add a new branch to `buildDefaultAdvancementConfiguration()` for
-`'ItemBumpUses'` returning:
+`buildDefaultAdvancementConfiguration()` returns:
 ```ts
 {
-  target: null,   // RequirementLeaf — feature / feat leaf only
+  target: null,   // { kind: 'feature'|'feat', id: string } | null
   amount: '',     // formula string: e.g. '+1', '@prof', '@scale.<feat>.<col>'
 }
 ```
 
-Mirror how `ItemGrant` builds its default for comparison.
+`normalizeAdvancementForEditor` includes a defensive coercion
+branch: `target.kind` is constrained to `'feature'|'feat'`, and
+`{kind, id}` becomes `null` if either is empty.
 
-### 3. Editor UI block in AdvancementManager
+### 3. Editor UI block in AdvancementManager ✅ shipped
 **File**: [src/components/compendium/AdvancementManager.tsx](../src/components/compendium/AdvancementManager.tsx)
 
-Add an editor block for `editingAdv.type === 'ItemBumpUses'`.
-Pattern is established by the other type-specific blocks
-(`AbilityScoreImprovement`, `Trait`, etc. around line 2920+).
+Editor block for `editingAdv.type === 'ItemBumpUses'` sits right
+after `ExtendSpellList`. Two fieldsets:
 
-The block needs:
-- **Target picker**: reuse the requirements-tree leaf picker. The
-  existing `RequirementsEditor` (in `src/components/compendium/RequirementsEditor.tsx`)
-  has a `feature` / `feat` leaf — extract or inline the picker.
-  Constraint: only feature / feat leaf types make sense here;
-  hide the others.
-- **Amount input**: a formula string `<input>` accepting `'+1'`,
-  `'@prof'`, `'@scale.<owner>.<col>'`. Use the same input shape
-  as `ScaleValue`'s value cell.
-- **Hint copy**: "If the character has the target feature, add
-  this to its `uses.max`. If they don't have the feature, the
-  application silently skips and logs a warning."
+- **Target**: kind picker (Class Feature / Feat) using the existing
+  Select primitive, plus `SingleSelectSearch` bound to
+  `availableFeatures` / `availableFeats` from the parent editor.
+  Switching kind clears the id. We chose this over inlining the
+  RequirementsEditor leaf shape because `feature` / `feat` are the
+  only relevant leaf types and a dedicated picker reads cleaner
+  than a constrained `LeafNode`.
+- **Bump Amount**: a formula `<Input>` stored verbatim. Help text
+  documents the supported forms. A "Resolution" help card explains
+  bake-time application + the target-not-found warning behavior so
+  authors understand what will happen at apply time.
 
-### 4. Character builder integration
+The list-row subtitle for an `ItemBumpUses` advancement reads
+`+<amount> to a feat's / feature's uses` (with smart sign handling
+so authors can write `+1`, `1`, `@prof`, or `-1` and the prefix
+stays sensible).
+
+### 4. Character builder integration (open — next slice)
 **File**: [src/pages/characters/CharacterBuilder.tsx](../src/pages/characters/CharacterBuilder.tsx)
 
-This is the big one. Walk the character's chosen advancements;
-for every `ItemBumpUses` entry:
+This is the big one. The closest template inside this file is the
+synthesis walker around line 2895 that builds `character.feats`
+from class / subclass / feature ItemGrant advancements — same
+"walk progression, collect refs, materialize" shape. Walk the
+character's chosen advancements; for every `ItemBumpUses` entry:
 1. Resolve the target via the requirements-tree leaf (the existing
    `resolveRequirementLeaf` or equivalent — check existing call
    sites for the pattern).

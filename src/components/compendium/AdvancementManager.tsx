@@ -7,6 +7,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
+// Used by the ItemBumpUses target picker. Same primitive RequirementsEditor
+// reaches for when it needs an entity row out of a lookup list — keeps the
+// "feature / feat" picker consistent with how authors pick prereqs.
+import SingleSelectSearch from '../ui/SingleSelectSearch';
 import { fetchCollection } from '../../lib/d1';
 import { toast } from 'sonner';
 import ReferenceSheetDialog from '../reference/ReferenceSheetDialog';
@@ -32,7 +36,13 @@ export type AdvancementType =
   // Layer-2 spell grants — added by claude/kind-maxwell-bfa076 (Spellbook Manager).
   // Editor blocks live in ./SpellAdvancementEditors.tsx; resolver runs in CharacterBuilder.
   | 'GrantSpells'
-  | 'ExtendSpellList';
+  | 'ExtendSpellList'
+  // Phase C — author-time hook to bump `uses.max` on a feature / feat
+  // the character already owns. Typical authors are feats (e.g.
+  // "Divine Intervention Improvement") and items (e.g. "Amulet of the
+  // Devout"). Configuration: `{ target: { kind, id }, amount }`.
+  // Bake-time application — see docs/handoff-phase-c-itembumpuses.md.
+  | 'ItemBumpUses';
 
 export interface Advancement {
   _id: string;
@@ -115,6 +125,10 @@ const ADVANCEMENT_INFO: Record<AdvancementType, { label: string, icon: any, colo
   Subclass: { label: 'Choose Subclass', icon: <Star className="w-4 h-4" />, color: 'text-purple-500' },
   GrantSpells: { label: 'Grant Spells', icon: <BookOpen className="w-4 h-4" />, color: 'text-emerald-500' },
   ExtendSpellList: { label: 'Extend Spell List', icon: <BookOpen className="w-4 h-4" />, color: 'text-cyan-500' },
+  // Plus icon reads as "add charges". Teal-ish accent so it sits apart
+  // from ItemGrant's amber / ItemChoice's gold and reads as a separate
+  // mechanic rather than a sibling of the grant family.
+  ItemBumpUses: { label: 'Bump Uses', icon: <Plus className="w-4 h-4" />, color: 'text-teal-500' },
 };
 
 const ITEM_TYPE_LABELS: Record<string, string> = {
@@ -977,6 +991,20 @@ export default function AdvancementManager({
                   {adv.type === 'HitPoints' && `Hit Die: d${adv.configuration.hitDie || '?'}`}
                   {adv.type === 'Trait' && `Proficiency: ${TRAIT_TYPE_LABELS[adv.configuration.type] || adv.configuration.type}`}
                   {adv.type === 'Subclass' && `Subclass selection trigger`}
+                  {adv.type === 'ItemBumpUses' && (() => {
+                    // Compact one-liner for the list row. We surface the
+                    // amount (the visible mutation) + the target kind, but
+                    // not the target name — the row is space-constrained
+                    // and authors who need the name open the editor.
+                    const amount = String(adv.configuration?.amount || '').trim();
+                    const kind = adv.configuration?.target?.kind;
+                    if (!amount || !kind) return 'Bump uses (target / amount not set)';
+                    // Add a leading + only when the amount itself doesn't
+                    // already start with a sign — `+1` stays `+1`,
+                    // `@prof` becomes `+@prof`, `-1` stays `-1`.
+                    const signed = /^[+-]/.test(amount) ? amount : `+${amount}`;
+                    return `${signed} to a ${kind === 'feat' ? 'feat' : 'feature'}'s uses`;
+                  })()}
                 </span>
                 {adv.isBase && (
                   <span className="text-gold/40 not-italic font-sans font-bold uppercase tracking-tighter text-[9px]">
@@ -3077,6 +3105,150 @@ export default function AdvancementManager({
                   />
                 </fieldset>
               )}
+
+              {/* ── ItemBumpUses (Phase C — bump uses.max on a target) ── */}
+              {/*
+                Authoring surface for the bump-uses mechanic. Examples:
+                  • Cleric: Divine Intervention Improvement → +1 to Channel Divinity
+                  • Amulet of the Devout → +1 to Channel Divinity
+                  • Homebrew feat → +1 to Bardic Inspiration
+
+                Storage shape:
+                  configuration: {
+                    target: { kind: 'feature' | 'feat', id: string } | null,
+                    amount: string  // formula: '+1', '@prof', '@scale.<owner>.<col>'
+                  }
+
+                Runtime resolution (character builder + Foundry export) is
+                a separate slice — see docs/handoff-phase-c-itembumpuses.md
+                § "Implementation scope" sections 4 + 5. Until that ships
+                the authored shape is inert; saving works so authors can
+                stage content for the upcoming runtime pass.
+              */}
+              {editingAdv.type === 'ItemBumpUses' && (() => {
+                const target = editingAdv.configuration?.target || null;
+                const kind = (target?.kind === 'feat' ? 'feat' : 'feature') as 'feature' | 'feat';
+                const pool = kind === 'feat'
+                  ? availableFeats.map((f: any) => ({ id: String(f.id), name: String(f.name || f.id) }))
+                  : availableFeatures.map((f: any) => ({ id: String(f.id), name: String(f.name || f.id) }));
+                const targetId = String(target?.id || '');
+                const amount = String(editingAdv.configuration?.amount || '');
+
+                const setTargetKind = (nextKind: 'feature' | 'feat') => {
+                  // Switching kind clears the id — a class feature id doesn't
+                  // resolve against the feats table and vice versa.
+                  setEditingAdv({
+                    ...editingAdv,
+                    configuration: {
+                      ...editingAdv.configuration,
+                      target: { kind: nextKind, id: '' },
+                    },
+                  });
+                };
+                const setTargetId = (nextId: string) => {
+                  setEditingAdv({
+                    ...editingAdv,
+                    configuration: {
+                      ...editingAdv.configuration,
+                      target: nextId ? { kind, id: nextId } : null,
+                    },
+                  });
+                };
+                const setAmount = (nextAmount: string) => {
+                  setEditingAdv({
+                    ...editingAdv,
+                    configuration: {
+                      ...editingAdv.configuration,
+                      amount: nextAmount,
+                    },
+                  });
+                };
+
+                return (
+                  <div className="grid xl:grid-cols-[minmax(280px,0.9fr)_minmax(0,1.1fr)] gap-5 items-start">
+                    <fieldset className="config-fieldset bg-background/20">
+                      <legend className="section-label text-gold/60 px-1">Target</legend>
+                      <div className="space-y-3">
+                        <div className="space-y-1.5">
+                          <label className="field-label">Target Kind</label>
+                          <Select
+                            value={kind}
+                            onValueChange={(val: string | null) => {
+                              if (val !== 'feature' && val !== 'feat') return;
+                              setTargetKind(val);
+                            }}
+                          >
+                            <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                              <SelectValue>{kind === 'feat' ? 'Feat' : 'Class Feature'}</SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="feature">Class Feature</SelectItem>
+                              <SelectItem value="feat">Feat</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-[10px] text-ink/45">
+                            {kind === 'feat'
+                              ? 'Pick a feat from the catalog. Bumps the feat\'s uses when it\'s present on the character.'
+                              : 'Pick a class feature from the local list. Bumps the feature\'s uses when the character has it.'}
+                          </p>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="field-label">
+                            {kind === 'feat' ? 'Target Feat' : 'Target Feature'}
+                          </label>
+                          <SingleSelectSearch
+                            value={targetId}
+                            onChange={setTargetId}
+                            options={pool}
+                            placeholder={kind === 'feat' ? 'Select feat…' : 'Select feature…'}
+                            noEntitiesText={kind === 'feat'
+                              ? 'No feats available — pass `availableFeats` from the parent editor.'
+                              : 'No features available — pass `availableFeatures` from the parent editor.'}
+                            triggerClassName="w-full h-9"
+                          />
+                        </div>
+                      </div>
+                    </fieldset>
+
+                    <fieldset className="config-fieldset bg-background/20">
+                      <legend className="section-label text-gold/60 px-1">Bump Amount</legend>
+                      <div className="space-y-3">
+                        <div className="space-y-1.5">
+                          <label className="field-label">Amount Formula</label>
+                          <Input
+                            value={amount}
+                            onChange={(e) => setAmount(e.target.value)}
+                            placeholder="e.g. +1, @prof, @scale.amulet-of-the-devout.charges"
+                            className="h-9 bg-background/50 border-gold/10 placeholder:text-ink/20 font-mono text-[12px]"
+                          />
+                          <p className="text-[10px] text-ink/45">
+                            Stored verbatim. Plain numbers like <code className="font-mono text-ink/60">1</code> mean
+                            "add 1 to the target's <code className="font-mono text-ink/60">uses.max</code>." Formulas
+                            like <code className="font-mono text-ink/60">@prof</code> or
+                            <code className="font-mono text-ink/60"> @scale.&lt;owner&gt;.&lt;col&gt;</code> are
+                            evaluated against the character at apply time.
+                          </p>
+                        </div>
+
+                        <div className="border border-gold/10 rounded-md bg-card/40 px-3 py-2.5 space-y-1">
+                          <p className="text-[10px] uppercase font-black tracking-widest text-gold/60">Resolution</p>
+                          <p className="text-[10px] text-ink/55 leading-snug">
+                            When this advancement applies, the character builder finds the target
+                            on the sheet and adds the amount to its <code className="font-mono text-ink/60">uses.max</code>.
+                            If the target is <span className="font-bold text-ink/70">not present</span> on the character,
+                            the builder logs a warning so you can pass the note along to the DM — the rest of the
+                            granting feat / item still applies.
+                          </p>
+                          <p className="text-[10px] text-ink/40 italic">
+                            Note: runtime application is queued — see docs/handoff-phase-c-itembumpuses.md.
+                          </p>
+                        </div>
+                      </div>
+                    </fieldset>
+                  </div>
+                );
+              })()}
 
             </div>
           </div>

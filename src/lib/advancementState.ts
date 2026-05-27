@@ -8,7 +8,12 @@ export type CanonicalAdvancementType =
   | 'Trait'
   | 'Subclass'
   | 'GrantSpells'
-  | 'ExtendSpellList';
+  | 'ExtendSpellList'
+  // Phase C — bumps the `uses.max` of an existing feature / feat the
+  // character already owns. Authored on the granting feat or item;
+  // resolved app-side at bake time (not as a runtime Active Effect).
+  // Configuration shape: { target: { kind: 'feature'|'feat', id }, amount }.
+  | 'ItemBumpUses';
 
 export interface CanonicalTraitChoiceEntry {
   id: string;
@@ -76,6 +81,15 @@ export function buildDefaultAdvancementConfiguration(type: string, defaultHitDie
         resolver: { kind: 'rule', ruleId: '' },
         scope: 'self',
         scopeClassId: null,
+      };
+    case 'ItemBumpUses':
+      return {
+        // `target` mirrors the requirements-tree leaf shape for
+        // feature / feat picks — a discriminated `{ kind, id }` pair.
+        // The shape stays minimal because Phase C bumps a single
+        // target; multi-target bumps would author two advancements.
+        target: null,
+        amount: '',
       };
     default:
       return {};
@@ -172,6 +186,27 @@ export function normalizeAdvancementForEditor<T extends { type?: string; configu
   if (type === 'Size') {
     configuration = normalizeSizeConfiguration(configuration);
     delete configuration.size;
+  }
+
+  if (type === 'ItemBumpUses') {
+    // Defensive normalization for the bump configuration. We accept
+    // the editor's `{ target: { kind, id } | null, amount: string }`
+    // shape; anything else is coerced. `kind` is restricted to
+    // `feature` or `feat` (the two leaf types in the requirements
+    // editor that target an entity row). Amount is stored as a raw
+    // formula string so authors can write `+1`, `@prof`,
+    // `@scale.<owner>.<col>` without app-side parsing leaking into
+    // the persisted shape.
+    const rawTarget = configuration.target;
+    const validKind = rawTarget?.kind === 'feat' || rawTarget?.kind === 'feature';
+    const targetId = String(rawTarget?.id || '').trim();
+    configuration = {
+      ...configuration,
+      target: validKind && targetId
+        ? { kind: rawTarget.kind, id: targetId }
+        : null,
+      amount: String(configuration.amount || '').trim(),
+    };
   }
 
   if (type === 'Trait') {
