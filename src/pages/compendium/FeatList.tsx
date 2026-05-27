@@ -245,7 +245,7 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
       // narrow widths but the proportions stay consistent on wider
       // viewports so a typical row (e.g. Athlete, Lvl 4 +
       // Athletics Proficiency) fits without truncation.
-      width: 'minmax(110px,3.2fr)',
+      width: 'minmax(140px,4fr)',
       alwaysVisible: true,
       align: 'start',
       render: (feat) => {
@@ -273,30 +273,15 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
         );
       },
     },
-    {
-      key: 'ability',
-      label: 'Ability',
-      width: 'minmax(80px,2.5fr)',
-      render: (feat) => {
-        const leaves = (feat.abilityScoreLeaves || []) as Array<{ ability: string; min: number }>;
-        if (!leaves.length) return <span className="text-[11px] text-ink/40">—</span>;
-        const byMin = new Map<number, string[]>();
-        for (const l of leaves) {
-          const k = Number(l.min) || 0;
-          if (!byMin.has(k)) byMin.set(k, []);
-          byMin.get(k)!.push(String(l.ability).toUpperCase());
-        }
-        const parts = [...byMin.entries()]
-          .sort((a, b) => b[0] - a[0])
-          .map(([min, abilities]) => `${abilities.join('/')} ${min}`);
-        const label = parts.join(' · ');
-        return <span className="text-[11px] text-ink truncate" title={label}>{label}</span>;
-      },
-    },
+    // Ability column removed. Ability-score requirements still
+    // render inside the Prerequisite column (e.g. "WIS 13" for
+    // Blood Hound), so dropping the standalone column doesn't lose
+    // information — it just frees ~2.5fr of horizontal space for
+    // the Name + Prerequisite columns that needed it more.
     {
       key: 'prerequisite',
       label: 'Prerequisite',
-      width: 'minmax(120px,3fr)',
+      width: 'minmax(160px,4fr)',
       render: (feat) => {
         const text = formatRequirementShort(feat.requirementsTree ?? null, prereqLookup);
         const fallback = String(feat.requirements ?? '').trim();
