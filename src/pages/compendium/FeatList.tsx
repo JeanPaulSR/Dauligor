@@ -238,21 +238,23 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
     {
       key: 'name',
       label: 'Name',
-      // `minmax(160px, 1fr)` ensures the name stays at least 160px
-      // wide even when the other columns + the favorites pane eat
-      // most of the table area. The previous `minmax(0, 1fr)`
-      // allowed the column to collapse to 0px, which combined with
-      // the inner `truncate` made the name disappear entirely.
-      width: 'minmax(160px,1fr)',
+      // Column proportions match 5etools' feat table (col-3-2 /
+      // col-1-3 / col-2-5 / col-3 / col-1-7 against their 12-unit
+      // grid). All values are fractional so the row scales with
+      // the list pane width; sensible mins prevent collapse at
+      // narrow widths but the proportions stay consistent on wider
+      // viewports so a typical row (e.g. Athlete, Lvl 4 +
+      // Athletics Proficiency) fits without truncation.
+      width: 'minmax(110px,3.2fr)',
       alwaysVisible: true,
       align: 'start',
       render: (feat) => {
         const starred = isFavorite(feat.id);
         return (
-          <div className="min-w-0 flex items-center gap-1.5">
-            <span className="truncate font-semibold text-sm text-ink">{feat.name}</span>
+          <div className="min-w-0 flex items-center gap-1">
+            <span className="truncate font-semibold text-[12px] text-ink">{feat.name}</span>
             {starred && (
-              <Star className="w-3 h-3 text-gold/70 fill-gold/40 shrink-0" aria-label="Favorite" />
+              <Star className="w-2.5 h-2.5 text-gold/70 fill-gold/40 shrink-0" aria-label="Favorite" />
             )}
           </div>
         );
@@ -261,34 +263,23 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
     {
       key: 'category',
       label: 'Category',
-      width: '140px',
+      width: 'minmax(60px,1.3fr)',
       render: (feat) => {
-        // Look up the admin-authored category name. Falls back to a
-        // dim em-dash when the feat has no category assigned (the
-        // common cold-start case before admins curate the taxonomy).
         const label = categoryNameById[String(feat.featCategoryId ?? '')] || '';
         return label ? (
-          <span className="text-xs text-ink/80 truncate">{label}</span>
+          <span className="text-[11px] text-ink truncate" title={label}>{label}</span>
         ) : (
-          <span className="text-xs text-ink/30">—</span>
+          <span className="text-[11px] text-ink/40">—</span>
         );
       },
     },
     {
       key: 'ability',
       label: 'Ability',
-      width: '100px',
+      width: 'minmax(80px,2.5fr)',
       render: (feat) => {
-        // Roll the abilityScore leaves from the requirements tree
-        // up into a tight glance. Multiple leaves with the same min
-        // collapse: "STR/DEX 13"; differing mins render each one:
-        // "STR 13 · WIS 11". The attributes-table abbreviation is
-        // always SCREAMING_CASE (per /admin/proficiencies), so the
-        // raw slug.toUpperCase() matches the canonical label without
-        // a join.
         const leaves = (feat.abilityScoreLeaves || []) as Array<{ ability: string; min: number }>;
-        if (!leaves.length) return <span className="text-xs text-ink/30">—</span>;
-        // Group by min so "STR/DEX/CON 13" collapses cleanly.
+        if (!leaves.length) return <span className="text-[11px] text-ink/40">—</span>;
         const byMin = new Map<number, string[]>();
         for (const l of leaves) {
           const k = Number(l.min) || 0;
@@ -298,36 +289,31 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
         const parts = [...byMin.entries()]
           .sort((a, b) => b[0] - a[0])
           .map(([min, abilities]) => `${abilities.join('/')} ${min}`);
-        return <span className="text-xs text-ink/80 truncate">{parts.join(' · ')}</span>;
+        const label = parts.join(' · ');
+        return <span className="text-[11px] text-ink truncate" title={label}>{label}</span>;
       },
     },
     {
       key: 'prerequisite',
       label: 'Prerequisite',
-      width: 'minmax(180px,1.4fr)',
+      width: 'minmax(120px,3fr)',
       render: (feat) => {
-        // formatRequirementShort: drops the verbose "(character
-        // level)" qualifier and the "Skill proficiency:" prefix in
-        // favor of a clean "Proficiency: <name>" reading. The
-        // per-kind lookup maps resolve identifier slugs like "ath"
-        // to their display name ("Athletics") — falls back to the
-        // slug when the lookup isn't populated yet.
         const text = formatRequirementShort(feat.requirementsTree ?? null, prereqLookup);
         const fallback = String(feat.requirements ?? '').trim();
         const display = text || fallback;
         return display ? (
-          <span className="text-xs text-ink truncate" title={display}>{display}</span>
+          <span className="text-[11px] text-ink truncate" title={display}>{display}</span>
         ) : (
-          <span className="text-xs text-ink/40">—</span>
+          <span className="text-[11px] text-ink/40">—</span>
         );
       },
     },
     {
       key: 'source',
       label: 'Source',
-      width: '60px',
+      width: 'minmax(50px,1.7fr)',
       render: (feat) => (
-        <span className="text-xs font-bold text-gold/80 justify-self-center">
+        <span className="text-[11px] font-bold text-gold/80 justify-self-center">
           {renderSourceAbbreviation(feat)}
         </span>
       ),
@@ -409,6 +395,7 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
       onResetFilters={() => setSearch('')}
       columns={columns}
       columnsLocalStorageKey="dauligor.featListColumns"
+      rowHeight={36}
       favorites={favorites}
       onToggleFavorite={toggleFavorite}
       favoritesRowRender={favoritesRowRender}

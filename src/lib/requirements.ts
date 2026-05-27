@@ -383,10 +383,10 @@ const ABILITY_ABBR: Record<AbilityKey, string> = {
 function formatLeafShort(leaf: RequirementLeaf, lookup: RequirementFormatLookup): string {
   switch (leaf.type) {
     case 'level':
-      // No "(character level)" suffix — most feats want the
-      // character total; the rare class-scoped case uses
-      // `levelInClass` instead, which we still render specially.
-      return `Level ${leaf.minLevel}+`;
+      // Match 5etools' "Lvl 4" — 6 fewer characters than "Level 4+"
+      // and the "+" qualifier is implicit (a feat with a level
+      // prerequisite always means "at least that level").
+      return `Lvl ${leaf.minLevel}`;
     case 'levelInClass': {
       const name = lookup.classNameById?.[leaf.classId] ?? '<unknown class>';
       return `${name} ${leaf.minLevel}+`;
@@ -404,14 +404,14 @@ function formatLeafShort(leaf: RequirementLeaf, lookup: RequirementFormatLookup)
     case 'spellRule':
       return `Knows ${lookup.spellRuleNameById?.[leaf.spellRuleId] ?? '<unknown spell rule>'}`;
     case 'abilityScore':
-      // Compact "STR 13+" reads better in narrow columns than the
-      // verbose "Strength 13 or higher".
-      return `${ABILITY_ABBR[leaf.ability]} ${leaf.min}+`;
+      // Compact "STR 13" — also drops the "+" qualifier (implicit).
+      return `${ABILITY_ABBR[leaf.ability]} ${leaf.min}`;
     case 'proficiency': {
-      // Resolve slug → display name via the per-kind lookup map.
-      // The label is just "Proficiency: <name>" regardless of kind
-      // (no "Skill proficiency:" / "Tool proficiency:" qualifier —
-      // the resolved name already communicates the kind to readers).
+      // "<Name> Proficiency" word order matches 5etools and reads
+      // naturally inside a comma-joined chain ("Lvl 4, Athletics
+      // Proficiency"). Resolves slug → display name via per-kind
+      // lookup; the kind is implied by the name so we don't repeat
+      // it as "Skill proficiency:".
       const map =
         leaf.category === 'skill' ? lookup.skillNameById :
         leaf.category === 'weapon' ? lookup.weaponNameById :
@@ -420,7 +420,7 @@ function formatLeafShort(leaf: RequirementLeaf, lookup: RequirementFormatLookup)
         leaf.category === 'language' ? lookup.languageNameById :
         undefined;
       const resolved = map?.[leaf.identifier] ?? leaf.identifier;
-      return `Proficiency: ${resolved}`;
+      return `${resolved} Proficiency`;
     }
     case 'string':
       return leaf.value;
