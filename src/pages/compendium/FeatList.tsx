@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Lock, Star, X } from 'lucide-react';
+import { Star, X } from 'lucide-react';
 import { auth } from '../../lib/firebase';
 import { fetchCollection } from '../../lib/d1';
 import { cn } from '../../lib/utils';
@@ -216,17 +216,16 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
       align: 'start',
       render: (feat) => {
         const starred = isFavorite(feat.id);
+        // Only the favorite star renders alongside the name now. The
+        // prerequisite lock and repeatable arrow are gone — when the
+        // Prerequisite column lands they'll live there, and the
+        // repeatable signal will surface in the detail view rather
+        // than as a row chip.
         return (
           <div className="min-w-0 flex items-center gap-1.5">
             <span className="truncate font-serif text-sm text-ink">{feat.name}</span>
             {starred && (
               <Star className="w-3 h-3 text-gold/70 fill-gold/40 shrink-0" aria-label="Favorite" />
-            )}
-            {feat.hasPrereqs && (
-              <Lock className="w-3 h-3 text-blood/70 shrink-0" aria-label="Has prerequisites" />
-            )}
-            {feat.repeatable && (
-              <span title="Repeatable" className="text-[9px] uppercase tracking-widest text-gold/60 font-bold shrink-0">↻</span>
             )}
           </div>
         );
