@@ -16,12 +16,37 @@ For the architectural philosophy behind the dual-state design (human-readable on
 | `module/dauligor-pairing/scripts/` | Module runtime code |
 | `module/dauligor-pairing/docs/` | Module-side documentation (separate from app docs) |
 
-The live runtime copy lives at:
-`C:\Users\Jean\AppData\Local\FoundryVTT\Data\modules\dauligor-pairing`
+The live runtime location is:
+`%LOCALAPPDATA%\FoundryVTT\Data\modules\dauligor-pairing` (Windows;
+the equivalent `~/Library/Application Support/FoundryVTT/Data/modules/dauligor-pairing` on macOS).
 
-Sync command (when needed):
+**Check the runtime location before copying anything.** On a dev machine
+the runtime path is typically a **directory junction (Windows) or symlink
+(macOS/Linux)** pointing back at `module/dauligor-pairing/` in the repo
+or active worktree. When that's the case, editing the repo source is
+already the live edit — reload Foundry and you're done. Running a copy
+or `robocopy /MIR` with the junction in place would be source == dest
+and is unsafe.
+
+Verify which mode you're in:
+
 ```powershell
-robocopy "E:\DnD\Professional\Dev\Dauligor\module\dauligor-pairing" "C:\Users\Jean\AppData\Local\FoundryVTT\Data\modules\dauligor-pairing" /MIR /XD data
+Get-Item "$env:LOCALAPPDATA\FoundryVTT\Data\modules\dauligor-pairing" |
+  Select-Object FullName, LinkType, Target
+```
+
+- `LinkType: Junction` (or `SymbolicLink`) with `Target` pointing at the
+  repo → **no sync needed**. Reload Foundry to pick up new code.
+- Empty `LinkType` → it's a real copied folder. Use the sync command
+  below, or follow the README's "Live development sync" recipe to switch
+  to a junction once and skip the copy step forever after.
+
+Setup recipe (one-time, switches a copied folder to a junction):
+[module/dauligor-pairing/README.md § Live development sync](../../module/dauligor-pairing/README.md#live-development-sync-recommended-for-module-work).
+
+Fallback sync command (only when the runtime is a real copy):
+```powershell
+robocopy "E:\DnD\Professional\Dev\Dauligor\module\dauligor-pairing" "$env:LOCALAPPDATA\FoundryVTT\Data\modules\dauligor-pairing" /MIR /XD data
 ```
 
 The dev module copy is the **code source of truth**. The live Foundry module copy is the runtime copy. `data/` is allowed to drift because source payload delivery is moving toward app endpoints.
