@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useKeyboardSave } from "../../hooks/useKeyboardSave";
 import { auth, reportClientError, OperationType } from "../../lib/firebase";
@@ -106,6 +106,12 @@ import {
   getEffectiveHpMax,
   areStringListsEqual,
   normalizeSpellcastingForExport,
+  // Phase C — bake-time uses.max bump resolution. The shared walker
+  // is re-used by the actor exporter in characterShared.ts so the
+  // bumps that show on the sheet match what Foundry sees on import.
+  collectItemBumpUses,
+  describeItemBumpWarning,
+  type ItemBumpWarning,
 } from "../../lib/characterLogic";
 import { Button } from "../../components/ui/button";
 import { StatusEmblem } from "../../components/ui/StatusEmblem";
@@ -3230,6 +3236,61 @@ export default function CharacterBuilder({
     optionsCache,
     character.progression,
     character.subclassId,
+    classCache,
+    subclassCache,
+    featureCache,
+  ]);
+
+  // ── ItemBumpUses resolution (Phase C — bake-time uses.max bump) ──
+  //
+  // Runs after the synthesis walker so `character.feats` is fresh.
+  // Stores `{ bumps, warnings }` on `character.derivedItemBumpUses`
+  // (transient field — not persisted to D1) and toasts each newly-
+  // seen warning so authors can pass orphan info to their DM. The
+  // `seenWarningKeysRef` set keeps the toast from re-firing on
+  // every render once the user has been notified.
+  const seenWarningKeysRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const progression = buildCurrentProgression(character);
+    const totalCharacterLevel = getTotalCharacterLevel(progression, character.level);
+    const result = collectItemBumpUses({
+      progression,
+      classCache,
+      subclassCache,
+      featureCache,
+      ownedFeats: Array.isArray(character.feats) ? character.feats : [],
+      totalCharacterLevel,
+    });
+
+    result.warnings.forEach((w: ItemBumpWarning) => {
+      const key = `${w.sourceAdvancementId}|${w.targetKind}:${w.targetId}|${w.reason}`;
+      if (seenWarningKeysRef.current.has(key)) return;
+      seenWarningKeysRef.current.add(key);
+      toast.warning(describeItemBumpWarning(w), {
+        description: `Bump amount: ${w.amount || '(empty)'} — pass this to your DM.`,
+      });
+    });
+
+    setCharacter((prev: any) => {
+      // Fingerprint over bumps + warning counts. Avoids pointless
+      // setState on every dep change that didn't actually move the
+      // derived state.
+      const fingerprint = (r: typeof result) => {
+        const keys = Object.keys(r.bumps).sort();
+        const bumpPart = keys
+          .map((k) => `${k}:${(r.bumps[k] || []).map((b) => b.amount).join(',')}`)
+          .join('|');
+        return `${bumpPart}#${r.warnings.length}`;
+      };
+      const prevDerived = prev?.derivedItemBumpUses || { bumps: {}, warnings: [] };
+      if (fingerprint(prevDerived) === fingerprint(result)) return prev;
+      return { ...prev, derivedItemBumpUses: result };
+    });
+  }, [
+    character.feats,
+    character.progression,
+    character.subclassId,
+    character.level,
     classCache,
     subclassCache,
     featureCache,
