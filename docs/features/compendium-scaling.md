@@ -6,7 +6,7 @@ Scaling tables drive any value on a class sheet that depends on level: cantrip d
 
 | Table | Role |
 |---|---|
-| `scaling_columns` | Per-class / per-subclass scaling table (cantrip damage, etc.) |
+| `scaling_columns` | Per-owner scaling table (cantrip damage, channel-divinity charges, etc.) — polymorphic via `(parent_id, parent_type)`; owners include class, subclass, feat, race, background, item |
 | `spellcasting_progressions` | Slot tables: `type` ∈ `standard`, `pact`, `known` |
 | `multiclass_master_chart` | Standard multiclass-caster slot table |
 | `spellcasting_types` | Reference list of spellcasting types and their formulas |
@@ -15,26 +15,48 @@ Schema: [../database/structure/spellcasting_progressions.md](../database/structu
 
 ## Scaling columns
 
-A class scaling column is a 20-row table where row N is the value at level N.
+A scaling column is a 20-row table where row N is the value at level N. Originally a class-only concept; as of 2026-05-27 the same table also backs feat / race / background / item scaling so non-class owners can carry their own per-level progressions (e.g. Amulet of the Devout adding +1 to Channel Divinity charges).
 
 ### Schema
 - `id` (PK)
 - `name` — display name (e.g., "Cantrip Damage")
-- `parent_id` — class or subclass ID
-- `parent_type` — `class` or `subclass`
+- `parent_id` — id of the owning entity
+- `parent_type` — one of `class`, `subclass`, `feat`, `race`, `background`, `item`
+- `type` — `number` | `dice` | `string` | `cr` | `distance`
+- `identifier` — stable slug (the `<identifier>` half of `@scale.<owner>.<identifier>`)
+- `distance_units` — units string for `type='distance'`; ignored otherwise
 - `values` — JSON; either `{ "1": "1d8", "2": "1d8", ... }` or numeric
 
-### Editor
-- `/compendium/scaling/` — main scaling editor entry
-- Per-class scaling columns appear inside the class editor under their own tab
-- Subclass-specific columns live under the subclass editor
+The table is already polymorphic via `parent_type` (originally added in `0009_scalings.sql`). Widening to support feat / race / background / item required **zero schema migration** — only editor wiring + read-path scoping. See `docs/roadmap.md#scaling-columns-for-non-class-owners--follow-ups` for what's still outstanding.
 
-Source: [src/pages/compendium/scaling/ScalingEditor.tsx](../../src/pages/compendium/scaling/ScalingEditor.tsx).
+### Editor
+
+- **Full matrix editor** — `/compendium/scaling/edit/<id>` (or `/compendium/scaling/new?parentId=<id>&parentType=<type>` for a new column). Single page; takes parent context from the URL. Source: [src/pages/compendium/scaling/ScalingEditor.tsx](../../src/pages/compendium/scaling/ScalingEditor.tsx).
+- **Per-owner sidebar / sub-tab** — every editor that can own columns hosts a `<ScalingColumnsPanel>` for inline rename + breakpoint preview + a link out to the full matrix editor:
+  - Class editor — right sidebar ("Class Columns") — [src/pages/compendium/ClassEditor.tsx](../../src/pages/compendium/ClassEditor.tsx)
+  - Feats editor — Advancement sub-tab, right column at xl+ ("Feat Columns" / "Race Columns" / "Background Columns" depending on `feat_type`) — [src/pages/compendium/FeatsEditor.tsx](../../src/pages/compendium/FeatsEditor.tsx). **Class features (`feat_type='class'` / `'subclass'`) are excluded** — they inherit columns from the parent class.
+  - Items editor — Scaling sub-tab ("Item Columns") — [src/pages/compendium/ItemsEditor.tsx](../../src/pages/compendium/ItemsEditor.tsx)
+
+The panel itself is shared: [src/components/compendium/ScalingColumnsPanel.tsx](../../src/components/compendium/ScalingColumnsPanel.tsx).
+
+#### URL-backed editingId
+
+Both FeatsEditor and ItemsEditor track the current selection via `?editingId=<uuid>` so navigating to the full matrix editor and back (or refreshing the page mid-edit) preserves the user's place. The pattern is in [src/components/compendium/useEditorFormSession.ts](../../src/components/compendium/useEditorFormSession.ts) sibling logic + the per-editor effects; the FeatList public browser uses an analogous `#identifier_abbrev` hash for user-shareable links.
 
 ### Identifier convention
-The display name maps to an identifier (slug). Reference syntax `@scale.<class>.<identifier>` resolves at character level. See [../architecture/reference-syntax.md](../architecture/reference-syntax.md).
+The column's `identifier` field (slug) combines with the owning entity's identifier to form a Foundry resolver path: `@scale.<owner-identifier>.<column-identifier>`. The `<owner-identifier>` half comes from the owning item's `system.identifier` at runtime — dnd5e resolves the namespace itself, so the app doesn't need to inject the prefix on the export side. See [../architecture/reference-syntax.md](../architecture/reference-syntax.md).
 
-When two classes share a column name (e.g., "Cantrip Damage"), the identifier is namespaced to the class — `@scale.wizard.cantrip-damage` and `@scale.warlock.cantrip-damage` resolve independently.
+Examples that resolve independently because their owners differ:
+- `@scale.wizard.cantrip-damage` (class-owned)
+- `@scale.warlock.cantrip-damage` (class-owned)
+- `@scale.amulet-of-the-devout.channel-divinity-bonus` (item-owned)
+- `@scale.bloodlust.rage-die` (feat-owned)
+
+### Foundry export round-trip
+
+Class exports have always synthesized `ScaleValue` advancements from `scaling_columns`. As of `10fa13c`, the same path runs for feats — `_featExport.ts` loads scaling_columns scoped to the feat and runs each ScaleValue advancement through the shared `normalizeScaleValueAdvancement` helper (extracted from `_classExport.ts`). The exported feat carries a fully-populated `system.advancement` map; Foundry's dnd5e system resolves `@scale.<feat-identifier>.<column>` natively at play time. No module-side changes were required.
+
+Items, races, and backgrounds **don't have a server-built export endpoint today** — they ship as Foundry items via the module's folder-export path, which doesn't currently inject scaling. Wiring is tracked in [the roadmap](../roadmap.md#scaling-columns-for-non-class-owners--follow-ups).
 
 ## Spellcasting progressions
 
@@ -95,9 +117,18 @@ For per-class scale values (cantrip damage etc.), the builder evaluates `@scale.
 
 ### Add a new scaling column to a class
 1. Open the class editor.
-2. Go to the Scaling tab.
-3. Add a new column with name and identifier.
-4. Fill in level-by-level values.
+2. Use the **Class Columns** sidebar on the right (`<ScalingColumnsPanel>`).
+3. Click "+ Add" → name the column → fill in level-by-level values in the full matrix editor.
+
+### Add a new scaling column to a feat / race / background
+1. Open the feat (or race, or background) editor at `/compendium/feats/manage` (or the scoped wrappers).
+2. Save the row at least once so it has a stable id (the placeholder card in the Advancement tab nudges you to do this).
+3. Go to the **Advancement** sub-tab — the "Feat Columns" / "Race Columns" / "Background Columns" panel is on the right at xl+ widths, stacked below at narrower viewports.
+4. Click "+ Add" → name the column → fill in level-by-level values.
+5. Author a `ScaleValue` advancement on the feat that references the new column (so it ships to Foundry). Other advancement types (Trait, ItemChoice, ItemGrant) can also reference scaling columns once authored — pickers come from the owner-scoped `availableScalingColumns` list.
+
+### Add a new scaling column to an item
+Same as above but in `/items/manage` — the **Scaling** sub-tab on the item editor hosts the panel. Use case: Amulet of the Devout (+1 Channel Divinity charge), Staff of Power (charge-scaling damage), etc. Note that items don't currently round-trip scaling to Foundry — see the [roadmap entry](../roadmap.md#scaling-columns-for-non-class-owners--follow-ups).
 
 ### Change a class's spellcasting type
 1. Open the class editor.
