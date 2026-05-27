@@ -1,0 +1,29 @@
+-- Migration: Items — advancements column (Phase C — items as bump authors)
+-- Date: 2026-05-27
+--
+-- Adds the dnd5e `system.advancement` analogue to the items table so
+-- items can author the new `ItemBumpUses` advancement type that ships
+-- in the Phase C track. This unlocks "Amulet of the Devout (+1 Channel
+-- Divinity)" and similar item-side bumps app-side, instead of forcing
+-- authors to ship them as faux-feats granted alongside the item.
+--
+-- Shape mirrors the column on `feats`
+-- (worker/migrations/20260525-1900_feats_advancements.sql): a TEXT
+-- column holding a JSON array, defaulting to `'[]'` so legacy rows
+-- stay valid without a backfill pass.
+--
+-- Authoring surface: the items editor now mounts an Advancement
+-- sub-tab that reuses `AdvancementManager` (the same component
+-- classes / subclasses / feats use). The type menu is the same
+-- ItemBumpUses-aware set the feat editor exposes; the per-item
+-- editor passes its own `availableFeatures` + `availableFeats`
+-- catalogs through so the Bump Uses target picker resolves.
+--
+-- Runtime application: items aren't yet a first-class source kind
+-- in `collectItemBumpUses` (the walker accepts `ownedFeats` but
+-- not `ownedItems`). Until that walker pass lands, item-authored
+-- bumps sit dormant — authoring round-trips through D1 + the
+-- editor, but the character builder + Foundry export silently
+-- skip them. Tracked in docs/handoff-phase-c-itembumpuses.md.
+
+ALTER TABLE items ADD COLUMN advancements TEXT DEFAULT '[]';

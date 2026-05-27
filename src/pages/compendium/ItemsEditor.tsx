@@ -34,6 +34,13 @@ import {
   type EditorListColumn,
 } from '../../components/compendium/CompendiumEditorShell';
 import ScalingColumnsPanel from '../../components/compendium/ScalingColumnsPanel';
+// Phase C — items-as-bump-authors. AdvancementManager is the same
+// component classes / subclasses / feats mount; passing it the item's
+// `availableFeatures` + `availableFeats` catalogs lets the Bump Uses
+// target picker resolve. Item-authored ItemBumpUses bumps are stored
+// on the items.advancements JSON column added by migration
+// 20260527-1200_items_advancements.sql.
+import AdvancementManager, { type Advancement } from '../../components/compendium/AdvancementManager';
 import { SectionFilterPanel, type FilterSection } from '../../components/compendium/SectionFilterPanel';
 import { Checkbox } from '../../components/ui/checkbox';
 import { ImageUpload } from '../../components/ui/ImageUpload';
@@ -227,6 +234,11 @@ type ItemFormData = {
   activities: any[];
   effects: any[];
 
+  // Phase C — authored advancements (ItemBumpUses, etc.). Persists
+  // to the items.advancements JSON column. Mirrors the feat-shape
+  // advancements field; the editor surfaces a dedicated sub-tab.
+  advancements: Advancement[];
+
   // Tags
   tagIds: string[];
 
@@ -278,6 +290,7 @@ const ITEM_DEFAULTS: Omit<ItemFormData, 'sourceId'> & { sourceId?: string } = {
   baseItem: '',
   activities: [],
   effects: [],
+  advancements: [],
   tagIds: [],
 };
 
@@ -397,6 +410,14 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
   const [scalingColumns, setScalingColumns] = useState<any[]>([]);
   const [scalingLoadTick, setScalingLoadTick] = useState(0);
 
+  // Phase C — feats + features catalogs for the AdvancementManager
+  // target picker on the new Advancement sub-tab. Loaded once on
+  // mount alongside the other compendium fetches. Lightweight {id,
+  // name} projections is all the picker needs; passing the full row
+  // is fine since the dropdown only renders `name`.
+  const [availableFeats, setAvailableFeats] = useState<any[]>([]);
+  const [availableFeatures, setAvailableFeatures] = useState<any[]>([]);
+
   // Outgoing sync: editingId -> URL. `replace: true` keeps the
   // back stack clean while row-clicking. See FeatsEditor for the
   // matching pattern + rationale.
@@ -472,6 +493,8 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
           weaponCategoryRows,
           tagRows,
           tagGroupRows,
+          featRows,
+          featureRows,
         ] = await Promise.all([
           fetchCollection<any>('items', { orderBy: 'name ASC' }),
           fetchCollection<any>('sources', { orderBy: 'name ASC' }),
@@ -483,6 +506,11 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
           fetchCollection<any>('weaponCategories', { orderBy: '"order", name ASC' }),
           fetchCollection<any>('tags', { orderBy: 'name ASC' }),
           fetchCollection<any>('tagGroups', { orderBy: 'name ASC' }),
+          // Phase C — feats + features catalogs for the ItemBumpUses
+          // target picker. Same fetch pattern FeatsEditor uses for its
+          // `availableFeats` source (`entries`).
+          fetchCollection<any>('feats', { orderBy: 'name ASC' }),
+          fetchCollection<any>('features', { orderBy: 'name ASC' }),
         ]);
         if (cancelled) return;
 
@@ -559,6 +587,12 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
           abilities: abilities.map((r) => denormalizeCompendiumData(r)),
           weaponProperties: weaponProperties.map((r) => denormalizeCompendiumData(r)),
         });
+        // Phase C — feats + features for the ItemBumpUses target picker.
+        // Raw rows are fine here; the AdvancementManager picker only
+        // needs `{ id, name }` and we don't want to denormalize the
+        // entire catalog just to filter the dropdown.
+        setAvailableFeats(featRows);
+        setAvailableFeatures(featureRows);
         // Tags + tagGroups for the TagPicker. normalizeTagRow handles
         // the snake_case → camelCase rename + the `parent_tag_id` →
         // `parentTagId` shape the picker expects.
@@ -698,6 +732,11 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
         effects: Array.isArray(cached.automation?.effects)
           ? cached.automation.effects
           : Array.isArray(cached.effects) ? cached.effects : [],
+        // `advancements` is auto-parsed by d1.ts (it's in the jsonFields
+        // list), so cached rows arrive as arrays. The fallback handles
+        // legacy items written before migration 20260527-1200 added the
+        // column — they come back undefined and we seed an empty array.
+        advancements: Array.isArray(cached.advancements) ? cached.advancements : [],
         tagIds: Array.isArray(cached.tagIds) ? cached.tagIds : (Array.isArray(cached.tags) ? cached.tags : []),
       };
       setFormData(loaded);
@@ -1070,6 +1109,46 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
       ),
     },
     {
+      // Phase C — items as bump authors. Mounts the same
+      // AdvancementManager classes / subclasses / feats use,
+      // with the item's own scaling columns + the global feat
+      // and feature catalogs passed through so the ItemBumpUses
+      // target picker resolves. We pass `parentContext="feat"`
+      // because items behave like feats for runtime gating:
+      // they're "always on while owned" by default and don't
+      // surface HitPoints / Size in the type menu.
+      key: 'advancement',
+      label: 'Advancement',
+      render: () => (
+        <div className="border-t border-gold/10 pt-4 space-y-3">
+          <div className="flex items-baseline justify-between gap-3">
+            <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Advancement</h3>
+            <span className="text-[10px] text-ink/40 italic">
+              Default level <span className="font-mono">0</span> = always-on while item is owned.
+              Use Bump Uses to add charges to a target feature or feat — Amulet of the Devout
+              adds +1 to Channel Divinity, etc.
+            </span>
+          </div>
+          <AdvancementManager
+            advancements={formData.advancements}
+            onChange={(advancements) => setFormData((prev) => ({ ...prev, advancements }))}
+            parentContext="feat"
+            availableScalingColumns={scalingColumns}
+            availableFeats={availableFeats}
+            availableFeatures={availableFeatures}
+            availableOptionGroups={[]}
+            availableOptionItems={[]}
+            defaultLevel={0}
+            referenceContext={{
+              classLabel: formData.name || 'Item',
+              classIdentifier: formData.identifier || slugify(formData.name || 'item'),
+            }}
+            referenceSheetTitle="Item Reference Sheet"
+          />
+        </div>
+      ),
+    },
+    {
       key: 'scaling',
       label: 'Scaling',
       render: () => (
@@ -1118,7 +1197,7 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
         </div>
       ),
     },
-  ], [formData, sources, profs, editingId, scalingColumns]);
+  ], [formData, sources, profs, editingId, scalingColumns, availableFeats, availableFeatures]);
 
   const tagsSubTabsList: TagsSubTab[] = useMemo(() => [
     {

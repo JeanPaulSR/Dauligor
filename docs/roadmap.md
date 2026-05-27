@@ -70,10 +70,11 @@ A separate advancement type that lets a feat or item upgrade an existing feature
 
 **What's still open**:
 - **Feat-authored bumps in server export**. The export pipeline reconstructs the character from D1 via `rebuildCharacterFromSql`, which doesn't synthesize `character.feats` (the client-side synthesis walker owns that). Feat-authored bumps work app-side (runtime + warnings) but are silently dropped from the exported actor data. Unblocks once a server-side feat synthesizer ports the relevant slice of the client walker.
-- **Items as bump authors**: items don't have an `advancements` column today, so ItemBumpUses can only be authored on classes / subclasses / feats in v1. Schema migration + ItemsEditor wiring is needed before items (Amulet of the Devout, etc.) can author bumps app-side.
+- **Items as bump authors** ✅ shipped — migration `20260527-1200_items_advancements.sql` adds an `advancements` JSON column to the items table, and [ItemsEditor.tsx](../src/pages/compendium/ItemsEditor.tsx) mounts the same `AdvancementManager` classes / subclasses / feats use on a new **Advancement** sub-tab between Activities and Scaling. Items now author ItemBumpUses + any other supported type the same way feats do. **Caveat**: the runtime walker doesn't yet accept `ownedItems` — item-authored bumps round-trip through the editor but don't fire on the character sheet or in export yet. Documented as a follow-up below.
+- **Item-authored bumps in the character runtime**. `collectItemBumpUses` accepts `ownedFeats` but not `ownedItems`. Extending the walker to also walk a character's owned items' advancements would let Amulet-of-the-Devout-style bumps apply at runtime once the rest of the character builder's inventory layer is fleshed out.
 - **Future modes**: `'addToChoice'` (extend a target ItemChoice's pool) and `'replace'` (full feature overwrite). Out of scope; treat as Phase D / E.
 
-Created 2026-05-27. v1 end-to-end shipped on `feat/itembumpuses-advancement` (commits `fe71fdd` authoring + `656d96c` walker + `e709888` builder runtime + `960a99d` export).
+Created 2026-05-27. v1 end-to-end shipped on `feat/itembumpuses-advancement` (commits `fe71fdd` authoring + `656d96c` walker + `e709888` builder runtime + `960a99d` export + items-as-authors follow-up).
 
 ---
 

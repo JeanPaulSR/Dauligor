@@ -158,17 +158,15 @@ Things that should NOT regress.
 - [ ] FeatList hash deep-link (`#bloodlust_abh`) still works at the public-browser level.
 - [ ] No new TypeScript errors when running `npx tsc --noEmit` — only the 7 pre-existing ones.
 
-## J. ItemBumpUses authoring surface (Phase C v1)
+## J. ItemBumpUses end-to-end (Phase C v1)
 
-The `ItemBumpUses` advancement type lands as **authoring-only** in this
-pass — authors can add the advancement to a class / subclass / feat and
-the configuration round-trips through save/reload, but the runtime
-application (mutating the target's `uses.max` on the character sheet
-and in Foundry export) is still queued. See
-[handoff-phase-c-itembumpuses.md § Implementation scope](handoff-phase-c-itembumpuses.md)
-sections 4 + 5 for the open pieces.
+Phase C v1 shipped the `ItemBumpUses` advancement type end-to-end:
+authoring on classes / subclasses / feats / items, character builder
+runtime, and Foundry actor export. See
+[handoff-phase-c-itembumpuses.md](handoff-phase-c-itembumpuses.md)
+for design calls and what's still queued.
 
-What to verify in this pass:
+### J.1 Authoring on classes / subclasses / feats
 
 - [ ] Open a class editor (e.g. Cleric) → Advancement tab → "+ Add Row".
 - [ ] In the modal's **Advancement Type** dropdown, "Bump Uses" appears in the list.
@@ -180,13 +178,57 @@ What to verify in this pass:
 - [ ] Save the advancement. The list row shows the title (or default label "Bump Uses") with the subtitle `+1 to a feature's uses`.
 - [ ] Reopen the advancement — the kind / target / amount survive the round-trip.
 - [ ] Try the same in a **feat editor** (`/compendium/feats/manage` → pick a feat with `feat_type='feat'` → Advancement sub-tab). "Bump Uses" should appear in the type list there too.
-- [ ] **Out of scope for v1**: the character builder does NOT yet apply the bump. Selecting the granting feat / class on a character does not change the target feature's uses_max. This is the next slice.
 
-What's not in this slice (call out if you want it sooner):
+### J.2 Character builder runtime (Phase C.4)
 
-1. **Runtime application**: walking the character's authored advancements, finding the target, mutating `uses.max`. Lives in [src/pages/characters/CharacterBuilder.tsx](../src/pages/characters/CharacterBuilder.tsx) — the synthesis-walker pattern around line 2895 is the closest template.
-2. **Items as bump authors**: items don't have an `advancements` column yet. A schema migration + ItemsEditor wiring is needed before Amulet of the Devout can author a bump app-side. Today an item's bump would have to be authored as a feat with `feat_type='item-equivalent'` (which we don't have).
-3. **Foundry export pass-through**: if the builder applies the bump app-side, the exported actor data inherits it for free. If the builder doesn't, the exporter needs to walk advancements at bake time. Decide once the builder pass lands.
+The shared walker in [characterLogic.ts](../src/lib/characterLogic.ts)
+(`collectItemBumpUses`) feeds a new effect in
+[CharacterBuilder.tsx](../src/pages/characters/CharacterBuilder.tsx)
+that derives `character.derivedItemBumpUses = { bumps, warnings }`.
+
+- [ ] Author a class feature with a `usesMax` (e.g. Channel Divinity, uses_max = `1`).
+- [ ] On a different feature (or a feat), author an `ItemBumpUses` advancement targeting the first feature with amount `+1`.
+- [ ] Create a character that owns both. The character state (DevTools React inspector → `character.derivedItemBumpUses`) shows a `bumps` map with one entry under `feature:<channel-divinity-id>`.
+- [ ] Demote the character below the level that grants the bumping feature. The bump disappears from the map (effective-level gating).
+- [ ] Author a bumping advancement that targets a feature/feat the character doesn't own. A toast appears with the warning text: `<source name> (<source kind>) → target <kind> <id> not present on the character.` The warning fingerprint dedupes so the toast doesn't re-fire on every render.
+- [ ] Author a bumping advancement and leave the target picker empty — the toast reports `... ItemBumpUses advancement has no target picked.`
+
+### J.3 Foundry export pass-through (Phase C.5)
+
+The exporter in [characterShared.ts](../src/lib/characterShared.ts)
+fetches feature rows from D1, calls the same `collectItemBumpUses`
+helper, and bakes the result into the exported actor.
+
+- [ ] Run "Export Character" on the character set up above.
+- [ ] In the downloaded JSON, find the feature item under `items[]` whose `flags["dauligor-pairing"].sourceId` matches the bumped feature's identifier.
+- [ ] `system.uses.max` is the **combined formula** — the feature's authored `uses_max` plus each bump's amount stitched with normalized signs (e.g. `1 + 1` for a base of `1` and a single `+1` bump).
+- [ ] `flags["dauligor-pairing"].itemBumpUses` is an array of `{amount, sourceKind, sourceId, sourceName, sourceAdvancementId}` — one entry per bump that stacked on this feature.
+- [ ] `actor.flags["dauligor-pairing"].itemBumpUses` carries `{ bumps, warnings }` for the whole actor — the module side can read this for audit / debug UIs without re-walking the advancements.
+- [ ] Features with **no** bump and **no** authored `uses_max` still render without `system.uses` (no shape regression for existing exports).
+
+### J.4 Items as bump authors (Phase C — items advancements column)
+
+Items now own the same `advancements` JSON column feats use. Migration
+`20260527-1200_items_advancements.sql` adds the column;
+[ItemsEditor.tsx](../src/pages/compendium/ItemsEditor.tsx) mounts the
+same `AdvancementManager` classes / subclasses / feats use on a new
+**Advancement** sub-tab between Activities and Scaling.
+
+- [ ] Apply the local migration (auto-applied via the migration runner; manually via `wrangler d1 execute dauligor-db --local --file=worker/migrations/20260527-1200_items_advancements.sql`).
+- [ ] Open `/compendium/items/manage` → pick an item (Amulet of the Devout works well).
+- [ ] A new sub-tab labelled **Advancement** sits between Activities and Scaling.
+- [ ] The familiar AdvancementManager renders inside, with the type menu including "Bump Uses".
+- [ ] Author an ItemBumpUses targeting a class feature (e.g. Channel Divinity) with amount `+1`.
+- [ ] Save the item. Refresh the page — the advancement is still there with all fields preserved.
+- [ ] Re-open the advancement — kind / target / amount round-trip correctly.
+- [ ] Pick an item with `item_type='weapon'` or `'tool'` — the Advancement tab is available regardless of item type (item type discriminates other fields, not advancements).
+
+### J.5 Known limitations
+
+1. **Item-authored bumps don't fire in the character runtime yet**. `collectItemBumpUses` accepts `ownedFeats` but not `ownedItems`. Authoring round-trips cleanly through the items editor (per § J.4), but the CharacterBuilder + Foundry export don't walk item advancements yet. Unblocks once the walker is extended to accept owned items.
+2. **Feat-authored bumps don't fire in the server export**. The export pipeline rebuilds the character from D1 columns, and `character.feats` is a client-only synthesis — it doesn't round-trip through `rebuildCharacterFromSql`. Feat advancements that bump a feature work app-side (toast + derived state) but the exported actor data won't carry those bumps until a server-side feat synthesizer ships.
+3. **`derivedItemBumpUses` is not persisted to D1**. It re-derives every time the character is loaded or the relevant deps change. Don't rely on it being present in raw D1 reads.
+4. **Remote migration not yet applied**. The local D1 has the items.advancements column; the remote D1 still needs `wrangler d1 execute dauligor-db --remote --file=worker/migrations/20260527-1200_items_advancements.sql` (gated behind explicit user permission per project policy).
 
 ---
 
