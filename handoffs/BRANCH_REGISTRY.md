@@ -10,10 +10,11 @@ Live record of in-progress branches and the files they're touching.
 
 | Branch | Started | Owner | Status | Primary files (exclusive) | Shared files (append-only) | Manifest |
 |---|---|---|---|---|---|---|
-| _(none)_ |  |  |  |  |  |  |
+| `feat/system-applications` | 2026-05-27 | TBD | planned | Article system revamp (`src/pages/wiki/**`, `src/lib/lore.ts`, `src/lib/bbcode.ts`); Phase 1.5 hash-on-upsert (`src/lib/d1.ts`, `api/_lib/d1-internal.ts`); Phase 2 viewer (new files under `module/dauligor-pairing/scripts/dauligor-viewer.js`, `enrichers/`, `templates/dauligor-viewer.hbs`); new article + system-page endpoints in `functions/api/module/[[path]].ts` + new `api/_lib/_articleExport.ts` / `_systemPageExport.ts`; new system-page UI (`src/pages/compendium/SystemPage*.tsx`, `src/components/compendium/SystemPageGlossary.tsx`) | `src/lib/compendium.ts`, `src/lib/d1Tables.ts`, `src/App.tsx`, `src/components/Sidebar.tsx`, `worker/migrations/`, `docs/roadmap.md`, `module/dauligor-pairing/scripts/main.js` | [feat-system-applications/manifest.md](feat-system-applications/manifest.md) |
 
 ## Status legend
 
+- **planned** — branch reserved in the registry but code work hasn't started yet; protects scope so concurrent branches route around the planned files
 - **active** — branch is currently being worked on
 - **paused** — branch is on hold; shared files OK for others to claim
 - **ready-to-merge** — branch is feature-complete, awaiting review
