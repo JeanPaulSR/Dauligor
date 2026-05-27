@@ -75,6 +75,7 @@ export default function FeatDetailPanel({
   const [sources, setSources] = useState<SourceRecord[]>([]);
   const [tags, setTags] = useState<TagRecord[]>([]);
   const [tagGroups, setTagGroups] = useState<Array<{ id: string; name: string }>>([]);
+  const [featCategories, setFeatCategories] = useState<Array<{ id: string; name: string }>>([]);
   const [showTags, setShowTags] = useState(false);
   const [featsById, setFeatsById] = useState<Record<string, FeatRecord>>({});
   const [loading, setLoading] = useState(false);
@@ -89,12 +90,19 @@ export default function FeatDetailPanel({
       fetchCollection<any>('sources', { orderBy: 'name ASC' }),
       fetchCollection<any>('tags', { orderBy: 'name ASC' }),
       fetchCollection<any>('tagGroups', { where: "classifications LIKE '%feat%'" }),
+      // Feat categories drive the italic category line under the
+      // name. Empty list is the cold-start case — the line just
+      // doesn't render.
+      fetchCollection<any>('featCategories', { orderBy: '"order", name ASC' }),
     ])
-      .then(([sourcesData, tagsData, groupsData]) => {
+      .then(([sourcesData, tagsData, groupsData, categoryData]) => {
         if (!active) return;
         setSources(sourcesData);
         setTags(tagsData.map((t: any) => ({ ...t, groupId: t.group_id ?? t.groupId ?? null })));
         setTagGroups(groupsData.map((g: any) => ({ id: g.id, name: g.name })));
+        setFeatCategories(
+          (categoryData || []).map((r: any) => ({ id: String(r.id), name: String(r.name || '') }))
+        );
       })
       .catch((err) => console.error('[FeatDetailPanel] failed to load foundation data:', err));
     return () => {
@@ -123,6 +131,7 @@ export default function FeatDetailPanel({
           sourceType: data.source_type,
           repeatable: !!data.repeatable,
           tagIds: Array.isArray(data.tags) ? data.tags : [],
+          featCategoryId: data.feat_category_id || '',
           requirementsTree: parseRequirementTree(data.requirements_tree ?? data.requirementsTree),
         };
         setFeatsById((prev) => ({ ...prev, [featId]: mapped }));
@@ -179,14 +188,14 @@ export default function FeatDetailPanel({
   const prereqDisplay = requirementsLine || String(feat.requirements ?? '').trim();
 
   // Feat Category surfaces a single italic line under the name. The
-  // category is admin-managed (P4) — until that taxonomy table lands,
-  // the field is null on every feat and this block stays empty.
-  // Tolerates either `featCategoryName` (denormalized read) or a
-  // future `featCategory` object payload.
-  const categoryLabel =
-    (feat as any).featCategoryName
-    || (feat as any).featCategory?.name
-    || '';
+  // category is admin-managed (table populated via /admin/feat-
+  // categories); empty when the feat hasn't been assigned a category
+  // and the line just doesn't render.
+  const categoryLabel = (() => {
+    const id = String((feat as any).featCategoryId ?? '');
+    if (!id) return '';
+    return featCategories.find((c) => c.id === id)?.name || '';
+  })();
 
   // Tag-grouping mirrors SpellDetailPanel exactly so the two
   // disclosures feel identical to the author. Tags assigned to the

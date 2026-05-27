@@ -8,6 +8,7 @@ import {
   MessageCircle,
   Skull,
   Star,
+  Award,
   Wand2,
   ChevronLeft,
   type LucideIcon,
@@ -83,6 +84,11 @@ const TABS: TabEntry[] = [
   { id: 'languages', label: 'Languages', icon: MessageCircle, group: 'language', parent: 'languageCategories', countTable: 'languages' },
   { id: 'damageTypes', label: 'Damage Types', icon: Skull, group: 'system', countTable: 'damageTypes' },
   { id: 'attributes', label: 'Attributes', icon: Star, group: 'system', countTable: 'attributes' },
+  // Admin-managed feat taxonomy. Drives the per-row "Category"
+  // column in /compendium/feats and the picker in the FeatsEditor.
+  // Lives alongside Attributes / Damage Types since it's a system-
+  // wide classification rather than combat-specific.
+  { id: 'featCategories', label: 'Feat Categories', icon: Award, group: 'system', countTable: 'featCategories' },
   { id: 'spellcasting', label: 'Spellcasting', icon: Wand2, group: 'system' },
 ];
 
@@ -477,6 +483,18 @@ export default function AdminProficiencies({ userProfile }: { userProfile: any }
                 // by convention; auto-uppercase the slug so the user
                 // doesn't have to type the casing themselves.
                 identifierTransform={(slug) => slug.toUpperCase()}
+              />
+            )}
+            {activeTab === 'featCategories' && (
+              <ProficiencyEntityShell
+                userProfile={userProfile}
+                hideHeader
+                table="featCategories"
+                singular="Feat Category"
+                plural="Feat Categories"
+                icon={Award}
+                description="Define broad feat groupings such as General, Fighting Style, Epic Boon, Origin, or homebrew categories. The Feat Editor picker and the public compendium list both read from this list."
+                {...TAXONOMY_TAB_BASE}
               />
             )}
             {activeTab === 'spellcasting' && <SpellcastingAdvancementManager userProfile={userProfile} />}

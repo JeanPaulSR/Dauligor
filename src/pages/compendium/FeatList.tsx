@@ -55,6 +55,7 @@ type FeatRow = {
   sourceId?: string;
   featType?: string;
   featSubtype?: string;
+  featCategoryId?: string;
   repeatable?: boolean;
   requirements?: string;
   repeatableFlag?: boolean;
@@ -73,6 +74,10 @@ const AXIS_KEYS = ['source', 'type', 'property'] as const;
 export default function FeatList({ userProfile }: { userProfile: any }) {
   const [feats, setFeats] = useState<FeatRow[]>([]);
   const [sources, setSources] = useState<SourceRecord[]>([]);
+  // Admin-managed feat categories — drives the Category column.
+  // Empty list is the cold-start case (admin hasn't authored any yet);
+  // the column simply shows "—" for every feat in that scenario.
+  const [featCategories, setFeatCategories] = useState<Array<{ id: string; name: string }>>([]);
   const [loadingFeats, setLoadingFeats] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedFeatId, setSelectedFeatId] = useState('');
@@ -113,6 +118,7 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
             sourceId: row.source_id,
             featType: row.feat_type,
             featSubtype: row.feat_subtype || '',
+            featCategoryId: row.feat_category_id || '',
             repeatable: !!row.repeatable,
             repeatableFlag: flags.repeatable,
             hasUses: flags.hasUses,
@@ -130,8 +136,17 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
     };
     const loadFoundation = async () => {
       try {
-        const sourcesData = await fetchCollection<any>('sources', { orderBy: 'name ASC' });
+        // Sources + feat categories load in parallel. Categories drive
+        // the new "Category" column + filter axis; the public
+        // FeatDetailPanel reads them via its own load path.
+        const [sourcesData, categoryData] = await Promise.all([
+          fetchCollection<any>('sources', { orderBy: 'name ASC' }),
+          fetchCollection<any>('featCategories', { orderBy: '"order", name ASC' }),
+        ]);
         setSources(sourcesData);
+        setFeatCategories(
+          (categoryData || []).map((r: any) => ({ id: String(r.id), name: String(r.name || '') }))
+        );
       } catch (err) {
         console.error('[FeatList] failed to load foundation data:', err);
       }
@@ -143,6 +158,11 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
   const sourceById = useMemo(
     () => Object.fromEntries(sources.map((s) => [s.id, s])) as Record<string, SourceRecord>,
     [sources],
+  );
+
+  const categoryNameById = useMemo(
+    () => Object.fromEntries(featCategories.map((c) => [c.id, c.name])) as Record<string, string>,
+    [featCategories],
   );
 
   // Filter pipeline. Search + axis filters + class scope all AND
@@ -232,12 +252,19 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
       },
     },
     {
-      key: 'type',
-      label: 'Type',
-      width: '120px',
+      key: 'category',
+      label: 'Category',
+      width: '140px',
       render: (feat) => {
-        const label = FEAT_TYPE_LABELS[feat.featType as FeatTypeValue] || feat.featType || 'Feat';
-        return <span className="text-xs text-ink/75 truncate justify-self-center">{label}</span>;
+        // Look up the admin-authored category name. Falls back to a
+        // dim em-dash when the feat has no category assigned (the
+        // common cold-start case before admins curate the taxonomy).
+        const label = categoryNameById[String(feat.featCategoryId ?? '')] || '';
+        return label ? (
+          <span className="text-xs text-ink/80 truncate">{label}</span>
+        ) : (
+          <span className="text-xs text-ink/30">—</span>
+        );
       },
     },
     {
@@ -256,7 +283,7 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
     // this pattern; FeatList now matches it. The favorite star + the
     // prerequisite lock chip in the name column are the only row
     // affordances retained.
-  ]), [isFavorite, sourceById]);
+  ]), [isFavorite, sourceById, categoryNameById]);
 
   // ─── Favorites pane row render ──────────────────────────────
   const favoritesRowRender = ({ row: feat, selected, toggleStar, onSelect }: { row: FeatRow; selected: boolean; toggleStar: () => void; onSelect: () => void }) => {

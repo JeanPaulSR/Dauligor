@@ -136,6 +136,10 @@ type FeatFormData = {
   featType: string;
   featSubtype: string;
   sourceType: string;
+  // Admin-managed feat-category taxonomy. Empty string means
+  // "no category assigned"; the public detail view simply hides
+  // the category line in that case.
+  featCategoryId: string;
   requirements: string;
   repeatable: boolean;
   uses: {
@@ -168,6 +172,7 @@ const FEAT_DEFAULTS: Omit<FeatFormData, 'sourceId'> & { sourceId?: string } = {
   featType: 'feat',
   featSubtype: 'general',
   sourceType: 'feat',
+  featCategoryId: '',
   requirements: '',
   repeatable: false,
   uses: { max: '', spent: 0, recovery: [] },
@@ -246,6 +251,11 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
   const [entries, setEntries] = useState<any[]>([]);
   const [featDetailsById, setFeatDetailsById] = useState<Record<string, any>>({});
   const [sources, setSources] = useState<any[]>([]);
+  // Admin-managed feat-category taxonomy — drives the per-feat
+  // Feat Category picker below. Loaded once at mount; the editor
+  // doesn't surface a "create category" affordance (admins author
+  // categories at /admin/proficiencies → Feat Categories).
+  const [featCategories, setFeatCategories] = useState<Array<{ id: string; name: string; sortOrder?: number; order?: number }>>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
@@ -303,6 +313,7 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
           tools, toolCategories,
           skills,
           languages, languageCategories,
+          featCategoryRows,
         ] = await Promise.all([
           fetchCollection<any>('feats', { orderBy: 'name ASC' }),
           fetchCollection<any>('sources', { orderBy: 'name ASC' }),
@@ -320,6 +331,11 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
           fetchCollection<any>('skills', { orderBy: 'name ASC' }),
           fetchCollection<any>('languages', { orderBy: 'name ASC' }),
           fetchCollection<any>('languageCategories', { orderBy: '"order", name ASC' }),
+          // Sort by `"order"` (the admin shell stores display priority
+          // in this column for every taxonomy) then by name to break
+          // ties. ProficiencyEntityShell already produces this exact
+          // ordering on its list page.
+          fetchCollection<any>('featCategories', { orderBy: '"order", name ASC' }),
         ]);
         if (cancelled) return;
 
@@ -353,6 +369,7 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
             featType: normalized.featType,
             featSubtype: row.feat_subtype || normalized.featSubtype,
             sourceType: row.source_type,
+            featCategoryId: row.feat_category_id || '',
             requirementsTree: parseRequirementTree(row.requirements_tree ?? row.requirementsTree),
             tagIds: Array.isArray(row.tags) ? row.tags : [],
             // Filter-axis precomputes:
@@ -362,6 +379,18 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
         });
         setEntries(mapped);
         setSources(sourceRows);
+        // d1.ts auto-converts snake_case columns to camelCase for known
+        // columns; `sort_order` may surface as `sortOrder` while the
+        // ProficiencyEntityShell's `"order"` quoting writes to a
+        // literal `order` column. Normalize here so the picker sort
+        // doesn't need to care.
+        setFeatCategories(
+          (featCategoryRows || []).map((r: any) => ({
+            id: String(r.id),
+            name: String(r.name || ''),
+            sortOrder: Number(r.sort_order ?? r.sortOrder ?? r.order ?? 0) || 0,
+          }))
+        );
         setClasses(classRows);
         setSubclasses(subclassRows);
         setSpellRules(spellRuleRows);
@@ -593,6 +622,7 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
         featType: normalized.featType,
         featSubtype: cached.featSubtype || cached.feat_subtype || normalized.featSubtype || '',
         sourceType: cached.sourceType || cached.source_type || 'feat',
+        featCategoryId: cached.featCategoryId || cached.feat_category_id || '',
         requirements: cached.requirements || '',
         repeatable: !!cached.repeatable,
         uses: {
@@ -718,6 +748,10 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
         feat_type: formData.featType || 'feat',
         feat_subtype: formData.featSubtype || null,
         source_type: formData.sourceType || 'feat',
+        // Empty string → null so D1's FK constraint accepts the row
+        // ("no category" === FK is NULL). The picker treats "" as the
+        // none option.
+        feat_category_id: formData.featCategoryId || null,
         requirements: formData.requirements || null,
         repeatable: formData.repeatable ? 1 : 0,
         uses_max: formData.uses.max || null,
@@ -878,14 +912,26 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
                   ))}
                 </select>
               </ReviewFieldHighlight>
-              {/* feat_type / feat_subtype / source_type fields used
-                  to live here. They've been dropped from the editor
-                  per the new "a feat is always a feat" UX direction
-                  — Foundry import still populates the underlying
-                  columns from `system.type.value` so re-export round-
-                  trips work, but the author never sees the controls.
-                  Feat Category (admin-managed taxonomy, P4) will
-                  occupy the equivalent slot once it lands. */}
+              <ReviewFieldHighlight columnKey="feat_category_id" className="space-y-0.5">
+                <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Feat Category</Label>
+                {/* Admin-managed taxonomy authored at
+                    /admin/proficiencies → Feat Categories. Empty
+                    option is the "no category assigned" sentinel; the
+                    public detail view hides the line when this is
+                    null. The dropdown is the only visible control for
+                    the feat's bucket — the legacy feat_type /
+                    feat_subtype / source_type fields are gone. */}
+                <select
+                  value={formData.featCategoryId}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, featCategoryId: e.target.value }))}
+                  className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                >
+                  <option value="">— Uncategorized —</option>
+                  {featCategories.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </ReviewFieldHighlight>
             </div>
           </div>
 
