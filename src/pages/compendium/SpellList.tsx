@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ChevronDown, Lock, Star, X } from 'lucide-react';
+import { ChevronDown, Star, X } from 'lucide-react';
 import { useSpellFavorites } from '../../lib/spellFavorites';
 import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
 import { expandTagsWithAncestors, normalizeTagRow } from '../../lib/tagHierarchy';
@@ -601,29 +601,16 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
       align: 'start',
       sortable: true,
       render: (spell) => {
-        const reqTagIds = Array.isArray((spell as any).required_tags) ? (spell as any).required_tags : [];
-        const hasFreeText = !!(spell as any).prerequisite_text;
-        const hasPrereqs = reqTagIds.length > 0 || hasFreeText;
-        const prereqTitle = (() => {
-          if (!hasPrereqs) return '';
-          const tagLabel = reqTagIds
-            .map((tid: string) => allTags.find((t: any) => t.id === tid)?.name || tid)
-            .join(', ');
-          return [
-            tagLabel ? `Requires: ${tagLabel}` : null,
-            hasFreeText ? `Note: ${(spell as any).prerequisite_text}` : null,
-          ].filter(Boolean).join(' · ');
-        })();
+        // Mirror FeatList — only the favorite star renders here. The
+        // prerequisite lock used to live alongside the name but it
+        // was redundant with the detail-view prerequisite section
+        // and overloaded the row. Keep the row visually quiet so
+        // the table reads as a clean catalog.
         return (
           <div className="min-w-0 flex items-center gap-1.5">
             <span className="truncate font-serif text-sm text-ink">{spell.name}</span>
             {isFavorite(spell.id) && (
               <Star className="w-3 h-3 text-gold/70 fill-gold/40 shrink-0" aria-label="Favorite" />
-            )}
-            {hasPrereqs && (
-              <span title={prereqTitle} className="shrink-0 inline-flex">
-                <Lock className="w-3 h-3 text-blood/70" aria-label="Has prerequisites" />
-              </span>
             )}
           </div>
         );
