@@ -481,6 +481,61 @@ export function formatRequirementShort(
 }
 
 /**
+ * Three-layer prerequisite spec — the shape consumers carry on each
+ * row. Each layer is optional; the resolvers below apply the
+ * documented priority chains. Centralizing the resolution here means
+ * the RequirementsEditor's live preview and the actual consumer
+ * surfaces (FeatList column / FeatDetailPanel) can't drift — anytime
+ * a chain needs to change, this file is the single place to edit.
+ */
+export type PrereqSpec = {
+  shortText?: string | null;
+  freeText?: string | null;
+  tree?: Requirement | null;
+};
+
+/**
+ * Compact resolver — used by the FeatList Prerequisite column and any
+ * other row / column surface that needs the tight reading.
+ *
+ * Resolution chain:
+ *   shortText  →  freeText  →  formatRequirementShort(tree, lookup,
+ *                                { proficiencyOnly: true })
+ *   →  empty string
+ */
+export function resolveListPrereq(
+  spec: PrereqSpec,
+  lookup: RequirementFormatLookup = {},
+): string {
+  const shortText = String(spec.shortText ?? '').trim();
+  if (shortText) return shortText;
+  const freeText = String(spec.freeText ?? '').trim();
+  if (freeText) return freeText;
+  return formatRequirementShort(spec.tree ?? null, lookup, { proficiencyOnly: true });
+}
+
+/**
+ * Detail-surface resolver — used by FeatDetailPanel and any other
+ * full-text surface. Intentionally skips the `shortText` layer (that
+ * field is a column-only override). Otherwise identical chain to
+ * `resolveListPrereq` minus the `proficiencyOnly` flag, so
+ * proficiency leaves keep their "Athletics Proficiency" suffix in
+ * the verbose surface.
+ *
+ * Resolution chain:
+ *   freeText  →  formatRequirementShort(tree, lookup)
+ *   →  empty string
+ */
+export function resolveDetailPrereq(
+  spec: PrereqSpec,
+  lookup: RequirementFormatLookup = {},
+): string {
+  const freeText = String(spec.freeText ?? '').trim();
+  if (freeText) return freeText;
+  return formatRequirementShort(spec.tree ?? null, lookup);
+}
+
+/**
  * Walk a requirements tree and return every `abilityScore` leaf as a
  * flat array. Used by the FeatList's Ability column to render
  * something like "Wis 13" without re-rendering the rest of the

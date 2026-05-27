@@ -6,7 +6,7 @@ import { cn } from '../../lib/utils';
 import { fetchCollection, fetchDocument } from '../../lib/d1';
 import {
   parseRequirementTree,
-  formatRequirementShort,
+  resolveDetailPrereq,
   type Requirement,
   type RequirementFormatLookup,
 } from '../../lib/requirements';
@@ -204,19 +204,21 @@ export default function FeatDetailPanel({
     return bbcodeToHtml(raw);
   })();
 
-  // Prerequisites: two-layer resolution for the detail surface —
-  // the free-text `requirements` field, if set, OVERRIDES the
-  // structured tree (some prereqs read better as prose than as a
-  // formatted leaf chain). When free text is empty, the compound
-  // tree formats through `formatRequirementShort` with slug
-  // resolution. The list-only `requirementsShortText` override is
-  // intentionally NOT consulted here — the detail surface has
-  // space for the full text and authors expect to see the
+  // Prerequisites resolve through the shared `resolveDetailPrereq`
+  // helper so this surface stays in lockstep with the editor's live
+  // preview (see lib/requirements.ts). Chain: freeText →
+  // formatRequirementShort(tree). The list-only `requirementsShortText`
+  // override is intentionally NOT consulted here — the detail surface
+  // has space for the full text and authors expect to see the
   // structured / verbose version. Italic, no box — matches the
   // "Feat is presented as a body of text, not a card" UX direction.
-  const freeText = String(feat.requirements ?? '').trim();
-  const compoundLine = formatRequirementShort(feat.requirementsTree ?? null, prereqLookup);
-  const prereqDisplay = freeText || compoundLine;
+  const prereqDisplay = resolveDetailPrereq(
+    {
+      freeText: feat.requirements,
+      tree: feat.requirementsTree ?? null,
+    },
+    prereqLookup,
+  );
 
   // Feat Category surfaces a single italic line under the name. The
   // category is admin-managed (table populated via /admin/feat-

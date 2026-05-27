@@ -13,8 +13,8 @@ import {
   emptyLeaf,
   isGroup,
   isLeaf,
-  formatRequirementShort,
-  formatRequirementText,
+  resolveListPrereq,
+  resolveDetailPrereq,
 } from '../../lib/requirements';
 import SingleSelectSearch from '../ui/SingleSelectSearch';
 
@@ -184,15 +184,16 @@ export default function RequirementsEditor({
   const showShortText = typeof onShortTextChange === 'function';
   const showOverrides = showFreeText || showShortText;
 
-  // Live preview values mirroring the resolution chain consumers
-  // follow. Only renders when at least one override layer is active
-  // — for tree-only consumers the preview block is hidden.
-  const trimmedShort = String(shortText ?? '').trim();
-  const trimmedFree = String(freeText ?? '').trim();
-  const compoundPreview = formatRequirementText(value, previewLookup);
-  const compoundShortPreview = formatRequirementShort(value, previewLookup, { proficiencyOnly: true });
-  const listPreview = trimmedShort || trimmedFree || compoundShortPreview || '—';
-  const detailPreview = trimmedFree || compoundPreview || '—';
+  // Live preview routes through the same resolvers the consumer
+  // surfaces use at render time (see resolveListPrereq /
+  // resolveDetailPrereq in lib/requirements). Single source of
+  // truth means the editor preview can't drift from the actual
+  // FeatList column or FeatDetailPanel output. Empty resolves
+  // surface as the em-dash so authors see "no value" the same way
+  // the public surfaces will.
+  const spec = { shortText, freeText, tree: value };
+  const listPreview = resolveListPrereq(spec, previewLookup) || '—';
+  const detailPreview = resolveDetailPrereq(spec, previewLookup) || '—';
 
   return (
     <div className="space-y-2">

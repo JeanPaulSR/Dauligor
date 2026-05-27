@@ -14,7 +14,7 @@ import FeatDetailPanel from '../../components/compendium/FeatDetailPanel';
 import { deriveFeatPropertyFlags } from '../../lib/featFilters';
 import {
   parseRequirementTree,
-  formatRequirementShort,
+  resolveListPrereq,
   extractAbilityScoreLeaves,
   type Requirement,
   type RequirementFormatLookup,
@@ -54,9 +54,10 @@ type FeatRow = {
   featSubtype?: string;
   featCategoryId?: string;
   repeatable?: boolean;
-  // Three-layer prerequisite display. Resolution order in the
-  // column: requirementsShortText → requirements (free text) →
-  // formatRequirementShort(requirementsTree).
+  // Three-layer prerequisite display, resolved via
+  // `resolveListPrereq` (lib/requirements). Chain in the column:
+  // requirementsShortText → requirements (free text) →
+  // formatted requirementsTree (proficiencyOnly).
   requirements?: string;
   requirementsShortText?: string;
   requirementsTree?: Requirement | null;
@@ -285,19 +286,18 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
       label: 'Prerequisite',
       width: 'minmax(160px,4fr)',
       render: (feat) => {
-        // Three-layer resolution: short text overrides everything,
-        // free text overrides the structured tree, structured tree
-        // is the fallback (formatted compact, proficiencyOnly).
-        // Each layer is the author's deliberate override of the
-        // one below it.
-        const shortText = String(feat.requirementsShortText ?? '').trim();
-        const freeText = String(feat.requirements ?? '').trim();
-        const compoundText = formatRequirementShort(
-          feat.requirementsTree ?? null,
+        // Three-layer resolution lives in `resolveListPrereq` so this
+        // column and RequirementsEditor's live preview can't drift —
+        // see lib/requirements.ts. Chain: shortText → freeText →
+        // formatted tree (proficiencyOnly).
+        const display = resolveListPrereq(
+          {
+            shortText: feat.requirementsShortText,
+            freeText: feat.requirements,
+            tree: feat.requirementsTree ?? null,
+          },
           prereqLookup,
-          { proficiencyOnly: true },
         );
-        const display = shortText || freeText || compoundText;
         return display ? (
           <span className="text-[11px] text-ink truncate" title={display}>{display}</span>
         ) : (
