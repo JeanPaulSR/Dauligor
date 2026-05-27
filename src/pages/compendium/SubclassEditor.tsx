@@ -49,7 +49,7 @@ import { Checkbox } from '../../components/ui/checkbox';
 import AdvancementManager, { Advancement } from '../../components/compendium/AdvancementManager';
 import ReferenceSyntaxHelp from '../../components/reference/ReferenceSyntaxHelp';
 import ReferenceSheetDialog from '../../components/reference/ReferenceSheetDialog';
-import { buildSpellFormulaShortcutRows } from '../../lib/referenceSyntax';
+import { buildSpellFormulaShortcutRows, normalizeSpellFormulaShortcuts } from '../../lib/referenceSyntax';
 import { normalizeAdvancementListForEditor, resolveAdvancementDefaultHitDie } from '../../lib/advancementState';
 import { buildCanonicalSubclassProgression } from '../../lib/classProgression';
 import {
@@ -1029,6 +1029,15 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                           description: row.description
                         }))}
                         context={subclassReferenceContext}
+                        // This field uses the spell-formula shortcut
+                        // vocabulary (`@level`/`@mod`/`@value`/...) — not the
+                        // general semantic grammar. Pass the matching resolver
+                        // so the inline preview shows what the exporter
+                        // (`normalizeSpellcastingForExport` in `classExport.ts`)
+                        // will actually emit. Subclass spell formulas resolve
+                        // `@level` against the parent class identifier (see
+                        // subclassReferenceContext.classIdentifier).
+                        normalize={(v) => normalizeSpellFormulaShortcuts(v, subclassReferenceContext)}
                       />
                     </div>
                   </fieldset>

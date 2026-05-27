@@ -87,17 +87,28 @@ export function normalizeSpellFormulaShortcuts(
   const { classIdentifier, spellcastingAbility } = getReferenceIdentifiers(context);
   let normalized = String(value ?? "");
 
-  normalized = normalized.replace(/@totallevel/giu, "@details.level");
-  normalized = normalized.replace(/@level/giu, `@classes.${classIdentifier}.levels`);
+  // Word boundary (`\b`) on every shortcut. Without it `/@level/giu` would
+  // match the `@level` substring inside `@levels` (or someone typing
+  // Foundry's plural `@classes.x.levels` half-remembered as `@levels`),
+  // producing `@classes.druid.levelss`. Same hazard for `@mod` inside
+  // `@module`/`@modifier`, `@value` inside `@values`, etc. Foundry-native
+  // input like `@abilities.wis.mod` and `@classes.druid.levels` is also
+  // safe: the `@` in those strings is followed by `abilities`/`classes`,
+  // so the shortcut prefix never matches in the first place.
+  // Order: longer prefixes first (`@totalLevel` before `@level`) so the
+  // shorter rule can't strip the leading half of the longer token.
+  normalized = normalized.replace(/@totallevel\b/giu, "@details.level");
+  normalized = normalized.replace(/@level\b/giu, `@classes.${classIdentifier}.levels`);
   normalized = normalized.replace(
-    /@mod/giu,
+    /@mod\b/giu,
     `@abilities.${spellcastingAbility}.mod`,
   );
   normalized = normalized.replace(
-    /@value/giu,
+    /@value\b/giu,
     `@abilities.${spellcastingAbility}.value`,
   );
-  normalized = normalized.replace(/@prof/giu, "@prof");
+  // `@prof` is Foundry-native already — no rewrite needed. (Previously
+  // a no-op `@prof` → `@prof` replacement lived here.)
 
   return normalized;
 }

@@ -18,6 +18,7 @@ export default function ReferenceSyntaxHelp({
   examples,
   context,
   buttonLabel = "Open Reference Help",
+  normalize,
 }: {
   title?: string;
   description?: string;
@@ -26,10 +27,24 @@ export default function ReferenceSyntaxHelp({
   examples?: ReferenceExample[];
   context?: ReferenceContext;
   buttonLabel?: string;
+  /**
+   * Custom resolver for the inline preview. Defaults to
+   * `normalizeSemanticReferenceText`, which handles the general semantic
+   * grammar (`@class.X.level`, `@ability.X.mod`, `@scale.X.Y`, etc.).
+   *
+   * Fields that have their own shortcut vocabulary (e.g. the
+   * `spellsKnownFormula` field uses `@level`/`@mod`/`@value`/`@totalLevel`)
+   * MUST pass the matching resolver here, otherwise the preview will
+   * silently disagree with what the exporter produces. See
+   * `normalizeSpellFormulaShortcuts` in `referenceSyntax.ts`.
+   */
+  normalize?: (value: string) => string;
 }) {
   const rows =
     examples && examples.length > 0 ? examples : buildReferenceExamples(context);
-  const normalizedValue = normalizeSemanticReferenceText(value, mode);
+  const normalizedValue = normalize
+    ? normalize(value)
+    : normalizeSemanticReferenceText(value, mode);
   const hasPreview = Boolean(value?.trim());
   const previewChanged = hasPreview && normalizedValue !== value;
 

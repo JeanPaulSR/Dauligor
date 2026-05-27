@@ -25,7 +25,7 @@ import { slugify, cn } from '../../lib/utils';
 import AdvancementManager, { Advancement } from '../../components/compendium/AdvancementManager';
 import ReferenceSyntaxHelp from '../../components/reference/ReferenceSyntaxHelp';
 import ReferenceSheetDialog from '../../components/reference/ReferenceSheetDialog';
-import { buildSpellFormulaShortcutRows } from '../../lib/referenceSyntax';
+import { buildSpellFormulaShortcutRows, normalizeSpellFormulaShortcuts } from '../../lib/referenceSyntax';
 import { normalizeAdvancementListForEditor, resolveAdvancementDefaultHitDie } from '../../lib/advancementState';
 import { buildCanonicalBaseClassAdvancements } from '../../lib/classProgression';
 import { fetchCollection, fetchDocument, queryD1, upsertDocument, deleteDocument } from '../../lib/d1';
@@ -2991,6 +2991,13 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                               description: row.description
                             }))}
                             context={classReferenceContext}
+                            // This field uses the spell-formula shortcut
+                            // vocabulary (`@level`/`@mod`/`@value`/...) — not
+                            // the general semantic grammar. Pass the matching
+                            // resolver so the inline preview shows what the
+                            // exporter (`normalizeSpellcastingForExport` in
+                            // `classExport.ts`) will actually emit.
+                            normalize={(v) => normalizeSpellFormulaShortcuts(v, classReferenceContext)}
                           />
                         </div>
                       </fieldset>
