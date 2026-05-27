@@ -19,6 +19,7 @@ import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
 import AdvancementManager, { type Advancement } from '../../components/compendium/AdvancementManager';
 import MarkdownEditor from '../../components/MarkdownEditor';
 import RequirementsEditor, { RequirementsEditorLookups } from '../../components/compendium/RequirementsEditor';
+import ScalingColumnsPanel, { type ScalingOwnerType } from '../../components/compendium/ScalingColumnsPanel';
 import { useEditorFormSession } from '../../components/compendium/useEditorFormSession';
 import {
   EMPTY_REQUIREMENT_TREE,
@@ -258,6 +259,14 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
   const [entries, setEntries] = useState<any[]>([]);
   const [featDetailsById, setFeatDetailsById] = useState<Record<string, any>>({});
   const [sources, setSources] = useState<any[]>([]);
+  // Scaling columns owned by the currently-edited feat. Class
+  // features (feat_type='class'/'subclass') intentionally don't get
+  // their own columns — they inherit from the parent class. For
+  // everything else (feat/race/background/monster) the feat owns
+  // its own progression table, queryable as
+  // `parent_id = <feat.id> AND parent_type = 'feat'|'race'|'background'`.
+  const [scalingColumns, setScalingColumns] = useState<any[]>([]);
+  const [scalingLoadTick, setScalingLoadTick] = useState(0);
   // Admin-managed feat-category taxonomy — drives the per-feat
   // Feat Category picker below. Loaded once at mount; the editor
   // doesn't surface a "create category" affordance (admins author
@@ -711,6 +720,48 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
       active = false;
     };
   }, [editingId, sources, featDetailsById, draftedFeatEntities]);
+
+  // Scaling columns owned by the currently-edited feat. Class
+  // features (feat_type='class'/'subclass') inherit from the
+  // parent class, so they don't load their own columns. The
+  // `scaling_columns` table is already polymorphic via
+  // (parent_id, parent_type) — no schema migration was needed
+  // to support feats / races / backgrounds; we just write new
+  // parent_type values.
+  useEffect(() => {
+    if (!editingId) {
+      setScalingColumns([]);
+      return;
+    }
+    const featTypeForScaling = String(formData.featType ?? '').toLowerCase();
+    if (featTypeForScaling === 'class' || featTypeForScaling === 'subclass') {
+      setScalingColumns([]);
+      return;
+    }
+    // 'feat' / 'race' / 'background' map 1:1 to their parent_type
+    // string. 'monster' uses 'feat' since monsters don't have
+    // their own scaling-owner type today (they're authored as
+    // feats with feat_type='monster').
+    const parentType: ScalingOwnerType =
+      featTypeForScaling === 'race' || featTypeForScaling === 'background'
+        ? (featTypeForScaling as ScalingOwnerType)
+        : 'feat';
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await fetchCollection<any>('scaling_columns', {
+          where: 'parent_id = ? AND parent_type = ?',
+          params: [editingId, parentType],
+          orderBy: 'name ASC',
+        });
+        if (cancelled) return;
+        setScalingColumns(rows.map((r: any) => denormalizeCompendiumData(r)));
+      } catch (err) {
+        console.error('[FeatsEditor] scaling_columns load failed:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [editingId, formData.featType, scalingLoadTick]);
 
   // ── Switch handler ────────────────────────────────────────────
   const startEditing = async (id: string) => {
@@ -1178,50 +1229,91 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
       key: 'advancement',
       label: 'Advancement',
       layout: 'scroll',
-      render: () => (
-        <div className="border-t border-gold/10 pt-4 space-y-3">
-          <div className="flex items-baseline justify-between gap-3">
-            <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Advancement</h3>
-            <span className="text-[10px] text-ink/40 italic">
-              Default level <span className="font-mono">0</span> = always-on while feat is owned.
-              Set a level &gt; 0 to gate against the granting class's level (or character level
-              for standalone feats).
-            </span>
+      render: () => {
+        // Scaling columns are gated by feat type. Class features
+        // (feat_type='class'/'subclass') inherit from the parent
+        // class — they don't author their own progression tables.
+        // Everything else owns its own columns, queryable as
+        // (parent_id=<feat.id>, parent_type=<feat|race|background>).
+        const ft = String(formData.featType ?? '').toLowerCase();
+        const scalingAllowed = ft !== 'class' && ft !== 'subclass';
+        const scalingOwnerType: ScalingOwnerType =
+          ft === 'race' || ft === 'background'
+            ? (ft as ScalingOwnerType)
+            : 'feat';
+        const scalingLabel =
+          ft === 'race' ? 'Race Columns'
+            : ft === 'background' ? 'Background Columns'
+              : 'Feat Columns';
+        return (
+          <div className="border-t border-gold/10 pt-4 space-y-3">
+            <div className="flex items-baseline justify-between gap-3">
+              <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Advancement</h3>
+              <span className="text-[10px] text-ink/40 italic">
+                Default level <span className="font-mono">0</span> = always-on while feat is owned.
+                Set a level &gt; 0 to gate against the granting class's level (or character level
+                for standalone feats).
+              </span>
+            </div>
+            {/* Two-column layout mirroring ClassEditor: the
+                AdvancementManager owns the main column; the
+                ScalingColumnsPanel hugs the right at xl+. Columns
+                authored here surface as `availableScalingColumns`
+                in the manager (next prop), so a ScaleValue
+                advancement on the feat can reference them. */}
+            <div className="grid xl:grid-cols-[1fr_320px] gap-6">
+              <AdvancementManager
+                advancements={formData.advancements}
+                onChange={(advancements) => setFormData((prev) => ({ ...prev, advancements }))}
+                parentContext={scopeFeatType || 'feat'}
+                // Feats don't have sub-features (their `featureId` slot is
+                // a class-side concept). `availableFeatures` left at the
+                // default `[]` hides the picker; `parentContext="feat"`
+                // ALSO hides it explicitly.
+                availableOptionGroups={allOptionGroups}
+                // Option items aren't needed in the feat add menu today —
+                // ItemGrant / ItemChoice pools resolve against option
+                // GROUPS, not raw items. Leaving the prop empty mirrors the
+                // pattern in ClassEditor where group-level choice is the
+                // primary path.
+                availableOptionItems={[]}
+                // Scaling columns owned by THIS feat. Passing them
+                // lets a ScaleValue advancement reference the
+                // feat's own progression tables (e.g. a feat that
+                // scales channel-divinity uses based on character
+                // level). Class features omit this — they inherit
+                // from the parent class instead.
+                availableScalingColumns={scalingAllowed ? scalingColumns : undefined}
+                // Tasha's-style feats can grant OTHER feats via ItemGrant
+                // (e.g. "Skilled" with sub-feats). The feats list is the
+                // already-loaded catalog (`entries`) — we filter out the
+                // feat currently being edited so an author can't accidentally
+                // make a feat grant itself.
+                availableFeats={entries.filter((e: any) => e.id !== editingId)}
+                // No classId — the option-group filter (which restricts
+                // groups to classIds.includes(classId)) no-ops when classId
+                // is undefined, falling through to all groups. That's the
+                // right default for feats, which aren't class-scoped.
+                defaultLevel={0}
+                referenceContext={{
+                  classLabel: formData.name || 'Feat',
+                  classIdentifier: formData.identifier || slugify(formData.name || 'feat'),
+                }}
+                referenceSheetTitle="Feat Reference Sheet"
+              />
+              {scalingAllowed && editingId ? (
+                <ScalingColumnsPanel
+                  parentId={editingId}
+                  parentType={scalingOwnerType}
+                  columns={scalingColumns}
+                  onColumnsChanged={() => setScalingLoadTick((t) => t + 1)}
+                  label={scalingLabel}
+                />
+              ) : null}
+            </div>
           </div>
-          <AdvancementManager
-            advancements={formData.advancements}
-            onChange={(advancements) => setFormData((prev) => ({ ...prev, advancements }))}
-            parentContext={scopeFeatType || 'feat'}
-            // Feats don't have sub-features (their `featureId` slot is
-            // a class-side concept). `availableFeatures` left at the
-            // default `[]` hides the picker; `parentContext="feat"`
-            // ALSO hides it explicitly.
-            availableOptionGroups={allOptionGroups}
-            // Option items aren't needed in the feat add menu today —
-            // ItemGrant / ItemChoice pools resolve against option
-            // GROUPS, not raw items. Leaving the prop empty mirrors the
-            // pattern in ClassEditor where group-level choice is the
-            // primary path.
-            availableOptionItems={[]}
-            // Tasha's-style feats can grant OTHER feats via ItemGrant
-            // (e.g. "Skilled" with sub-feats). The feats list is the
-            // already-loaded catalog (`entries`) — we filter out the
-            // feat currently being edited so an author can't accidentally
-            // make a feat grant itself.
-            availableFeats={entries.filter((e: any) => e.id !== editingId)}
-            // No classId — the option-group filter (which restricts
-            // groups to classIds.includes(classId)) no-ops when classId
-            // is undefined, falling through to all groups. That's the
-            // right default for feats, which aren't class-scoped.
-            defaultLevel={0}
-            referenceContext={{
-              classLabel: formData.name || 'Feat',
-              classIdentifier: formData.identifier || slugify(formData.name || 'feat'),
-            }}
-            referenceSheetTitle="Feat Reference Sheet"
-          />
-        </div>
-      ),
+        );
+      },
     },
     {
       key: 'effects',
@@ -1237,7 +1329,7 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
         </div>
       ),
     },
-  ], [formData, sources, editingId]);
+  ], [formData, sources, editingId, scalingColumns, allOptionGroups, entries, scopeFeatType]);
 
   const tagsSubTabsList: TagsSubTab[] = useMemo(() => [
     {
