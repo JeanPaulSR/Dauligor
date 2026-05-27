@@ -961,6 +961,15 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
         // in (the column is in the `jsonFields` autolist), and
         // `denormalizeCompendiumData` parses it back to an array on read.
         advancements: Array.isArray(formData.advancements) ? formData.advancements : [],
+        // Tag-picker edits land in `formData.tagIds`; without this line
+        // the save's explicit-field payload would never propagate tag
+        // changes (SpellsEditor avoids this trap by spreading
+        // `...formData`). `upsertFeat` renames `tagIds → tags` on the
+        // way to D1 — see `src/lib/compendium.ts:upsertFeat`. The Foundry
+        // feat browser reads `row.tags` for its `tagIds` summary flag,
+        // so stale tags here surface as wrong filter chips in the
+        // module's per-source picker.
+        tagIds: Array.isArray(formData.tagIds) ? formData.tagIds : [],
         requirements_tree: serializeRequirementTree(formData.requirementsTree),
         updated_at: new Date().toISOString(),
       };
