@@ -105,6 +105,28 @@ The [`handoffs/`](handoffs/) folder has two surfaces:
 Full convention details + lifecycle in
 [`handoffs/README.md`](handoffs/README.md).
 
+### Currently reserved branches
+
+The full live picture lives in
+[`handoffs/BRANCH_REGISTRY.md`](handoffs/BRANCH_REGISTRY.md). Headline
+items called out here so any agent skimming AGENTS.md sees them
+without needing to navigate:
+
+- **`system-applications`** (planned) — picks up the live-content
+  bridge work: Phase 1.5 hash-on-upsert wiring, the article-system
+  schema revamp (lore_articles → identifier + source_id), and Phase 2
+  read-only live viewer (DauligorViewer ApplicationV2 + custom
+  enrichers + new article / system-page endpoints). Branch hasn't
+  been created yet — the manifest reserves scope so other concurrent
+  branches route around its planned files. Full manifest:
+  [`handoffs/system-applications/manifest.md`](handoffs/system-applications/manifest.md).
+  Pickup context:
+  [`handoffs/system-applications/2026-05-27-live-content-bridge-phase1.md`](handoffs/system-applications/2026-05-27-live-content-bridge-phase1.md).
+
+Update this list when a new branch is reserved or when a reserved
+branch lands on main. Keep it short — detail belongs in the registry,
+not here.
+
 ### The shared-files protocol
 
 When you need to edit a file owned by another branch's `manifest.md`:
