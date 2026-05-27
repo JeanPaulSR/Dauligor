@@ -5,28 +5,19 @@ import { auth } from '../../lib/firebase';
 import { fetchCollection } from '../../lib/d1';
 import { cn } from '../../lib/utils';
 import { Button } from '../../components/ui/button';
-import { type FilterSection } from '../../components/compendium/SectionFilterPanel';
 import {
   CompendiumBrowserShell,
   type CompendiumColumn,
 } from '../../components/compendium/CompendiumBrowserShell';
-import { matchesSingleAxisFilter, matchesMultiAxisFilter } from '../../lib/spellFilters';
-import { useAxisFilters } from '../../hooks/useAxisFilters';
 import { useFeatFavorites } from '../../lib/featFavorites';
 import FeatDetailPanel from '../../components/compendium/FeatDetailPanel';
-import {
-  FEAT_PROPERTY_LABELS,
-  FEAT_PROPERTY_ORDER,
-  FEAT_TYPE_LABELS,
-  FEAT_TYPE_ORDER,
-  deriveFeatPropertyFlags,
-  type FeatTypeValue,
-} from '../../lib/featFilters';
+import { deriveFeatPropertyFlags } from '../../lib/featFilters';
 import {
   parseRequirementTree,
-  formatRequirementText,
+  formatRequirementShort,
   extractAbilityScoreLeaves,
   type Requirement,
+  type RequirementFormatLookup,
 } from '../../lib/requirements';
 
 /**
@@ -78,11 +69,6 @@ type FeatRow = {
   [key: string]: any;
 };
 
-// Declared axis keys — drives the activeFilterCount tally inside
-// useAxisFilters so stale keys (e.g. removed axes) don't inflate
-// the badge.
-const AXIS_KEYS = ['source', 'type', 'property'] as const;
-
 export default function FeatList({ userProfile }: { userProfile: any }) {
   const [feats, setFeats] = useState<FeatRow[]>([]);
   const [sources, setSources] = useState<SourceRecord[]>([]);
@@ -90,12 +76,14 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
   // Empty list is the cold-start case (admin hasn't authored any yet);
   // the column simply shows "—" for every feat in that scenario.
   const [featCategories, setFeatCategories] = useState<Array<{ id: string; name: string }>>([]);
+  // Per-proficiency-kind name lookups for the prerequisite formatter.
+  // Resolves slugs like "ath" → "Athletics" when rendering the
+  // Prerequisite column + detail panel prereq line. Loading happens
+  // in parallel with sources/categories in `loadFoundation`.
+  const [prereqLookup, setPrereqLookup] = useState<RequirementFormatLookup>({});
   const [loadingFeats, setLoadingFeats] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedFeatId, setSelectedFeatId] = useState('');
-
-  const { axisFilters, cyclers, activeFilterCount, resetAll: resetFilters } =
-    useAxisFilters(AXIS_KEYS);
 
   // Auth-aware favorites — feeds the shell with a userId-bound
   // favorites Set. The onAuthStateChanged listener re-runs the hook
@@ -158,17 +146,42 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
     };
     const loadFoundation = async () => {
       try {
-        // Sources + feat categories load in parallel. Categories drive
-        // the new "Category" column + filter axis; the public
-        // FeatDetailPanel reads them via its own load path.
-        const [sourcesData, categoryData] = await Promise.all([
+        // Sources + feat categories drive the Category / Source
+        // columns. The proficiency name collections (skills, tools,
+        // weapons, armor, languages) feed the prereq formatter's
+        // slug-resolution lookup so a row like "ath" reads as
+        // "Athletics" in the Prerequisite column.
+        const [sourcesData, categoryData, skillsData, toolsData, weaponsData, armorData, languagesData] = await Promise.all([
           fetchCollection<any>('sources', { orderBy: 'name ASC' }),
           fetchCollection<any>('featCategories', { orderBy: '"order", name ASC' }),
+          fetchCollection<any>('skills', { orderBy: 'name ASC' }),
+          fetchCollection<any>('tools', { orderBy: 'name ASC' }),
+          fetchCollection<any>('weapons', { orderBy: 'name ASC' }),
+          fetchCollection<any>('armor', { orderBy: 'name ASC' }),
+          fetchCollection<any>('languages', { orderBy: 'name ASC' }),
         ]);
         setSources(sourcesData);
         setFeatCategories(
           (categoryData || []).map((r: any) => ({ id: String(r.id), name: String(r.name || '') }))
         );
+        // Build the prereq lookup. The proficiency requirement leaf
+        // stores an `identifier` field that matches the row's
+        // identifier column (e.g. "ath" → Athletics row whose
+        // identifier is "ath"). We key by identifier first; the
+        // editor authors prereqs against identifiers, not IDs.
+        const byIdent = (rows: any[]) =>
+          Object.fromEntries(
+            (rows || [])
+              .filter((r) => r?.identifier)
+              .map((r) => [String(r.identifier), String(r.name || r.identifier)])
+          ) as Record<string, string>;
+        setPrereqLookup({
+          skillNameById: byIdent(skillsData),
+          toolNameById: byIdent(toolsData),
+          weaponNameById: byIdent(weaponsData),
+          armorNameById: byIdent(armorData),
+          languageNameById: byIdent(languagesData),
+        });
       } catch (err) {
         console.error('[FeatList] failed to load foundation data:', err);
       }
@@ -187,9 +200,11 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
     [featCategories],
   );
 
-  // Filter pipeline. Search + axis filters + class scope all AND
-  // together. Lives here (not in the shell) because the entity
-  // determines what "matching" means.
+  // Filter pipeline. Just search + the optional `?class=` scope —
+  // the multi-axis filter modal got dropped per the new UX
+  // direction (the row's category / ability / source columns are
+  // expressive enough that the per-axis pill wall added clutter
+  // without earning its space).
   const filteredFeats = useMemo(() => {
     const lowered = search.trim().toLowerCase();
     const scopeIdLower = classScopeIdentifier.trim().toLowerCase();
@@ -209,39 +224,9 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
         if (String(feat.featType ?? '').toLowerCase() !== 'class') return false;
         if (String(feat.featSubtype ?? '').toLowerCase() !== scopeIdLower) return false;
       }
-
-      const propsHave = new Set<string>();
-      for (const p of FEAT_PROPERTY_ORDER) {
-        const flagKey = p === 'repeatable' ? 'repeatableFlag' : p;
-        if ((feat as any)[flagKey]) propsHave.add(p);
-      }
-      return (
-        matchesSearch
-        && matchesSingleAxisFilter(String(feat.sourceId ?? ''), axisFilters.source)
-        && matchesSingleAxisFilter(String(feat.featType ?? ''), axisFilters.type)
-        && matchesMultiAxisFilter(propsHave, axisFilters.property)
-      );
+      return matchesSearch;
     });
-  }, [feats, sourceById, search, axisFilters, classScopeIdentifier]);
-
-  const filterAxes = useMemo<FilterSection[]>(() => ([
-    {
-      key: 'source', name: 'Sources', kind: 'axis',
-      values: sources.map((s) => ({
-        value: s.id,
-        label: String(s.abbreviation || s.shortName || s.name || s.id),
-        labelAlt: String(s.name || s.shortName || s.abbreviation || s.id),
-      })),
-    },
-    {
-      key: 'type', name: 'Feat Type', kind: 'axis',
-      values: FEAT_TYPE_ORDER.map((value) => ({ value, label: FEAT_TYPE_LABELS[value] })),
-    },
-    {
-      key: 'property', name: 'Properties', kind: 'axis',
-      values: FEAT_PROPERTY_ORDER.map((value) => ({ value, label: FEAT_PROPERTY_LABELS[value] })),
-    },
-  ]), [sources]);
+  }, [feats, sourceById, search, classScopeIdentifier]);
 
   // ─── Column descriptors ──────────────────────────────────────
   const renderSourceAbbreviation = (feat: FeatRow) => {
@@ -253,19 +238,19 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
     {
       key: 'name',
       label: 'Name',
-      width: 'minmax(0,1fr)',
+      // `minmax(160px, 1fr)` ensures the name stays at least 160px
+      // wide even when the other columns + the favorites pane eat
+      // most of the table area. The previous `minmax(0, 1fr)`
+      // allowed the column to collapse to 0px, which combined with
+      // the inner `truncate` made the name disappear entirely.
+      width: 'minmax(160px,1fr)',
       alwaysVisible: true,
       align: 'start',
       render: (feat) => {
         const starred = isFavorite(feat.id);
-        // Only the favorite star renders alongside the name now. The
-        // prerequisite lock and repeatable arrow are gone — when the
-        // Prerequisite column lands they'll live there, and the
-        // repeatable signal will surface in the detail view rather
-        // than as a row chip.
         return (
           <div className="min-w-0 flex items-center gap-1.5">
-            <span className="truncate font-serif text-sm text-ink">{feat.name}</span>
+            <span className="truncate font-semibold text-sm text-ink">{feat.name}</span>
             {starred && (
               <Star className="w-3 h-3 text-gold/70 fill-gold/40 shrink-0" aria-label="Favorite" />
             )}
@@ -319,21 +304,21 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
     {
       key: 'prerequisite',
       label: 'Prerequisite',
-      width: '220px',
+      width: 'minmax(180px,1.4fr)',
       render: (feat) => {
-        // Render the full requirements line via formatRequirementText
-        // — the same helper the detail view uses. Slugs (class IDs,
-        // skill IDs, etc.) won't resolve to display names here
-        // because we don't pass a lookup; for the list we accept the
-        // slug fallback since it's still readable ("ath", "wizard").
-        // Authors get the resolved labels in the detail panel.
-        const text = formatRequirementText(feat.requirementsTree ?? null);
+        // formatRequirementShort: drops the verbose "(character
+        // level)" qualifier and the "Skill proficiency:" prefix in
+        // favor of a clean "Proficiency: <name>" reading. The
+        // per-kind lookup maps resolve identifier slugs like "ath"
+        // to their display name ("Athletics") — falls back to the
+        // slug when the lookup isn't populated yet.
+        const text = formatRequirementShort(feat.requirementsTree ?? null, prereqLookup);
         const fallback = String(feat.requirements ?? '').trim();
         const display = text || fallback;
         return display ? (
-          <span className="text-xs text-ink/75 truncate" title={display}>{display}</span>
+          <span className="text-xs text-ink truncate" title={display}>{display}</span>
         ) : (
-          <span className="text-xs text-ink/30">—</span>
+          <span className="text-xs text-ink/40">—</span>
         );
       },
     },
@@ -401,11 +386,27 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
       search={search}
       onSearchChange={setSearch}
       searchPlaceholder="Search feat name, source, identifier, or subtype"
-      filterAxes={filterAxes}
-      axisFilters={axisFilters}
-      cyclers={cyclers}
-      activeFilterCount={activeFilterCount}
-      onResetFilters={resetFilters}
+      // Filter UI is gone — the type-aware columns (Category /
+      // Ability / Prerequisite / Source) already let authors narrow
+      // visually, and the modal added clutter without a clear
+      // payoff. Required-prop shells get empty axes + a no-op
+      // reset.
+      hideFilters
+      filterAxes={[]}
+      axisFilters={{}}
+      cyclers={{
+        cycleAxisState: () => {},
+        cycleAxisStateReverse: () => {},
+        cycleAxisCombineMode: () => {},
+        cycleAxisCombineModeReverse: () => {},
+        cycleAxisExclusionMode: () => {},
+        cycleAxisExclusionModeReverse: () => {},
+        axisIncludeAll: () => {},
+        axisExcludeAll: () => {},
+        axisClear: () => {},
+      }}
+      activeFilterCount={0}
+      onResetFilters={() => setSearch('')}
       columns={columns}
       columnsLocalStorageKey="dauligor.featListColumns"
       favorites={favorites}

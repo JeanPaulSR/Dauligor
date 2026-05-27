@@ -6,8 +6,9 @@ import { cn } from '../../lib/utils';
 import { fetchCollection, fetchDocument } from '../../lib/d1';
 import {
   parseRequirementTree,
-  formatRequirementText,
+  formatRequirementShort,
   type Requirement,
+  type RequirementFormatLookup,
 } from '../../lib/requirements';
 import { StatusEmblem } from '../ui/StatusEmblem';
 
@@ -76,6 +77,9 @@ export default function FeatDetailPanel({
   const [tags, setTags] = useState<TagRecord[]>([]);
   const [tagGroups, setTagGroups] = useState<Array<{ id: string; name: string }>>([]);
   const [featCategories, setFeatCategories] = useState<Array<{ id: string; name: string }>>([]);
+  // Per-proficiency-kind slug → name lookups for the prerequisite
+  // formatter so "ath" reads as "Athletics" in the panel.
+  const [prereqLookup, setPrereqLookup] = useState<RequirementFormatLookup>({});
   const [showTags, setShowTags] = useState(false);
   const [featsById, setFeatsById] = useState<Record<string, FeatRecord>>({});
   const [loading, setLoading] = useState(false);
@@ -94,8 +98,16 @@ export default function FeatDetailPanel({
       // name. Empty list is the cold-start case — the line just
       // doesn't render.
       fetchCollection<any>('featCategories', { orderBy: '"order", name ASC' }),
+      // Proficiency-name collections feed the prereq formatter's
+      // slug-resolution lookup (e.g. "ath" → "Athletics" in the
+      // italic prerequisite line under the name).
+      fetchCollection<any>('skills', { orderBy: 'name ASC' }),
+      fetchCollection<any>('tools', { orderBy: 'name ASC' }),
+      fetchCollection<any>('weapons', { orderBy: 'name ASC' }),
+      fetchCollection<any>('armor', { orderBy: 'name ASC' }),
+      fetchCollection<any>('languages', { orderBy: 'name ASC' }),
     ])
-      .then(([sourcesData, tagsData, groupsData, categoryData]) => {
+      .then(([sourcesData, tagsData, groupsData, categoryData, skillsData, toolsData, weaponsData, armorData, languagesData]) => {
         if (!active) return;
         setSources(sourcesData);
         setTags(tagsData.map((t: any) => ({ ...t, groupId: t.group_id ?? t.groupId ?? null })));
@@ -103,6 +115,19 @@ export default function FeatDetailPanel({
         setFeatCategories(
           (categoryData || []).map((r: any) => ({ id: String(r.id), name: String(r.name || '') }))
         );
+        const byIdent = (rows: any[]) =>
+          Object.fromEntries(
+            (rows || [])
+              .filter((r) => r?.identifier)
+              .map((r) => [String(r.identifier), String(r.name || r.identifier)])
+          ) as Record<string, string>;
+        setPrereqLookup({
+          skillNameById: byIdent(skillsData),
+          toolNameById: byIdent(toolsData),
+          weaponNameById: byIdent(weaponsData),
+          armorNameById: byIdent(armorData),
+          languageNameById: byIdent(languagesData),
+        });
       })
       .catch((err) => console.error('[FeatDetailPanel] failed to load foundation data:', err));
     return () => {
@@ -180,11 +205,11 @@ export default function FeatDetailPanel({
   })();
 
   // Prerequisites: prefer the structured `requirementsTree` rendered
-  // by the shared formatter (resolves slugs to display names), fall
-  // back to the raw free-text `requirements` field. Italic, no box —
-  // matches the "Feat is presented as a body of text, not a card" UX
-  // direction.
-  const requirementsLine = formatRequirementText(feat.requirementsTree ?? null);
+  // by the compact formatter (resolves slugs to display names via
+  // `prereqLookup`), fall back to the raw free-text `requirements`
+  // field. Italic, no box — matches the "Feat is presented as a body
+  // of text, not a card" UX direction.
+  const requirementsLine = formatRequirementShort(feat.requirementsTree ?? null, prereqLookup);
   const prereqDisplay = requirementsLine || String(feat.requirements ?? '').trim();
 
   // Feat Category surfaces a single italic line under the name. The

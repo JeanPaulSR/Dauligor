@@ -235,6 +235,16 @@ export interface RequirementFormatLookup {
   featureNameById?: Record<string, string>;
   spellNameById?: Record<string, string>;
   spellRuleNameById?: Record<string, string>;
+  // Per-proficiency-kind name lookups. Resolves a leaf's `identifier`
+  // slug ("ath" → "Athletics") so the rendered output reads as a
+  // human-readable label instead of an internal short code. Empty
+  // when the consumer hasn't passed the relevant collection — the
+  // formatter falls back to the slug.
+  skillNameById?: Record<string, string>;
+  weaponNameById?: Record<string, string>;
+  armorNameById?: Record<string, string>;
+  toolNameById?: Record<string, string>;
+  languageNameById?: Record<string, string>;
 }
 
 const ABILITY_LABEL: Record<AbilityKey, string> = {
@@ -348,6 +358,103 @@ export function formatRequirementText(
   }
 
   const parts = children.map(c => formatRequirementText(c, lookup, true));
+  const joined = parts.join(joinerByKind[tree.kind]);
+  return _nested ? `(${joined})` : joined;
+}
+
+// Ability label abbreviations for the compact formatter — STR, DEX,
+// CON, INT, WIS, CHA. Matches the canonical /admin/proficiencies
+// attribute identifiers and the 5etools convention.
+const ABILITY_ABBR: Record<AbilityKey, string> = {
+  str: 'STR', dex: 'DEX', con: 'CON', int: 'INT', wis: 'WIS', cha: 'CHA',
+};
+
+/**
+ * Render a single leaf in COMPACT form — drops the verbose qualifiers
+ * that `formatLeaf` adds for the editor's full readable output. Used
+ * by `formatRequirementShort` (which the FeatList Prerequisite
+ * column + FeatDetailPanel prereq line use) to keep the output
+ * scannable: "Level 4+", "Proficiency: Athletics", "WIS 13+".
+ *
+ * Proficiency lookups resolve via per-kind name maps on the lookup
+ * (e.g. `skillNameById['ath'] = 'Athletics'`). When the lookup is
+ * empty or the slug is missing, falls back to the slug verbatim.
+ */
+function formatLeafShort(leaf: RequirementLeaf, lookup: RequirementFormatLookup): string {
+  switch (leaf.type) {
+    case 'level':
+      // No "(character level)" suffix — most feats want the
+      // character total; the rare class-scoped case uses
+      // `levelInClass` instead, which we still render specially.
+      return `Level ${leaf.minLevel}+`;
+    case 'levelInClass': {
+      const name = lookup.classNameById?.[leaf.classId] ?? '<unknown class>';
+      return `${name} ${leaf.minLevel}+`;
+    }
+    case 'class':
+      return lookup.classNameById?.[leaf.classId] ?? '<unknown class>';
+    case 'subclass':
+      return lookup.subclassNameById?.[leaf.subclassId] ?? '<unknown subclass>';
+    case 'optionItem':
+      return lookup.optionItemNameById?.[leaf.itemId] ?? '<unknown option>';
+    case 'feature':
+      return lookup.featureNameById?.[leaf.featureId] ?? '<unknown feature>';
+    case 'spell':
+      return `Knows ${lookup.spellNameById?.[leaf.spellId] ?? '<unknown spell>'}`;
+    case 'spellRule':
+      return `Knows ${lookup.spellRuleNameById?.[leaf.spellRuleId] ?? '<unknown spell rule>'}`;
+    case 'abilityScore':
+      // Compact "STR 13+" reads better in narrow columns than the
+      // verbose "Strength 13 or higher".
+      return `${ABILITY_ABBR[leaf.ability]} ${leaf.min}+`;
+    case 'proficiency': {
+      // Resolve slug → display name via the per-kind lookup map.
+      // The label is just "Proficiency: <name>" regardless of kind
+      // (no "Skill proficiency:" / "Tool proficiency:" qualifier —
+      // the resolved name already communicates the kind to readers).
+      const map =
+        leaf.category === 'skill' ? lookup.skillNameById :
+        leaf.category === 'weapon' ? lookup.weaponNameById :
+        leaf.category === 'armor' ? lookup.armorNameById :
+        leaf.category === 'tool' ? lookup.toolNameById :
+        leaf.category === 'language' ? lookup.languageNameById :
+        undefined;
+      const resolved = map?.[leaf.identifier] ?? leaf.identifier;
+      return `Proficiency: ${resolved}`;
+    }
+    case 'string':
+      return leaf.value;
+  }
+}
+
+/**
+ * Compact recursive renderer — used by the public list + detail
+ * panel where the prerequisite line should read as a punctuated,
+ * scannable summary rather than the verbose editor explanation.
+ *
+ * Joins groups with ", " (all) / " or " (any) / " or " (one) rather
+ * than the editor's " and " / " or " / " xor ". Nested groups
+ * still wrap in parens.
+ */
+export function formatRequirementShort(
+  tree: Requirement | null | undefined,
+  lookup: RequirementFormatLookup = {},
+  _nested = false,
+): string {
+  if (!tree) return '';
+  if (isLeaf(tree)) return formatLeafShort(tree, lookup);
+
+  const joinerByKind: Record<RequirementGroupKind, string> = {
+    all: ', ',
+    any: ' or ',
+    one: ' or ',
+  };
+
+  const children = tree.children.filter(Boolean) as Requirement[];
+  if (children.length === 0) return '';
+  if (children.length === 1) return formatRequirementShort(children[0], lookup, _nested);
+
+  const parts = children.map((c) => formatRequirementShort(c, lookup, true));
   const joined = parts.join(joinerByKind[tree.kind]);
   return _nested ? `(${joined})` : joined;
 }

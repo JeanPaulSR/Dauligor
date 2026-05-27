@@ -116,6 +116,15 @@ export type CompendiumBrowserShellProps<TRow> = {
   activeFilterCount: number;
   onResetFilters: () => void;
   filterTitle?: string;
+  /**
+   * Hide the Filters button + modal entirely. Threads to FilterBar's
+   * `hideFilters` prop. Use when the browser is happy with just
+   * search + the always-on column-level affordances and a per-axis
+   * filter wall would be noise. The `filterAxes` etc. props remain
+   * required so the type contract stays stable; pass `[]` and
+   * no-op cyclers.
+   */
+  hideFilters?: boolean;
 
   // ─── Columns ────────────────────────────────────────────────
   columns: CompendiumColumn<TRow>[];
@@ -208,6 +217,7 @@ export function CompendiumBrowserShell<TRow>(props: CompendiumBrowserShellProps<
     searchPlaceholder,
     filterAxes,
     axisFilters,
+    hideFilters,
     cyclers,
     activeFilterCount,
     onResetFilters,
@@ -568,6 +578,7 @@ export function CompendiumBrowserShell<TRow>(props: CompendiumBrowserShellProps<
             </>
           }
           renderFilters={renderFilters ?? defaultFilters}
+          hideFilters={hideFilters}
         />
       </div>
 

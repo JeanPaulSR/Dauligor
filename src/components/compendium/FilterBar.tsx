@@ -43,6 +43,13 @@ export function useFilterBarContext() {
 }
 
 export interface FilterBarProps {
+  /**
+   * Hide the Filters button + axis modal entirely, leaving just the
+   * search input + inline Reset. Useful for browsers (FeatList) that
+   * decided per-axis filtering doesn't earn its space — the Reset
+   * button still clears the search.
+   */
+  hideFilters?: boolean;
   search: string;
   setSearch: (val: string) => void;
   isFilterOpen: boolean;
@@ -81,6 +88,7 @@ export interface FilterBarProps {
 }
 
 export function FilterBar({
+  hideFilters = false,
   search, setSearch,
   isFilterOpen, setIsFilterOpen,
   activeFilterCount,
@@ -135,24 +143,26 @@ export function FilterBar({
           onChange={setSearch}
           wrapperClassName="flex-1 w-full"
         />
-        <Button
-          variant={isFilterOpen ? "default" : "outline"}
-          size="sm"
-          onClick={() => setIsFilterOpen(true)}
-          className={`h-8 gap-2 w-full sm:w-auto ${isFilterOpen ? 'bg-gold text-white' : 'border-gold/20 text-gold hover:bg-gold/10'}`}
-        >
-          <Filter className="w-3 h-3" /> Filters
-          {activeFilterCount > 0 && (
-            // Bare numeric badge — no background pill, inherits the
-            // button's text color so it reads as a count next to the
-            // label rather than a chip. Override the default <Badge>
-            // background/padding/border via `!` modifiers so the
-            // component's own bg-primary etc. don't sneak back in.
-            <Badge className="!bg-transparent !border-0 !p-0 !shadow-none text-current text-[10px] font-bold leading-none">
-              {activeFilterCount}
-            </Badge>
-          )}
-        </Button>
+        {!hideFilters && (
+          <Button
+            variant={isFilterOpen ? "default" : "outline"}
+            size="sm"
+            onClick={() => setIsFilterOpen(true)}
+            className={`h-8 gap-2 w-full sm:w-auto ${isFilterOpen ? 'bg-gold text-white' : 'border-gold/20 text-gold hover:bg-gold/10'}`}
+          >
+            <Filter className="w-3 h-3" /> Filters
+            {activeFilterCount > 0 && (
+              // Bare numeric badge — no background pill, inherits the
+              // button's text color so it reads as a count next to the
+              // label rather than a chip. Override the default <Badge>
+              // background/padding/border via `!` modifiers so the
+              // component's own bg-primary etc. don't sneak back in.
+              <Badge className="!bg-transparent !border-0 !p-0 !shadow-none text-current text-[10px] font-bold leading-none">
+                {activeFilterCount}
+              </Badge>
+            )}
+          </Button>
+        )}
         {/* Inline Reset button. Always rendered so users know the
             affordance exists. When there's nothing to reset (no
             active filters, empty search) it dims to a disabled
@@ -191,7 +201,7 @@ export function FilterBar({
         )}
       </div>
 
-      {isFilterOpen && (
+      {!hideFilters && isFilterOpen && (
         // Outer container vertically centers the Card. Horizontal
         // padding remains so the Card doesn't touch screen edges on
         // narrow widths; vertical padding is dropped so the Card's
