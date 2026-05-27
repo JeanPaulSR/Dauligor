@@ -34,6 +34,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { auth } from '../lib/firebase';
 import { useBlock } from '../lib/proposalBlock';
+import { useProposalContextOptional } from '../lib/proposalAccumulator';
 import type { DraftRevision } from '../lib/proposalBlock';
 
 export interface CascadeDependentState {
@@ -79,6 +80,7 @@ export function useCascadeDependent(
   entityType: string,
   entityId: string | null | undefined,
 ): CascadeDependentState | null {
+  const ctx = useProposalContextOptional();
   const { drafts, refresh } = useBlock();
   // Local optimistic-resolve so the banner closes immediately on
   // Accept/Replace without waiting for the round-trip + refresh.
@@ -88,13 +90,17 @@ export function useCascadeDependent(
 
   const dependent = useMemo<DraftRevision | null>(() => {
     if (!entityId) return null;
+    // Outside <ProposalEditorWrapper> the user is on an admin-direct
+    // route — block-level cascade banners shouldn't appear there even
+    // if the admin has an unrelated block open with cascade drafts.
+    if (!ctx) return null;
     return drafts.find(
       (d) =>
         d.entity_type === entityType &&
         d.entity_id === entityId &&
         !!d.cascade_parent_revision_id,
     ) ?? null;
-  }, [drafts, entityType, entityId]);
+  }, [ctx, drafts, entityType, entityId]);
 
   const persistedResolved =
     !!dependent?.proposed_payload &&

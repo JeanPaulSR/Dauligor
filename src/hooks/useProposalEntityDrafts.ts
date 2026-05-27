@@ -36,6 +36,11 @@ export function useProposalEntityDrafts(entityType: ProposalEntityType | null) {
   const { drafts, activeBundleId } = useBlock();
   return useMemo(() => {
     if (!entityType) return EMPTY_RETURN;
+    // Outside <ProposalEditorWrapper> (admin-direct route, navbar,
+    // dashboards, etc.) return empty — block drafts must not leak
+    // overlays onto admin-direct editors when an admin has an open
+    // block elsewhere in the app.
+    if (!ctx) return EMPTY_RETURN;
     return getDraftedEntities(entityType, ctx, drafts, activeBundleId);
   }, [entityType, ctx, drafts, activeBundleId]);
 }

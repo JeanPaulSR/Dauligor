@@ -856,15 +856,17 @@ function TagTreePane({
   const { drafts: allDrafts, activeBundleId } = useBlock();
   const draftedTagIds = useMemo(() => {
     const ids = new Set<string>();
-    if (proposalContext) {
-      for (const q of proposalContext.queue) {
-        if (q.entity_type !== 'tag') continue;
-        // CREATE entries in the queue carry the minted UUID in
-        // entity_id (the writer stores it there for downstream
-        // dedup); UPDATE entries also have it. Either way we want
-        // the row to render highlighted.
-        if (q.entity_id) ids.add(q.entity_id);
-      }
+    // Outside <ProposalEditorWrapper> (admin-direct route) there is no
+    // proposal/block UI — return an empty set even if the admin has
+    // an open block elsewhere in the app.
+    if (!proposalContext) return ids;
+    for (const q of proposalContext.queue) {
+      if (q.entity_type !== 'tag') continue;
+      // CREATE entries in the queue carry the minted UUID in
+      // entity_id (the writer stores it there for downstream
+      // dedup); UPDATE entries also have it. Either way we want
+      // the row to render highlighted.
+      if (q.entity_id) ids.add(q.entity_id);
     }
     if (activeBundleId) {
       for (const d of allDrafts) {

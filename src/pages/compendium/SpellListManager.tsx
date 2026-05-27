@@ -295,6 +295,10 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
   const stagedSpellIds = useMemo(() => {
     const ids = new Set<string>();
     if (!selectedClassId) return ids;
+    // Outside <ProposalEditorWrapper> (admin-direct route) the staged-
+    // spell overlay is not applicable — return empty even if the admin
+    // has an open block elsewhere in the app.
+    if (!proposalContext) return ids;
     const linkedRuleIds = new Set(linkedRules.map(r => r.id));
     const ruleById = new Map(linkedRules.map(r => [r.id, r] as const));
     const parseArray = (val: any): string[] => {

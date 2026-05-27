@@ -20,7 +20,6 @@ import { useMemo } from 'react';
 import { toast } from 'sonner';
 import { auth } from './firebase';
 import { upsertDocument, deleteDocument } from './d1';
-import { useBlock } from './proposalBlock';
 
 export type ProposalEntityType =
   | 'tag'
@@ -51,6 +50,12 @@ const ENTITY_TO_COLLECTION: Record<ProposalEntityType, string> = {
   unique_option_item: 'uniqueOptionItems',
 };
 
+// `block` mode is wrapper-owned — when a write happens inside a
+// <ProposalEditorWrapper>, useProposalAccumulator returns a queue-
+// based writer whose mode is `'proposal'`; the wrapper itself flushes
+// the queue into the active block at Save-Progress time. We keep
+// `'block'` in the union for back-compat with existing call-site
+// `mode === 'block'` checks but useEntityWriter never produces it.
 export type WriterMode = 'direct' | 'proposal' | 'block' | 'readonly';
 
 export type WriterApi = {
@@ -88,9 +93,7 @@ export function useEntityWriter(
   entityType: ProposalEntityType,
   effectiveProfile: any,
 ): WriterApi {
-  const { activeBundleId, refresh: refreshBlock } = useBlock();
-
-  const baseMode: Exclude<WriterMode, 'block'> = useMemo(() => {
+  const mode: WriterMode = useMemo(() => {
     if (!effectiveProfile) return 'readonly';
     if (effectiveProfile.role === 'admin') return 'direct';
     if (
@@ -102,12 +105,16 @@ export function useEntityWriter(
     return 'readonly';
   }, [effectiveProfile]);
 
-  // When a block is open AND the user has at least 'proposal' rights,
-  // writes land in the active bundle as drafts. Admins ALSO go
-  // through the block when one's open — gives them the same staging
-  // UX for testing the workflow and bundling related changes.
-  const blockActive = !!activeBundleId && baseMode !== 'readonly';
-  const mode: WriterMode = blockActive ? 'block' : baseMode;
+  // NOTE: this hook used to auto-promote `direct` → `block` whenever
+  // a block was open globally (via useBlock().activeBundleId), so that
+  // admin-direct writes would land in the open block. That leaked
+  // proposal/block UI onto every admin-direct editor route (cascade
+  // banners, drafted-row highlights, "added to block" toasts) the
+  // moment an admin had a block open elsewhere. Block-mode writes are
+  // now exclusively wrapper-owned: useProposalAccumulator wraps this
+  // writer when mounted inside <ProposalEditorWrapper> and queues
+  // writes for the wrapper's flushToBundle pipeline. Outside the
+  // wrapper, writes always go DIRECT.
 
   return useMemo<WriterApi>(() => {
     const collection = ENTITY_TO_COLLECTION[entityType];
@@ -142,10 +149,9 @@ export function useEntityWriter(
       };
     }
 
-    // proposal + block share the POST /api/proposals path. The only
-    // difference is the body: block mode tags `is_draft: true` and
-    // pins the bundle_id; proposal mode lets the server pick a
-    // bundle id (or omit one for a single revision).
+    // Standalone-proposal submission for content-creators on non-
+    // wrapper routes. Drafts/block writes happen via the wrapper's
+    // queue + flushToBundle path — they never come through here.
     const submitProposal = async (
       op: 'create' | 'update' | 'delete',
       entityId: string | null,
@@ -165,10 +171,6 @@ export function useEntityWriter(
           },
         ],
       };
-      if (mode === 'block' && activeBundleId) {
-        body.is_draft = true;
-        body.bundle_id = activeBundleId;
-      }
       const res = await fetch('/api/proposals', {
         method: 'POST',
         headers: {
@@ -180,14 +182,6 @@ export function useEntityWriter(
       if (!res.ok) {
         const respBody = await res.json().catch(() => ({}));
         throw new Error(respBody.error || `Proposal failed (HTTP ${res.status})`);
-      }
-      // Keep the BlockProvider's local draft cache in sync so the
-      // navbar indicator + Drafts tab update without a manual
-      // refresh. No-op outside block mode.
-      if (mode === 'block') {
-        // Don't await — UI doesn't need to block on it; the next
-        // navigation to Drafts will fetch anyway.
-        void refreshBlock();
       }
     };
 
@@ -205,7 +199,7 @@ export function useEntityWriter(
         await submitProposal('delete', id, null, opts?.notes);
       },
     };
-  }, [mode, entityType, activeBundleId, refreshBlock]);
+  }, [mode, entityType]);
 }
 
 /**
