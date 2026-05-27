@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { fetchCollection, fetchDocument } from '../../lib/d1';
+import { useClassRouteId } from '../../lib/useClassRouteId';
 import { calculateEffectiveCastingLevel, getSpellSlotsForLevel } from '../../lib/spellcasting';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
@@ -49,7 +50,7 @@ import { ClassImageStyle, DEFAULT_DISPLAY } from '../../components/compendium/Cl
 import { toast } from 'sonner';
 
 export default function ClassView({ userProfile }: { userProfile: any }) {
-  const { id } = useParams();
+  const { id, slug, isLoading: slugLoading, notFound: slugNotFound } = useClassRouteId();
   const navigate = useNavigate();
   const [classData, setClassData] = useState<any>(null);
   const [source, setSource] = useState<any>(null);
@@ -546,9 +547,17 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
     return max;
   }, [spellcasting, subclassSpellcasting]);
 
-  if (loading) return (
+  if (slugLoading || loading) return (
     <div className="max-w-6xl mx-auto py-20 text-center space-y-4">
       <div className="font-serif italic text-gold animate-pulse">Consulting the archives...</div>
+      <Button variant="ghost" size="sm" onClick={() => navigate('/compendium/classes')} className="text-ink/40">
+        <ChevronLeft className="w-4 h-4 mr-2" /> Return to Compendium
+      </Button>
+    </div>
+  );
+  if (slugNotFound) return (
+    <div className="max-w-6xl mx-auto py-20 text-center space-y-4">
+      <div className="font-serif italic text-ink/60">No class matches the slug "{slug}".</div>
       <Button variant="ghost" size="sm" onClick={() => navigate('/compendium/classes')} className="text-ink/40">
         <ChevronLeft className="w-4 h-4 mr-2" /> Return to Compendium
       </Button>
@@ -711,7 +720,7 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Link to={`/compendium/classes/edit/${id}`}>
+              <Link to={`/compendium/classes/edit/${slug ?? id}`}>
                 <Button variant="outline" className="border-gold/20 text-gold gap-2 hover:bg-gold/10">
                   <Edit className="w-4 h-4" /> Edit Class
                 </Button>

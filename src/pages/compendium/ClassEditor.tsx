@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { toast } from 'sonner';
-import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
+import { useClassRouteId, buildClassSlug } from '../../lib/useClassRouteId';
 import { useKeyboardSave } from '../../hooks/useKeyboardSave';
 import ActivityEditor from '../../components/compendium/ActivityEditor';
 import FeatureModalHero from '../../components/compendium/FeatureModalHero';
@@ -439,17 +440,14 @@ function normalizeClassSpellcastingForSave(spellcasting: any) {
 }
 
 export default function ClassEditor({ userProfile }: { userProfile: any }) {
-  // Sanitize the route param: pre-`ce906dc` releases of MyProposals
-  // generated `/proposals/edit/classes/edit/null` for CREATE drafts
-  // (entity_id is null server-side; the real id lives in
-  // proposed_payload.id). React Router hands us the literal string
-  // "null" — fetchDocument('classes', 'null') then errors with
-  // "Class document null does not exist" and the form loads blank
-  // even though the draft IS in classDrafts.byId. Belt-and-braces:
-  // treat the string "null" / "undefined" as if no id were provided
-  // so the editor falls through to its create-mode behaviour.
-  const { id: rawId } = useParams();
-  const id = rawId && rawId !== 'null' && rawId !== 'undefined' ? rawId : undefined;
+  // Route param resolves through `useClassRouteId`, which handles both
+  // the admin `:slug` form (`sorcerer_phb`) and the proposal `:id` form
+  // (primary key, or React Router's stringified `"null"`/`"undefined"`
+  // for pre-`ce906dc` CREATE-draft routes — those fall through to
+  // create-mode behaviour because the hook returns `id: undefined`).
+  // The `slug` field carries the original URL slug for outbound
+  // back-link construction on the admin side.
+  const { id, slug, isLoading: slugLoading, notFound: slugNotFound } = useClassRouteId();
   const navigate = useNavigate();
   const location = useLocation();
   const isAdmin = userProfile?.role === 'admin';
@@ -1345,7 +1343,14 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
       // catches up on the next page load via `classDrafts.byId.get(id)`
       // once the draft persists server-side.
       if (!id && !opts.silent && !isProposalMode) {
-        navigate(`${basePath}/edit/${saveId}`);
+        // Admin route uses the `<identifier>_<sourceAbbrev>` slug now;
+        // fall back to the primary key only if the row somehow has no
+        // identifier (shouldn't happen — `slugify(name)` produces one
+        // for any non-empty name).
+        const savedSource = sources.find((s: any) => s.id === sourceId);
+        const savedAbbrev = savedSource?.abbreviation || savedSource?.shortName;
+        const newSlug = buildClassSlug({ identifier: slugify(name) }, savedAbbrev);
+        navigate(`${basePath}/edit/${newSlug ?? saveId}`);
       }
       setProficiencies(normalizedProficiencies);
       setMulticlassProficiencies(normalizedMulticlassProficiencies);
@@ -1608,12 +1613,22 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
     });
   };
 
-  if (initialLoading) {
+  if (slugLoading || initialLoading) {
     return (
       <div className="max-w-6xl mx-auto py-20 text-center space-y-4">
         <div className="font-serif italic text-gold animate-pulse">Consulting the archives...</div>
         <Button variant="ghost" size="sm" onClick={() => navigate(isProposalRoute ? '/my-proposals' : '/compendium/classes')} className="text-ink/40">
           <ChevronLeft className="w-4 h-4 mr-2" /> {isProposalRoute ? 'Back to My Proposals' : 'Return to Compendium'}
+        </Button>
+      </div>
+    );
+  }
+  if (slugNotFound) {
+    return (
+      <div className="max-w-6xl mx-auto py-20 text-center space-y-4">
+        <div className="font-serif italic text-ink/60">No class matches the slug "{slug}".</div>
+        <Button variant="ghost" size="sm" onClick={() => navigate('/compendium/classes')} className="text-ink/40">
+          <ChevronLeft className="w-4 h-4 mr-2" /> Return to Compendium
         </Button>
       </div>
     );
@@ -1654,7 +1669,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
             ? '/my-proposals'
             : isProposalRoute
               ? (id ? '/proposals/edit/classes' : '/my-proposals')
-              : (id ? `/compendium/classes/view/${id}` : '/compendium/classes')
+              : (slug ? `/compendium/classes/view/${slug}` : '/compendium/classes')
         }
         proposalTitle={effectiveId ? (name || 'Untitled Class') : 'New Class'}
         adminContent={
