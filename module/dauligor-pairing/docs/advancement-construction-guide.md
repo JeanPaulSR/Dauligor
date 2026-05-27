@@ -543,6 +543,18 @@ For Dauligor:
 
 ### `ScaleValue`
 
+> **Owner scope (Phase A/B "advancements outside classes" — May 2026)** —
+> `ScaleValue` advancements work on any advancement-carrying item type
+> dnd5e exposes, not just on `type: "class"`. App-side, the underlying
+> `scaling_columns` table is polymorphic across `parent_type ∈ { class,
+> subclass, feat, race, background, item }`. Foundry's resolver
+> (`@scale.<owner-identifier>.<column-identifier>`) treats them
+> identically regardless of owner. See § "Pitfall 1" below for the
+> design call that still holds — class progression that's *conceptually*
+> class-scoped stays on the class item; the owner-scope generalization
+> is for content that *isn't* class-scoped (a homebrew feat with its own
+> scaling die, a magic item with bumped charges, etc.).
+
 Valid item families:
 
 - all item types supported by `dnd5e`
@@ -587,6 +599,66 @@ Important rule:
 - the progression belongs in `configuration.scale`
 - actor-specific current value is derived from level
 - `value` is usually empty
+
+### `ItemBumpUses`
+
+> **App-only advancement type (Phase C — May 2026)** — bumps the
+> `uses.max` of a target feature / feat that the character already
+> owns. Used for "Cleric: Divine Intervention Improvement" (+1 to
+> Channel Divinity), "Amulet of the Devout" (+1 charge), and homebrew
+> feats that add to existing class-feature uses.
+
+Valid item families (app-side authoring):
+
+- `feat` (covers feat / race / background via `feat_type` discriminator)
+- `item`
+- `class`, `subclass`, `feature` (rare but valid — a class feature can
+  bump another class feature's uses, e.g. a tier-up at a later level)
+
+Purpose:
+
+- after the granting entity is added to a character, the app finds the
+  target on the sheet and adds the configured amount to its `uses.max`
+- target-not-present → warning surfaced to the author; the bump is
+  silently skipped so the granting entity still applies cleanly
+
+Configuration shape:
+
+```json
+{
+  "target": { "kind": "feature", "id": "<features.id or feats.id>" },
+  "amount": "+1"
+}
+```
+
+- `target.kind` is `"feature"` (class / subclass features in the
+  `features` table) or `"feat"` (rows in `feats`).
+- `amount` is a Foundry-roll-engine formula string. Plain numbers
+  (`"1"`), signed numbers (`"+1"`), `@prof`, `@scale.<owner>.<col>`,
+  and arithmetic combinations all work — the app emits the combined
+  formula via `combineUsesMaxWithBumps()` so Foundry resolves the
+  final value at play time.
+
+Foundry export behavior:
+
+- bumps are baked into each granted feature item's `system.uses.max`
+  via app-side stitching — no runtime `ActiveEffect` involved
+- each bumped feature item carries
+  `flags["dauligor-pairing"].itemBumpUses: [{amount, sourceKind,
+  sourceId, sourceName, sourceAdvancementId}]` so debug / audit UIs
+  can show where the bump came from
+- the actor itself carries
+  `flags["dauligor-pairing"].itemBumpUses: { bumps, warnings }` —
+  the whole-actor map, including any target-not-present warnings the
+  app produced during the walk
+
+App-side caveats (track in
+[`docs/handoff-phase-c-itembumpuses.md`](../../../docs/handoff-phase-c-itembumpuses.md)):
+
+- feat-authored bumps don't fire in the server export today
+  (`rebuildCharacterFromSql` doesn't synthesize `character.feats`)
+- item-authored bumps don't fire in the character runtime today
+  (`collectItemBumpUses` accepts `ownedFeats` but not `ownedItems`)
 
 ### `Size`
 
@@ -1012,6 +1084,15 @@ Better:
 
 - Sorcerer class owns the `ScaleValue` and `ItemGrant`
 - Font of Magic feat owns description and activities
+
+> The "ScaleValue lives on the class" guidance above still holds for
+> *class progression* tracks like sorcery points or cantrips known —
+> those are conceptually class-scoped. The "advancements outside
+> classes" track (Phase A/B, May 2026) generalized the *underlying*
+> `scaling_columns` table so a homebrew feat / race / background /
+> item can own its own scaling progression when it isn't class-scoped
+> (e.g. "Bloodlust Rage Die" on a feat, "Channel Divinity Bonus" on
+> Amulet of the Devout). The two patterns don't conflict.
 
 ### Pitfall 2: saving choices on the actor but not on the class item
 

@@ -46,13 +46,22 @@ Foundry → app reverse direction.
 Touches: [src/lib/scalingImport.ts](../src/lib/scalingImport.ts) (shared helper) + [src/components/compendium/FeatImportWorkbench.tsx](../src/components/compendium/FeatImportWorkbench.tsx) + [src/components/compendium/ItemImportWorkbench.tsx](../src/components/compendium/ItemImportWorkbench.tsx).
 
 ### Phase B.4 — Module canonical contract updates
-**Status**: open · **Priority**: low · **Owner-gated**: requires explicit per-doc permission per the `dauligor-guardian` skill protocol
+**Status**: core three shipped (May 2026) · stale wider corpus still open · **Priority**: low
 
-The following module canonical docs treat scaling as class-only; they need a pass to acknowledge non-class owners once Phase B.2/B.3 ship:
-- [module/dauligor-pairing/docs/class-import-contract.md](../module/dauligor-pairing/docs/class-import-contract.md) — mentions `scalingColumns` only for classes
-- [module/dauligor-pairing/docs/advancement-construction-guide.md](../module/dauligor-pairing/docs/advancement-construction-guide.md) — ScaleValue section is class-only
-- [module/dauligor-pairing/docs/schema-crosswalk.md](../module/dauligor-pairing/docs/schema-crosswalk.md) — extensive ScaleValue coverage all in class context
-- [module/dauligor-pairing/docs/class-feature-activity-contract.md](../module/dauligor-pairing/docs/class-feature-activity-contract.md) — line 1013 references Sorcerer-owned ScaleValue specifically
+The three core contract docs received owner-scope clarifying notes
+acknowledging non-class scaling owners + the new `ItemBumpUses`
+advancement type:
+
+- ✅ [module/dauligor-pairing/docs/class-import-contract.md](../module/dauligor-pairing/docs/class-import-contract.md) — `ScaleValue` section gained an owner-scope callout
+- ✅ [module/dauligor-pairing/docs/advancement-construction-guide.md](../module/dauligor-pairing/docs/advancement-construction-guide.md) — `ScaleValue` section + Pitfall 1 reframed; new `ItemBumpUses` section added
+- ✅ [module/dauligor-pairing/docs/schema-crosswalk.md](../module/dauligor-pairing/docs/schema-crosswalk.md) — owner-scope callout in "Scaling Value Advancements"; new "ItemBumpUses" section appended
+
+The fourth doc the original list named (`class-feature-activity-contract.md`)
+no longer references `ScaleValue` directly — that pointer was stale
+and the doc needs no edit.
+
+Remaining: a sweep across the wider module-doc corpus (eight other docs
+still use class-only language for scaling — see [followups-advancements-outside-classes.md § 1.4](followups-advancements-outside-classes.md#14-stale-module-doc-refs)).
 
 ### Phase C — `ItemBumpUses` advancement type
 **Status**: v1 end-to-end shipped on `feat/itembumpuses-advancement` (authoring + CharacterBuilder runtime + Foundry actor export) · feat-authored bumps on server export + items as authors still open · **Pick-up doc**: [handoff-phase-c-itembumpuses.md](handoff-phase-c-itembumpuses.md)
@@ -68,11 +77,7 @@ A separate advancement type that lets a feat or item upgrade an existing feature
 - Foundry actor export: [characterShared.ts](../src/lib/characterShared.ts) fetches feature rows, calls the same walker, and bakes the bumps into each feature item's `system.uses.max`. Per-item `flags['dauligor-pairing'].itemBumpUses` and a top-level `actor.flags['dauligor-pairing'].itemBumpUses` audit trail let the module side surface "where did this bump come from" without re-walking.
 - Verification covered in [§ J of verification-scaling-non-class-owners.md](verification-scaling-non-class-owners.md#j-itembumpuses-end-to-end-phase-c-v1).
 
-**What's still open**:
-- **Feat-authored bumps in server export**. The export pipeline reconstructs the character from D1 via `rebuildCharacterFromSql`, which doesn't synthesize `character.feats` (the client-side synthesis walker owns that). Feat-authored bumps work app-side (runtime + warnings) but are silently dropped from the exported actor data. Unblocks once a server-side feat synthesizer ports the relevant slice of the client walker.
-- **Items as bump authors** ✅ shipped — migration `20260527-1200_items_advancements.sql` adds an `advancements` JSON column to the items table, and [ItemsEditor.tsx](../src/pages/compendium/ItemsEditor.tsx) mounts the same `AdvancementManager` classes / subclasses / feats use on a new **Advancement** sub-tab between Activities and Scaling. Items now author ItemBumpUses + any other supported type the same way feats do. **Caveat**: the runtime walker doesn't yet accept `ownedItems` — item-authored bumps round-trip through the editor but don't fire on the character sheet or in export yet. Documented as a follow-up below.
-- **Item-authored bumps in the character runtime**. `collectItemBumpUses` accepts `ownedFeats` but not `ownedItems`. Extending the walker to also walk a character's owned items' advancements would let Amulet-of-the-Devout-style bumps apply at runtime once the rest of the character builder's inventory layer is fleshed out.
-- **Future modes**: `'addToChoice'` (extend a target ItemChoice's pool) and `'replace'` (full feature overwrite). Out of scope; treat as Phase D / E.
+**What's still open**: All v1 surfaces shipped — the remaining items (feat-authored bumps in server export, item-authored bumps in the character runtime, future advancement modes, module-side consumers) are cataloged in [docs/followups-advancements-outside-classes.md](followups-advancements-outside-classes.md). Focus shifted back to feats / editors code clarity on 2026-05-27.
 
 Created 2026-05-27. v1 end-to-end shipped on `feat/itembumpuses-advancement` (commits `fe71fdd` authoring + `656d96c` walker + `e709888` builder runtime + `960a99d` export + items-as-authors follow-up).
 

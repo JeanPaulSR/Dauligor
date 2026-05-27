@@ -666,6 +666,18 @@ for the full app-side schema + resolver walk.
 
 ### `ScaleValue`
 
+> **Owner scope** — `ScaleValue` advancements are no longer class-only.
+> Phase A/B of the "advancements outside classes" track (shipped May 2026)
+> generalized the underlying `scaling_columns` table to a polymorphic
+> `(parent_id, parent_type)` shape. Valid `parent_type` values today:
+> `class`, `subclass`, `feat`, `race`, `background`, `item`. The Foundry-
+> ready output shape is identical regardless of owner — the difference is
+> which entity the advancement lives on app-side. See
+> [docs/features/compendium-scaling.md](../../../docs/features/compendium-scaling.md)
+> for the app-side authoring model. The module-side importer must accept
+> `ScaleValue` on any advancement-carrying item type the dnd5e system
+> exposes (feats, races, backgrounds, items), not just on `type: "class"`.
+
 Use `ScaleValue` for class progression tracks such as:
 
 - cantrips known

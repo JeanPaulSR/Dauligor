@@ -429,6 +429,44 @@ Our app stores simple objects currently (`{"int": 13}`). Foundry expects `system
 
 Foundry `dnd5e` relies directly on `ScaleValue` advancement data to automate class abilities like Martial Arts dice and Sneak Attack. Our `scalingColumns` provide the table UI, but we must expand our schema to include Foundry's type definition (e.g., is it a string, a dice size, a numeric value, or a distance?) so the character sheet automatically applies these scale changes to damage rolls.
 
+> **Owner scope (Phase A/B "advancements outside classes" — May 2026)** —
+> `scaling_columns` is now polymorphic. The table carries `(parent_id,
+> parent_type)` with `parent_type ∈ { class, subclass, feat, race,
+> background, item }`. The Foundry-side resolver
+> (`@scale.<owner-identifier>.<column-identifier>`) treats every owner
+> the same — only the *which entity owns this column* metadata differs
+> app-side. Module-side importers must accept `ScaleValue` advancements
+> on any advancement-carrying dnd5e item type, not just on
+> `type: "class"`. See
+> [`docs/features/compendium-scaling.md`](../../../docs/features/compendium-scaling.md)
+> for the app-side authoring model.
+
+## ItemBumpUses (Phase C — May 2026)
+
+A new advancement type that bumps a target feature / feat's `uses.max`
+by an arbitrary formula. Used for "Cleric: Divine Intervention
+Improvement" (+1 to Channel Divinity uses), "Amulet of the Devout"
+(+1 charge), homebrew feats that scale Bardic Inspiration, etc.
+
+Configuration shape: `{ target: { kind: 'feature' | 'feat', id }, amount: '<formula>' }`.
+
+App-side resolution is bake-time (not a runtime `ActiveEffect`):
+
+- the character builder's `collectItemBumpUses` walker (in
+  `src/lib/characterLogic.ts`) finds the target on the sheet and
+  records the bump
+- the actor exporter stitches the bumps onto each granted feature
+  item's `system.uses.max` via `combineUsesMaxWithBumps()`
+- per-item `flags["dauligor-pairing"].itemBumpUses` + actor-level
+  `flags["dauligor-pairing"].itemBumpUses` carry the audit trail so
+  module-side UIs can answer "where did this bump come from"
+
+See [`docs/handoff-phase-c-itembumpuses.md`](../../../docs/handoff-phase-c-itembumpuses.md)
+for the design calls + the known runtime caveats (feat-authored bumps
+don't fire in the server export yet; item-authored bumps don't fire in
+the character runtime yet — both unblock when the walker gains an
+`ownedItems` slice + server-side feat synthesis ports across).
+
 ## What Plutonium appears to do
 
 Based on the local Plutonium bundle in:
