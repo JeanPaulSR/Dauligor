@@ -59,6 +59,13 @@ import { ImageUpload } from '../../components/ui/ImageUpload';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import SingleSelectSearch from '../../components/ui/SingleSelectSearch';
+// Tag system — matches the SpellsEditor / ItemsEditor pattern. Feats
+// reuse the shared `tags` + `tag_groups` tables; the field on the row
+// is `tags` (JSON column auto-parsed by d1.ts) but editors carry it
+// as `tagIds` for cross-entity consistency, and the upsertFeat path
+// already remaps `tagIds → tags` on save (see compendium.ts).
+import TagPicker from '../../components/compendium/TagPicker';
+import { normalizeTagRow } from '../../lib/tagHierarchy';
 
 // ─── Constants ──────────────────────────────────────────────────────────
 
@@ -369,6 +376,19 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
     Partial<Record<ProficiencyKind, Array<{ id: string; name: string; hint?: string }>>>
   >({});
 
+  // Tags + tag groups for the Tags sub-tab. Loaded once on mount
+  // alongside the other catalogs. Shape mirrors what SpellsEditor /
+  // ItemsEditor pass to TagPicker: tags come through `normalizeTagRow`
+  // (which renames `parent_tag_id` → `parentTagId`, etc.), groups stay
+  // as `{ id, name }`.
+  const [tags, setTags] = useState<Array<{
+    id: string;
+    name: string;
+    groupId: string | null;
+    parentTagId: string | null;
+  }>>([]);
+  const [tagGroups, setTagGroups] = useState<Array<{ id: string; name: string }>>([]);
+
   // ── Initial load ──────────────────────────────────────────────
   useEffect(() => {
     if (!canManage) return;
@@ -390,6 +410,8 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
           skills,
           languages, languageCategories,
           featCategoryRows,
+          tagRows,
+          tagGroupRows,
         ] = await Promise.all([
           fetchCollection<any>('feats', { orderBy: 'name ASC' }),
           fetchCollection<any>('sources', { orderBy: 'name ASC' }),
@@ -412,6 +434,11 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
           // ties. ProficiencyEntityShell already produces this exact
           // ordering on its list page.
           fetchCollection<any>('featCategories', { orderBy: '"order", name ASC' }),
+          // Tag system — same fetch pattern SpellsEditor / ItemsEditor
+          // use. `normalizeTagRow` runs on each row below to project
+          // the shape TagPicker expects.
+          fetchCollection<any>('tags', { orderBy: 'name ASC' }),
+          fetchCollection<any>('tagGroups', { orderBy: 'name ASC' }),
         ]);
         if (cancelled) return;
 
@@ -494,6 +521,23 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
           skill: skills.map((s: any) => ({ id: s.identifier, name: s.name })),
           language: mergeProf(languages, languageCategories),
         });
+        // Tags + tagGroups for the TagPicker. `normalizeTagRow` handles
+        // the snake_case → camelCase rename + the `parent_tag_id` →
+        // `parentTagId` shape the picker expects (matches the pattern
+        // in ItemsEditor + SpellsEditor).
+        setTags(tagRows.map((row: any) => {
+          const normalized = normalizeTagRow(row);
+          return {
+            id: String(normalized.id),
+            name: String(normalized.name || ''),
+            groupId: normalized.groupId ?? null,
+            parentTagId: normalized.parentTagId ?? null,
+          };
+        }));
+        setTagGroups(tagGroupRows.map((g: any) => ({
+          id: String(g.id),
+          name: String(g.name || 'Tags'),
+        })));
 
         setLoading(false);
       } catch (err) {
@@ -1435,15 +1479,37 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
     },
     {
       key: 'tags',
-      label: 'Tags',
+      // Label carries the selection count so authors see what they've
+      // already tagged without opening the sub-tab — mirrors the
+      // SpellsEditor / ItemsEditor pattern.
+      label: (
+        <>
+          Tags {formData.tagIds.length > 0 && (
+            <span className="ml-1 text-gold/70">({formData.tagIds.length})</span>
+          )}
+        </>
+      ),
       render: () => (
-        <div className="space-y-2 border border-gold/10 rounded-md p-4 bg-background/20">
-          <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Tags</h3>
-          <p className="text-xs text-ink/40 italic">Tag picker for feats — TODO (follow-up: load tag / tagGroup rows + wire a SpellTagPicker-style component bound to formData.tags / formData.tagIds, mirroring SpellsEditor's Tags sub-tab).</p>
-        </div>
+        <TagPicker
+          tags={tags}
+          tagGroups={tagGroups}
+          selectedIds={formData.tagIds}
+          onChange={(next) => setFormData((prev) => ({ ...prev, tagIds: next }))}
+          hint="Tag rules + class spell list rules use these to decide which feats they include. Feats granted to a character also contribute their tags to the character's effective tag set."
+          emptyHint="No tags loaded yet."
+        />
       ),
     },
-  ], [formData.requirements, formData.requirementsShortText, formData.requirementsTree, requirementsLookups, requirementsTextLookup]);
+  ], [
+    formData.requirements,
+    formData.requirementsShortText,
+    formData.requirementsTree,
+    formData.tagIds,
+    requirementsLookups,
+    requirementsTextLookup,
+    tags,
+    tagGroups,
+  ]);
 
   // ── List columns ──────────────────────────────────────────────
   const listColumns: EditorListColumn<any>[] = useMemo(() => [
@@ -1673,6 +1739,7 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
         proposalMode={!!proposalContext}
         editorSubTabs={editorSubTabs}
         tagsSubTabs={tagsSubTabsList}
+        tagsSuperTabCount={formData.tagIds.length}
         renderPreview={(id) =>
           id ? (
             <FeatDetailPanel
