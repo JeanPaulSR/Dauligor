@@ -437,14 +437,21 @@ export async function buildCharacterExport(
   const classIds = uniqueStrings(progression.map((p: any) => p.classId));
   const subclassIds = uniqueStrings(progression.map((p: any) => p.subclassId).filter(Boolean));
 
-  // Fetch documents for classes and subclasses
-  const [classRows, subclassRows] = await Promise.all([
-    classIds.length > 0 
+  // Fetch documents for classes, subclasses, and features. Features
+  // were added in Phase C so the ItemBumpUses walker has access to
+  // each feature's `advancements` array (where the bumps may live)
+  // and its `uses_max` formula (the base value bumps stack on top of).
+  const featureParentIds = [...classIds, ...subclassIds];
+  const [classRows, subclassRows, featureRows] = await Promise.all([
+    classIds.length > 0
       ? queryFn<any>(`SELECT * FROM classes WHERE id IN (${classIds.map(() => "?").join(",")})`, classIds)
       : Promise.resolve([]),
     subclassIds.length > 0
       ? queryFn<any>(`SELECT * FROM subclasses WHERE id IN (${subclassIds.map(() => "?").join(",")})`, subclassIds)
-      : Promise.resolve([])
+      : Promise.resolve([]),
+    featureParentIds.length > 0
+      ? queryFn<any>(`SELECT * FROM features WHERE parent_id IN (${featureParentIds.map(() => "?").join(",")})`, featureParentIds)
+      : Promise.resolve([]),
   ]);
 
   // D1 rows are snake_case with JSON columns as strings; the export code below
@@ -453,6 +460,38 @@ export async function buildCharacterExport(
   // through the canonical denormalizers so the actor shape is correct.
   const classDocsById = Object.fromEntries(classRows.map(r => [r.id, denormalizeClassRow(r)]));
   const subclassDocsById = Object.fromEntries(subclassRows.map(r => [r.id, denormalizeSubclassRow(r)]));
+
+  // ── Feature catalog (Phase C) ──────────────────────────────────
+  // Minimal denormalizer for what the ItemBumpUses walker + the
+  // feature-item builder need. We don't import the full
+  // `denormalizeFeatureRow` from classExport.ts because pulling that
+  // dependency chain into the shared module bloats the bundle —
+  // every field we touch here is a flat scalar or a JSON column.
+  const parseJsonArray = (raw: any): any[] => {
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw !== 'string') return [];
+    try { const parsed = JSON.parse(raw); return Array.isArray(parsed) ? parsed : []; }
+    catch { return []; }
+  };
+  const featuresById: Record<string, any> = {};
+  const featureCacheMap: Record<string, any[]> = {};
+  featureRows.forEach((row: any) => {
+    const denormalized = {
+      id: row.id,
+      name: row.name,
+      level: Number(row.level || 1) || 1,
+      parentId: row.parent_id,
+      parentType: row.parent_type,
+      usesMax: row.uses_max ?? '',
+      usesRecovery: parseJsonArray(row.uses_recovery),
+      advancements: parseJsonArray(row.advancements),
+    };
+    featuresById[row.id] = denormalized;
+    const parent = String(row.parent_id || '');
+    if (!parent) return;
+    if (!featureCacheMap[parent]) featureCacheMap[parent] = [];
+    featureCacheMap[parent].push(denormalized);
+  });
 
   // Shared Logic Imports (assumed available in scope or via imports)
   const {
@@ -470,7 +509,10 @@ export async function buildCharacterExport(
     buildOptionFeatItem,
     mapTraitSelectionToSemantic,
     trimString,
-    slugify
+    slugify,
+    collectItemBumpUses,
+    combineUsesMaxWithBumps,
+    itemBumpKey,
   } = await import("./characterLogic");
 
   const hpState = getHpExportState(charData);
@@ -481,6 +523,26 @@ export async function buildCharacterExport(
   const items: any[] = [];
   const progressionState = charData.progressionState || { classPackages: [], ownedFeatures: [], ownedItems: [] };
   const classPackages = progressionState.classPackages || [];
+
+  // ── ItemBumpUses resolution (Phase C — bake-time uses.max) ──────
+  //
+  // Walks every authored ItemBumpUses across class / subclass /
+  // feature advancements at the character's effective levels and
+  // collects the bumps per target. Per-feat advancements are walked
+  // ONLY if charData carries a hydrated `feats` array (the
+  // client-side synthesis walker produces it; the server-side
+  // rebuilder doesn't). In server-only callers, feat-authored bumps
+  // silently no-op until a server-side feat synthesizer ships.
+  // Tracked in docs/handoff-phase-c-itembumpuses.md.
+  const ownedFeats = Array.isArray(charData.feats) ? charData.feats : [];
+  const bumpResult = collectItemBumpUses({
+    progression,
+    classCache: classDocsById,
+    subclassCache: subclassDocsById,
+    featureCache: featureCacheMap,
+    ownedFeats,
+    totalCharacterLevel: totalLevel,
+  });
 
   progressionGroups.forEach((group: any) => {
     const classDoc = group.classDocument;
@@ -545,7 +607,46 @@ export async function buildCharacterExport(
   });
 
   (progressionState.ownedFeatures || []).forEach((entry: any) => {
-    items.push(buildFeatureItemFromOwnedFeature(entry));
+    // `as any` because the return type of `buildFeatureItemFromOwnedFeature`
+    // is a closed shape; Phase C augments it with `system.uses` and
+    // a `flags['dauligor-pairing'].itemBumpUses` audit array. Until
+    // that helper's return type is widened, we mutate as `any`.
+    const baseItem: any = buildFeatureItemFromOwnedFeature(entry);
+    // The simplified `buildFeatureItemFromOwnedFeature` doesn't read
+    // uses_max off the D1 row — it only sees the ownedFeature entry.
+    // Look up the row directly to recover the base formula + recovery
+    // metadata, then layer any Phase C bumps on top via
+    // `combineUsesMaxWithBumps`. We only emit `system.uses` when there
+    // IS uses content (base or bumps) so feature items without uses
+    // stay shape-compatible with the existing exporter output.
+    const featureId = String(entry?.entityId || entry?.id || '');
+    const featureRow = featureId ? featuresById[featureId] : null;
+    const bumps = featureId
+      ? (bumpResult.bumps[itemBumpKey('feature', featureId)] || [])
+      : [];
+    const baseUsesMax = String(featureRow?.usesMax ?? '');
+    if (bumps.length > 0 || baseUsesMax) {
+      const combinedMax = combineUsesMaxWithBumps(baseUsesMax, bumps);
+      baseItem.system = baseItem.system || {};
+      baseItem.system.uses = {
+        max: combinedMax,
+        spent: 0,
+        recovery: Array.isArray(featureRow?.usesRecovery) ? featureRow.usesRecovery : [],
+      };
+      // Audit trail for the module side — lets debug-mode UIs show
+      // which bumps stacked onto a given feature without recomputing
+      // the walk. Empty array when no bumps applied.
+      baseItem.flags = baseItem.flags || {};
+      baseItem.flags['dauligor-pairing'] = baseItem.flags['dauligor-pairing'] || {};
+      baseItem.flags['dauligor-pairing'].itemBumpUses = bumps.map((b: any) => ({
+        amount: b.amount,
+        sourceKind: b.sourceKind,
+        sourceId: b.sourceId,
+        sourceName: b.sourceName,
+        sourceAdvancementId: b.sourceAdvancementId,
+      }));
+    }
+    items.push(baseItem);
   });
 
   // Spells — fetch the referenced spell rows once and build a Foundry
@@ -770,6 +871,18 @@ export async function buildCharacterExport(
             isActive: Boolean(l.isActive),
             sortOrder: Number(l.sortOrder ?? 0) || 0,
           })),
+          // Phase C — ItemBumpUses audit trail. The bumps are already
+          // baked into each feature item's `system.uses.max` (and
+          // surfaced per-item via `flags['dauligor-pairing'].itemBumpUses`).
+          // This top-level entry gives the module side a single map
+          // to iterate when reporting "where did this bump come from"
+          // and a list of orphan warnings the actor's DM should know
+          // about (e.g. a feat that bumps a feature the character
+          // doesn't actually have at this level).
+          itemBumpUses: {
+            bumps: bumpResult.bumps,
+            warnings: bumpResult.warnings,
+          },
         },
       },
     },
