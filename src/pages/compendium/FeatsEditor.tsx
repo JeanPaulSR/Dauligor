@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import FeatImportWorkbench from '../../components/compendium/FeatImportWorkbench';
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
 import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
@@ -275,9 +275,61 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
-  const [editingId, setEditingId] = useState<string | null>(null);
+  // URL-backed editingId — survives navigation away/back (e.g.
+  // when the user clicks "+ Add" on a scaling column, edits it in
+  // ScalingEditor, and hits Save → navigate(-1) returns here with
+  // ?editingId=X intact). Pulled from the URL on mount; pushed
+  // back to the URL whenever the user picks a different row.
+  // Mirrors the URL-deep-link pattern FeatList uses for #hash so
+  // every editor surface is reload-safe.
+  const [urlSearchParams, setUrlSearchParams] = useSearchParams();
+  const initialEditingId = urlSearchParams.get('editingId');
+  const [editingId, setEditingId] = useState<string | null>(initialEditingId);
   const [formData, setFormData] = useState<FeatFormData>(makeInitialFeatForm());
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+
+  // Outgoing sync: when editingId changes from any code path
+  // (startEditing, save promotions, reviewMode hydration, the
+  // delete handler), reflect it in the URL. `replace: true` so
+  // row-by-row browsing doesn't bury the back stack the way a
+  // pushState chain would. Skipping the no-op case avoids a
+  // redundant history entry on mount.
+  useEffect(() => {
+    const current = urlSearchParams.get('editingId');
+    if (editingId && editingId !== current) {
+      setUrlSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set('editingId', editingId);
+          return next;
+        },
+        { replace: true },
+      );
+    } else if (!editingId && current) {
+      setUrlSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete('editingId');
+          return next;
+        },
+        { replace: true },
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingId]);
+
+  // Inbound sync: when the URL's editingId changes from outside —
+  // browser back/forward, address-bar edits, or another component
+  // calling setSearchParams — pull it back into state. The
+  // matching-value guard prevents a feedback loop with the
+  // outgoing effect (both no-op when state and URL agree).
+  useEffect(() => {
+    const urlEditingId = urlSearchParams.get('editingId');
+    if ((urlEditingId || null) !== editingId) {
+      setEditingId(urlEditingId || null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlSearchParams]);
 
   // ── Filter state ──────────────────────────────────────────────
   // useAxisFilters bundles every cycler the SectionFilterPanel needs.
