@@ -11,6 +11,7 @@ Live record of in-progress branches and the files they're touching.
 | Branch | Started | Owner | Status | Primary files (exclusive) | Shared files (append-only) | Manifest |
 |---|---|---|---|---|---|---|
 | `system-applications` | 2026-05-27 | TBD | planned | Article system revamp (`src/pages/wiki/**`, `src/lib/lore.ts`, `src/lib/bbcode.ts`); Phase 1.5 hash-on-upsert (`src/lib/d1.ts`, `api/_lib/d1-internal.ts`); Phase 2 viewer (new files under `module/dauligor-pairing/scripts/dauligor-viewer.js`, `enrichers/`, `templates/dauligor-viewer.hbs`); new article + system-page endpoints in `functions/api/module/[[path]].ts` + new `api/_lib/_articleExport.ts` / `_systemPageExport.ts`; new system-page UI (`src/pages/compendium/SystemPage*.tsx`, `src/components/compendium/SystemPageGlossary.tsx`) | `src/lib/compendium.ts`, `src/lib/d1Tables.ts`, `src/App.tsx`, `src/components/Sidebar.tsx`, `worker/migrations/`, `docs/roadmap.md`, `module/dauligor-pairing/scripts/main.js` | [system-applications/manifest.md](system-applications/manifest.md) |
+| `compendium-management` | 2026-05-27 | Claude | active | None claimed yet — `feat/feats-tagging` still in flight with compendium editor files (FeatsEditor, FeatList, FeatDetailPanel + AdvancementManager touches); future work in this branch will claim per task | `src/lib/compendium.ts`, `src/lib/d1.ts`, `src/lib/d1Tables.ts`, `src/App.tsx`, `src/components/Sidebar.tsx`, `worker/migrations/`, `docs/roadmap.md`, `AGENTS.md` | [compendium-management/manifest.md](compendium-management/manifest.md) |
 
 ## Status legend
 
