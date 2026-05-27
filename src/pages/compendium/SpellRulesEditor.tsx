@@ -120,10 +120,12 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
   const { drafts: allDrafts, activeBundleId } = useBlock();
   const draftedRuleIds = useMemo(() => {
     const ids = new Set<string>();
-    if (proposalContext) {
-      for (const q of proposalContext.queue) {
-        if (q.entity_type === 'spell_rule' && q.entity_id) ids.add(q.entity_id);
-      }
+    // Outside <ProposalEditorWrapper> (admin-direct route) there is no
+    // proposal/block UI — return an empty set even if an admin has an
+    // open block elsewhere in the app.
+    if (!proposalContext) return ids;
+    for (const q of proposalContext.queue) {
+      if (q.entity_type === 'spell_rule' && q.entity_id) ids.add(q.entity_id);
     }
     if (activeBundleId) {
       for (const d of allDrafts) {

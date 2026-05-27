@@ -28,7 +28,6 @@ import { TombstoneRow } from '../proposals/TombstoneRow';
 import { CascadeDependentBanner } from '../proposals/CascadeDependentBanner';
 import { TagReplacementPicker } from '../proposals/TagReplacementPicker';
 import { useCascadeDependent } from '../../hooks/useCascadeDependent';
-import { useBlock } from '../../lib/proposalBlock';
 
 type DevelopmentFormData = {
   id?: string;
@@ -115,7 +114,6 @@ export default function DevelopmentCompendiumManager({
   const isProposalMode =
     !!entityType && !!proposalContext &&
     (entityWriter.mode === 'proposal' || entityWriter.mode === 'block');
-  const { drafts: allDrafts, activeBundleId } = useBlock();
   const focusMode = proposalContext?.focusMode ?? 'drafts';
   const focusModeEnabled = proposalContext?.focusModeEnabled ?? false;
   // Review-mode wiring. When this manager owns the entityType being
