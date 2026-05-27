@@ -560,14 +560,31 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
     proficiencies: proficiencyPools,
   }), [classes, subclasses, spellRules, allOptionGroups, proficiencyPools]);
 
-  const requirementsTextLookup = useMemo(() => ({
-    classNameById: Object.fromEntries(classes.map((c: any) => [c.id, c.name])),
-    subclassNameById: Object.fromEntries(subclasses.map((s: any) => [s.id, s.name])),
-    spellRuleNameById: Object.fromEntries(spellRules.map((r: any) => [r.id, r.name])),
-    optionItemNameById: Object.fromEntries(
-      allOptionGroups.flatMap((g) => g.items.map((it) => [it.id, it.name] as const)),
-    ),
-  }), [classes, subclasses, spellRules, allOptionGroups]);
+  const requirementsTextLookup = useMemo(() => {
+    // Proficiency pools land keyed by their Foundry identifier
+    // (skill = `ath`, weapon = `longsword`, language = `elvish`,
+    // etc.) — the exact key shape the formatter expects. Without
+    // these maps the editor's detail preview would render slugs
+    // ("ath Proficiency") while the public FeatDetailPanel resolves
+    // them to display names ("Athletics Proficiency") — drift.
+    // Reading from proficiencyPools (the source the leaf picker
+    // already uses) keeps the two surfaces consistent.
+    const profMap = (cat: 'weapon' | 'armor' | 'tool' | 'skill' | 'language') =>
+      Object.fromEntries((proficiencyPools[cat] ?? []).map((p) => [p.id, p.name]));
+    return {
+      classNameById: Object.fromEntries(classes.map((c: any) => [c.id, c.name])),
+      subclassNameById: Object.fromEntries(subclasses.map((s: any) => [s.id, s.name])),
+      spellRuleNameById: Object.fromEntries(spellRules.map((r: any) => [r.id, r.name])),
+      optionItemNameById: Object.fromEntries(
+        allOptionGroups.flatMap((g) => g.items.map((it) => [it.id, it.name] as const)),
+      ),
+      skillNameById: profMap('skill'),
+      weaponNameById: profMap('weapon'),
+      armorNameById: profMap('armor'),
+      toolNameById: profMap('tool'),
+      languageNameById: profMap('language'),
+    };
+  }, [classes, subclasses, spellRules, allOptionGroups, proficiencyPools]);
 
   const resetForm = () => {
     const initial = makeInitialFeatForm(sources);
@@ -803,7 +820,22 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
         });
         if (!opts.silent) toast.success(`Feat ${entryIdAtStart ? 'updated' : 'created'}`);
         await refreshEntries();
-        if (!opts.silent) resetForm();
+        if (!opts.silent) {
+          // Stay on the just-saved feat rather than resetting back to
+          // a fresh form — the editor previously jumped the user
+          // away from their work, which felt like data loss even
+          // though the save succeeded. For new-feat saves we promote
+          // `editingId` to the freshly-minted id so the next save
+          // updates rather than creates a second row.
+          if (wasCreate) setEditingId(entryId);
+          // Mark the current form as clean (it now matches what's
+          // persisted). The cache-eviction in refreshEntries() will
+          // trigger a re-fetch through the editingId useEffect, so
+          // the form gets the canonical post-save shape on its next
+          // tick — but in the meantime, this keeps the dirty-check
+          // honest if the user clicks another row before then.
+          lastLoadedFormRef.current = JSON.stringify(formDataRef.current ?? formData);
+        }
       }
     } catch (error) {
       console.error('Error saving feat:', error);
