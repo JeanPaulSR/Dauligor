@@ -196,7 +196,56 @@ export default function RequirementsEditor({
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between">
+      {/* Free Text override (all surfaces). Topmost layer in the
+          authoring stack — the most general "I want prose, not a
+          tree" hatch. Overrides the compound tree on every
+          surface (compact + detail). */}
+      {showFreeText && (
+        <div className="space-y-1">
+          <label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">
+            Free Text
+          </label>
+          <input
+            type="text"
+            value={freeText ?? ''}
+            onChange={(e) => onFreeTextChange!(e.target.value)}
+            placeholder="e.g. The ability to cast at least one spell"
+            className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs"
+          />
+          <p className="text-[10px] text-ink/40">
+            A text override for all prerequisites. If possible, use the compound requirements block below.
+          </p>
+        </div>
+      )}
+
+      {/* Short Text override (compact contexts only). Second-tier
+          override — replaces both the free text and the formatted
+          tree, but only in column / row displays. Detail surfaces
+          still read the layers below. */}
+      {showShortText && (
+        <div className="space-y-1">
+          <label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">
+            Short Text
+          </label>
+          <input
+            type="text"
+            value={shortText ?? ''}
+            onChange={(e) => onShortTextChange!(e.target.value)}
+            placeholder="e.g. Outlander, Lvl 4, Dragonmark"
+            className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs"
+          />
+          <p className="text-[10px] text-ink/40">
+            Short text overrides compound requirements and free texts in smaller sections. Useful for columns that don't have much room.
+          </p>
+        </div>
+      )}
+
+      {/* Compound Requirements header + tree. Lives at the bottom
+          of the authoring stack — the default, structured layer
+          that the override texts above replace when set. Header
+          moved here from the panel top so the heading + its
+          description + the tree itself read as one section. */}
+      <div className="flex items-center justify-between pt-1">
         <label className="text-xs font-bold uppercase tracking-widest text-ink/40">{label}</label>
         {value && (
           <button
@@ -208,50 +257,9 @@ export default function RequirementsEditor({
           </button>
         )}
       </div>
-
-      {/* Short Text override (compact contexts only). Highest
-          priority in column / row surfaces; detail surfaces ignore
-          it. Authors use this when the structured tree or free text
-          is too long for a tight cell ("Outlander origin" instead
-          of "Lvl 4 · Outlander origin"). */}
-      {showShortText && (
-        <div className="space-y-1">
-          <label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">
-            Short Text <span className="text-ink/35 normal-case tracking-normal">— compact column only</span>
-          </label>
-          <input
-            type="text"
-            value={shortText ?? ''}
-            onChange={(e) => onShortTextChange!(e.target.value)}
-            placeholder="e.g. Outlander, Lvl 4, Dragonmark"
-            className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs"
-          />
-          <p className="text-[10px] text-ink/40">
-            Replaces the free text and the formatted tree in compact column displays. Detail surfaces use the layers below.
-          </p>
-        </div>
-      )}
-
-      {/* Free Text override (all surfaces). Overrides the structured
-          tree on both compact and detail surfaces — use when the
-          prereq reads better as prose than as a leaf chain. */}
-      {showFreeText && (
-        <div className="space-y-1">
-          <label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">
-            Free Text <span className="text-ink/35 normal-case tracking-normal">— overrides the compound tree</span>
-          </label>
-          <input
-            type="text"
-            value={freeText ?? ''}
-            onChange={(e) => onFreeTextChange!(e.target.value)}
-            placeholder="e.g. The ability to cast at least one spell"
-            className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs"
-          />
-          <p className="text-[10px] text-ink/40">
-            Free-text override for prereqs that don't fit the structured tree. Replaces the compound tree in both compact and detail surfaces. Not machine-checked.
-          </p>
-        </div>
-      )}
+      <p className="text-[10px] text-ink/40">
+        Add Requirement adds a single requirement. Add Group adds a block that you can choose whether all need to match (AND) or only one has to match (OR).
+      </p>
 
       {!value ? (
         <div className="border border-gold/10 border-dashed rounded-md bg-background/20 px-3 py-4 space-y-2">
