@@ -46,6 +46,7 @@ import { normalizeTagRow, expandTagsWithAncestors, buildTagParentMap } from '../
 import {
   importClassSemantic
 } from '../../lib/classExport';
+import { buildClassSlug } from '../../lib/useClassRouteId';
 import { ClassImageStyle, DEFAULT_DISPLAY } from '../../components/compendium/ClassImageEditor';
 import { toast } from 'sonner';
 
@@ -127,17 +128,26 @@ export function ClassList({
   const newClassHref = isProposalRoute
     ? '/proposals/edit/classes/new'
     : '/compendium/classes/new';
-  const editClassHref = (classId: string) =>
-    isProposalRoute
-      ? `/proposals/edit/classes/edit/${classId}`
-      : `/compendium/classes/edit/${classId}`;
+  const editClassHref = (cls: { id: string; identifier?: string; source_id?: string; sourceId?: string }) => {
+    if (isProposalRoute) return `/proposals/edit/classes/edit/${cls.id}`;
+    const sourceRow = sources[String(cls.source_id ?? cls.sourceId ?? '')];
+    const abbrev = sourceRow?.abbreviation || sourceRow?.shortName;
+    const slug = buildClassSlug({ identifier: cls.identifier }, abbrev);
+    return `/compendium/classes/edit/${slug ?? cls.id}`;
+  };
+  const viewClassHref = (cls: { id: string; identifier?: string; source_id?: string; sourceId?: string }) => {
+    const sourceRow = sources[String(cls.source_id ?? cls.sourceId ?? '')];
+    const abbrev = sourceRow?.abbreviation || sourceRow?.shortName;
+    const slug = buildClassSlug({ identifier: cls.identifier }, abbrev);
+    return `/compendium/classes/view/${slug ?? cls.id}`;
+  };
   const isLoading = loadingStates.classes || loadingStates.foundation;
 
   useEffect(() => {
     const loadClasses = async () => {
       try {
         const classData = await fetchCollection<any>('classes', { 
-          select: 'id, name, source_id, category, tag_ids, image_url, card_image_url, preview_image_url, card_display, image_display, preview_display, preview, description',
+          select: 'id, name, identifier, source_id, category, tag_ids, image_url, card_image_url, preview_image_url, card_display, image_display, preview_display, preview, description',
           orderBy: 'name ASC' 
         });
         
@@ -1003,14 +1013,14 @@ export function ClassList({
                               route, hide it so a content-creator's back-button flow
                               stays inside /proposals/edit/* end-to-end. */}
                           {!isProposalRoute && (
-                            <Link to={`/compendium/classes/view/${selectedClass.id}`}>
+                            <Link to={viewClassHref(selectedClass)}>
                               <Button size="sm" className="btn-gold-solid shadow-lg shadow-gold/20 uppercase tracking-widest text-[10px] h-8">
                                 View Page
                               </Button>
                             </Link>
                           )}
                           {canManage && (
-                            <Link to={editClassHref(selectedClass.id)}>
+                            <Link to={editClassHref(selectedClass)}>
                               <Button size="sm" variant={isProposalRoute ? undefined : "outline"} className={isProposalRoute ? "btn-gold-solid shadow-lg shadow-gold/20 uppercase tracking-widest text-[10px] h-8" : "border-gold/20 text-gold uppercase tracking-widest text-[10px] h-8"}>
                                 <Edit className="w-3.5 h-3.5 mr-1" /> Edit
                               </Button>

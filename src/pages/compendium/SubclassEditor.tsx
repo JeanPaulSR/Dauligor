@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
+import { buildClassSlug } from '../../lib/useClassRouteId';
 import MarkdownEditor from '../../components/MarkdownEditor';
 import { ImageUpload } from '../../components/ui/ImageUpload';
 import { ClassImageEditor, ImageDisplay, DEFAULT_DISPLAY } from '../../components/compendium/ClassImageEditor';
@@ -220,6 +221,19 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
   const [progressionScalings, setProgressionScalings] = useState<any[]>([]);
   const [knownScalings, setKnownScalings] = useState<any[]>([]);
   const [parentClass, setParentClass] = useState<any>(null);
+
+  // Slug for the parent class's admin route (used by the back-to-parent
+  // navigations). Built from parent identifier + source abbreviation;
+  // falls back to the parent's primary key when no identifier yet, so
+  // a half-saved parent still routes somewhere sensible.
+  const parentClassAdminEditHref = useMemo(() => {
+    if (!parentClass) return '/compendium/classes';
+    const sourceFK = String(parentClass.source_id ?? parentClass.sourceId ?? '');
+    const sourceRow = sources.find((s: any) => s.id === sourceFK);
+    const abbrev = sourceRow?.abbreviation || sourceRow?.shortName;
+    const slug = buildClassSlug({ identifier: parentClass.identifier }, abbrev);
+    return `/compendium/classes/edit/${slug ?? parentClass.id}`;
+  }, [parentClass, sources]);
 
   // UI State
   const [loading, setLoading] = useState(true);
@@ -732,7 +746,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
         backHref={
           isProposalRoute
             ? (parentClass ? `/proposals/edit/classes/edit/${parentClass.id}` : '/proposals/edit/classes')
-            : (parentClass ? `/compendium/classes/edit/${parentClass.id}` : '/compendium/classes')
+            : parentClassAdminEditHref
         }
         backLabel={`Back to ${parentClass?.name || 'Class'}`}
         proposalTitleNode={
@@ -1360,7 +1374,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                     try {
                       await deleteDocument('subclasses', id);
                       toast.success('Subclass deleted');
-                      navigate(parentClass ? `/compendium/classes/edit/${parentClass.id}` : '/compendium/classes');
+                      navigate(parentClassAdminEditHref);
                     } catch (error) {
                       toast.error('Failed to delete subclass');
                     }

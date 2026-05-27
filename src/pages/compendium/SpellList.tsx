@@ -8,6 +8,7 @@ import { expandTagsWithAncestors, normalizeTagRow } from '../../lib/tagHierarchy
 import { fetchCollection, fetchDocument } from '../../lib/d1';
 import { auth } from '../../lib/firebase';
 import { fetchClassSpellIds } from '../../lib/classSpellLists';
+import { buildClassSlug } from '../../lib/useClassRouteId';
 import { SCHOOL_LABELS, formatActivationLabel, formatRangeLabel } from '../../lib/spellImport';
 import { cn } from '../../lib/utils';
 import { Button } from '../../components/ui/button';
@@ -170,6 +171,7 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
   const classParam = searchParams.get('class') || '';
   const [classFilter, setClassFilter] = useState<{
     classId: string;
+    classSlug: string | null;
     className: string;
     spellIds: Set<string>;
   } | null>(null);
@@ -185,7 +187,13 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
         ]);
         if (cancelled) return;
         const className = String(classRow?.name || classRow?.identifier || 'Class');
-        setClassFilter({ classId: classParam, className, spellIds });
+        // Resolve the back-link slug now so the BackButton can deep-link to
+        // `/compendium/classes/view/sorcerer_phb` instead of the primary key.
+        const sourceFK = String(classRow?.source_id ?? classRow?.sourceId ?? '');
+        const sourceRow = sourceFK ? await fetchDocument<any>('sources', sourceFK).catch(() => null) : null;
+        const abbrev = sourceRow?.abbreviation || sourceRow?.shortName;
+        const classSlug = buildClassSlug({ identifier: classRow?.identifier }, abbrev);
+        setClassFilter({ classId: classParam, classSlug, className, spellIds });
       } catch (err) {
         console.warn('[SpellList] Failed to resolve ?class= filter:', err);
         if (!cancelled) setClassFilter(null);
@@ -904,7 +912,7 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
       leadingActions={
         classFilter ? (
           <BackButton
-            to={`/compendium/classes/view/${classFilter.classId}`}
+            to={`/compendium/classes/view/${classFilter.classSlug ?? classFilter.classId}`}
             label={`Back to ${classFilter.className}`}
             title={`Return to the ${classFilter.className} class page`}
           />
