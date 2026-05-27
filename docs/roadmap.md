@@ -15,6 +15,100 @@ Conventions:
 
 ---
 
+## Live-content bridge — Phase 2+ work
+
+**Status**: Phase 1 foundation patches shipped 2026-05-27 on `claude/phase1-foundation`. Phase 2 (read-only live viewer) gated on article revamp — see "Article system unification" below. **Working spec**: [docs/_drafts/foundry-enricher-deep-dive-2026-05-26.html](_drafts/foundry-enricher-deep-dive-2026-05-26.html).
+
+The plan: instead of baking Dauligor content into Foundry as static compendium documents, Foundry becomes a live viewer that fetches from `/api/module/*`. Solves the stale-journal problem; canonical content lives in one place forever. Drag-and-drop for mechanical content still creates real Foundry documents (the drag payload carries the full Foundry-shape JSON), but the *reference* layer (article cross-links, system pages, hover tooltips) is live-fetched and cached per-world.
+
+**Phase 1 patches that just shipped** (this branch):
+- Composite `(source_id, identifier)` uniqueness on spells, classes, subclasses, unique_option_groups was incomplete. Migration `20260527-1400_composite_identifier_uniqueness.sql` adds it for spells / classes / subclasses (matches the pattern set by feats + items in `20260526-2300`).
+- Features had **zero uniqueness** on identifier. Migration `20260527-1410_features_parent_scoped_identifier.sql` adds `UNIQUE(parent_type, parent_id, identifier)` — scoped by owner since the same identifier can recur across different classes/subclasses/feats. One pre-existing duplicate (Arcane Archer subclass had a feature with the wrong identifier slug) was fixed inline.
+- Added `content_hash TEXT` column to spells / feats / items / classes / subclasses / features / unique_option_groups via `20260527-1420_content_hash_columns.sql`. Population (hash-on-upsert) happens in Phase 1.5 — column is currently NULL on existing rows. Phase 4 update-detection consumes this column.
+- New deterministic Foundry `_id` derivation helper at [module/dauligor-pairing/scripts/foundry-id.js](../module/dauligor-pairing/scripts/foundry-id.js). SHA-256 hash of `(MODULE_ID + ':' + sourceId)` → 16-char base62. Stable across re-imports. Async (crypto.subtle); pre-warm pattern documented for sync `dragstart` handlers.
+
+**Phase 2 (read-only live viewer)** — next, after article revamp:
+- New API endpoints under `/api/module/<source>/articles/<slug>` (full HTML) and `/articles/<slug>/summary` (hover summary, short HTML)
+- `DauligorViewer` ApplicationV2 class in the module — opens when a Dauligor reference link is clicked, renders the API HTML into a Foundry window with the standard Journal chrome
+- Custom enricher registration via `CONFIG.TextEditor.enrichers.push(...)` for `@article[slug]`, `@condition[key]`, `@rule[key]`, etc.
+- Hover tooltips via `data-tooltip-html` populated by lazy fetch + per-session cache
+- World-local cache (Foundry world `setFlag`) keyed by `kind/source/key/hash` — offline reads fall through to cache
+- "System page" article type on the app side (parent article + child glossary entries, addressable by slug — mirrors dnd5e's Conditions / Rules journal structure)
+
+**Phase 3 (drag-construct mechanical items)** — relies on deterministic Foundry `_id` helper from Phase 1 above:
+- Pre-fetch full Foundry-shape JSON on hover (extends Phase 2's summary fetch)
+- `dragstart` reads cached payload, emits `{ type: "Item", data: <converted> }` — Foundry's drop handler does the rest
+- Sentinel fallback for cache misses: `{ type: "Item", data: { _dauligorRef: "<sourceId>" } }`, resolved async via `preCreateItem` hook
+- Reuses existing batch-import conversion code from `class-import-service.js` exposed as a per-item path
+
+**Phase 4 (update detection)**:
+- Batch freshness API: `POST /api/module/<source>/batch-status` with `[{ sourceId, knownHash }]` returns `[{ sourceId, isStale, currentHash }]`
+- Glow icon on stale item sheets (CSS pulse on a header element when `flags.dauligor-pairing.sourceHash !== currentHash`)
+- Diff modal: click icon → opt-in to re-fetch + replace, OR opt-out (stamps the current hash so glow stops until next change)
+
+**Phase 5 (hardening)**:
+- "Bake to world" snapshot button — one-way conversion of cached content into real Foundry `JournalEntry`s for offline play
+- Auth model audit (currently public reads suffice; per-world API key if private content becomes a concern)
+- Architecture doc under `docs/architecture/live-content-bridge.md`
+
+Created 2026-05-27.
+
+---
+
+## Races + Backgrounds full implementation
+
+**Status**: placeholder list pages + editor wrappers exist (commit `<see compendium-shell handoff>`). **No DB tables.** **No importers.** **No exports.**
+
+The compendium browser already shows Race / Background tiles via [src/pages/compendium/RacesList.tsx](../src/pages/compendium/RacesList.tsx) and [BackgroundsList.tsx](../src/pages/compendium/BackgroundsList.tsx), and edit-wrappers exist at [RaceEditor.tsx](../src/pages/compendium/RaceEditor.tsx) / [BackgroundEditor.tsx](../src/pages/compendium/BackgroundEditor.tsx) — but they're scaffolding only. Anyone picking this up needs to deliver:
+
+**Database**:
+- `CREATE TABLE races` and `CREATE TABLE backgrounds` migrations. Schemas should mirror the existing entity-table pattern: `id`, `name`, `identifier`, `source_id`, `description`, `image_url`, `tags`, `activities`, `effects`, `advancements`, `content_hash`, plus race-/background-specific fields (race: size, speed, vision, traits; background: skill proficiencies, tool proficiencies, equipment, feature).
+- **Important**: today the feat exporter already covers races + backgrounds (commit `10fa13c`) — features authored as `feat_type='race'`/`'background'` flow through the feat path. **The new `races`/`backgrounds` tables must coexist with that** until the migration cuts over, or the feat-table approach must be retired explicitly. Pick one and document the choice.
+- Apply the same composite `UNIQUE(COALESCE(source_id, ''), identifier)` pattern set by `20260526-2300_feats_items_composite_identifier_uniq.sql` and `20260527-1400_composite_identifier_uniqueness.sql`.
+- Add `content_hash TEXT` column to both tables (matches `20260527-1420_content_hash_columns.sql`).
+
+**Server export**:
+- New `api/_lib/_raceExport.ts` and `_backgroundExport.ts` paralleling `_featExport.ts` / `_itemExport.ts`. Both have to stamp `flags.dauligor-pairing.sourceId`, `dbId`, `entityKind`, plus type-specific extras (race subraces, background features).
+- Module dispatcher in `functions/api/module/[[path]].ts` — add `/races/<dbId>.json` and `/backgrounds/<dbId>.json` routes.
+
+**Module-side importer**:
+- The existing feat / item importer pattern in `module/dauligor-pairing/scripts/` is the template. Race import should drop a `type: "race"` item with subrace handling; background import should drop a `type: "background"` item with the standard 5e starting-feature pattern.
+
+**Editor surfaces**:
+- Race-specific fields (size, speed, languages, traits) and background-specific fields (skill+tool proficiencies, equipment, feature description) in the existing editor wrappers.
+- Advancement-driven proficiency grants — share the AdvancementManager already used by classes / subclasses / feats. Owner kind extends to `'race'` and `'background'` per Phase B groundwork.
+
+**Foundry contract docs**:
+- `module/dauligor-pairing/docs/race-import-contract.md` and `background-import-contract.md`. Pattern: take `feat-import-contract.md` as the template.
+
+Created 2026-05-27.
+
+---
+
+## Article system unification (blocks live-content bridge Phase 2)
+
+**Status**: open. **Should land before** [Live-content bridge Phase 2](#live-content-bridge--phase-2-work) starts.
+
+`lore_articles` is the odd one out across Dauligor entity tables. Every other content table uses `(identifier, source_id)` as the semantic identity pair, with composite UNIQUE enforcement (per the Phase 1 patches above). `lore_articles` uses `slug + parent_id` — partitioned by hierarchy (parent article), not by source.
+
+That's fine for the existing wiki use case but breaks down when articles need to participate in the live-content bridge:
+
+- **`@article[slug]` references** — what scope does the slug live in? Currently global (since `slug` is per-row, no namespacing). If two campaigns ship articles named "Deep Shadow Cult," they collide. Need either source-scoping (`@article[deep-shadow-cult]{slug + source}`) or world-scoping.
+- **"System page" article type** — a parent + children glossary structure (mirroring dnd5e Conditions journal) needs addressable child identifiers. The current `parent_id` hierarchy supports the structure; what's missing is a stable identifier per child that's not just the parent's row id.
+- **Module deep-link URL** — Foundry-side `DauligorViewer` needs to compose `https://www.dauligor.com/wiki/<something>` for "open in app." Today's wiki uses slug-based URLs but the slug isn't guaranteed unique outside its parent.
+
+**Recommended path**:
+1. Add `identifier TEXT NOT NULL DEFAULT ''` column to `lore_articles`, backfilled from `slug` on existing rows.
+2. Add `source_id TEXT REFERENCES sources(id)` for source-scoping (optional — could also scope by `world_id` once worlds ship).
+3. Add `UNIQUE(COALESCE(source_id, ''), identifier)` once duplicates are resolved.
+4. Add `content_hash TEXT` (Phase 4 update detection — articles update frequently).
+5. Update [src/pages/wiki/Wiki.tsx](../src/pages/wiki/Wiki.tsx) to route by identifier rather than slug.
+6. Update BBCode parser (`src/lib/bbcode.ts`) to compile `@article[…]` to identifier-based hrefs.
+
+Created 2026-05-27.
+
+---
+
 ## Scaling columns for non-class owners — follow-ups
 
 The first slices of the "advancements outside classes" track shipped on `feat/scaling-non-class-owners` (commits `f1e4f6b` … `10fa13c`). What's still open:
