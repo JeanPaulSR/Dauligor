@@ -55,7 +55,7 @@ The following module canonical docs treat scaling as class-only; they need a pas
 - [module/dauligor-pairing/docs/class-feature-activity-contract.md](../module/dauligor-pairing/docs/class-feature-activity-contract.md) — line 1013 references Sorcerer-owned ScaleValue specifically
 
 ### Phase C — `ItemBumpUses` advancement type
-**Status**: open · **Priority**: high (the actual new mechanic the user asked for; Phase A/B was scaffolding)
+**Status**: open · **Priority**: high (the actual new mechanic the user asked for; Phase A/B was scaffolding) · **Pick-up doc**: [handoff-phase-c-itembumpuses.md](handoff-phase-c-itembumpuses.md)
 
 A separate advancement type that lets a feat or item upgrade an existing feature on a character — bumping its `uses.max` is the first mode. Design call: separate type (not a flag on `ItemGrant`), per [the design call in this conversation](handoff-scaling-non-class-owners.md#phase-c-design-decisions). Implementation scope:
 
