@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { useCompendiumHashLink } from '../../lib/useCompendiumHashLink';
 import { ChevronDown, Star, X } from 'lucide-react';
 import { useSpellFavorites } from '../../lib/spellFavorites';
 import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
@@ -350,6 +351,16 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
     () => Object.fromEntries(sources.map((s) => [s.id, s])) as Record<string, SourceRecord>,
     [sources],
   );
+
+  // Hash deep-link (`#identifier_abbrev`). Same hook FeatList /
+  // ItemList / FacilitiesList use — see `src/lib/useCompendiumHashLink.ts`.
+  useCompendiumHashLink({
+    rows: spells,
+    sources,
+    sourceById,
+    selectedId: selectedSpellId,
+    setSelectedId: setSelectedSpellId,
+  });
   const tagsByGroup = useMemo(() => {
     const map: Record<string, TagRecord[]> = {};
     for (const tag of allTags) {

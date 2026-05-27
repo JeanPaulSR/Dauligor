@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useCompendiumHashLink } from '../../lib/useCompendiumHashLink';
 import { Button } from '../../components/ui/button';
 import { fetchCollection } from '../../lib/d1';
 import { cn } from '../../lib/utils';
@@ -121,6 +122,18 @@ export default function FacilitiesList({ userProfile }: { userProfile: any }) {
     () => Object.fromEntries(sources.map((s) => [s.id, s])) as Record<string, SourceRecord>,
     [sources],
   );
+
+  // Hash deep-link (`#identifier_abbrev`). Same hook FeatList /
+  // SpellList / ItemList use — see `src/lib/useCompendiumHashLink.ts`.
+  // Facilities rows keep snake_case `source_id`; the hook accepts
+  // either form.
+  useCompendiumHashLink({
+    rows: facilities,
+    sources,
+    sourceById,
+    selectedId,
+    setSelectedId,
+  });
 
   const filtered = useMemo(() => {
     const lowered = search.trim().toLowerCase();

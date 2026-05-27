@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useCompendiumHashLink } from '../../lib/useCompendiumHashLink';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Star, X } from 'lucide-react';
 import { auth } from '../../lib/firebase';
@@ -203,64 +204,17 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
     [featCategories],
   );
 
-  // ─── Hash deep-link (#identifier_abbrev) ────────────────────
-  //
-  // Mirrors 5etools' feat-link convention (e.g. `#bloodlust_abh`)
-  // so a feat can be linked-to from anywhere on the web with a
-  // URL alone. Format: lowercase `identifier` + `_` + lowercase
-  // source abbreviation. Split at the LAST `_` so identifiers
-  // with underscores still resolve correctly. Inbound runs once
-  // (after both `feats` and `sources` are populated); outbound
-  // tracks `selectedFeatId` and rewrites the hash on every
-  // selection change with `replaceState` so the back stack
-  // doesn't fill up with row clicks.
-  const hashAppliedRef = useRef(false);
-  useEffect(() => {
-    if (hashAppliedRef.current) return;
-    if (!feats.length || !sources.length) return;
-    const raw = decodeURIComponent(window.location.hash.replace(/^#/, ''));
-    if (!raw) {
-      hashAppliedRef.current = true;
-      return;
-    }
-    const lastUnderscore = raw.lastIndexOf('_');
-    if (lastUnderscore === -1) {
-      hashAppliedRef.current = true;
-      return;
-    }
-    const namePart = raw.slice(0, lastUnderscore).trim().toLowerCase();
-    const abbrevPart = raw.slice(lastUnderscore + 1).trim().toLowerCase();
-    const match = feats.find((feat) => {
-      const rec = sourceById[String(feat.sourceId ?? '')];
-      const abbrev = String(rec?.abbreviation || rec?.shortName || '').toLowerCase();
-      if (abbrev !== abbrevPart) return false;
-      const ident = String(feat.identifier ?? '').toLowerCase();
-      const name = String(feat.name ?? '').toLowerCase();
-      return ident === namePart || name === namePart;
-    });
-    if (match) setSelectedFeatId(match.id);
-    hashAppliedRef.current = true;
-  }, [feats, sources, sourceById]);
-
-  useEffect(() => {
-    if (!selectedFeatId) return;
-    const feat = feats.find((f) => f.id === selectedFeatId);
-    if (!feat) return;
-    const rec = sourceById[String(feat.sourceId ?? '')];
-    const abbrev = String(rec?.abbreviation || rec?.shortName || '').toLowerCase().trim();
-    const key = String(feat.identifier ?? '').toLowerCase().trim();
-    if (!key || !abbrev) return;
-    const nextHash = `#${encodeURIComponent(key)}_${abbrev}`;
-    if (window.location.hash === nextHash) return;
-    // replaceState (not pushState): row-by-row browsing shouldn't
-    // bury the page in history. The latest selection is what
-    // matters for deep-linking, not the trail.
-    window.history.replaceState(
-      null,
-      '',
-      `${window.location.pathname}${window.location.search}${nextHash}`,
-    );
-  }, [selectedFeatId, feats, sourceById]);
+  // Hash deep-link (`#identifier_abbrev`). Mirrors 5etools (e.g.
+  // `#bloodlust_abh`). Logic lives in `useCompendiumHashLink`
+  // so SpellList / ItemList / FacilitiesList share the same
+  // behavior — see `src/lib/useCompendiumHashLink.ts`.
+  useCompendiumHashLink({
+    rows: feats,
+    sources,
+    sourceById,
+    selectedId: selectedFeatId,
+    setSelectedId: setSelectedFeatId,
+  });
 
   // Filter pipeline. Just search + the optional `?class=` scope —
   // the multi-axis filter modal got dropped per the new UX

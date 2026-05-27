@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useCompendiumHashLink } from '../../lib/useCompendiumHashLink';
 import { Lock, Sparkles, Star } from 'lucide-react';
 import { auth } from '../../lib/firebase';
 import { fetchCollection } from '../../lib/d1';
@@ -191,6 +192,16 @@ export default function ItemList({ userProfile }: { userProfile: any }) {
     () => Object.fromEntries(sources.map((s) => [s.id, s])) as Record<string, SourceRecord>,
     [sources],
   );
+
+  // Hash deep-link (`#identifier_abbrev`). Same hook FeatList /
+  // SpellList / FacilitiesList use — see `src/lib/useCompendiumHashLink.ts`.
+  useCompendiumHashLink({
+    rows: items,
+    sources,
+    sourceById,
+    selectedId,
+    setSelectedId,
+  });
 
   const filteredItems = useMemo(() => {
     const lowered = search.trim().toLowerCase();
