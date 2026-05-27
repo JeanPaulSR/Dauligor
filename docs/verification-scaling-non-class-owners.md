@@ -101,6 +101,26 @@ The owner's columns should be selectable inside any advancement type that refere
 - [ ] **Re-import the same feat**: the column doesn't duplicate. The existing row updates in place.
 - [ ] If the existing column was renamed by the author, the rename is **preserved** (only `type`, `values`, `distance_units` get refreshed).
 
+## F'. Item Server Export endpoint (Phase B.2 items — forward direction)
+
+The app now serves `/api/module/items/<dbId>.json` with the Foundry-ready item document, including synthesized ScaleValue advancements from owned `scaling_columns`.
+
+- [ ] Author an item with at least one Item Column (e.g. Amulet of the Devout, "Channel Divinity Bonus" with +1 at every level).
+- [ ] Find the item's `dbId` (e.g. via DevTools → Network → look for the item row's id when ItemsEditor loads).
+- [ ] Visit `https://www.dauligor.com/api/module/items/<dbId>.json` (or your local dev URL).
+- [ ] Response JSON has `kind: "dauligor.item-item.v1"`.
+- [ ] `item.system.identifier` matches the item's identifier.
+- [ ] `item.system.advancement` contains a ScaleValue entry whose `configuration.identifier` matches the column's identifier.
+- [ ] The ScaleValue's `configuration.scale` map has entries for the levels you filled in.
+- [ ] Per-item_type system block populated correctly:
+  - Weapons: `system.damage`, `system.range`, `system.type.baseItem`
+  - Equipment: `system.armor.value`, `system.armor.dex`, `system.strength`, `system.stealth`
+  - Tools: `system.type.value` (tool subtype), `system.bonus`
+  - Containers: `system.capacity`
+- [ ] `flags.dauligor-pairing.sourceId` carries the item's identifier.
+
+Module-side consumer doesn't exist yet — verification is via the URL response only. Once a Foundry-side item importer lands, the full end-to-end test (import item → @scale.<item>.<col> resolves in play) becomes available.
+
 ## H'. Item Importer round-trip (Phase B.3 items — follow-up to `3cf87a3`)
 
 The item importer now extracts ScaleValue advancements off

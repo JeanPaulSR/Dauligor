@@ -20,20 +20,19 @@ Conventions:
 The first slices of the "advancements outside classes" track shipped on `feat/scaling-non-class-owners` (commits `f1e4f6b` … `10fa13c`). What's still open:
 
 ### Phase B.2 — Item Foundry export endpoint (app → Foundry)
-**Status**: open · **Priority**: low
+**Status**: app-side shipped on `<commit>` · module-side companion open
 
 Races + backgrounds were always covered by the feat-export path (commit `10fa13c`) since they're stored as feats with `feat_type='race'`/`'background'`. The feat exporter maps that to `parent_type` correctly. ✅
 
-What's left is **items moving app → Foundry**. The structural gap: no `/api/module/items/<id>.json` server endpoint exists (parallel to `/api/module/feats/<id>.json`, `/api/module/spells/<id>.json`, `/api/module/<source>/classes/<class>.json`). Today items are Foundry-authored and flow Foundry → app only.
+**What shipped**:
+- New `api/_lib/_itemExport.ts` paralleling `_featExport.ts`. Builds the full Foundry-ready item document with per-`item_type` system blocks (weapon / equipment / consumable / tool / container / loot). Common fields (description, weight, price, properties, rarity, attunement, equipped, identified, uses, activities, effects, source) emit for every type; type-specific extras (damage / armor / tool / capacity / etc.) layer on top via `buildTypeSpecificSystem()`.
+- Synthesizes one `ScaleValue` advancement per `scaling_columns` row owned by the item (`parent_type='item'`). Stub advancements run through the shared `normalizeScaleValueAdvancement` helper from `_classExport.ts` to fill in `scale` / `identifier` / `type` / `distance`. Advancement `_id` derived from the column's UUID (hyphens stripped, 16-char) for round-trip stability.
+- New `/api/module/items/<dbId>.json` route in `functions/api/module/[[path]].ts`, mirroring the spell / feat detail endpoints.
+- Items flow round-trip with scaling: author column in app → server endpoint emits ScaleValue → Foundry's dnd5e resolves `@scale.<item.identifier>.<column.identifier>` natively at play time.
 
-To complete the round-trip:
-- New server-built `_itemExport.ts` paralleling `_featExport.ts`. Needs to cover the full Foundry item shape across all item_types (weapon / equipment / armor / consumable / tool / loot / container) — substantial mapping work because the items table is unified but Foundry expects type-specific `system.*` blocks.
-- Synthesize `ScaleValue` advancements from owner-scoped `scaling_columns` rows (`parent_type='item'`) and embed them in the exported `system.advancement`. The synthesis pattern is already established for classes; the helper just needs to mint stable `_id`s for items the same way.
-- New `/api/module/items/<dbId>.json` route in `functions/api/module/[[path]].ts`.
-- Module-side fetcher to consume the new endpoint when the user picks an item from the importer (requires module-side companion work).
-- Canonical contract clarification in `item-import-contract.md` to acknowledge advancements as a valid field. (Note: the canonical doc *already* supports `system.activities` / `effects`; advancements would be an extension following the same pattern.)
-
-Items already work app-side (scaling columns author, persist, surface in the editor). The forward Foundry path is the only remaining gap.
+**What's still open**:
+- Module-side companion: an item importer in Foundry that consumes `/api/module/items/<dbId>.json` and embeds the document. Pattern is established by the feat importer in `module/dauligor-pairing/scripts/`. Until a module-side consumer ships, the app-side endpoint is verifiable only by URL inspection (see [verification doc § F'](verification-scaling-non-class-owners.md#f-item-server-export-endpoint-phase-b2-items--forward-direction)).
+- Canonical contract clarification in `item-import-contract.md` to acknowledge advancements as a valid field. Owner-gated per `dauligor-guardian`.
 
 ### Phase B.3 — Importer side: ScaleValue → `scaling_columns` rows
 **Status**: shipped for feats + items on `<commit>` and `<followup-commit>` · **Priority**: complete for in-scope owners

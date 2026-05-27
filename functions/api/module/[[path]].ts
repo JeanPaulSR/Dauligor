@@ -37,6 +37,7 @@ import { buildSourceSpellListBundle } from "../../../api/_lib/_sourceSpellList.j
 import { buildSpellItemBundle } from "../../../api/_lib/_spellExport.js";
 import { buildSourceFeatListBundle } from "../../../api/_lib/_sourceFeatList.js";
 import { buildFeatItemBundle } from "../../../api/_lib/_featExport.js";
+import { buildItemBundle } from "../../../api/_lib/_itemExport.js";
 import { buildTagCatalog } from "../../../api/_lib/_tagCatalog.js";
 import { SERVER_EXPORT_FETCHERS } from "../../../api/_lib/d1-fetchers-server.js";
 import {
@@ -365,6 +366,26 @@ export const onRequest = async (context: any): Promise<Response> => {
       const result = await buildFeatItemBundle(dbId, SERVER_EXPORT_FETCHERS);
       if (result) return serveLive(result);
       // Fall through to 404 if no feat row matched.
+    }
+
+    // Per-item full document — live read-through, no R2 cache. URL:
+    //   /api/module/items/<dbId>.json
+    // Phase B.2 of the non-class scaling track: ships the full
+    // Foundry-ready item document with synthesized ScaleValue
+    // advancements from owner-scoped `scaling_columns` rows. Mirrors
+    // the spell / feat detail endpoints in shape but for items.
+    // Module-side consumer (an item importer paralleling the feat
+    // one) is the next infrastructure step — flagged in
+    // docs/roadmap.md § Scaling columns for non-class owners.
+    else if (
+      pathParts.length === 2
+      && pathParts[0] === "items"
+      && pathParts[1].endsWith(".json")
+    ) {
+      const dbId = pathParts[1].replace(".json", "");
+      const result = await buildItemBundle(dbId, SERVER_EXPORT_FETCHERS);
+      if (result) return serveLive(result);
+      // Fall through to 404 if no item row matched.
     }
 
     // Per-source feat list — live read-through, no R2 cache. URL:
