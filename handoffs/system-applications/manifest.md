@@ -75,6 +75,7 @@ None currently. Add `- [ ] (date) Request <other-branch> to <change> in <file>` 
 ## Handoff log
 
 - 2026-05-27 — [2026-05-27-live-content-bridge-phase1.md](2026-05-27-live-content-bridge-phase1.md) — Phase 1 status + complete pickup context for Phases 1.5 / 2 / 3 / 4 / 5
+- 2026-05-28 — [2026-05-28-reference-authoring.md](2026-05-28-reference-authoring.md) — **CURRENT**: reference-authoring track (grammar + autocomplete done, hover card + summary field next). Read this to resume after the compaction.
 
 ## When to retire this manifest
 
