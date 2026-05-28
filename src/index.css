@@ -243,10 +243,22 @@
      colorway but no cursor, no underline, so it reads as "this is a
      thing, but you can't click it (yet)". */
   .prose .ref-link {
-    @apply text-gold/85 underline decoration-gold/30 decoration-dotted underline-offset-2 transition-colors;
+    @apply underline decoration-gold/30 decoration-dotted underline-offset-2 transition-colors;
+    /* !important for the same reason as plain links below: without it the
+       colour loses the cascade (to .prose's !important body colour) and
+       renders dark/invisible in the preview. The editor escapes this via
+       the .ProseMirror a rule, which is why links show there but not here.
+       color-mix keeps the 85% softening. */
+    color: color-mix(in oklab, var(--gold) 85%, transparent) !important;
   }
-  .prose a.ref-link:hover { @apply text-gold decoration-gold/70 decoration-solid; }
-  .prose span.ref-link.ref-dangling { @apply text-gold/55 cursor-help no-underline; }
+  .prose a.ref-link:hover {
+    @apply decoration-gold/70 decoration-solid;
+    color: var(--gold) !important;
+  }
+  .prose span.ref-link.ref-dangling {
+    @apply cursor-help no-underline;
+    color: color-mix(in oklab, var(--gold) 55%, transparent) !important;
+  }
 
   /* Plain [url] links. The typography plugin colours bare <a> with a
      dark default (var(--tw-prose-links)) that vanishes against the dark
