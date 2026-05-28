@@ -356,8 +356,49 @@
       converter; spoiler-button + link-colour fixes verified via the dev page. Server mirror
       (<code>api/_lib/_bbcode.ts</code>) updated in lockstep for the quote + hr fixes.</em>
       <br><br>
+      <strong>Batch 2 (reported 2026-05-28):</strong>
+      <ul>
+        <li>
+          &#10003; <strong>Quote captured trailing whitespace</strong> (editor &rarr; source).
+          TipTap wraps quote content in <code>&lt;p&gt;</code>; the reverse converter kept it and
+          the generic <code>&lt;p&gt;&rarr;\n\n</code> pass turned it into
+          <code>[quote]Text\n\n[/quote]</code>. The blockquote handler now strips inner
+          <code>&lt;p&gt;</code> and trims.
+        </li>
+        <li>
+          &#10003; <strong>Editor links rendered black, no pointer cursor.</strong> The editor
+          surface is <code>.ProseMirror</code>, not <code>.prose</code>, so the Batch 1 link rule
+          didn't reach it. Added <code>.ProseMirror a</code> (theme gold + underline + pointer).
+        </li>
+        <li>
+          &#10003; <strong>Link entry used the browser's <code>window.prompt</code>.</strong>
+          Replaced with an in-app dialog (works in both Visual and Source modes; captures the
+          selection on open).
+        </li>
+        <li>
+          &#10003; <strong>Formatting an empty selection did nothing useful.</strong> A collapsed
+          cursor now expands to the word under it before applying spoiler / comment / small, so
+          one click wraps the word instead of emitting empty markers.
+        </li>
+        <li>
+          &#10003; <strong>Wraps captured surrounding whitespace</strong> (e.g.
+          <code>[b]Test [/b]</code>). Leading/trailing whitespace now stays outside the markers in
+          both modes &rarr; <code>[b]Test[/b]</code>.
+        </li>
+        <li>
+          &#9888; <strong>Comment hides its text</strong> &mdash; <em>open design question, not a
+          bug.</em> <code>[comment]</code> compiles to an HTML comment (<code>&lt;!-- … --&gt;</code>),
+          which is invisible by design. Needs a product decision: keep as a hidden authoring note,
+          remove the button, or repurpose it as a visible styled aside. (Note: <code>[secret]</code>
+          already covers DM-only-but-visible content.)
+        </li>
+      </ul>
+      <em>Quote round-trip verified programmatically (incl. no regression on the Batch 1
+      multi-line case); link dialog, word-wrap, and whitespace-tight wraps verified via the dev
+      page. The quote fix is in <code>htmlToBbcode</code> (client-only — no server mirror needed).</em>
+      <br><br>
       <em>Report further defects via the dev page's "Copy bug report" button &mdash; they'll
-      be appended as Batch 2.</em>
+      be appended as Batch 3.</em>
     </div>
   </div>
 </div>
