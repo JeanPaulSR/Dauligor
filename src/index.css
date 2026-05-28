@@ -254,7 +254,13 @@
      legible on parchment, light, and dark alike. ref-link anchors keep
      their own gold-dotted treatment above. */
   .prose a:not(.ref-link) {
-    @apply text-gold underline decoration-gold/40 underline-offset-2 transition-colors;
+    @apply underline decoration-gold/40 underline-offset-2 transition-colors;
+    /* !important matches this file's prose-colour convention (see the
+       .prose / body / heading rules above). Without it the colour can
+       lose to the @tailwindcss/typography plugin depending on layer
+       ordering — every other prose colour here is !important for the
+       same reason. */
+    color: var(--gold) !important;
   }
   .prose a:not(.ref-link):hover { @apply decoration-gold/70; }
 
@@ -283,7 +289,10 @@
      render in the browser default (near-black) and show no pointer
      cursor (Link is configured openOnClick:false). Match the theme
      accent and restore the pointer. */
-  .ProseMirror a { @apply text-gold underline decoration-gold/40 underline-offset-2 cursor-pointer transition-colors; }
+  .ProseMirror a {
+    @apply underline decoration-gold/40 underline-offset-2 cursor-pointer transition-colors;
+    color: var(--gold) !important;
+  }
   .ProseMirror a:hover { @apply decoration-gold/70; }
   .ProseMirror .column-resize-handle {
     position: absolute;
