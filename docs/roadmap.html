@@ -454,6 +454,17 @@
           Works in both Source mode (inserts the BBCode) and Visual mode (inserts the
           equivalent link node).
         </li>
+        <li>
+          <strong>Make references first-class in the Visual editor.</strong> Today a
+          reference loaded into the editor is flattened to a plain link: it looks identical
+          to an ordinary hyperlink (you can't tell it's a reference), there's no way to
+          click it to edit, retarget, or remove it, and &mdash; worst &mdash; it risks
+          round-tripping back to <code>[url=&hellip;]</code> instead of
+          <code>[ref|&hellip;]</code>, silently breaking the reference. This needs a
+          dedicated TipTap node/mark that preserves <code>kind</code> + <code>id</code>,
+          renders references as a distinct chip (so authors recognise them on sight), and
+          supports click-to-edit / remove. <em>(Reported from the BBCode tester, 2026-05-28.)</em>
+        </li>
       </ul>
     </div>
   </div>
