@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { 
   Bold, Italic, Underline, Strikethrough, AlignCenter, AlignLeft, AlignRight, AlignJustify,
   List, ListOrdered, Heading1, Heading2, Heading3, Heading4, 
-  Quote, Code, Link, Eye, EyeOff, Type, Minus, Hash, 
+  Quote, Link, Eye, EyeOff, Type, Minus, Hash,
   EyeOff as Spoiler, Subscript, Superscript,
   Undo, Redo, FileCode, Indent, Outdent, Table as TableIcon
 } from 'lucide-react';
@@ -144,7 +144,6 @@ export default function MarkdownToolbar({
         case '[ul]\n[li]': editor.chain().focus().toggleBulletList().run(); break;
         case '[ol]\n[li]': editor.chain().focus().toggleOrderedList().run(); break;
         case '[quote]': editor.chain().focus().toggleBlockquote().run(); break;
-        case '[code]': editor.chain().focus().toggleCode().run(); break;
         case '[sub]': editor.chain().focus().toggleSubscript().run(); break;
         case '[sup]': editor.chain().focus().toggleSuperscript().run(); break;
         case '[spoiler]': expandSelectionToWord(); editor.chain().focus().toggleMark('spoiler').run(); break;
@@ -272,7 +271,6 @@ export default function MarkdownToolbar({
     { icon: Outdent, label: 'Outdent (Shift+Tab)', action: () => insertText('', ''), active: false },
     { icon: TableIcon, label: 'Table', action: () => isWYSIWYG ? insertText('[table]', '') : insertText('\n[table]\n  [tr]\n    [th]Header 1[/th]\n    [th]Header 2[/th]\n  [/tr]\n  [tr]\n    [td]Cell 1[/td]\n    [td]Cell 2[/td]\n  [/tr]\n[/table]\n', ''), active: editor?.isActive('table') },
     { icon: Quote, label: 'Quote', action: () => insertText('[quote]', '[/quote]'), active: editor?.isActive('blockquote') },
-    { icon: Code, label: 'Code', action: () => insertText('[code]', '[/code]'), active: editor?.isActive('code') },
     { icon: Link, label: 'Link (Ctrl+K)', action: () => insertText('[url=url]', '[/url]'), active: editor?.isActive('link') },
     { icon: Type, label: 'Small', action: () => insertText('[small]', '[/small]') },
     { icon: Subscript, label: 'Subscript', action: () => insertText('[sub]', '[/sub]'), active: editor?.isActive('subscript') },
