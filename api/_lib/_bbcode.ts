@@ -21,25 +21,6 @@
 // MUST match — the Foundry-shipped spell description survives a
 // round-trip when a player re-imports the spell into the app.
 
-function resolveRefRoute(kind: string, id: string): string | null {
-  const safeId = encodeURIComponent(id);
-  switch (kind) {
-    case "spell":     return `/compendium/spells?focus=${safeId}`;
-    case "class":     return `/compendium/classes/view/${safeId}`;
-    case "condition": return `/admin/statuses?focus=${safeId}`;
-    case "creature":  return null;
-    default:          return null;
-  }
-}
-
-function escapeAttr(value: string): string {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
 /**
  * BBCode → HTML. Matches the website's converter byte-for-byte on
  * non-era/campaign content; era and campaign conditional blocks are
@@ -76,26 +57,14 @@ export function bbcodeToHtml(text: string): string {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 
-  // Cross-references — [ref|kind|id]Display[/ref]. Routes only work
-  // in the web app; Foundry users clicking will get a no-op. Kept
-  // anyway so the markup survives a round-trip (if/when a player
-  // re-imports a Foundry-exported spell, the anchor's data-ref-*
-  // attrs let the converter rebuild the BBCode marker).
-  html = html.replace(
-    /\[ref\|([a-z]+)\|([^\]|]+)\]([\s\S]*?)\[\/ref\]/gi,
-    (_match, rawKind, rawId, display) => {
-      const kind = String(rawKind || "").toLowerCase();
-      const id = String(rawId || "").trim();
-      const text = String(display || "").trim() || id;
-      const route = resolveRefRoute(kind, id);
-      const safeKind = escapeAttr(kind);
-      const safeId = escapeAttr(id);
-      if (route) {
-        return `<a class="ref-link ref-${safeKind}" data-ref-kind="${safeKind}" data-ref-id="${safeId}" href="${escapeAttr(route)}">${text}</a>`;
-      }
-      return `<span class="ref-link ref-${safeKind} ref-dangling" data-ref-kind="${safeKind}" data-ref-id="${safeId}">${text}</span>`;
-    }
-  );
+  // Cross-references — INTENTIONALLY not rendered here. The web app's
+  // bbcode.ts renders @kind[id]{display} / &kind[id] into reader anchors,
+  // but on the Foundry side those references are resolved by the module's
+  // custom enrichers (the deferred live-content bridge), and dnd5e's own
+  // &Reference[...] already covers SRD conditions/rules. So we leave the
+  // raw reference text in place for Foundry's enrich pipeline to pick up.
+  // (The retired [ref|...] tag is gone; there is no [ref|...] content to
+  // migrate. See src/lib/bbcode.ts for the app-reader rendering.)
 
   // Basic formatting
   html = html.replace(/\[b\]([\s\S]*?)\[\/b\]/gi, "<strong>$1</strong>");

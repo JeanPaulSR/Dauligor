@@ -115,45 +115,52 @@ const TEST_CASES: TestGroup[] = [
     ],
   },
   {
-    group: 'Cross-references — working kinds',
+    group: 'Cross-references — @ entity links',
     cases: [
       {
-        name: 'Spell ref',
-        bbcode: 'Cast [ref|spell|fire-bolt]Fire Bolt[/ref] at the door.',
-        note: 'Should render as a gold-dotted-underline link routing to /compendium/spells?focus=fire-bolt.',
+        name: 'Spell',
+        bbcode: 'Cast @spell[fire-bolt]{Fire Bolt} at the door.',
+        note: 'Reader renders a styled link → /compendium/spells?focus=fire-bolt. In the EDITOR it stays as @spell[…] text (try toggling to Visual).',
       },
+      { name: 'Class', bbcode: 'The @class[wizard]{Wizard} approached.' },
+      { name: 'Feat', bbcode: 'Take @feat[great-weapon-master]{Great Weapon Master}.' },
+      { name: 'Item', bbcode: 'He drew @item[longsword]{the longsword}.' },
+      { name: 'Article', bbcode: 'See @article[deep-shadow-cult]{the Deep Shadow Cult}.' },
       {
-        name: 'Class ref',
-        bbcode: 'The [ref|class|wizard]Wizard[/ref] approached.',
-        note: 'Routes to /compendium/classes/view/wizard.',
-      },
-      {
-        name: 'Condition ref',
-        bbcode: 'You become [ref|condition|prone]prone[/ref].',
-        note: 'Routes to /admin/statuses?focus=prone (admin-only destination; link still styled for non-admins).',
+        name: 'No {display}',
+        bbcode: 'A reference with no display label: @spell[fire-bolt].',
+        note: 'Falls back to a humanised id ("Fire Bolt").',
       },
     ],
   },
   {
-    group: 'Cross-references — missing kinds (render as dangling badges)',
+    group: 'Cross-references — & rule links',
     cases: [
       {
-        name: 'Item ref (dangling)',
-        bbcode: 'He drew [ref|item|longsword]the longsword[/ref].',
-        note: 'No item kind wired up. Renders as ref-dangling span.',
+        name: 'Condition',
+        bbcode: 'You become &condition[prone]{prone}.',
+        note: '& sigil = rule reference. In Foundry this maps to dnd5e &Reference.',
       },
       {
-        name: 'Article ref (dangling)',
-        bbcode: 'See the article on [ref|article|deep-shadow-cult]the Deep Shadow Cult[/ref].',
+        name: 'Condition + anchor',
+        bbcode: 'See &condition[prone]#movement for details.',
+        note: 'Optional #anchor after the id, for section deep-links.',
+      },
+      { name: 'Custom display', bbcode: 'You are &condition[prone]{knocked flat}.' },
+    ],
+  },
+  {
+    group: 'Cross-references — dangling (no route yet)',
+    cases: [
+      {
+        name: 'Subclass (dangling)',
+        bbcode: 'The @subclass[draconic-bloodline]{Draconic Bloodline} sorcerer.',
+        note: 'subclass has no clean public route yet → non-clickable ref-dangling badge.',
       },
       {
-        name: 'Feat ref (dangling)',
-        bbcode: 'Take [ref|feat|great-weapon-master]Great Weapon Master[/ref].',
-      },
-      {
-        name: 'Creature ref (placeholder)',
-        bbcode: 'A [ref|creature|adult-red-dragon]red dragon[/ref] emerges.',
-        note: 'creature kind is in RefKind but resolveRefRoute returns null — intentional placeholder.',
+        name: 'Unknown kind',
+        bbcode: 'A @widget[foo]{thing}.',
+        note: 'Unknown kind → dangling badge.',
       },
     ],
   },
@@ -199,12 +206,12 @@ const TEST_CASES: TestGroup[] = [
       {
         name: 'Mixed paragraph',
         bbcode:
-          'A paragraph with [b]bold[/b], [i]italic[/i], [url=https://example.com]a link[/url], and a [ref|spell|fire-bolt]spell ref[/ref] all together.',
+          'A paragraph with [b]bold[/b], [i]italic[/i], [url=https://example.com]a link[/url], and a @spell[fire-bolt]{spell ref} all together.',
       },
       {
         name: 'Heading + list + ref',
         bbcode:
-          '[h2]Spells[/h2]\n[ul][li][ref|spell|fire-bolt]Fire Bolt[/ref] — cantrip[/li][li][ref|spell|magic-missile]Magic Missile[/ref] — 1st level[/li][/ul]',
+          '[h2]Spells[/h2]\n[ul][li]@spell[fire-bolt]{Fire Bolt} — cantrip[/li][li]@spell[magic-missile]{Magic Missile} — 1st level[/li][/ul]',
       },
       {
         name: 'Special chars in body',
@@ -238,7 +245,7 @@ This page tests the BBCode pipeline end-to-end. Edit the BBCode on the left; the
 [li]Click [i]Copy bug report[/i] to assemble a structured snippet for filing.[/li]
 [/ul]
 
-Try a cross-reference: [ref|spell|fire-bolt]Fire Bolt[/ref] (working) vs [ref|item|longsword]Longsword[/ref] (dangling — no "item" kind wired up yet).`;
+Try a cross-reference: @spell[fire-bolt]{Fire Bolt} (entity link) vs &condition[prone]{Prone} (rule link). In the editor these stay as text; the reader renders them as links.`;
 
 export default function BBCodeTester(_props: BBCodeTesterProps) {
   const [bbcode, setBbcode] = useState<string>(INITIAL_SAMPLE);

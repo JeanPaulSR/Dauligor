@@ -7,35 +7,58 @@ export interface BbcodeViewContext {
   eraId?: string | null;
   campaignId?: string | null;
   isStaff?: boolean;
+  /**
+   * Set by the rich-text editor when loading content into TipTap.
+   * References are left as plain, editable text (`@kind[id]{display}`)
+   * instead of being rendered into anchors — only the reader renders
+   * them. This is what makes "edit a reference on the fly" work and
+   * sidesteps the old corruption-on-edit bug.
+   */
+  editor?: boolean;
 }
 
 /**
- * Cross-reference tag — pipe-delimited so the syntax survives the XSS
- * escape pass without needing &quot; gymnastics. Kinds the app
- * understands today: `spell`, `class`, `condition`. (`creature` is
- * intentionally not wired in until the creatures compendium exists;
- * a [ref|creature|...] would render as a styled badge with no link.)
+ * Cross-reference grammar (Foundry-aligned; replaces the old
+ * `[ref|kind|id]…[/ref]` tag):
  *
- * Storage form:   [ref|<kind>|<id>]Display Name[/ref]
- * Display form:   <a class="ref-link ref-<kind>" data-ref-kind="<kind>"
- *                   data-ref-id="<id>" href="<route>">Display Name</a>
+ *   @kind[semantic-id]{display}   entity reference  (spell, class, feat, …)
+ *   &kind[semantic-id]{display}   rule reference    (condition, …)
+ *   …[id]#anchor{display}         optional section anchor
  *
- * Routes are picked by `resolveRefRoute()` below. The data-ref-*
- * attributes are what htmlToBbcode and the (future) Foundry-export
- * converter key off — `class="ref-link"` alone wouldn't survive a
- * TipTap round-trip clean enough.
+ * `{display}` and `#anchor` are optional. Stored with SEMANTIC ids, never
+ * raw Foundry UUIDs — the Foundry module translates these to `@UUID` /
+ * `&Reference` at import (module/dauligor-pairing/docs/reference-syntax-guide.md).
+ *
+ * Rendering here is APP-READER-ONLY by design. `bbcodeToHtml` emits an
+ * `<a class="ref-link ref-<kind>">` for the reader and skips the pass
+ * entirely in editor mode (refs stay as text). The Foundry export
+ * converter `api/_lib/_bbcode.ts` intentionally does NOT mirror this —
+ * Foundry-side reference handling is the deferred live-content-bridge's job.
  */
-export type RefKind = 'spell' | 'class' | 'condition' | 'creature';
+export type RefKind =
+  | 'spell' | 'class' | 'subclass' | 'feat' | 'item' | 'condition' | 'article';
 
-function resolveRefRoute(kind: string, id: string): string | null {
+function resolveRefRoute(kind: string, id: string, anchor?: string): string | null {
   const safeId = encodeURIComponent(id);
+  const frag = anchor ? `#${encodeURIComponent(anchor)}` : '';
   switch (kind) {
-    case 'spell':     return `/compendium/spells?focus=${safeId}`;
-    case 'class':     return `/compendium/classes/view/${safeId}`;
-    case 'condition': return `/admin/statuses?focus=${safeId}`;
-    case 'creature':  return null; // no destination yet
+    case 'spell':     return `/compendium/spells?focus=${safeId}${frag}`;
+    case 'class':     return `/compendium/classes/view/${safeId}${frag}`;
+    case 'feat':      return `/compendium/feats?focus=${safeId}${frag}`;
+    case 'item':      return `/compendium/items?focus=${safeId}${frag}`;
+    case 'condition': return `/admin/statuses?focus=${safeId}${frag}`;
+    case 'article':   return `/wiki/article/${safeId}${frag}`;
+    // subclass + unknown kinds have no clean public route yet → dangling.
     default:          return null;
   }
+}
+
+/** Fallback display when a reference omits {display}: humanise the id. */
+function humanizeRefId(kind: string, id: string): string {
+  let s = id;
+  if (s.toLowerCase().startsWith(kind + '-')) s = s.slice(kind.length + 1);
+  s = s.replace(/[-_]+/g, ' ').trim();
+  return s.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function escapeAttr(value: string): string {
@@ -94,28 +117,35 @@ export function bbcodeToHtml(text: string, context?: BbcodeViewContext): string 
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
 
-  // Cross-references — [ref|kind|id]Display[/ref]. Done early (right
-  // after the XSS escape pass) so the generated <a> survives the rest
-  // of the converter; later passes only fire on remaining bbcode markers
-  // and don't re-touch raw <a> tags.
-  html = html.replace(
-    /\[ref\|([a-z]+)\|([^\]|]+)\]([\s\S]*?)\[\/ref\]/gi,
-    (_match, rawKind, rawId, display) => {
-      const kind = String(rawKind || '').toLowerCase();
-      const id = String(rawId || '').trim();
-      const text = String(display || '').trim() || id;
-      const route = resolveRefRoute(kind, id);
-      const safeKind = escapeAttr(kind);
-      const safeId = escapeAttr(id);
-      if (route) {
-        return `<a class="ref-link ref-${safeKind}" data-ref-kind="${safeKind}" data-ref-id="${safeId}" href="${escapeAttr(route)}">${text}</a>`;
+  // Cross-references — @kind[id]{display} (entity) / &kind[id]{display}
+  // (rule). Runs right after the XSS escape, so the '&' sigil arrives as
+  // '&amp;' and any {display} text is already escaped. Skipped in editor
+  // mode so references stay as plain, editable text (see BbcodeViewContext).
+  if (!context?.editor) {
+    html = html.replace(
+      /(@|&amp;)([a-z][a-z0-9-]*)\[([^\]\s]+)\](?:#([\w-]+))?(?:\{([^}]*)\})?/gi,
+      (_match, rawSigil, rawKind, rawId, rawAnchor, rawDisplay) => {
+        const sigilAttr = rawSigil === '@' ? '@' : '&amp;';
+        const kind = String(rawKind).toLowerCase();
+        const id = String(rawId).trim();
+        const anchor = rawAnchor ? String(rawAnchor) : '';
+        const display = (rawDisplay != null && rawDisplay !== '')
+          ? rawDisplay
+          : humanizeRefId(kind, id);
+        const route = resolveRefRoute(kind, id, anchor);
+        const safeKind = escapeAttr(kind);
+        const data =
+          `data-ref-sigil="${sigilAttr}" data-ref-kind="${safeKind}" data-ref-id="${escapeAttr(id)}"` +
+          (anchor ? ` data-ref-anchor="${escapeAttr(anchor)}"` : '');
+        if (route) {
+          return `<a class="ref-link ref-${safeKind}" ${data} href="${escapeAttr(route)}">${display}</a>`;
+        }
+        // Unknown/unrouteable kind (e.g. subclass today) — styled, non-clickable
+        // badge so the reference is visible but clearly unresolved.
+        return `<span class="ref-link ref-${safeKind} ref-dangling" ${data}>${display}</span>`;
       }
-      // No destination (creatures today, or unknown kinds) — styled
-      // badge with the data-* attrs preserved for round-trip / future
-      // wiring. Same class so styling cascades.
-      return `<span class="ref-link ref-${safeKind} ref-dangling" data-ref-kind="${safeKind}" data-ref-id="${safeId}">${text}</span>`;
-    }
-  );
+    );
+  }
 
   // Basic formatting
   html = html.replace(/\[b\]([\s\S]*?)\[\/b\]/gi, '<strong>$1</strong>');
@@ -286,28 +316,11 @@ export function htmlToBbcode(html: string): string {
   bbcode = bbcode.replace(/<sub>([\s\S]*?)<\/sub>/gi, '[sub]$1[/sub]');
   bbcode = bbcode.replace(/<sup>([\s\S]*?)<\/sup>/gi, '[sup]$1[/sup]');
   
-  // Cross-references — recognize ref-link anchors AND ref-link spans
-  // (dangling, no destination) before the generic <a> -> [url] pass so
-  // they're captured by kind+id rather than collapsed to a plain url.
-  // Attributes can come in any order, so use lookups per attribute.
-  bbcode = bbcode.replace(
-    /<a\b[^>]*\bclass="[^"]*\bref-link\b[^"]*"[^>]*>([\s\S]*?)<\/a>/gi,
-    (match, text) => {
-      const kindMatch = match.match(/\bdata-ref-kind="([^"]+)"/i);
-      const idMatch = match.match(/\bdata-ref-id="([^"]+)"/i);
-      if (!kindMatch || !idMatch) return text; // malformed -> drop tag
-      return `[ref|${kindMatch[1]}|${idMatch[1]}]${text}[/ref]`;
-    }
-  );
-  bbcode = bbcode.replace(
-    /<span\b[^>]*\bclass="[^"]*\bref-link\b[^"]*"[^>]*>([\s\S]*?)<\/span>/gi,
-    (match, text) => {
-      const kindMatch = match.match(/\bdata-ref-kind="([^"]+)"/i);
-      const idMatch = match.match(/\bdata-ref-id="([^"]+)"/i);
-      if (!kindMatch || !idMatch) return text;
-      return `[ref|${kindMatch[1]}|${idMatch[1]}]${text}[/ref]`;
-    }
-  );
+  // Cross-references need no reverse handling: in editor mode the editor
+  // never renders them to anchors (they stay as `@kind[id]{display}` text),
+  // so they round-trip as plain text. Any stray reader-rendered ref-link
+  // anchor that somehow reached here would be handled by the generic
+  // <a href> -> [url] pass below — but that path doesn't occur in practice.
 
   // Links
   bbcode = bbcode.replace(/<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (match, url, text) => {

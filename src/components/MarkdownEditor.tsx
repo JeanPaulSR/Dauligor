@@ -225,7 +225,7 @@ export default function MarkdownEditor({
         placeholder: placeholder || 'Start writing...',
       }),
     ],
-    content: bbcodeToHtml(value),
+    content: bbcodeToHtml(value, { editor: true }),
     onUpdate: ({ editor }) => {
       if (isWYSIWYG) {
         const html = editor.getHTML();
@@ -253,7 +253,7 @@ export default function MarkdownEditor({
         // Option C: Auto-parse pasted BBCode
         if (plainText && plainText.match(/\[(b|i|u|s|h[1-4]|left|center|right|justify|indent|li|ul|ol|quote|code|table|tr|th|td|url|spoiler)(?:=.*?)?\]/i)) {
           event.preventDefault();
-          const convertedHtml = bbcodeToHtml(plainText);
+          const convertedHtml = bbcodeToHtml(plainText, { editor: true });
           setTimeout(() => {
             editorRef.current?.commands.insertContent(convertedHtml);
           }, 0);
@@ -299,7 +299,7 @@ export default function MarkdownEditor({
     }
 
     const currentHtml = editor.getHTML();
-    const newHtml = bbcodeToHtml(value);
+    const newHtml = bbcodeToHtml(value, { editor: true });
     if (currentHtml !== newHtml) {
       editor.commands.setContent(newHtml, { emitUpdate: false });
     }
