@@ -144,7 +144,14 @@ export function bbcodeToHtml(text: string, context?: BbcodeViewContext): string 
   }
   
   // Special
-  html = html.replace(/\[quote\]([\s\S]*?)\[\/quote\]/gi, '<blockquote>$1</blockquote>');
+  // Quote — trim the inner content and convert internal newlines to <br>
+  // so a trailing/leading blank line (or a multi-paragraph quote) doesn't
+  // leave a `\n\n` inside the <blockquote>. The paragraph splitter below
+  // breaks on `\n\n`, and a `\n\n` inside a block tag would split the
+  // open/close across segments, producing malformed
+  // `<blockquote>…<p></blockquote></p>`.
+  html = html.replace(/\[quote\]([\s\S]*?)\[\/quote\]/gi, (_m, inner) =>
+    `<blockquote>${String(inner).trim().replace(/\n{2,}/g, '<br/><br/>').replace(/\n/g, '<br/>')}</blockquote>`);
   html = html.replace(/\[indent\]([\s\S]*?)\[\/indent\]/gi, '<div class="indent-block" style="padding-left: 2rem">$1</div>');
   html = html.replace(/\[code\]([\s\S]*?)\[\/code\]/gi, '<code>$1</code>');
   html = html.replace(/\[br\]/gi, '<br/>');
@@ -189,7 +196,10 @@ export function bbcodeToHtml(text: string, context?: BbcodeViewContext): string 
   // We treat double newlines as paragraph breaks, and single newlines as line breaks
   // First, normalize all block tags to ensure they are on their own lines
   let processedHtml = html.replace(/<(h[1-4]|p|div|blockquote|ul|ol|li|hr|table|tr|th|td)([^>]*)>([\s\S]*?)<\/\1>/gi, (match) => `\n\n${match.trim()}\n\n`);
-  processedHtml = processedHtml.replace(/<hr([^>]*)\/?>/gi, '\n\n<hr$1/>\n\n');
+  // Normalise <hr> onto its own line. Match an optional self-closing
+  // slash but DON'T recapture it — the old `<hr([^>]*)\/?>` captured the
+  // existing `/` into $1 and then re-appended `/>`, producing `<hr//>`.
+  processedHtml = processedHtml.replace(/<hr\s*\/?>/gi, '\n\n<hr/>\n\n');
   
   const blocks = processedHtml.split(/\n\n+/);
   html = blocks.map(block => {

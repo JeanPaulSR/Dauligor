@@ -248,6 +248,16 @@
   .prose a.ref-link:hover { @apply text-gold decoration-gold/70 decoration-solid; }
   .prose span.ref-link.ref-dangling { @apply text-gold/55 cursor-help no-underline; }
 
+  /* Plain [url] links. The typography plugin colours bare <a> with a
+     dark default (var(--tw-prose-links)) that vanishes against the dark
+     theme's charcoal background. Force the theme accent so links stay
+     legible on parchment, light, and dark alike. ref-link anchors keep
+     their own gold-dotted treatment above. */
+  .prose a:not(.ref-link) {
+    @apply text-gold underline decoration-gold/40 underline-offset-2 transition-colors;
+  }
+  .prose a:not(.ref-link):hover { @apply decoration-gold/70; }
+
   /* Conditional era/campaign content blocks (staff view) */
   .prose .conditional-block {
     @apply my-4 rounded-lg border-l-4 border-gold/40 bg-gold/5 overflow-hidden;

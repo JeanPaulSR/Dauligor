@@ -69,6 +69,7 @@ export default function MarkdownToolbar({
         case '[code]': editor.chain().focus().toggleCode().run(); break;
         case '[sub]': editor.chain().focus().toggleSubscript().run(); break;
         case '[sup]': editor.chain().focus().toggleSuperscript().run(); break;
+        case '[spoiler]': editor.chain().focus().toggleMark('spoiler').run(); break;
         case '[url=url]': {
           const url = window.prompt('Enter URL:', 'https://');
           if (url) editor.chain().focus().setLink({ href: url }).run();
@@ -91,6 +92,17 @@ export default function MarkdownToolbar({
           } else {
             editor.chain().focus().lift('indentBlock').run();
           }
+          break;
+        }
+        default: {
+          // Tags without a dedicated TipTap command (e.g. [comment],
+          // [small]) used to fall through here and silently do nothing.
+          // Wrap the current selection in the literal BBCode markers so
+          // the button always does something; the markers round-trip
+          // through htmlToBbcode on save and render correctly.
+          const { from, to } = editor.state.selection;
+          const selected = editor.state.doc.textBetween(from, to, ' ');
+          editor.chain().focus().insertContent(`${before}${selected}${after}`).run();
           break;
         }
       }

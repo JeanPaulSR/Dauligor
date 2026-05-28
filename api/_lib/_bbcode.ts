@@ -124,7 +124,13 @@ export function bbcodeToHtml(text: string): string {
   }
 
   // Special
-  html = html.replace(/\[quote\]([\s\S]*?)\[\/quote\]/gi, "<blockquote>$1</blockquote>");
+  // Quote — trim + convert internal newlines to <br> so a trailing blank
+  // line (or multi-paragraph quote) doesn't leave a `\n\n` inside the
+  // <blockquote> that the paragraph splitter below would break on,
+  // producing malformed `<blockquote>…<p></blockquote></p>`.
+  // (Mirror of src/lib/bbcode.ts.)
+  html = html.replace(/\[quote\]([\s\S]*?)\[\/quote\]/gi, (_m, inner) =>
+    `<blockquote>${String(inner).trim().replace(/\n{2,}/g, "<br/><br/>").replace(/\n/g, "<br/>")}</blockquote>`);
   html = html.replace(/\[indent\]([\s\S]*?)\[\/indent\]/gi, '<div class="indent-block" style="padding-left: 2rem">$1</div>');
   html = html.replace(/\[code\]([\s\S]*?)\[\/code\]/gi, "<code>$1</code>");
   html = html.replace(/\[br\]/gi, "<br/>");
@@ -147,7 +153,10 @@ export function bbcodeToHtml(text: string): string {
   // produces the same shape.
   let processedHtml = html.replace(/<(h[1-4]|p|div|blockquote|ul|ol|li|hr|table|tr|th|td)([^>]*)>([\s\S]*?)<\/\1>/gi,
     (match) => `\n\n${match.trim()}\n\n`);
-  processedHtml = processedHtml.replace(/<hr([^>]*)\/?>/gi, "\n\n<hr$1/>\n\n");
+  // Don't recapture the self-closing slash — the old `<hr([^>]*)\/?>`
+  // captured the existing `/` into $1 and re-appended `/>`, producing
+  // `<hr//>`. (Mirror of src/lib/bbcode.ts.)
+  processedHtml = processedHtml.replace(/<hr\s*\/?>/gi, "\n\n<hr/>\n\n");
 
   const blocks = processedHtml.split(/\n\n+/);
   html = blocks
