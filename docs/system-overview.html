@@ -452,9 +452,10 @@ Cloudflare D1 (SQL)  +  Cloudflare R2 (binary)</pre>
 
 <p>
   The Archive runs on <strong>Cloudflare D1</strong> for relational data and <strong>R2</strong>
-  for binary objects. <strong>Firebase Authentication</strong> sits alongside as the JWT
-  issuer for user accounts &mdash; tokens only, no data storage. Every read and write to
-  application data goes through D1.
+  for binary objects. The Firestore database that originally backed the app was decommissioned
+  in May 2026; no Firestore client code remains in the repo. <strong>Firebase Authentication
+  stays</strong> &mdash; it's a solid JWT issuer with existing user accounts, and the rest of
+  the stack only needs the tokens, not the database.
 </p>
 
 <table>
@@ -475,7 +476,7 @@ Cloudflare D1 (SQL)  +  Cloudflare R2 (binary)</pre>
     <tr>
       <td>Auth tokens</td>
       <td>Firebase Authentication</td>
-      <td>JWT issuance + admin user-management via Identity Toolkit REST.</td>
+      <td>JWT issuance + admin user-management via Identity Toolkit REST. No Firestore.</td>
     </tr>
   </tbody>
 </table>
@@ -733,17 +734,17 @@ Cloudflare D1 (SQL)  +  Cloudflare R2 (binary)</pre>
 <table>
   <thead><tr><th>Subsystem</th><th>Status</th><th>Notes</th></tr></thead>
   <tbody>
+    <tr><td>Firestore &rarr; D1 migration</td><td><span class="pill live">Complete</span></td><td>Live on Cloudflare D1 + R2. No Firestore client remains.</td></tr>
+    <tr><td>Vercel &rarr; Cloudflare Pages hosting</td><td><span class="pill live">Complete</span></td><td>Production runs on Pages + Pages Functions.</td></tr>
     <tr><td>Firebase Auth exit</td><td><span class="pill planned">Planned</span></td><td>Two-stage exit plan exists; not started.</td></tr>
     <tr><td>Compendium core (classes, spells, feats, items, scaling)</td><td><span class="pill live">Live</span></td><td>Full editors + Foundry export round-trip.</td></tr>
     <tr><td>Content proposals</td><td><span class="pill live">Live</span></td><td>Shipped May 2026 (Phase 1 &rarr; 4.6 + cascade).</td></tr>
     <tr><td>Spellbook manager (4-layer)</td><td><span class="pill live">Live</span></td><td>All 4 layers shipped; Foundry round-trip handed off to importer agent.</td></tr>
     <tr><td>ItemBumpUses advancement v1</td><td><span class="pill live">Live</span></td><td>End-to-end: authoring + builder runtime + Foundry actor export.</td></tr>
     <tr><td>Live-content bridge &mdash; Phase 1 foundation</td><td><span class="pill live">Live</span></td><td>Composite uniqueness, content_hash columns, deterministic Foundry _id helper.</td></tr>
-    <tr><td>BBCode audit + fixes</td><td><span class="pill flight">In Flight</span></td><td>Active branch scope. Specific defects being enumerated.</td></tr>
-    <tr><td>Cross-reference authoring</td><td><span class="pill flight">In Flight</span></td><td>Active branch scope. Add missing kinds (<code>item</code>, <code>article</code>, <code>feat</code>) + picker UI in editor toolbar.</td></tr>
-    <tr><td>Live-content bridge &mdash; Phase 1.5 (hash-on-upsert)</td><td><span class="pill planned">Planned</span></td><td>Up Next, after BBCode + cross-ref authoring land.</td></tr>
-    <tr><td>Article system unification</td><td><span class="pill planned">Planned</span></td><td>Up Next. Blocks Phase 2.</td></tr>
-    <tr><td>Live-content bridge &mdash; Phase 2 (live viewer)</td><td><span class="pill planned">Planned</span></td><td>Up Next. Gated on article unification.</td></tr>
+    <tr><td>Live-content bridge &mdash; Phase 1.5 (hash-on-upsert)</td><td><span class="pill flight">In Flight</span></td><td>Active branch scope.</td></tr>
+    <tr><td>Article system unification</td><td><span class="pill flight">In Flight</span></td><td>Blocks Phase 2. Active branch scope.</td></tr>
+    <tr><td>Live-content bridge &mdash; Phase 2 (live viewer)</td><td><span class="pill flight">In Flight</span></td><td>Gated on article unification. Active branch scope.</td></tr>
     <tr><td>Live-content bridge &mdash; Phases 3-5</td><td><span class="pill planned">Planned</span></td><td>Drag-construct, update detection, hardening.</td></tr>
     <tr><td>Races + Backgrounds (full data layer)</td><td><span class="pill planned">Planned</span></td><td>Scaffolding only today; no DB tables, no importers.</td></tr>
     <tr><td>Systems overview page (in-app)</td><td><span class="pill planned">Planned</span></td><td>An <code>/systems</code> page mirroring this doc.</td></tr>
