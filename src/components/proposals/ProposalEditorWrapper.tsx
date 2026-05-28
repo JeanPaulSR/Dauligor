@@ -84,6 +84,7 @@ const ENTITY_LABELS: Record<ProposalEntityType, string> = {
   unique_option_group: 'Option Groups',
   unique_option_item: 'Option Items',
   scaling_column: 'Scaling Columns',
+  feature: 'Features',
 };
 
 export type ProposalEditorWrapperProps = {

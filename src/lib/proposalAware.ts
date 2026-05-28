@@ -36,7 +36,11 @@ export type ProposalEntityType =
   // Nested entity owned by a class/subclass — proposable so block
   // authoring of scaling columns routes through the queue instead of
   // the proxy's staff-only direct-write gate.
-  | 'scaling_column';
+  | 'scaling_column'
+  // Class/subclass features — proposable so authoring a class in a
+  // block can include its features (Wild Shape, Rage, …) instead of
+  // 403-ing on the direct write.
+  | 'feature';
 
 // `entity_type` → camelCase collection name used by the d1 helpers
 // (which map to snake_case D1 tables internally).
@@ -53,6 +57,7 @@ const ENTITY_TO_COLLECTION: Record<ProposalEntityType, string> = {
   unique_option_group: 'uniqueOptionGroups',
   unique_option_item: 'uniqueOptionItems',
   scaling_column: 'scalingColumns',
+  feature: 'features',
 };
 
 // `block` mode is wrapper-owned — when a write happens inside a

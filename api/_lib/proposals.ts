@@ -44,7 +44,15 @@ export type EntityType =
   // of hitting the proxy's staff-only direct-write gate. See
   // handoffs/proposal-system/2026-05-28-cross-referential-cluster-design.md
   // (Part A).
-  | "scaling_column";
+  | "scaling_column"
+  // Class/subclass features (Wild Shape, Rage, …) — the existing
+  // `features`-table entity, now proposable so "propose a class" yields
+  // a *usable* class, not a feature-less shell. A feature is an interior
+  // node: its `advancements` re-open the whole advancement reference
+  // graph, and option groups attach back to it via
+  // `unique_option_groups.feature_id`. Brought into scope after the
+  // compendium-editors cross-reference audit (full-scope decision).
+  | "feature";
 
 export const PROPOSABLE_ENTITY_TYPES: ReadonlyArray<EntityType> = [
   "tag",
@@ -59,6 +67,7 @@ export const PROPOSABLE_ENTITY_TYPES: ReadonlyArray<EntityType> = [
   "unique_option_group",
   "unique_option_item",
   "scaling_column",
+  "feature",
 ];
 
 export function isProposableEntityType(s: unknown): s is EntityType {
@@ -265,11 +274,37 @@ const ENTITY_CONFIGS: Record<EntityType, EntityConfig> = {
   // parent_type) and are referenced by id from class/subclass
   // advancements and option-item configs. The `values` column is a
   // JSON map of level (string) → value. Schema: 0009_scalings.sql.
+  //
+  // parent_type is one of class|subclass|feat|race|background|item
+  // (the panel's ScalingOwnerType). All six are accepted — the
+  // approval-side guard #1 resolves whichever parent type is present.
   scaling_column: {
     tableName: "scaling_columns",
     pkColumn: "id",
     writableColumns: new Set(["id", "name", "parent_id", "parent_type", "values"]),
     jsonColumns: new Set(["values"]),
+  },
+  // Class/subclass features — the existing `features` table. Writable
+  // set = every non-timestamp column (timestamps are server-managed and
+  // stripped). `tags` is the feature's tag column (NOT `tag_ids`; see
+  // upsertFeature in src/lib/compendium.ts, which translates tagIds→tags
+  // on write). Schema: `features` table (backup 20260521).
+  feature: {
+    tableName: "features",
+    pkColumn: "id",
+    writableColumns: new Set([
+      "id", "name", "identifier", "parent_id", "parent_type", "level",
+      "feature_type", "subtype", "requirements", "description", "image_url",
+      "uses_max", "uses_spent", "uses_recovery",
+      "prerequisites_level", "prerequisites_items", "repeatable",
+      "properties", "activities", "effects", "advancements",
+      "source_id", "page", "tags",
+      "is_subclass_feature", "quantity_column_id", "scaling_column_id", "icon_url",
+    ]),
+    jsonColumns: new Set([
+      "uses_recovery", "prerequisites_items", "properties",
+      "activities", "effects", "advancements", "tags",
+    ]),
   },
 };
 
