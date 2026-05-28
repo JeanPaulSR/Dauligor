@@ -12,6 +12,12 @@
       "runtimeExecutable": "cmd",
       "runtimeArgs": ["/c", "cd worker && npx wrangler dev"],
       "port": 8787
+    },
+    {
+      "name": "Docs (compendium-editors)",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["--yes", "http-server", "docs/architecture/compendium-editors", "-p", "5500", "-c-1"],
+      "port": 5500
     }
   ]
 }
