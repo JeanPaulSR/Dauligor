@@ -350,7 +350,7 @@ export default function BBCodeTester(_props: BBCodeTesterProps) {
         <Card className="p-4 flex flex-col gap-4">
           <section>
             <h2 className="text-lg font-serif text-gold mb-2">Live preview</h2>
-            <div className="border border-gold/20 rounded-md p-4 bg-parchment/40 min-h-[200px]">
+            <div className="border border-gold/20 rounded-md p-4 bg-background min-h-[200px]">
               <BBCodeRenderer content={bbcode} viewContext={viewContext} />
             </div>
           </section>
@@ -359,7 +359,7 @@ export default function BBCodeTester(_props: BBCodeTesterProps) {
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-lg font-serif text-gold">Round-trip check</h2>
               {isRoundTripStable ? (
-                <span className="flex items-center gap-1 text-leaf text-sm font-semibold">
+                <span className="flex items-center gap-1 text-emerald-500 text-sm font-semibold">
                   <CheckCircle2 className="w-4 h-4" /> Stable
                 </span>
               ) : (
@@ -380,7 +380,7 @@ export default function BBCodeTester(_props: BBCodeTesterProps) {
                   <div className="text-ink/50 mb-1">
                     Input ({bbcode.length} chars, {lineCountInput} lines)
                   </div>
-                  <pre className="bg-ink/95 text-parchment p-2 rounded overflow-auto max-h-48 whitespace-pre-wrap break-all font-mono text-xs">
+                  <pre className="bg-muted text-foreground border border-gold/10 p-2 rounded overflow-auto max-h-48 whitespace-pre-wrap break-all font-mono text-xs">
                     {bbcode || '(empty)'}
                   </pre>
                 </div>
@@ -390,7 +390,7 @@ export default function BBCodeTester(_props: BBCodeTesterProps) {
                     {charDelta >= 0 ? '+' : ''}
                     {charDelta})
                   </div>
-                  <pre className="bg-ink/95 text-parchment p-2 rounded overflow-auto max-h-48 whitespace-pre-wrap break-all font-mono text-xs">
+                  <pre className="bg-muted text-foreground border border-gold/10 p-2 rounded overflow-auto max-h-48 whitespace-pre-wrap break-all font-mono text-xs">
                     {roundTripBbcode || '(empty)'}
                   </pre>
                 </div>
@@ -400,7 +400,7 @@ export default function BBCodeTester(_props: BBCodeTesterProps) {
 
           <section className="border-t border-gold/10 pt-3">
             <h2 className="text-lg font-serif text-gold mb-2">Rendered HTML (raw)</h2>
-            <pre className="bg-ink/95 text-parchment p-3 rounded text-xs overflow-auto max-h-64 whitespace-pre-wrap break-all font-mono">
+            <pre className="bg-muted text-foreground border border-gold/10 p-3 rounded text-xs overflow-auto max-h-64 whitespace-pre-wrap break-all font-mono">
               {renderedHtml || '(empty)'}
             </pre>
           </section>
@@ -423,7 +423,7 @@ export default function BBCodeTester(_props: BBCodeTesterProps) {
         <div className="space-y-4">
           {TEST_CASES.map((group) => (
             <div key={group.group}>
-              <div className="text-xs uppercase tracking-wider text-gold-deep font-semibold mb-1.5">
+              <div className="text-xs uppercase tracking-wider text-gold/80 font-semibold mb-1.5">
                 {group.group}
               </div>
               <div className="flex flex-wrap gap-1.5">
