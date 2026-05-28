@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Proposal Cross-Reference Audit · Compendium Editors</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+
+<nav class="crumbs">
+  <a href="../../../AGENTS.md">AGENTS.md</a>
+  <span class="sep">/</span>
+  <a href="../">architecture</a>
+  <span class="sep">/</span>
+  <a href="index.html">compendium-editors</a>
+  <span class="sep">/</span>
+  Proposal cross-reference audit
+</nav>
+
+<header class="hero">
+  <h1>Proposal Cross-Reference Audit</h1>
+  <div class="sub">
+    Every editor surface the proposal system could touch, and every place one entity references
+    another &mdash; so guard&nbsp;#1 (reference-integrity) can be made exhaustive and Part&nbsp;C
+    (picker overlays) complete. For <code>proposal-system</code>. &middot; 2026-05-28
+  </div>
+  <div class="meta">
+    <span class="badge steel">audit</span>
+    <span class="badge gold">for proposal-system</span>
+    <span class="badge muted">compendium-editors branch</span>
+  </div>
+</header>
+
+<div class="callout info">
+  <strong>Why this exists.</strong>
+  The Parts&nbsp;B+C handoff and the cross-referential-cluster design both scope tightly to
+  <code>scaling_column</code> + the class/subclass/option-group cluster. A walkthrough of the actual
+  editor code shows the real cross-reference graph is much larger, spans <strong>three different
+  picker-injection layers</strong> (only one of which the handoff's Part&nbsp;C addresses), and
+  references several proposable entity types that guard&nbsp;#1's enumerated ref-walk doesn't visit.
+  This doc lays out the complete graph so the scope line can be drawn deliberately instead of by
+  omission. Nothing here is a criticism of the design &mdash; the stable-UUID + atomic-block approach
+  is sound; this is about <em>completeness of coverage</em>.
+</div>
+
+<div class="toc">
+  <h4>On this page</h4>
+  <ol>
+    <li><a href="#tldr">TL;DR &mdash; three headline findings</a></li>
+    <li><a href="#draftable">What can be a block draft (reference targets)</a></li>
+    <li><a href="#layers">The picker-injection layers (where draft overlays must go)</a></li>
+    <li><a href="#inventory">The reference inventory (the full matrix)</a></li>
+    <li><a href="#guard1">Guard&nbsp;#1 coverage gap</a></li>
+    <li><a href="#crossblock">Cross-block hazard (the "different block" case)</a></li>
+    <li><a href="#features-safe">Features: the biggest deferred hole</a></li>
+    <li><a href="#recommendations">Recommendations for proposal-system</a></li>
+    <li><a href="#sources">Source files behind this audit</a></li>
+  </ol>
+</div>
+
+<h2 id="tldr">TL;DR &mdash; the headline findings</h2>
+
+<div class="card priority-now">
+  <h3>0. The most fundamental gap &mdash; a proposed class has no features</h3>
+  <p>
+    A class <em>is</em> its features (Wild Shape, Rage, Channel Divinity), stored as separate rows in
+    the <code>features</code> table (<code>parent_id</code> = the class). But <code>feature</code> is
+    <strong>not</strong> a proposable type, and ClassEditor saves features via a direct
+    <code>upsertFeature</code> → <code>upsertDocument('features', …)</code>
+    (<code>ClassEditor.tsx:1140/1147</code>) that bypasses the accumulator the class row uses
+    (<code>:1313</code>). So a content-creator proposing a Druid can queue the class <em>shell</em> but
+    <strong>403s the moment they add Wild Shape</strong> — the exact Bug&nbsp;#2 pattern, for features.
+    Decision&nbsp;#2 defers features; that deferral removes the ability to propose a <em>usable</em>
+    class. This is arguably <em>the</em> scope call &mdash; see
+    <a href="#features-safe">Features: the biggest deferred hole</a>.
+  </p>
+</div>
+
+<div class="card priority-now">
+  <h3>1. Part&nbsp;C reaches only one of three picker-injection layers</h3>
+  <p>
+    The handoff's Part&nbsp;C plan is "<code>EntityPicker</code> gains a <code>draftEntries</code> prop;
+    merge drafts at the ClassEditor / SubclassEditor / UniqueOptionGroupEditor pickers." But the
+    cross-reference pickers live in <strong>three</strong> places, and only the direct-<code>EntityPicker</code>
+    sites are covered:
+  </p>
+  <ul>
+    <li><strong>AdvancementManager</strong> pickers (option groups, option items, feats, features,
+      scaling columns) read from <code>available*</code> <em>props passed by the parent editor</em> &mdash;
+      they use <code>SingleSelectSearch</code> + inline selects, not <code>EntityPicker</code>.</li>
+    <li><strong>RequirementsEditor</strong> pickers (class, subclass, feature, spell, spell-rule,
+      option-item, proficiency) read from a <code>lookups</code> <em>prop passed by the parent</em> &mdash;
+      also <code>SingleSelectSearch</code>, not <code>EntityPicker</code>. The handoff doesn't mention
+      RequirementsEditor at all.</li>
+    <li><strong>SpellAdvancementEditors</strong> (GrantSpells / ExtendSpellList) <em>fetch their own</em>
+      spells / rules / classes via <code>fetchCollection</code> &mdash; live-only, no overlay path.</li>
+  </ul>
+  <p>
+    A <code>draftEntries</code> prop on <code>EntityPicker</code> alone leaves the advancement and
+    requirement pickers blind to block drafts.
+  </p>
+</div>
+
+<div class="card priority-now">
+  <h3>2. Guard&nbsp;#1's reference-walk is missing most of the JSON-buried refs</h3>
+  <p>
+    The design's guard&nbsp;#1 enumerates <code>subclass.class_id</code>, option-item
+    <code>group_id</code>, <code>scaling_column.parent_id</code>, advancement
+    <code>scaling_column_id</code>/<code>quantity_column_id</code>, <code>class.unique_option_mappings</code>,
+    <code>group.class_ids</code>, <code>subclass.unique_option_group_ids</code>. The full graph (below)
+    adds at least: advancement spell-grant refs (<code>spellIds</code>, <code>ruleId</code>,
+    <code>countsAsClassId</code>, <code>classId</code>, <code>scopeClassId</code>), advancement
+    grant/choice pools (<code>pool</code>, <code>optionalPool</code>, <code>excludedOptionIds</code> →
+    option groups / option items / feats), <code>optionScalingColumnId</code>, the
+    <strong>entire requirements_tree</strong> (class / subclass / spell / spell-rule / option-item
+    leaves), tag refs (<code>tags</code> / <code>required_tags</code> / <code>tag_ids</code> → draftable
+    tags), and <code>item.container_id</code>. Since the schema has <strong>no FK</strong> on any of
+    these, a dropped draft reference goes live dangling unless guard&nbsp;#1 walks it.
+  </p>
+</div>
+
+<div class="card priority-next">
+  <h3>3. Cross-block references are silently un-authorable and would fail guard&nbsp;#1</h3>
+  <p>
+    Draft overlays are scoped to the <strong>active bundle</strong> (<code>useProposalEntityDrafts</code>
+    keys off <code>activeBundleId</code>). An entity in block&nbsp;A referencing a draft in block&nbsp;B:
+    (a) can't be authored &mdash; block&nbsp;B's drafts never appear in block&nbsp;A's pickers; and
+    (b) would fail guard&nbsp;#1, which resolves a ref only to "a live row OR another revision in the
+    <em>same</em> block." This is probably the correct constraint, but it should be a <em>stated</em>
+    one with a clear authoring-time message, not a silent dead-end.
+  </p>
+</div>
+
+<h2 id="draftable">What can be a block draft (reference targets)</h2>
+
+<p>
+  Only proposable entity types can exist as block drafts, so only references <em>to</em> these types
+  are draft hazards. From <code>src/lib/proposalAware.ts</code> (<code>ProposalEntityType</code>) plus
+  Part&nbsp;A's addition:
+</p>
+
+<table class="compact">
+  <tr><th>Proposable (can be a block draft)</th><th>NOT proposable (refs always resolve to live rows)</th></tr>
+  <tr>
+    <td>
+      <code>tag</code>, <code>tag_group</code>, <code>spell_rule</code>,
+      <code>spell_rule_application</code>, <code>spell</code>, <code>class</code>,
+      <code>subclass</code>, <code>feat</code>, <code>item</code>,
+      <code>unique_option_group</code>, <code>unique_option_item</code>,
+      <strong><code>scaling_column</code></strong> (added by Part&nbsp;A)
+    </td>
+    <td>
+      <code>feature</code> (deferred &mdash; Decision&nbsp;#2), proficiencies
+      (<code>skills</code>/<code>tools</code>/<code>weapons</code>/<code>armor</code>/<code>languages</code>
+      + their categories), <code>attributes</code>, <code>spellcastingTypes</code>,
+      pact/known scaling tables, <code>sources</code>
+    </td>
+  </tr>
+</table>
+
+<p>
+  <strong>Consequence:</strong> a reference whose target is in the right-hand column can never point at a
+  block draft, so it's not a guard&nbsp;#1 hazard and needs no picker overlay. This is what keeps the
+  problem bounded &mdash; see <a href="#features-safe">feature-refs are safe</a>.
+</p>
+
+<h2 id="layers">The picker-injection layers</h2>
+
+<p>
+  A draft overlay has to be applied wherever a picker's option list is assembled. There are four
+  distinct assembly points:
+</p>
+
+<table>
+  <tr>
+    <th style="width:6%">Layer</th>
+    <th style="width:26%">Where options are assembled</th>
+    <th>How a draft overlay must be applied</th>
+    <th style="width:14%">In handoff Part&nbsp;C?</th>
+  </tr>
+  <tr>
+    <td><strong>L1</strong></td>
+    <td><code>AdvancementManager</code> &mdash; reads <code>availableScalingColumns</code>,
+      <code>availableOptionGroups</code>, <code>availableOptionItems</code>, <code>availableFeats</code>,
+      <code>availableFeatures</code> (props)</td>
+    <td>The <strong>parent editor</strong> (ClassEditor / SubclassEditor / FeatsEditor / ItemsEditor)
+      merges <code>useProposalDraftOptions(type)</code> into each <code>available*</code> array before
+      passing it down. AdvancementManager itself needs no change.</td>
+    <td><span class="badge blood">no</span></td>
+  </tr>
+  <tr>
+    <td><strong>L2</strong></td>
+    <td><code>RequirementsEditor</code> &mdash; reads <code>lookups.{classes, subclasses, features,
+      spells, spellRules, optionGroups, proficiencies}</code> (prop)</td>
+    <td>The <strong>parent editor</strong> (FeatsEditor / UniqueOptionGroupEditor) merges drafts into
+      the <code>lookups</code> arrays. RequirementsEditor uses <code>SingleSelectSearch</code>, so a
+      <code>draftEntries</code> prop on <code>EntityPicker</code> doesn't reach it.</td>
+    <td><span class="badge blood">no</span></td>
+  </tr>
+  <tr>
+    <td><strong>L3</strong></td>
+    <td><code>SpellAdvancementEditors</code> (GrantSpells / ExtendSpellList) &mdash; fetches its own
+      <code>spells</code>, <code>rules</code>, <code>classes</code> via
+      <code>useSpellAdvancementFoundation()</code></td>
+    <td>This component needs its <em>own</em> <code>useProposalDraftOptions</code> calls (or the parent
+      must pass pools down, which it currently doesn't). Self-contained fetch = self-contained overlay.</td>
+    <td><span class="badge blood">no</span></td>
+  </tr>
+  <tr>
+    <td><strong>L4</strong></td>
+    <td>Direct <code>EntityPicker</code> sites &mdash; UniqueOptionGroupEditor class-restriction picker;
+      SubclassEditor class picker; ClassEditor option-group / column pickers</td>
+    <td>The handoff's <code>draftEntries</code> prop, merged at each call site.</td>
+    <td><span class="badge leaf">yes</span></td>
+  </tr>
+</table>
+
+<p>
+  <strong>Good news:</strong> every catalog editor already imports
+  <code>useProposalEntityDrafts(&lt;own-type&gt;)</code> (ClassEditor → <code>'class'</code>,
+  SubclassEditor → <code>'subclass'</code>, FeatsEditor → <code>'feat'</code>, ItemsEditor →
+  <code>'item'</code>, SpellsEditor → <code>'spell'</code>, UniqueOptionGroupEditor →
+  <code>'unique_option_group'</code>). That hook is currently used only to overlay each editor's
+  <em>own</em> list with its own drafts. The same machinery, called for <em>other</em> types, is exactly
+  what L1/L2/L3 need &mdash; the wiring exists; it just isn't pointed at the cross-reference pickers yet.
+</p>
+
+<h2 id="inventory">The reference inventory (the full matrix)</h2>
+
+<p>
+  Every place a proposable entity stores a reference to another entity. <strong>Storage</strong> is
+  the column / JSON path. <strong>Target</strong> is the referenced entity type;
+  <span class="badge blood">draftable</span> marks targets that can be a block draft (the hazard set).
+  <strong>Picker / Layer</strong> is where it's authored and which injection layer applies.
+</p>
+
+<h3>Class &mdash; <code>classes</code> table</h3>
+<table class="compact">
+  <tr><th>Reference</th><th>Storage</th><th>Target</th><th>Picker / Layer</th></tr>
+  <tr><td>Subclass marker (none — the subclass points back)</td><td><code>advancements[]</code> type=Subclass</td><td>—</td><td>—</td></tr>
+  <tr><td>Item grant/choice pool</td><td><code>advancements[].configuration.pool[]</code> / <code>optionalPool[]</code> / <code>excludedOptionIds[]</code></td><td><code>unique_option_group</code> / <code>unique_option_item</code> / <code>feat</code> <span class="badge blood">draftable</span></td><td>AdvancementManager · <strong>L1</strong></td></tr>
+  <tr><td>Choice-count scaling</td><td><code>advancements[].configuration.scalingColumnId</code></td><td><code>scaling_column</code> <span class="badge blood">draftable</span></td><td>AdvancementManager · <strong>L1</strong></td></tr>
+  <tr><td>Option group (ItemGrant choiceType=option-group)</td><td><code>advancements[].configuration.optionGroupId</code></td><td><code>unique_option_group</code> <span class="badge blood">draftable</span></td><td>AdvancementManager · <strong>L1</strong></td></tr>
+  <tr><td>Option scaling column</td><td><code>advancements[].configuration.optionScalingColumnId</code></td><td><code>scaling_column</code> <span class="badge blood">draftable</span></td><td>AdvancementManager · <strong>L1</strong></td></tr>
+  <tr><td>Linked feature (uses)</td><td><code>advancements[].configuration.usesFeatureId</code></td><td><code>feature</code> (not draftable)</td><td>AdvancementManager · <strong>L1</strong></td></tr>
+  <tr><td>Grant spells</td><td><code>advancements[].configuration.resolver.spellIds[]</code></td><td><code>spell</code> <span class="badge blood">draftable</span></td><td>SpellAdvancementEditors · <strong>L3</strong></td></tr>
+  <tr><td>Grant from rule</td><td><code>advancements[].configuration.resolver.ruleId</code></td><td><code>spell_rule</code> <span class="badge blood">draftable</span></td><td>SpellAdvancementEditors · <strong>L3</strong></td></tr>
+  <tr><td>Spell "counts as class"</td><td><code>advancements[].configuration.countsAsClassId</code></td><td><code>class</code> <span class="badge blood">draftable</span></td><td>SpellAdvancementEditors · <strong>L3</strong></td></tr>
+  <tr><td>Extend spell list (copy / scope)</td><td><code>advancements[].configuration.resolver.classId</code> / <code>scopeClassId</code></td><td><code>class</code> <span class="badge blood">draftable</span></td><td>SpellAdvancementEditors · <strong>L3</strong></td></tr>
+  <tr><td>Trait proficiencies</td><td><code>advancements[].configuration.fixed[]</code> / <code>options[]</code> / <code>replacements[]</code> / <code>categoryIds[]</code></td><td>proficiency (not draftable)</td><td>AdvancementManager · <strong>L1</strong></td></tr>
+  <tr><td>Unique-option mappings</td><td><code>unique_option_mappings</code> (JSON)</td><td><code>unique_option_group</code> <span class="badge blood">draftable</span></td><td>ClassEditor picker · <strong>L4</strong></td></tr>
+  <tr><td>Excluded options</td><td><code>excluded_option_ids</code> (JSON)</td><td><code>unique_option_item</code>/<code>group</code> <span class="badge blood">draftable</span></td><td>ClassEditor · <strong>L4</strong> (verify widget)</td></tr>
+  <tr><td>Spellcasting config</td><td><code>spellcasting</code> (JSON)</td><td>spellcastingType, scalings (not draftable)</td><td>ClassEditor selects</td></tr>
+  <tr><td>Tags</td><td><code>tag_ids</code> (JSON)</td><td><code>tag</code> <span class="badge blood">draftable</span></td><td>(tag picker)</td></tr>
+  <tr><td>Source</td><td><code>source_id</code> (FK)</td><td><code>source</code> (not draftable)</td><td>source select</td></tr>
+</table>
+
+<h3>Subclass &mdash; <code>subclasses</code> table</h3>
+<table class="compact">
+  <tr><th>Reference</th><th>Storage</th><th>Target</th><th>Picker / Layer</th></tr>
+  <tr><td>Parent class</td><td><code>class_id</code> (FK)</td><td><code>class</code> <span class="badge blood">draftable</span></td><td>SubclassEditor class picker · <strong>L4</strong></td></tr>
+  <tr><td>Advancements (all of the class advancement refs above)</td><td><code>advancements[]</code> (JSON)</td><td>scaling_column / option group+item / feat / spell / spell_rule / class <span class="badge blood">draftable</span></td><td>AdvancementManager <strong>L1</strong> + SpellAdvancementEditors <strong>L3</strong></td></tr>
+  <tr><td>Unique option groups</td><td><code>unique_option_group_ids</code> (JSON)</td><td><code>unique_option_group</code> <span class="badge blood">draftable</span></td><td><strong>L4</strong> (verify widget)</td></tr>
+  <tr><td>Source</td><td><code>source_id</code> (FK)</td><td><code>source</code></td><td>source select</td></tr>
+</table>
+
+<h3>Unique option group &mdash; <code>unique_option_groups</code> table</h3>
+<table class="compact">
+  <tr><th>Reference</th><th>Storage</th><th>Target</th><th>Picker / Layer</th></tr>
+  <tr><td>Class restriction</td><td><code>class_ids</code> (JSON)</td><td><code>class</code> <span class="badge blood">draftable</span></td><td><code>EntityPicker</code> · <strong>L4</strong></td></tr>
+  <tr><td>Owning feature</td><td><code>feature_id</code> (FK)</td><td><code>feature</code> (not draftable)</td><td>(feature picker)</td></tr>
+</table>
+
+<h3>Unique option item &mdash; <code>unique_option_items</code> table</h3>
+<table class="compact">
+  <tr><th>Reference</th><th>Storage</th><th>Target</th><th>Picker / Layer</th></tr>
+  <tr><td>Parent group</td><td><code>group_id</code> (FK)</td><td><code>unique_option_group</code> <span class="badge blood">draftable</span></td><td>(implicit — item lives under group)</td></tr>
+  <tr><td>Scaling / quantity column</td><td><code>scaling_column_id</code> / <code>quantity_column_id</code></td><td><code>scaling_column</code> <span class="badge blood">draftable</span></td><td>UniqueOptionGroupEditor selects</td></tr>
+  <tr><td>Requirements tree</td><td><code>requirements_tree</code> (JSON)</td><td>class / subclass / spell / spell_rule / option-item / option-group <span class="badge blood">draftable</span> (+ feature, proficiency — not draftable)</td><td>RequirementsEditor · <strong>L2</strong></td></tr>
+</table>
+
+<h3>Feat &mdash; <code>feats</code> table (also races/backgrounds via <code>feat_type</code>)</h3>
+<table class="compact">
+  <tr><th>Reference</th><th>Storage</th><th>Target</th><th>Picker / Layer</th></tr>
+  <tr><td>Requirements tree</td><td><code>requirements_tree</code> (JSON)</td><td>class / subclass / spell / spell_rule / option-item / option-group <span class="badge blood">draftable</span> (+ feature, proficiency)</td><td>RequirementsEditor · <strong>L2</strong></td></tr>
+  <tr><td>Bump-uses target</td><td><code>advancements[].configuration.target.id</code> (kind=feat|feature)</td><td><code>feat</code> <span class="badge blood">draftable</span> / <code>feature</code> (not)</td><td>AdvancementManager · <strong>L1</strong></td></tr>
+  <tr><td>Item grant/choice pool</td><td><code>advancements[].configuration.pool[]</code> etc.</td><td>option group/item / <code>feat</code> <span class="badge blood">draftable</span></td><td>AdvancementManager · <strong>L1</strong></td></tr>
+  <tr><td>Scaling</td><td><code>advancements[].configuration.scalingColumnId</code> + feat-owned <code>scaling_columns</code></td><td><code>scaling_column</code> <span class="badge blood">draftable</span></td><td>AdvancementManager <strong>L1</strong> + ScalingColumnsPanel (Part&nbsp;B)</td></tr>
+  <tr><td>Tags</td><td><code>tags</code> (JSON)</td><td><code>tag</code> <span class="badge blood">draftable</span></td><td>TagPicker</td></tr>
+</table>
+
+<h3>Item &mdash; <code>items</code> table</h3>
+<table class="compact">
+  <tr><th>Reference</th><th>Storage</th><th>Target</th><th>Picker / Layer</th></tr>
+  <tr><td>Base weapon / armor / tool</td><td><code>base_weapon_id</code> / <code>base_armor_id</code> / <code>base_tool_id</code> (FK)</td><td>weapons / armor / tools (not draftable)</td><td>SingleSelectSearch</td></tr>
+  <tr><td>Default ability</td><td><code>ability_id</code> (FK)</td><td>attributes (not draftable)</td><td>select</td></tr>
+  <tr><td>Container</td><td><code>container_id</code></td><td><code>item</code> <span class="badge blood">draftable</span></td><td>(verify widget)</td></tr>
+  <tr><td>Bump-uses target</td><td><code>advancements[].configuration.target.id</code></td><td><code>feat</code> <span class="badge blood">draftable</span> / feature</td><td>AdvancementManager · <strong>L1</strong></td></tr>
+  <tr><td>Tags</td><td><code>tags</code> (JSON)</td><td><code>tag</code> <span class="badge blood">draftable</span></td><td>TagPicker</td></tr>
+</table>
+
+<h3>Spell &mdash; <code>spells</code> table</h3>
+<table class="compact">
+  <tr><th>Reference</th><th>Storage</th><th>Target</th><th>Picker / Layer</th></tr>
+  <tr><td>Descriptive tags</td><td><code>tags</code> (JSON)</td><td><code>tag</code> <span class="badge blood">draftable</span></td><td>TagPicker</td></tr>
+  <tr><td>Prerequisite tags</td><td><code>required_tags</code> (JSON)</td><td><code>tag</code> <span class="badge blood">draftable</span></td><td>TagPicker</td></tr>
+  <tr><td>Rule membership</td><td>via <code>RuleMembershipPanel</code> (storage: verify — likely <code>spell_rule_application</code> / rule's manualSpells)</td><td><code>spell_rule</code> <span class="badge blood">draftable</span></td><td>RuleMembershipPanel (verify)</td></tr>
+</table>
+
+<h3>Scaling column &mdash; <code>scaling_columns</code> table (Part&nbsp;A)</h3>
+<table class="compact">
+  <tr><th>Reference</th><th>Storage</th><th>Target</th><th>Picker / Layer</th></tr>
+  <tr><td>Owner</td><td><code>parent_id</code> + <code>parent_type</code></td><td><code>class</code> / <code>subclass</code> <span class="badge blood">draftable</span> — <strong>and</strong> <code>feat</code> / <code>item</code> in the panel's <code>ScalingOwnerType</code> (also draftable), plus <code>race</code>/<code>background</code></td><td>ScalingColumnsPanel (Part&nbsp;B)</td></tr>
+</table>
+
+<div class="callout">
+  <strong>The <code>parent_type</code> scope mismatch (repeated from the earlier review).</strong>
+  <code>ScalingColumnsPanel</code>'s <code>ScalingOwnerType</code> is
+  <code>class | subclass | feat | race | background | item</code>, but the <code>scaling_column</code>
+  proposal config comment and the handoff both frame <code>parent_type</code> as
+  <code>class|subclass</code> only. <code>sanitizePayload</code> doesn't validate the value, so a
+  <code>feat</code>/<code>item</code>-owned column draft would be <em>accepted</em> — but guard&nbsp;#1's
+  draft-parent resolution needs to handle those parent types, and Part&nbsp;B has to decide whether to
+  wire the accumulator for all six owners or only class/subclass.
+</div>
+
+<h2 id="guard1">Guard&nbsp;#1 coverage gap</h2>
+
+<p>
+  What the design's reference-integrity walk enumerates vs. the full draftable-reference set:
+</p>
+
+<table class="compact">
+  <tr><th>Reference</th><th>Target draftable?</th><th>In guard&nbsp;#1's list?</th></tr>
+  <tr><td><code>subclass.class_id</code></td><td>yes (class)</td><td><span class="badge leaf">yes</span></td></tr>
+  <tr><td><code>unique_option_item.group_id</code></td><td>yes (group)</td><td><span class="badge leaf">yes</span></td></tr>
+  <tr><td><code>scaling_column.parent_id</code></td><td>yes</td><td><span class="badge leaf">yes</span> (class/subclass only)</td></tr>
+  <tr><td>advancement <code>scaling_column_id</code> / <code>quantity_column_id</code></td><td>yes (scaling_column)</td><td><span class="badge leaf">yes</span></td></tr>
+  <tr><td><code>class.unique_option_mappings</code></td><td>yes (group)</td><td><span class="badge leaf">yes</span></td></tr>
+  <tr><td><code>group.class_ids</code></td><td>yes (class)</td><td><span class="badge leaf">yes</span></td></tr>
+  <tr><td><code>subclass.unique_option_group_ids</code></td><td>yes (group)</td><td><span class="badge leaf">yes</span></td></tr>
+  <tr><td>advancement <code>optionScalingColumnId</code></td><td>yes (scaling_column)</td><td><span class="badge blood">no</span></td></tr>
+  <tr><td>advancement <code>optionGroupId</code></td><td>yes (group)</td><td><span class="badge blood">no</span></td></tr>
+  <tr><td>advancement <code>pool[]</code> / <code>optionalPool[]</code> / <code>excludedOptionIds[]</code></td><td>yes (group / item / feat)</td><td><span class="badge blood">no</span></td></tr>
+  <tr><td>advancement GrantSpells <code>resolver.spellIds[]</code></td><td>yes (spell)</td><td><span class="badge blood">no</span></td></tr>
+  <tr><td>advancement <code>resolver.ruleId</code></td><td>yes (spell_rule)</td><td><span class="badge blood">no</span></td></tr>
+  <tr><td>advancement <code>countsAsClassId</code> / <code>classId</code> / <code>scopeClassId</code></td><td>yes (class)</td><td><span class="badge blood">no</span></td></tr>
+  <tr><td>advancement ItemBumpUses <code>target.id</code> (kind=feat)</td><td>yes (feat)</td><td><span class="badge blood">no</span></td></tr>
+  <tr><td><code>requirements_tree</code> leaves (class / subclass / spell / spellRule / optionItem)</td><td>yes</td><td><span class="badge blood">no</span></td></tr>
+  <tr><td><code>unique_option_item.scaling_column_id</code> / <code>quantity_column_id</code></td><td>yes (scaling_column)</td><td><span class="badge blood">no</span> (verify)</td></tr>
+  <tr><td><code>tags</code> / <code>required_tags</code> / <code>tag_ids</code></td><td>yes (tag)</td><td><span class="badge blood">no</span></td></tr>
+  <tr><td><code>tag.group_id</code></td><td>yes (tag_group)</td><td><span class="badge blood">no</span></td></tr>
+  <tr><td><code>item.container_id</code></td><td>yes (item)</td><td><span class="badge blood">no</span></td></tr>
+</table>
+
+<p>
+  Roughly two-thirds of the draftable references aren't on the enumerated walk. Each one is a place a
+  dropped/rejected draft could leave a live row pointing at nothing, since the schema has no FK to catch
+  it (exactly the S2 failure mode the guard is meant to close).
+</p>
+
+<h2 id="crossblock">Cross-block hazard (the "different block" case)</h2>
+
+<p>
+  <code>useProposalEntityDrafts(type)</code> →
+  <code>getDraftedEntities(type, ctx, drafts, activeBundleId)</code> — scoped to the
+  <strong>active bundle</strong>. Outside a <code>ProposalEditorWrapper</code> it returns empty
+  (admin-direct editors never see block drafts — correct). Inside a wrapper, it returns
+  <em>only the current block's</em> drafts. So:
+</p>
+
+<ul>
+  <li>If a content-creator splits a logical cluster across two blocks (class in block&nbsp;A, its
+    subclass in block&nbsp;B), block&nbsp;B's class picker won't show block&nbsp;A's draft class. The
+    reference can't be authored.</li>
+  <li>Even if authored by other means, guard&nbsp;#1 resolves a ref to "a live row OR another revision
+    <em>in the same block</em>" — a block-B ref to a block-A draft fails validation.</li>
+</ul>
+
+<p>
+  This matches Decision&nbsp;#3 ("current active block only"). The audit's only ask: make the dead-end
+  <em>legible</em> — when a picker has nothing to show because the target is in another block, say so,
+  rather than rendering an empty dropdown that looks like a bug. (Same applies to another user's block.)
+</p>
+
+<h2 id="features-safe">Features: the biggest deferred hole</h2>
+
+<p>
+  <strong>A class is its features.</strong> Wild Shape, Rage, Channel Divinity are rows in the
+  <code>features</code> table (<code>parent_id</code> = class.id, <code>parent_type</code> = 'class'),
+  authored in ClassEditor's feature modal. <code>handleSaveFeature</code> persists them with
+  <code>upsertFeature</code> → <code>upsertDocument('features', …)</code>
+  (<code>compendium.ts:747</code>, <code>ClassEditor.tsx:1140/1147</code>) <strong>directly</strong> —
+  there is no proposal branch in that handler (contrast the class row at <code>:1313</code>, which
+  routes through <code>applyProposalWrite(classWriter, …)</code>). And <code>feature</code> is not in
+  <code>ProposalEntityType</code>.
+</p>
+<p>
+  <strong>Consequence:</strong> a content-creator proposing a class can queue the class row, but adding
+  a feature hits the same staff-only DB gate that blocked scaling columns — a <strong>403</strong>. A
+  proposed class is a <em>feature-less shell</em>. The handoff's "done" scenario reflects this: it
+  lists "creates a class, adds a scaling column, … adds a unique option group" but never "adds Wild
+  Shape."
+</p>
+<p>
+  <strong>Why it was deferred (and why it's a real lift):</strong> a feature isn't a leaf — it's an
+  interior node carrying its own reference graph:
+</p>
+<ul>
+  <li><code>activities</code> + <code>effects</code> (Foundry automation JSON)</li>
+  <li><code>advancements</code> (JSON) — re-dragging in the entire advancement reference set (scaling
+    columns, option groups, spells, …)</li>
+  <li><code>scalingColumnId</code> / <code>quantityColumnId</code> directly on the feature row</li>
+  <li><code>unique_option_groups.feature_id</code> points <em>back</em> at features — option groups
+    attach to a feature</li>
+</ul>
+<p>
+  So "make features proposable" is Part&nbsp;A/B/C-for-features <em>plus</em> it re-opens the advancement
+  graph and the option-group→feature link. That heft is presumably why Decision&nbsp;#2 punted — but the
+  punt isn't free: <strong>it's the difference between "propose a class" working and not.</strong>
+</p>
+<div class="callout">
+  <strong>Correction to an earlier framing in this audit.</strong> Feature-targeting references
+  (requirements <code>feature</code> leaf, advancement <code>usesFeatureId</code>, ItemBumpUses
+  <code>target.kind='feature'</code>, <code>unique_option_groups.feature_id</code>) are <em>not</em>
+  "safe because features can't dangle." They're <strong>blocked</strong> — the feature they'd point at
+  can't be created in the block at all. The matrix rows that mark a feature target "(not draftable)"
+  should be read as "(blocked by the feature deferral)," not "(benign)."
+</div>
+
+<h2 id="recommendations">Recommendations for proposal-system</h2>
+
+<ol>
+  <li>
+    <strong>Decide the features question first &mdash; it gates "propose a class."</strong> A class
+    without its features isn't a class. Either bring <code>feature</code> into scope (Part&nbsp;A/B/C
+    for features, accepting the activities / effects / advancements surface and the
+    option-group→feature link), or <em>explicitly</em> decide that a proposed class is a shell an
+    admin completes with features after approval &mdash; and make the editor say so instead of 403-ing
+    when a content-creator adds one. Either way it should be a stated decision; right now it's an
+    unannounced 403. For the "build a class in a block" use case this outranks the scaling-column work.
+  </li>
+  <li>
+    <strong>Draw the rest of the scope line explicitly.</strong> If this pass is genuinely "scaling_column +
+    class/subclass/option-group cluster only," then advancement spell/feat grants, requirements-tree
+    refs, tag refs, and item.container_id are out — say so in the design, and have the editors
+    <em>not</em> offer those draft overlays (so authors don't build references the approval side
+    silently won't validate).
+  </li>
+  <li>
+    <strong>If the cluster is meant to be authorable end-to-end</strong> (your "done" scenario implies
+    it — it includes a spell grant), then:
+    <ul>
+      <li>Part&nbsp;C must cover <strong>L1, L2, L3</strong>, not just L4. Concretely: merge
+        <code>useProposalDraftOptions</code> into the parent-passed <code>available*</code> arrays
+        (AdvancementManager) and <code>lookups</code> arrays (RequirementsEditor), and add overlay
+        calls inside <code>SpellAdvancementEditors</code>.</li>
+      <li>Guard&nbsp;#1's walk must add every <span class="badge blood">no</span> row in the
+        <a href="#guard1">gap table</a>.</li>
+    </ul>
+  </li>
+  <li>
+    <strong>Resolve the <code>parent_type</code> question for scaling columns</strong> (class/subclass
+    only, or all six owners) and have guard&nbsp;#1's draft-parent resolution + Part&nbsp;B's accumulator
+    wiring agree on the answer.
+  </li>
+  <li>
+    <strong>Make cross-block dead-ends legible</strong> (a one-line "this is in another block" affordance)
+    rather than empty dropdowns.
+  </li>
+  <li>
+    <strong>Link the feature deferral to its safety guarantee</strong> in the design, and flag the three
+    feature-ref sites as the first things to revisit when features become proposable.
+  </li>
+</ol>
+
+<p>
+  This audit deliberately stops at <em>what references exist and where</em>. Which to bring in scope is
+  proposal-system's call; the editor-side wiring for whatever is chosen (the L1/L2/L3 overlays) is
+  compendium-editors' to implement.
+</p>
+
+<h2 id="sources">Source files behind this audit</h2>
+
+<ul>
+  <li><code class="path">src/lib/advancementState.ts</code> — advancement config shapes (the ref-bearing keys)</li>
+  <li><code class="path">src/components/compendium/AdvancementManager.tsx</code> — L1 pickers, <code>available*</code> props</li>
+  <li><code class="path">src/components/compendium/SpellAdvancementEditors.tsx</code> — L3 self-fetched GrantSpells/ExtendSpellList pickers</li>
+  <li><code class="path">src/lib/requirements.ts</code> — requirement leaf vocabulary + ref fields</li>
+  <li><code class="path">src/components/compendium/RequirementsEditor.tsx</code> — L2 pickers, <code>lookups</code> prop</li>
+  <li><code class="path">src/components/ui/EntityPicker.tsx</code> — L4 picker (the <code>draftEntries</code> target)</li>
+  <li><code class="path">src/pages/compendium/{ClassEditor,SubclassEditor,UniqueOptionGroupEditor,FeatsEditor,ItemsEditor,SpellsEditor}.tsx</code> — the fetch + pass-down sites</li>
+  <li><code class="path">src/hooks/useProposalEntityDrafts.ts</code> — active-bundle draft scoping</li>
+  <li><code class="path">src/lib/proposalAware.ts</code> — <code>ProposalEntityType</code> (proposable set)</li>
+  <li><code class="path">api/_lib/proposals.ts</code> (origin/main) — <code>ENTITY_CONFIGS</code>, <code>sanitizePayload</code></li>
+</ul>
+
+<nav class="page-pager">
+  <a href="index.html">&larr; Back to index</a>
+  <a href="04-components.html">Related: 04 &mdash; Components &rarr;</a>
+</nav>
+
+</div>
+</body>
+</html>

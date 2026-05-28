@@ -67,7 +67,7 @@ The HTML reference under `docs/architecture/compendium-editors/` stays the sourc
 
 ## Open requests to other branches
 
-None currently. Add `- [ ] (date) Request <other-branch> to <change> in <file>` entries here as they come up.
+- [ ] `(2026-05-28)` Request `proposal-system` to decide cross-reference **scope** before I build Parts B + C: (1) features-as-proposable — gates "propose a class" (a proposed class is currently a feature-less shell because `feature` isn't proposable and `handleSaveFeature` 403s for content-creators); (2) the guard-#1 reference-walk gaps (advancement spell/feat-grant refs, the whole `requirements_tree`, tag refs, `item.container_id`); (3) `scaling_column` `parent_type` (class/subclass only vs all six owners). Full request: [2026-05-28-open-request-to-proposal-system.md](2026-05-28-open-request-to-proposal-system.md). Evidence: [docs/architecture/compendium-editors/proposal-cross-reference-audit.html](../../docs/architecture/compendium-editors/proposal-cross-reference-audit.html). **Holding B/C implementation until they respond.**
 
 ## Coordination notes
 
