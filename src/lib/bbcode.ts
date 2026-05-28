@@ -38,7 +38,7 @@ export interface BbcodeViewContext {
 export type RefKind =
   | 'spell' | 'class' | 'subclass' | 'feat' | 'item' | 'condition' | 'article';
 
-function resolveRefRoute(kind: string, id: string, anchor?: string): string | null {
+export function resolveRefRoute(kind: string, id: string, anchor?: string): string | null {
   const safeId = encodeURIComponent(id);
   const frag = anchor ? `#${encodeURIComponent(anchor)}` : '';
   switch (kind) {
