@@ -238,7 +238,7 @@ This page tests the BBCode pipeline end-to-end. Edit the BBCode on the left; the
 [li]Click [i]Copy bug report[/i] to assemble a structured snippet for filing.[/li]
 [/ul]
 
-Try a cross-reference: [ref|spell|fire-bolt]Fire Bolt[/ref] (working) vs [ref|item|longsword]Longsword[/ref] (dangling — no [code]item[/code] kind wired up yet).`;
+Try a cross-reference: [ref|spell|fire-bolt]Fire Bolt[/ref] (working) vs [ref|item|longsword]Longsword[/ref] (dangling — no "item" kind wired up yet).`;
 
 export default function BBCodeTester(_props: BBCodeTesterProps) {
   const [bbcode, setBbcode] = useState<string>(INITIAL_SAMPLE);
