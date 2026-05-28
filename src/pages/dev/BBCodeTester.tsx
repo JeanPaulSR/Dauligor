@@ -115,38 +115,42 @@ const TEST_CASES: TestGroup[] = [
     ],
   },
   {
-    group: 'Cross-references — @ entity links',
+    group: 'Cross-references — @ entity links (real data)',
     cases: [
       {
         name: 'Spell',
-        bbcode: 'Cast @spell[fire-bolt]{Fire Bolt} at the door.',
-        note: 'Reader renders a styled link → /compendium/spells?focus=fire-bolt. In the EDITOR it stays as @spell[…] text (try toggling to Visual).',
+        bbcode: 'In response, you cast @spell[absorb-elements]{Absorb Elements}.',
+        note: 'Real spell. Reader renders a styled link → /compendium/spells?focus=absorb-elements. In the EDITOR it stays as @spell[…] text (toggle to Visual).',
       },
-      { name: 'Class', bbcode: 'The @class[wizard]{Wizard} approached.' },
-      { name: 'Feat', bbcode: 'Take @feat[great-weapon-master]{Great Weapon Master}.' },
-      { name: 'Item', bbcode: 'He drew @item[longsword]{the longsword}.' },
-      { name: 'Article', bbcode: 'See @article[deep-shadow-cult]{the Deep Shadow Cult}.' },
+      { name: 'Class', bbcode: 'The @class[alchemist]{Alchemist} mixes a draught.' },
+      { name: 'Feat', bbcode: 'She took the @feat[actor]{Actor} feat at level 4.' },
+      { name: 'Article', bbcode: 'Read about @article[cagosia]{Cagosia} in the wiki.' },
       {
         name: 'No {display}',
-        bbcode: 'A reference with no display label: @spell[fire-bolt].',
-        note: 'Falls back to a humanised id ("Fire Bolt").',
+        bbcode: 'A reference with no display label: @spell[acid-splash].',
+        note: 'Real spell, no {display} → humanised id ("Acid Splash").',
+      },
+      {
+        name: 'Item (empty table)',
+        bbcode: 'He drew @item[longsword]{a longsword}.',
+        note: 'The items table is currently EMPTY in this DB, so @item refs render as a link but will not resolve to a real item yet.',
       },
     ],
   },
   {
-    group: 'Cross-references — & rule links',
+    group: 'Cross-references — & rule links (real conditions)',
     cases: [
       {
         name: 'Condition',
-        bbcode: 'You become &condition[prone]{prone}.',
-        note: '& sigil = rule reference. In Foundry this maps to dnd5e &Reference.',
+        bbcode: 'On a failed save you are &condition[frightened]{frightened}.',
+        note: '& sigil = rule reference. Real condition. In Foundry this maps to dnd5e &Reference[frightened].',
       },
       {
         name: 'Condition + anchor',
-        bbcode: 'See &condition[prone]#movement for details.',
+        bbcode: 'See &condition[blinded]#effects for the full rule.',
         note: 'Optional #anchor after the id, for section deep-links.',
       },
-      { name: 'Custom display', bbcode: 'You are &condition[prone]{knocked flat}.' },
+      { name: 'Custom display', bbcode: 'The target is &condition[charmed]{under your charm}.' },
     ],
   },
   {
@@ -154,8 +158,8 @@ const TEST_CASES: TestGroup[] = [
     cases: [
       {
         name: 'Subclass (dangling)',
-        bbcode: 'The @subclass[draconic-bloodline]{Draconic Bloodline} sorcerer.',
-        note: 'subclass has no clean public route yet → non-clickable ref-dangling badge.',
+        bbcode: 'An @subclass[aberrant-mind]{Aberrant Mind} sorcerer manifests psionic power.',
+        note: 'Real subclass, but subclass has no clean public route yet → non-clickable ref-dangling badge.',
       },
       {
         name: 'Unknown kind',
@@ -206,12 +210,12 @@ const TEST_CASES: TestGroup[] = [
       {
         name: 'Mixed paragraph',
         bbcode:
-          'A paragraph with [b]bold[/b], [i]italic[/i], [url=https://example.com]a link[/url], and a @spell[fire-bolt]{spell ref} all together.',
+          'A paragraph with [b]bold[/b], [i]italic[/i], [url=https://example.com]a link[/url], and a @spell[absorb-elements]{spell ref} all together.',
       },
       {
         name: 'Heading + list + ref',
         bbcode:
-          '[h2]Spells[/h2]\n[ul][li]@spell[fire-bolt]{Fire Bolt} — cantrip[/li][li]@spell[magic-missile]{Magic Missile} — 1st level[/li][/ul]',
+          '[h2]Spells[/h2]\n[ul][li]@spell[acid-splash]{Acid Splash} — cantrip[/li][li]@spell[absorb-elements]{Absorb Elements} — 1st-level reaction[/li][/ul]',
       },
       {
         name: 'Special chars in body',
@@ -245,7 +249,7 @@ This page tests the BBCode pipeline end-to-end. Edit the BBCode on the left; the
 [li]Click [i]Copy bug report[/i] to assemble a structured snippet for filing.[/li]
 [/ul]
 
-Try a cross-reference: @spell[fire-bolt]{Fire Bolt} (entity link) vs &condition[prone]{Prone} (rule link). In the editor these stay as text; the reader renders them as links.`;
+Try a cross-reference: @spell[absorb-elements]{Absorb Elements} (entity link) vs &condition[frightened]{Frightened} (rule link). In the editor these stay as text; the reader renders them as links.`;
 
 export default function BBCodeTester(_props: BBCodeTesterProps) {
   const [bbcode, setBbcode] = useState<string>(INITIAL_SAMPLE);
