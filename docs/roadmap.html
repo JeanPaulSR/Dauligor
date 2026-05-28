@@ -322,15 +322,42 @@
   <div class="what-row">
     <div class="lab">Status</div>
     <div class="val">
-      User has flagged the need; specific defects to be enumerated. Once the list is
-      assembled, each becomes a checklist item with a focused fix. The audit should also
-      establish a small regression-test surface so the same defects don't return.
+      Defects are catalogued as a checklist; the <code>/dev/bbcode</code> tester's preset
+      cases double as the regression surface so fixed bugs don't quietly return.
       <br><br>
-      <em>Awaiting enumeration of known bugs from the user &mdash; placeholder list below
-      will be populated as bugs are reported.</em>
+      <strong>Batch 1 (reported 2026-05-28) &mdash; all fixed:</strong>
       <ul>
-        <li><em>(to be filled in)</em></li>
+        <li>
+          &#10003; <strong>Quote trailing blank line.</strong> <code>[quote]…[/quote]</code>
+          with a trailing newline produced malformed HTML
+          (<code>&lt;blockquote&gt;…&lt;p&gt;&lt;/blockquote&gt;&lt;/p&gt;</code>) and an empty
+          line after the quote. The inner content is now trimmed and internal newlines become
+          <code>&lt;br&gt;</code>, so no <code>\n\n</code> survives inside the block to break
+          the paragraph splitter.
+        </li>
+        <li>
+          &#10003; <strong>Horizontal-rule double slash.</strong> <code>[hr]</code> rendered as
+          <code>&lt;hr//&gt;</code> and broke its own round-trip. The block-normaliser regex no
+          longer recaptures the self-closing slash.
+        </li>
+        <li>
+          &#10003; <strong>Spoiler / Comment toolbar buttons inert in Visual mode.</strong> The
+          editor's WYSIWYG path had no handler, so the buttons silently did nothing. Spoiler now
+          toggles its TipTap mark; any unhandled tag wraps the selection in literal markers
+          instead of no-opping.
+        </li>
+        <li>
+          &#10003; <strong>Links invisible on the dark theme.</strong> Plain <code>[url]</code>
+          links inherited the typography plugin's dark default colour and vanished against the
+          charcoal background. <code>.prose a</code> now uses the theme accent (gold).
+        </li>
       </ul>
+      <em>Quote, hr, and round-trip stability verified programmatically against the real
+      converter; spoiler-button + link-colour fixes verified via the dev page. Server mirror
+      (<code>api/_lib/_bbcode.ts</code>) updated in lockstep for the quote + hr fixes.</em>
+      <br><br>
+      <em>Report further defects via the dev page's "Copy bug report" button &mdash; they'll
+      be appended as Batch 2.</em>
     </div>
   </div>
 </div>
