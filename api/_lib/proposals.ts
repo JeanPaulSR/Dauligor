@@ -38,7 +38,13 @@ export type EntityType =
   | "feat"
   | "item"
   | "unique_option_group"
-  | "unique_option_item";
+  | "unique_option_item"
+  // Nested entity owned by a class/subclass. Made proposable so a
+  // content-creator can author scaling columns inside a block instead
+  // of hitting the proxy's staff-only direct-write gate. See
+  // handoffs/proposal-system/2026-05-28-cross-referential-cluster-design.md
+  // (Part A).
+  | "scaling_column";
 
 export const PROPOSABLE_ENTITY_TYPES: ReadonlyArray<EntityType> = [
   "tag",
@@ -52,6 +58,7 @@ export const PROPOSABLE_ENTITY_TYPES: ReadonlyArray<EntityType> = [
   "item",
   "unique_option_group",
   "unique_option_item",
+  "scaling_column",
 ];
 
 export function isProposableEntityType(s: unknown): s is EntityType {
@@ -253,6 +260,16 @@ const ENTITY_CONFIGS: Record<EntityType, EntityConfig> = {
       "class_ids", "properties", "activities", "effects", "advancements",
       "tags", "requirements_tree",
     ]),
+  },
+  // Scaling columns belong to a class or subclass (parent_id +
+  // parent_type) and are referenced by id from class/subclass
+  // advancements and option-item configs. The `values` column is a
+  // JSON map of level (string) → value. Schema: 0009_scalings.sql.
+  scaling_column: {
+    tableName: "scaling_columns",
+    pkColumn: "id",
+    writableColumns: new Set(["id", "name", "parent_id", "parent_type", "values"]),
+    jsonColumns: new Set(["values"]),
   },
 };
 
