@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pending Tasks — The Archive (2026-05-27)</title>
+<style>
+  :root {
+    --parchment: #f5f2e8;
+    --parchment-soft: #faf7ed;
+    --ink: #1a1a1a;
+    --ink-soft: #3a3a3a;
+    --muted: #6b6457;
+    --gold: #c5a059;
+    --gold-deep: #8a6d2f;
+    --blood: #7a1f1f;
+    --leaf: #355c3a;
+    --card: #fbf8ee;
+    --rule: #d8cfb8;
+    --code-bg: #2b2620;
+    --code-ink: #f0e9d2;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 10px rgba(0,0,0,0.04);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--parchment);
+    color: var(--ink);
+    font-family: "Inter", -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+  }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 40px 32px 80px;
+  }
+  header.hero {
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 20px;
+    margin-bottom: 30px;
+  }
+  header.hero h1 {
+    font-family: "Cormorant Garamond", "Georgia", serif;
+    font-weight: 600;
+    font-size: 40px;
+    line-height: 1.1;
+    margin: 0 0 6px;
+    color: var(--ink);
+  }
+  header.hero .sub {
+    color: var(--muted);
+    font-size: 14px;
+  }
+  header.hero .meta {
+    margin-top: 14px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .badge {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .badge.gold { background: var(--gold); color: #fff; }
+  .badge.blood { background: var(--blood); color: #fff; }
+  .badge.leaf { background: var(--leaf); color: #fff; }
+  .badge.muted { background: #d8cfb8; color: var(--ink-soft); }
+  h2 {
+    font-family: "Cormorant Garamond", "Georgia", serif;
+    font-size: 28px;
+    font-weight: 600;
+    margin: 48px 0 14px;
+    padding-bottom: 6px;
+    border-bottom: 2px solid var(--gold);
+    color: var(--ink);
+  }
+  h3 {
+    font-family: "Cormorant Garamond", "Georgia", serif;
+    font-size: 21px;
+    font-weight: 600;
+    margin: 28px 0 8px;
+    color: var(--ink);
+  }
+  h4 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    color: var(--gold-deep);
+    margin: 18px 0 6px;
+  }
+  p { margin: 8px 0; }
+  ul, ol { margin: 8px 0 8px 22px; padding: 0; }
+  li { margin: 4px 0; }
+  code {
+    font-family: "JetBrains Mono", "Consolas", monospace;
+    font-size: 13px;
+    background: rgba(138, 109, 47, 0.12);
+    color: var(--ink);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    padding: 14px 16px;
+    border-radius: 5px;
+    overflow-x: auto;
+    font-family: "JetBrains Mono", "Consolas", monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    box-shadow: var(--shadow);
+  }
+  pre code { background: transparent; color: inherit; padding: 0; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-left: 4px solid var(--gold);
+    border-radius: 4px;
+    padding: 16px 20px;
+    margin: 14px 0;
+    box-shadow: var(--shadow);
+  }
+  .card.priority-now { border-left-color: var(--blood); }
+  .card.priority-next { border-left-color: var(--gold); }
+  .card.priority-later { border-left-color: var(--muted); }
+  .card.priority-parked { border-left-color: var(--leaf); }
+  .card h3 { margin-top: 0; }
+  .card .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 4px 0 10px;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 14px 0;
+    background: var(--parchment-soft);
+    box-shadow: var(--shadow);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  th, td {
+    text-align: left;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--rule);
+    font-size: 14px;
+    vertical-align: top;
+  }
+  th {
+    background: rgba(138, 109, 47, 0.10);
+    font-weight: 600;
+    color: var(--gold-deep);
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.6px;
+  }
+  tr:last-child td { border-bottom: none; }
+  .callout {
+    background: rgba(122, 31, 31, 0.06);
+    border: 1px solid rgba(122, 31, 31, 0.25);
+    border-radius: 4px;
+    padding: 12px 16px;
+    margin: 14px 0;
+    font-size: 14px;
+  }
+  .callout strong { color: var(--blood); }
+  .toc {
+    background: var(--parchment-soft);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 14px 20px;
+    margin-bottom: 30px;
+    box-shadow: var(--shadow);
+  }
+  .toc h4 { margin: 0 0 8px; }
+  .toc ol { margin: 0 0 0 20px; columns: 2; column-gap: 32px; }
+  .toc a { color: var(--gold-deep); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; color: var(--blood); }
+  .path {
+    font-family: "JetBrains Mono", "Consolas", monospace;
+    font-size: 13px;
+    color: var(--gold-deep);
+  }
+  hr.section {
+    border: none;
+    border-top: 1px solid var(--rule);
+    margin: 36px 0;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>Pending Tasks &mdash; The Archive</h1>
+  <div class="sub">Current understanding from the <code>system-applications</code> branch &middot; 2026-05-27</div>
+  <div class="meta">
+    <span class="badge gold">live-content bridge</span>
+    <span class="badge gold">article schema</span>
+    <span class="badge gold">scaling follow-ups</span>
+    <span class="badge muted">races + backgrounds</span>
+    <span class="badge muted">systems overview</span>
+  </div>
+</header>
+
+<div class="toc">
+  <h4>Contents</h4>
+  <ol>
+    <li><a href="#tldr">TL;DR</a></li>
+    <li><a href="#current-branch">Current branch scope: <code>system-applications</code></a></li>
+    <li><a href="#bridge-future">Live-content bridge &mdash; Phases 3-5 (later)</a></li>
+    <li><a href="#races-bg">Races + Backgrounds full implementation</a></li>
+    <li><a href="#scaling-followups">Scaling columns follow-ups</a></li>
+    <li><a href="#itembumpuses">ItemBumpUses follow-ups</a></li>
+    <li><a href="#systems-page">Systems overview page</a></li>
+    <li><a href="#doc-hygiene">Documentation hygiene</a></li>
+    <li><a href="#constraints">Non-negotiable constraints</a></li>
+  </ol>
+</div>
+
+<h2 id="tldr">TL;DR</h2>
+
+<p>
+  The Firestore &rarr; D1 migration is <strong>done</strong>; the app runs on Cloudflare Pages + D1 + R2 with Firebase Auth as the only Firebase surface left. The remaining work splits cleanly into three buckets:
+</p>
+
+<ul>
+  <li><strong>Live-content bridge</strong> &mdash; multi-phase architecture to turn Foundry from a static content importer into a live viewer of canonical Dauligor content. Phase 1 foundation shipped 2026-05-27 (<code>2b7dea4</code>). Phases 1.5 + article-schema + Phase 2 are the <em>active</em> scope of this branch.</li>
+  <li><strong>Content-type completion</strong> &mdash; Races and Backgrounds are placeholder scaffolds with no DB tables, no importers, no exports. Big lift, scoped separately.</li>
+  <li><strong>Tail-end cleanup on the advancements-outside-classes track</strong> &mdash; the Phase B / C work that mostly shipped on <code>feat/scaling-non-class-owners</code> has a handful of follow-ups (feat-authored bumps in server export, items as bump authors, module-side consumers, stale-doc sweep).</li>
+</ul>
+
+<p>
+  Plus two minor pieces: a long-pending "Systems overview" page (read-only doc UI) and the standing doc-hygiene queue from the documentation guardian's audit (stale schemas dir, agent-memory consolidation, etc.).
+</p>
+
+<hr class="section">
+
+<h2 id="current-branch">Current branch scope: <code>system-applications</code></h2>
+
+<p>
+  Three pieces in strict order. Phase 2 is gated on the article revamp; the article revamp is independent of Phase 1.5 but both should land before Phase 2 begins.
+</p>
+
+<div class="card priority-now">
+  <h3>1. Phase 1.5 &mdash; hash-on-upsert wiring</h3>
+  <div class="meta-row">
+    <span class="badge blood">Active</span>
+    <span class="badge muted">no remote-D1 dependency</span>
+  </div>
+  <p>
+    Phase 1 added a <code>content_hash TEXT</code> column to spells / feats / items / classes / subclasses / features / unique_option_groups via migration <code>20260527-1420_content_hash_columns.sql</code>. Every existing row's <code>content_hash</code> is currently <strong>NULL</strong>.
+  </p>
+  <p>What needs to happen:</p>
+  <ul>
+    <li>Add a SHA-256 compute hook to <span class="path">src/lib/d1.ts</span> <code>upsertDocument</code> (or to per-entity upsert helpers in <span class="path">src/lib/compendium.ts</span>). Recipe is in the handoff: canonical-key-ordered JSON of an explicit content-field allowlist (<code>name, description, activities, effects, advancements, ...</code>), hashed and persisted.</li>
+    <li>Mirror the hook in <span class="path">api/_lib/d1-internal.ts</span> for server-side upsert paths.</li>
+    <li>One-shot backfill script (new: <span class="path">scripts/backfill-content-hashes.mjs</span>) that walks every existing row, computes the hash, writes it back.</li>
+  </ul>
+  <p>
+    Phase 4 update-detection consumes this column &mdash; it's how the module's batch-status endpoint detects "this Fireball on the actor was authored against a stale source version."
+  </p>
+</div>
+
+<div class="card priority-now">
+  <h3>2. Article system unification &mdash; blocks Phase 2</h3>
+  <div class="meta-row">
+    <span class="badge blood">Active</span>
+    <span class="badge gold">migrations required</span>
+  </div>
+  <p>
+    <code>lore_articles</code> is the odd one out across content tables. Every other content table uses <code>(identifier, source_id)</code> as identity; <code>lore_articles</code> uses <code>slug + parent_id</code> (hierarchy-based). That works for the existing wiki but breaks three things needed by Phase 2:
+  </p>
+  <ul>
+    <li><strong><code>@article[slug]</code> references</strong> have no namespacing &mdash; two campaigns shipping articles with the same name collide.</li>
+    <li><strong>System pages</strong> (parent + glossary children) need addressable child identifiers that aren't just the parent's row id.</li>
+    <li><strong>Foundry-side <code>DauligorViewer</code></strong> needs stable deep-link URLs.</li>
+  </ul>
+  <p>Recommended path:</p>
+  <ol>
+    <li>Migration: <code>ALTER TABLE lore_articles ADD COLUMN identifier TEXT NOT NULL DEFAULT ''</code>, backfill from <code>slug</code>.</li>
+    <li>Migration: <code>ALTER TABLE lore_articles ADD COLUMN source_id TEXT REFERENCES sources(id)</code>.</li>
+    <li>After de-dup, migration: <code>UNIQUE(COALESCE(source_id, ''), identifier)</code>.</li>
+    <li>Add <code>content_hash TEXT</code> (matches the Phase 1 pattern).</li>
+    <li>Update <span class="path">src/pages/wiki/Wiki.tsx</span> + <span class="path">LoreArticle.tsx</span> + <span class="path">LoreEditor.tsx</span> to route by identifier instead of slug.</li>
+    <li>Update <span class="path">src/lib/bbcode.ts</span> <code>[article=&hellip;]</code> / <code>@article[&hellip;]</code> resolver to compile to identifier-based hrefs.</li>
+  </ol>
+</div>
+
+<div class="card priority-next">
+  <h3>3. Phase 2 &mdash; read-only live viewer</h3>
+  <div class="meta-row">
+    <span class="badge gold">Gated on #2</span>
+    <span class="badge gold">module + app</span>
+  </div>
+  <p>The first time Foundry sees Dauligor reference-link content live.</p>
+  <p>App side:</p>
+  <ul>
+    <li>New endpoints in <span class="path">functions/api/module/[[path]].ts</span>:
+      <ul>
+        <li><code>GET /api/module/&lt;source&gt;/articles/&lt;slug&gt;</code> &mdash; full HTML (server-side BBCode &rarr; HTML)</li>
+        <li><code>GET /api/module/&lt;source&gt;/articles/&lt;slug&gt;/summary</code> &mdash; short HTML for hover tooltips</li>
+        <li><code>GET /api/module/&lt;source&gt;/system-pages/&lt;system&gt;/&lt;key&gt;</code></li>
+      </ul>
+    </li>
+    <li>New <span class="path">api/_lib/_articleExport.ts</span> + <span class="path">_systemPageExport.ts</span>.</li>
+    <li>New "system page" article type on the app side &mdash; parent article + child glossary entries, addressable by slug. Mirrors dnd5e's Conditions / Rules journal structure. New files: <span class="path">SystemPagesList.tsx</span>, <span class="path">SystemPageEditor.tsx</span>, <span class="path">SystemPageGlossary.tsx</span>.</li>
+  </ul>
+  <p>Module side:</p>
+  <ul>
+    <li>New <code>DauligorViewer</code> ApplicationV2 class (<span class="path">module/dauligor-pairing/scripts/dauligor-viewer.js</span>) &mdash; opens when a <code>&lt;a class="dauligor-link"&gt;</code> is clicked, fetches HTML, renders in a Foundry window.</li>
+    <li>Custom enricher registration via <code>CONFIG.TextEditor.enrichers.push(&hellip;)</code> for <code>@article[slug]</code>, <code>@condition[key]</code>, <code>@rule[key]</code>, etc. (New directory: <span class="path">scripts/enrichers/</span>.) <strong>Do not</strong> override <code>TextEditor.enrichHTML</code> &mdash; that breaks every other module.</li>
+    <li>Hover tooltips populated via <code>data-tooltip-html</code> from lazy <code>/summary</code> fetches.</li>
+    <li>World-local cache via Foundry world <code>setFlag</code>, keyed by <code>kind/source/key/hash</code>. Offline reads fall through to cache.</li>
+  </ul>
+</div>
+
+<hr class="section">
+
+<h2 id="bridge-future">Live-content bridge &mdash; Phases 3-5 (later)</h2>
+
+<p>Out of scope for this branch but worth knowing the trajectory.</p>
+
+<table>
+  <thead>
+    <tr><th style="width:120px">Phase</th><th>Purpose</th><th>Depends on</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Phase 3</strong><br><span class="badge muted">drag-construct</span></td>
+      <td>Pre-fetch full Foundry-shape JSON on hover; <code>dragstart</code> emits a real <code>{ type: "Item", data: &lt;converted&gt; }</code>; Foundry's drop handler does the rest. Sentinel fallback for cache misses, resolved async via <code>preCreateItem</code>. Reuses batch-import conversion code from <span class="path">class-import-service.js</span>.</td>
+      <td>Phase 1's deterministic Foundry-id helper, Phase 1.5's hashes</td>
+    </tr>
+    <tr>
+      <td><strong>Phase 4</strong><br><span class="badge muted">update detection</span></td>
+      <td>Batch freshness API <code>POST /api/module/&lt;source&gt;/batch-status</code> takes <code>[{ sourceId, knownHash }]</code> and returns staleness. Glow icon on stale item sheets; diff modal lets player opt-in to re-fetch or stamp the current hash to silence the glow until next change.</td>
+      <td>Phase 1.5's hashes being populated everywhere</td>
+    </tr>
+    <tr>
+      <td><strong>Phase 5</strong><br><span class="badge muted">hardening</span></td>
+      <td>"Bake to world" snapshot button for offline play; auth model audit (currently public reads suffice); architecture doc at <span class="path">docs/architecture/live-content-bridge.md</span>.</td>
+      <td>Phases 2-4 stable</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr class="section">
+
+<h2 id="races-bg">Races + Backgrounds full implementation</h2>
+
+<div class="card priority-later">
+  <div class="meta-row">
+    <span class="badge muted">Not started</span>
+    <span class="badge muted">scaffolding only</span>
+  </div>
+  <p>
+    The compendium browser shows Race / Background tiles and there are editor wrappers at <span class="path">src/pages/compendium/RaceEditor.tsx</span> / <span class="path">BackgroundEditor.tsx</span>, but they're scaffolding only. <strong>No DB tables. No importers. No exports.</strong>
+  </p>
+  <p>
+    Today the feat exporter already covers races + backgrounds (commit <code>10fa13c</code>) &mdash; features authored as <code>feat_type='race'</code> / <code>'background'</code> flow through the feat path. <strong>The new tables must either coexist with that path, or the feat-table approach must be retired explicitly.</strong> The decision needs to be made and documented before implementation starts.
+  </p>
+  <p>Scope when picked up:</p>
+  <ul>
+    <li><strong>DB</strong>: <code>CREATE TABLE races</code> + <code>CREATE TABLE backgrounds</code> migrations with the standard entity-table fields (<code>id, name, identifier, source_id, description, image_url, tags, activities, effects, advancements, content_hash</code>) plus type-specific fields. Apply composite <code>UNIQUE(COALESCE(source_id, ''), identifier)</code>.</li>
+    <li><strong>Server export</strong>: new <span class="path">api/_lib/_raceExport.ts</span> + <span class="path">_backgroundExport.ts</span>; module dispatcher routes <code>/races/&lt;dbId&gt;.json</code> + <code>/backgrounds/&lt;dbId&gt;.json</code>.</li>
+    <li><strong>Module importer</strong>: drop <code>type: "race"</code> / <code>type: "background"</code> Foundry items; race needs subrace handling; background needs the standard 5e starting-feature pattern.</li>
+    <li><strong>Editors</strong>: type-specific fields (race: size, speed, languages, traits; background: skill/tool profs, equipment, feature) layered on top of the existing wrappers. Share <code>AdvancementManager</code> as Phase B groundwork already supports owner kind <code>'race'</code> / <code>'background'</code>.</li>
+    <li><strong>Foundry contracts</strong>: <span class="path">module/dauligor-pairing/docs/race-import-contract.md</span> + <span class="path">background-import-contract.md</span>, templated from the feat contract.</li>
+  </ul>
+</div>
+
+<hr class="section">
+
+<h2 id="scaling-followups">Scaling columns for non-class owners &mdash; follow-ups</h2>
+
+<p>
+  First slices shipped on <code>feat/scaling-non-class-owners</code> (<code>f1e4f6b</code> &hellip; <code>10fa13c</code>). What's still open:
+</p>
+
+<div class="card priority-later">
+  <h3>Phase B.2 &mdash; Item Foundry export endpoint, module side</h3>
+  <p>App side shipped (<span class="path">api/_lib/_itemExport.ts</span>, <code>/api/module/items/&lt;dbId&gt;.json</code>, ScaleValue advancement synthesis from <code>scaling_columns</code> rows). <strong>Open</strong>: module-side item importer that consumes the endpoint. Pattern is the existing feat importer.</p>
+  <p>Also open: <span class="path">item-import-contract.md</span> update to acknowledge advancements as a valid field (owner-gated by <code>dauligor-guardian</code>).</p>
+</div>
+
+<div class="card priority-later">
+  <h3>Phase B.4 &mdash; stale module-doc sweep</h3>
+  <p>Three core contract docs got owner-scope clarifications in May 2026. Remaining: eight other docs in the module-doc corpus still use class-only language for scaling. Catalog at <span class="path">docs/followups-advancements-outside-classes.md &sect; 1.4</span>. Low priority.</p>
+</div>
+
+<hr class="section">
+
+<h2 id="itembumpuses">ItemBumpUses follow-ups</h2>
+
+<div class="card priority-later">
+  <div class="meta-row">
+    <span class="badge leaf">v1 shipped</span>
+    <span class="badge muted">tail-end</span>
+  </div>
+  <p>
+    A new advancement type that lets a feat or item upgrade an existing feature on a character (bumping <code>uses.max</code> is the first mode). v1 end-to-end shipped on <code>feat/itembumpuses-advancement</code> &mdash; authoring + builder runtime + Foundry actor export.
+  </p>
+  <p>Open follow-ups (cataloged in <span class="path">docs/followups-advancements-outside-classes.md</span>):</p>
+  <ul>
+    <li>Feat-authored bumps in server export (today the runtime resolves them; the actor export path covers them, but feat &harr; feat composition needs verification).</li>
+    <li>Items as bump authors in the character runtime (currently feats are the primary authors).</li>
+    <li>Module-side consumers / audit-trail surfacing using the <code>flags['dauligor-pairing'].itemBumpUses</code> trail already emitted on actor export.</li>
+    <li>Future advancement modes beyond <code>uses.max</code> bumping.</li>
+  </ul>
+</div>
+
+<hr class="section">
+
+<h2 id="systems-page">Systems overview page</h2>
+
+<div class="card priority-parked">
+  <div class="meta-row">
+    <span class="badge leaf">Backlog</span>
+    <span class="badge muted">created 2026-05-19</span>
+  </div>
+  <p>
+    A first-class <code>/systems</code> or <code>/docs</code> page that surfaces a curated, modular list of the major systems the app exposes: Worlds, Permissions / Content Proposals, Tags + Filters, Spell Rules, Sources, Class Spell Lists, Modular Options, Compendium, Lore Wiki, Foundry Export, etc.
+  </p>
+  <p>Each section is independently authored and linkable, stating what the system does, its entry-point pages, its permission model, and links to the canonical spec under <span class="path">docs/features/</span>. The natural home for embedded "what's coming" callouts so the roadmap can become an index and the Systems page does the rendered tour.</p>
+  <p>Not started. Owner: TBD.</p>
+</div>
+
+<hr class="section">
+
+<h2 id="doc-hygiene">Documentation hygiene</h2>
+
+<p>From the documentation guardian's audit, the standing cleanup queue:</p>
+
+<table>
+  <thead><tr><th>Priority</th><th>Item</th><th>Action</th></tr></thead>
+  <tbody>
+    <tr><td>High</td><td><code>schemas/</code> directory</td><td>All 4 files use outdated Firestore field names. Superseded by <span class="path">docs/database/structure/</span>. Migrate unique content, delete directory.</td></tr>
+    <tr><td>High</td><td><code>migration-firebase-side/</code></td><td>28 historical migration files, many 0 KB. Delete entire directory.</td></tr>
+    <tr><td>High</td><td><code>docs/agent-memory.md</code> (65 KB)</td><td>Accumulated AI session log, not a reference doc. Extract any permanent architectural decisions into canonical docs, then delete.</td></tr>
+    <tr><td>Medium</td><td><code>docs/foundry-spell-import-research.md</code></td><td>Verify whether superseded by <span class="path">module/dauligor-pairing/docs/spell-import-contract.md</span>; delete if so.</td></tr>
+    <tr><td>Medium</td><td><code>docs/foundry-item-activity-effects-authoring-plan.md</code></td><td>Planning artifact. Verify the work shipped; delete if so.</td></tr>
+    <tr><td>Medium</td><td><code>module/dauligor-pairing/notes-for-app-team/</code></td><td>Each correction note should be actioned and retired.</td></tr>
+    <tr><td>Medium</td><td><code>docs/database-memory.md</code></td><td>Cross-check against <span class="path">docs/database/structure/</span>; merge unique content, delete if redundant.</td></tr>
+    <tr><td>Low</td><td><code>docs/handoff-foundry-alignment-2026-05-25.md</code></td><td>Superseded by <code>handoff-compendium-shell-2026-05-25.md</code> per its own header. Safe to delete &mdash; currently sitting untracked in the working tree.</td></tr>
+  </tbody>
+</table>
+
+<hr class="section">
+
+<h2 id="constraints">Non-negotiable constraints</h2>
+
+<p>From <code>AGENTS.md</code> &mdash; these gate every piece of work above.</p>
+
+<ul>
+  <li><strong>No Firestore imports.</strong> The database is gone. Use the <span class="path">src/lib/d1.ts</span> helpers exclusively.</li>
+  <li><strong>No <code>INSERT OR REPLACE</code>.</strong> D1 enforces <code>PRAGMA foreign_keys = ON</code> by default; <code>INSERT OR REPLACE</code> resolves PK conflicts by deleting + reinserting, which fires <code>ON DELETE CASCADE</code> on FK children. Documented data-loss incident. Use <code>ON CONFLICT(id) DO UPDATE</code>.</li>
+  <li><strong>No backwards-compat dual reads.</strong> When schema changes, update sources to fit the new shape &mdash; don't leave <code>row.snake_case ?? row.camelCase</code> readers.</li>
+  <li><strong><code>queryD1</code> JSON column passthrough.</strong> Inline JSON-column remaps must do <code>typeof X === 'string' ? JSON.parse(X) : (X ?? &lt;default&gt;)</code> so already-parsed values pass through.</li>
+  <li><strong>Drift-managed sibling pairs.</strong> Changes to <span class="path">src/lib/X.ts</span> for <code>classExport</code>, <code>classProgression</code>, <code>referenceSyntax</code>, <code>requirements</code> must also land in <span class="path">api/_lib/_X.ts</span>.</li>
+  <li><strong>D1 migrations: local first; remote only with explicit per-migration permission</strong> in the current conversation. Earlier "go aheads" don't transfer.</li>
+  <li><strong>Drive the local dev stack via tool background-execution</strong> &mdash; don't ask the user to flip to a terminal.</li>
+</ul>
+
+<div class="callout">
+  <strong>Branch-switching gotcha:</strong> the harness has been observed to insert <code>git switch</code> calls mid-session. Chain branch-relevant ops in a single Bash call (<code>git switch X &amp;&amp; git rebase Y &amp;&amp; git push &hellip;</code>) and verify with <code>git branch --show-current</code> before committing.
+</div>
+
+</div>
+</body>
+</html>
