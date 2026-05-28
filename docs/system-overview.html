@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Archive — System Overview</title>
+<style>
+  :root {
+    --parchment: #f5f2e8;
+    --parchment-soft: #faf7ed;
+    --ink: #1a1a1a;
+    --ink-soft: #3a3a3a;
+    --muted: #6b6457;
+    --gold: #c5a059;
+    --gold-deep: #8a6d2f;
+    --blood: #7a1f1f;
+    --leaf: #355c3a;
+    --card: #fbf8ee;
+    --rule: #d8cfb8;
+    --code-bg: #2b2620;
+    --code-ink: #f0e9d2;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 10px rgba(0,0,0,0.04);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--parchment);
+    color: var(--ink);
+    font-family: "Inter", -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 40px 32px 80px;
+  }
+  header.hero {
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 24px;
+    margin-bottom: 32px;
+  }
+  header.hero .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    font-size: 11px;
+    color: var(--gold-deep);
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  header.hero h1 {
+    font-family: "Cormorant Garamond", "Georgia", serif;
+    font-weight: 600;
+    font-size: 46px;
+    line-height: 1.05;
+    margin: 0 0 10px;
+    color: var(--ink);
+  }
+  header.hero .tagline {
+    font-family: "Cormorant Garamond", "Georgia", serif;
+    font-style: italic;
+    font-size: 19px;
+    color: var(--muted);
+    margin: 0 0 14px;
+  }
+  header.hero .meta {
+    font-size: 13px;
+    color: var(--muted);
+  }
+  h2 {
+    font-family: "Cormorant Garamond", "Georgia", serif;
+    font-size: 30px;
+    font-weight: 600;
+    margin: 52px 0 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--gold);
+    color: var(--ink);
+  }
+  h3 {
+    font-family: "Cormorant Garamond", "Georgia", serif;
+    font-size: 22px;
+    font-weight: 600;
+    margin: 30px 0 8px;
+    color: var(--ink);
+  }
+  h4 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--gold-deep);
+    margin: 22px 0 6px;
+    font-weight: 700;
+  }
+  p { margin: 10px 0; }
+  ul, ol { margin: 10px 0 10px 24px; padding: 0; }
+  li { margin: 5px 0; }
+  code {
+    font-family: "JetBrains Mono", "Consolas", monospace;
+    font-size: 13px;
+    background: rgba(138, 109, 47, 0.12);
+    color: var(--ink);
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    padding: 16px 18px;
+    border-radius: 5px;
+    overflow-x: auto;
+    font-family: "JetBrains Mono", "Consolas", monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    box-shadow: var(--shadow);
+    margin: 16px 0;
+  }
+  pre code { background: transparent; color: inherit; padding: 0; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 16px 0;
+    background: var(--parchment-soft);
+    box-shadow: var(--shadow);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--rule);
+    font-size: 14px;
+    vertical-align: top;
+  }
+  th {
+    background: rgba(138, 109, 47, 0.10);
+    font-weight: 600;
+    color: var(--gold-deep);
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.6px;
+  }
+  tr:last-child td { border-bottom: none; }
+  .module-card {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-left: 4px solid var(--gold);
+    border-radius: 4px;
+    padding: 18px 22px;
+    margin: 16px 0;
+    box-shadow: var(--shadow);
+  }
+  .module-card h3 { margin-top: 0; }
+  .module-card .role-line {
+    font-size: 13px;
+    color: var(--muted);
+    font-style: italic;
+    margin: 4px 0 12px;
+  }
+  .callout {
+    background: rgba(122, 31, 31, 0.06);
+    border: 1px solid rgba(122, 31, 31, 0.25);
+    border-radius: 4px;
+    padding: 14px 18px;
+    margin: 16px 0;
+    font-size: 14px;
+  }
+  .callout strong { color: var(--blood); }
+  .note {
+    background: rgba(53, 92, 58, 0.06);
+    border: 1px solid rgba(53, 92, 58, 0.25);
+    border-radius: 4px;
+    padding: 14px 18px;
+    margin: 16px 0;
+    font-size: 14px;
+  }
+  .note strong { color: var(--leaf); }
+  .toc {
+    background: var(--parchment-soft);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 16px 22px;
+    margin-bottom: 36px;
+    box-shadow: var(--shadow);
+  }
+  .toc h4 { margin: 0 0 10px; }
+  .toc ol { margin: 0 0 0 22px; columns: 2; column-gap: 36px; }
+  .toc a { color: var(--gold-deep); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; color: var(--blood); }
+  .path {
+    font-family: "JetBrains Mono", "Consolas", monospace;
+    font-size: 13px;
+    color: var(--gold-deep);
+  }
+  hr.section {
+    border: none;
+    border-top: 1px solid var(--rule);
+    margin: 40px 0;
+  }
+  .pill {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 99px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    background: rgba(138, 109, 47, 0.15);
+    color: var(--gold-deep);
+    margin-right: 4px;
+  }
+  .pill.live { background: rgba(53, 92, 58, 0.15); color: var(--leaf); }
+  .pill.flight { background: rgba(197, 160, 89, 0.25); color: var(--gold-deep); }
+  .pill.planned { background: rgba(122, 31, 31, 0.10); color: var(--blood); }
+  .flow {
+    background: var(--parchment-soft);
+    border: 1px solid var(--rule);
+    border-radius: 5px;
+    padding: 18px 22px;
+    margin: 16px 0;
+    overflow-x: auto;
+  }
+  .flow pre {
+    background: transparent;
+    color: var(--ink-soft);
+    padding: 0;
+    box-shadow: none;
+    margin: 0;
+    font-size: 13px;
+  }
+  .companion {
+    font-size: 13px;
+    color: var(--muted);
+    font-style: italic;
+    margin-top: 6px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="eyebrow">System Overview</div>
+  <h1>The Archive</h1>
+  <p class="tagline">A Dungeon Master's workspace, dressed as a tome.</p>
+  <div class="meta">
+    Last updated: 2026-05-27 &middot; Living document &mdash; updated as the system evolves.
+    Companion: <a href="_drafts/pending-tasks-2026-05-27.html"><code>docs/_drafts/pending-tasks-2026-05-27.html</code></a> (forward roadmap).
+  </div>
+</header>
+
+<div class="toc">
+  <h4>Contents</h4>
+  <ol>
+    <li><a href="#what-it-is">What The Archive Is</a></li>
+    <li><a href="#modules">The Five Modules</a></li>
+    <li><a href="#runtime">Runtime Topology</a></li>
+    <li><a href="#data">Data &amp; Storage</a></li>
+    <li><a href="#api">API Surface</a></li>
+    <li><a href="#rbac">Permissions &amp; Roles</a></li>
+    <li><a href="#content">Rich Content &amp; References</a></li>
+    <li><a href="#foundry">Foundry Pairing</a></li>
+    <li><a href="#coordination">How Work Gets Coordinated</a></li>
+    <li><a href="#filemap">Where Each Concern Lives</a></li>
+    <li><a href="#status">System Status Snapshot</a></li>
+  </ol>
+</div>
+
+<h2 id="what-it-is">What The Archive Is</h2>
+
+<p>
+  The Archive is a campaign-management web app for Dungeon Masters running D&amp;D 5e. It
+  is two things at once: a <strong>technical dashboard</strong> for the dense reference work
+  that a long campaign accrues &mdash; lore, NPCs, custom rules, character sheets, spell
+  scaling tables &mdash; and an <strong>immersive workspace</strong> that dresses all of that
+  utility in a parchment-and-gold "Sword &amp; Sorcery" aesthetic so the DM stays in the world
+  while they prepare for it.
+</p>
+
+<p>
+  The Archive does not try to replace the table. It tries to be the room behind the
+  screen &mdash; the binder, the index card box, the wall of notes &mdash; while a virtual
+  tabletop like FoundryVTT handles play. To that end, a companion Foundry module pulls
+  Dauligor's canonical content into the table in real time.
+</p>
+
+<p>
+  The system is live in production at <a href="https://www.dauligor.com">www.dauligor.com</a>.
+</p>
+
+<hr class="section">
+
+<h2 id="modules">The Five Modules</h2>
+
+<p>Each module is a separate slice of the DM's workflow. They share auth, theme, and the
+underlying data plane, but feature work in one rarely needs to touch another.</p>
+
+<div class="module-card">
+  <h3>World Engine <span class="pill live">Live</span></h3>
+  <div class="role-line">The lore wiki. Where the campaign world is written down.</div>
+  <p>
+    Hierarchical articles &mdash; regions contain cities contain factions contain people. Each
+    article supports inline <strong>DM-only secrets</strong> (<code>[secret]&hellip;[/secret]</code>
+    blocks) that only staff can see, plus per-article notes that never reach players. Articles
+    can be drafts or published, scoped to specific campaigns or eras, and cross-linked
+    via reference syntax so a person's article auto-mentions every place they appear.
+  </p>
+  <p>
+    Surface: <code>/wiki</code>. Backing data: <code>lore_articles</code> + half a dozen
+    junction tables for secrets, metadata, and cross-links.
+  </p>
+</div>
+
+<div class="module-card">
+  <h3>Rules Foundry <span class="pill live">Live</span></h3>
+  <div class="role-line">The mechanical content library &mdash; classes, spells, feats, items, the works.</div>
+  <p>
+    A full mechanical compendium with first-class editors for every content type a DM might
+    want to author or modify: <strong>classes</strong> (with subclasses, features, and
+    advancements), <strong>spells</strong>, <strong>feats</strong>, <strong>items</strong>,
+    <strong>facilities</strong>, plus the supporting machinery &mdash; <strong>scaling
+    columns</strong> (cantrip scaling, spell-point progression, spells-known curves),
+    <strong>unique option groups</strong>, <strong>tags</strong> and tag groups for
+    filtering, and a <strong>requirements tree</strong> for prerequisites.
+  </p>
+  <p>
+    The compendium is also where the <strong>activity editor</strong> and <strong>active
+    effect editor</strong> live &mdash; shared components used by every entity that can
+    "do something" or "apply a status."
+  </p>
+  <p>
+    Surface: <code>/compendium/*</code>. Backing data: roughly twenty SQL tables, each
+    documented under <code>docs/database/structure/</code>.
+  </p>
+</div>
+
+<div class="module-card">
+  <h3>Character Workspace <span class="pill live">Live</span></h3>
+  <div class="role-line">The character builder + sheet, with Foundry-compatible export.</div>
+  <p>
+    A full character builder that walks the player through class selection, level-up
+    advancements, ability scores, equipment, and spell selection &mdash; using the same
+    progression engine that drives the compendium. The companion <strong>character sheet</strong>
+    handles play: HP bars, mana, hit dice, ability plaques, skill proficiency dots,
+    saving-throw trackers, portrait integration.
+  </p>
+  <p>
+    A character can be exported to FoundryVTT as a <code>dauligor.actor-bundle.v1</code>
+    payload &mdash; advancements baked into Foundry's native format, ItemBumpUses bumps
+    folded into <code>system.uses.max</code>, audit-trail flags so the module side knows
+    where each piece came from.
+  </p>
+  <p>
+    Surface: <code>/characters</code>. Backing data: <code>characters</code> + ~8
+    <code>character_*</code> child tables linked by FK cascade.
+  </p>
+</div>
+
+<div class="module-card">
+  <h3>Administrative Hub <span class="pill live">Live</span></h3>
+  <div class="role-line">User management, campaign control, the image library, system catalogs.</div>
+  <p>
+    The DM's control room. RBAC user CRUD with password reset and bootstrapping;
+    campaign + era management (with members and roles); a centrally managed image library
+    (R2-backed, with WebP auto-conversion and reference scanning); system catalogs for
+    skills, tools, weapons, armor, languages, damage types, and conditions; and the
+    <strong>content proposal queue</strong> where Librarians and trusted users can submit
+    changes for staff review without direct write access.
+  </p>
+  <p>
+    Surface: <code>/admin/*</code>. Backing data: <code>users</code>, <code>campaigns</code>,
+    <code>campaign_members</code>, <code>eras</code>, <code>image_metadata</code>,
+    <code>user_permissions</code>, <code>pending_revisions</code>.
+  </p>
+</div>
+
+<div class="module-card">
+  <h3>Foundry Pairing Module <span class="pill live">Live</span> <span class="pill flight">In Flight</span></h3>
+  <div class="role-line">The companion FoundryVTT module that brings Dauligor into the table.</div>
+  <p>
+    A companion module for FoundryVTT v13 + dnd5e 5.x. It currently <strong>imports</strong>
+    Dauligor content into Foundry as native compendium documents &mdash; classes, spells,
+    feats, items, characters &mdash; consuming the app's <code>/api/module/*</code> endpoints.
+    It also adds a Dauligor-flavoured alternate character sheet, a Prepare Spells manager,
+    and per-class spell catalogs that mirror the compendium.
+  </p>
+  <p>
+    <strong>In flight:</strong> the module is being upgraded from a static importer into
+    a <strong>live viewer</strong>. After this work lands, Foundry windows will fetch
+    canonical content from <code>/api/module/*</code> on demand and cache per-world &mdash;
+    eliminating the "stale Fireball" problem that comes with baking content into a
+    compendium pack. See the <a href="_drafts/pending-tasks-2026-05-27.html">pending-tasks
+    roadmap</a> for status.
+  </p>
+  <p>
+    Source: <code>module/dauligor-pairing/</code>.
+  </p>
+</div>
+
+<hr class="section">
+
+<h2 id="runtime">Runtime Topology</h2>
+
+<p>
+  Four layers, one direction. Every request originates in the browser, traverses an
+  authenticated proxy, and ends at the data plane via a stateless Worker.
+</p>
+
+<div class="flow">
+<pre>Browser  (React SPA, Firebase Auth SDK for JWT issuance)
+   │
+   │  Authorization: Bearer &lt;Firebase ID token&gt;
+   ▼
+Pages Functions (production)  |  Express server.ts (local dev)
+   │  • Verifies JWT via jose+JWKS  (no Firebase Admin SDK)
+   │  • Loads role from D1
+   │  • Gates request by table + action
+   │
+   │  Authorization: Bearer &lt;API_SECRET&gt;
+   ▼
+Cloudflare Worker  (worker/index.js — stateless, two bindings)
+   │
+   │  DB binding → D1     BUCKET binding → R2
+   ▼
+Cloudflare D1 (SQL)  +  Cloudflare R2 (binary)</pre>
+</div>
+
+<p>
+  Local development uses the same code paths via an Express server (<code>server.ts</code>)
+  that mounts Vite for the SPA and provides Pages-equivalent route handlers. The only
+  divergence is <code>/api/module/*</code>, which is Pages-only &mdash; for local module
+  testing run <code>npx wrangler pages dev</code>.
+</p>
+
+<div class="callout">
+  <strong>The Worker is the trust boundary.</strong> It accepts only requests bearing the
+  shared <code>API_SECRET</code> and never sees a user JWT. User-level authentication and
+  RBAC enforcement live one layer up, in Pages Functions / Express. The Worker must
+  never be exposed to the public internet without the API_SECRET wall.
+</div>
+
+<h3>One Worker, two bindings</h3>
+
+<p>
+  Both D1 and R2 traffic go through the same Worker by deliberate choice: a single auth
+  surface, lower cold-start cost, and a single <code>wrangler dev</code> process for local
+  emulation of both bindings.
+</p>
+
+<hr class="section">
+
+<h2 id="data">Data &amp; Storage</h2>
+
+<p>
+  The Archive runs on <strong>Cloudflare D1</strong> for relational data and <strong>R2</strong>
+  for binary objects. <strong>Firebase Authentication</strong> sits alongside as the JWT
+  issuer for user accounts &mdash; tokens only, no data storage. Every read and write to
+  application data goes through D1.
+</p>
+
+<table>
+  <thead>
+    <tr><th>Layer</th><th>Technology</th><th>What lives there</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Relational data</td>
+      <td>Cloudflare D1 (<code>dauligor-db</code>)</td>
+      <td>Every entity: users, campaigns, lore, compendium, characters, proposals, system catalogs.</td>
+    </tr>
+    <tr>
+      <td>Binary objects</td>
+      <td>Cloudflare R2 (<code>dauligor-storage</code>, public at <code>images.dauligor.com</code>)</td>
+      <td>Article images, portraits, tokens, map tiles &mdash; auto-converted to WebP; metadata mirrored in <code>image_metadata</code>.</td>
+    </tr>
+    <tr>
+      <td>Auth tokens</td>
+      <td>Firebase Authentication</td>
+      <td>JWT issuance + admin user-management via Identity Toolkit REST.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  Schema changes go through timestamped migration files in <code>worker/migrations/</code>
+  (e.g. <code>20260527-1420_content_hash_columns.sql</code>). Migrations always apply to local
+  D1 first; remote D1 requires explicit per-migration permission &mdash; this is a one-way
+  door.
+</p>
+
+<hr class="section">
+
+<h2 id="api">API Surface</h2>
+
+<p>The application exposes its data through two patterns:</p>
+
+<h3>1. Per-route endpoints</h3>
+
+<p>
+  The preferred shape for anything sensitive. Each route is a Pages Function with its own
+  SQL, its own gate, and its own contract.
+</p>
+
+<table>
+  <thead>
+    <tr><th>Route</th><th>Purpose</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>/api/me</code></td><td>Resolve the signed-in user's profile, auto-create on first sign-in, auto-promote bootstrap admins.</td></tr>
+    <tr><td><code>/api/characters/[id]</code></td><td>Read / write / delete a character with all child tables in one batch.</td></tr>
+    <tr><td><code>/api/lore/articles/[id]</code></td><td>Read / write articles. <code>dm_notes</code> stripped for non-staff readers.</td></tr>
+    <tr><td><code>/api/campaigns/...</code></td><td>Campaigns, members, era assignment.</td></tr>
+    <tr><td><code>/api/admin/*</code></td><td>Admin-only operations: user CRUD, character admin view, era management.</td></tr>
+    <tr><td><code>/api/module/[[path]]</code></td><td>The Foundry module's data surface &mdash; sources catalog, class bundles, spell payloads, tag catalog. (Pages-only.)</td></tr>
+    <tr><td><code>/api/r2/[action]</code></td><td>Single dispatcher for all seven R2 operations (upload, list, delete, rename, move-folder, scan-references, rewrite-references).</td></tr>
+  </tbody>
+</table>
+
+<h3>2. Generic D1 query proxy</h3>
+
+<p>
+  <code>/api/d1/query</code> is a catch-all that still handles most compendium reads and
+  writes. Its gate is <strong>table-aware</strong>: writes to sensitive tables
+  (<code>users</code>, <code>characters</code>, <code>lore_*</code>, <code>campaigns</code>,
+  etc.) are refused with a pointer at the proper per-route endpoint. New endpoints should
+  prefer pattern 1; the proxy is defense-in-depth, not the primary boundary.
+</p>
+
+<hr class="section">
+
+<h2 id="rbac">Permissions &amp; Roles</h2>
+
+<p>
+  Every user has exactly one of five base roles. Some capabilities don't fit neatly on
+  that ladder &mdash; those are <strong>additive permissions</strong> with optional scope.
+</p>
+
+<table>
+  <thead><tr><th>Role</th><th>UI Label</th><th>What they can do</th></tr></thead>
+  <tbody>
+    <tr><td><code>admin</code></td><td>GM</td><td>Everything. CRUD on all tables, user + campaign management, admin endpoints.</td></tr>
+    <tr><td><code>co-dm</code></td><td>Co-DM</td><td>Same as admin for lore + assigned campaigns. Not admin endpoints.</td></tr>
+    <tr><td><code>lore-writer</code></td><td>Librarian</td><td>CRUD on lore (drafts + published). Not characters, not campaigns.</td></tr>
+    <tr><td><code>trusted-player</code></td><td>Player+</td><td>Same as <code>user</code>, with extended visibility on certain DM-tagged content.</td></tr>
+    <tr><td><code>user</code></td><td>Adventurer</td><td>Read-only on published lore + revealed secrets. Own characters.</td></tr>
+  </tbody>
+</table>
+
+<p>
+  Additive permissions live in the <code>user_permissions</code> table. The first one is
+  <code>content-creator</code>: holders can submit proposals for tags, spell rules, and
+  spell lists into a review queue (<code>pending_revisions</code>), without write access
+  to the underlying tables. Scope is JSON-narrowed by world, campaign, or era.
+</p>
+
+<h3>Enforcement happens at three layers</h3>
+
+<ol>
+  <li>
+    <strong>Server-side route guards</strong> &mdash; the only layer that actually keeps
+    anyone out. Helpers like <code>requireStaffAccess</code>,
+    <code>requireImageManagerAccess</code>, <code>requireAdminAccess</code>,
+    <code>requireCharacterAccess</code> verify the JWT, load the role from D1, and refuse
+    the request before any SQL runs. <code>requireCharacterAccess</code> returns
+    <code>404</code> rather than <code>403</code> when access is denied, so probes can't
+    enumerate character IDs.
+  </li>
+  <li>
+    <strong>Client-side <code>effectiveProfile</code></strong> &mdash; a UX layer. Pages
+    use it to hide Edit/Delete buttons, filter results to what a viewer is allowed to see,
+    and honor <strong>preview mode</strong> (admins viewing the app "as a player"). Always
+    prop-drilled, never contextual.
+  </li>
+  <li>
+    <strong>D1 CHECK constraints</strong> &mdash; an integrity layer. Catches stray writes
+    of bogus values (unknown roles, unknown permission keys). Not a security boundary.
+  </li>
+</ol>
+
+<div class="note">
+  <strong>Preview mode is UX only.</strong> The user's JWT still carries their real role,
+  so server endpoints don't change behaviour. It exists so admins can sanity-check what
+  a player sees, not as a security primitive.
+</div>
+
+<h3>Bootstrap admins</h3>
+
+<p>
+  Three hardcoded staff principals are forced to <code>role: admin</code> on every
+  <code>/api/me</code> load: <code>luapnaej101@gmail.com</code>,
+  <code>admin@archive.internal</code>, <code>gm@archive.internal</code>. The intent is
+  to survive a wiped <code>users</code> table &mdash; signing in as one of these
+  bootstraps the system back into administrability.
+</p>
+
+<hr class="section">
+
+<h2 id="content">Rich Content &amp; References</h2>
+
+<p>
+  The Archive uses a three-layer rich-text pipeline:
+</p>
+
+<ul>
+  <li><strong>BBCode</strong> is the storage format. Articles, descriptions, and notes are persisted as BBCode strings.</li>
+  <li><strong>TipTap</strong> is the visual editor. The editor converts BBCode &harr; rich text for the author.</li>
+  <li><strong>BBCodeRenderer</strong> is the display component. Reads BBCode and renders the visual representation.</li>
+</ul>
+
+<p>
+  Inside BBCode, <strong>reference syntax</strong> lets authors link mechanical content
+  symbolically rather than by ID. References are resolved at render time and at Foundry
+  export time:
+</p>
+
+<table>
+  <thead><tr><th>Reference</th><th>Resolves to</th></tr></thead>
+  <tbody>
+    <tr><td><code>@prof</code></td><td>The character's proficiency bonus.</td></tr>
+    <tr><td><code>@level</code></td><td>The character's class level.</td></tr>
+    <tr><td><code>@scale.&lt;class&gt;.&lt;id&gt;</code></td><td>A scaling table value for the current class at the current level.</td></tr>
+    <tr><td><code>@ability.&lt;key&gt;</code></td><td>An ability modifier (str, dex, con, int, wis, cha).</td></tr>
+    <tr><td><code>@article[&lt;slug&gt;]</code></td><td>A live link to a wiki article. <em>Phase 2 will resolve this in Foundry too.</em></td></tr>
+    <tr><td><code>@condition[&lt;key&gt;]</code> · <code>@rule[&lt;key&gt;]</code></td><td>Planned — system-page glossary entries. Phase 2 in flight.</td></tr>
+  </tbody>
+</table>
+
+<hr class="section">
+
+<h2 id="foundry">Foundry Pairing</h2>
+
+<p>
+  The Foundry module is a <strong>companion</strong>, not a standalone tool. It runs on
+  FoundryVTT v13 + dnd5e 5.x and is installed via an NTFS junction pointing at the repo's
+  <code>module/dauligor-pairing/</code> directory &mdash; so module changes ship by editing
+  the repo source, no copy step required.
+</p>
+
+<h3>Today: static importer</h3>
+
+<p>
+  The module currently consumes baked endpoint payloads (per-class bundles, per-spell
+  documents, the sources catalog) and creates real Foundry compendium documents from
+  them. This works but means a content edit on the app side doesn't propagate to existing
+  Foundry copies &mdash; the "stale Fireball" problem.
+</p>
+
+<h3>Tomorrow: live viewer</h3>
+
+<p>
+  The <strong>live-content bridge</strong> &mdash; the work this branch is doing &mdash;
+  flips the architecture. After Phase 2 lands, Foundry text containing
+  <code>@article[…]</code> or <code>@condition[…]</code> will be rewritten by a custom
+  enricher into clickable links, and clicking one opens a Foundry window that fetches
+  the current HTML from <code>/api/module/&lt;source&gt;/articles/&lt;slug&gt;</code>.
+  Per-world caching keeps the experience snappy and lets the table play offline. Drag-and-
+  drop for mechanical content still creates real Foundry documents, but the payload is
+  fetched live and tagged with a <code>sourceHash</code> so the module can detect when
+  its copy went stale.
+</p>
+
+<div class="callout">
+  <strong>Architectural rule for enrichers:</strong> register via
+  <code>CONFIG.TextEditor.enrichers.push(&hellip;)</code>. Never override
+  <code>TextEditor.enrichHTML</code> or any pipeline stage &mdash; that breaks dnd5e and
+  every other module installed in the same world.
+</div>
+
+<p>
+  Full module contracts live in <code>module/dauligor-pairing/docs/</code>; the master
+  index is <code>import-contract-index.md</code>.
+</p>
+
+<hr class="section">
+
+<h2 id="coordination">How Work Gets Coordinated</h2>
+
+<p>
+  The repo is worked by multiple agents and the DM in parallel. To avoid two branches
+  silently overwriting each other on shared files (the registry of mapping tables in
+  <code>compendium.ts</code>, the JSON-parse list in <code>d1.ts</code>, the route table
+  in <code>App.tsx</code>), the project uses a coordination folder:
+</p>
+
+<ul>
+  <li>
+    <strong><code>handoffs/BRANCH_REGISTRY.md</code></strong> &mdash; live registry of
+    every in-progress branch and the files it claims. Read before editing any shared file.
+  </li>
+  <li>
+    <strong><code>handoffs/&lt;branch&gt;/manifest.md</code></strong> &mdash; per-branch
+    declaration of primary (exclusive) and shared (append-only) files, plus open requests
+    to other branches.
+  </li>
+  <li>
+    <strong><code>handoffs/&lt;branch&gt;/YYYY-MM-DD-&lt;topic&gt;.md</code></strong>
+    &mdash; accumulating handoff documents that survive context resets and agent hand-overs.
+  </li>
+</ul>
+
+<p>
+  Migration files are timestamped (<code>YYYYMMDD-HHMM_*.sql</code>) post-<code>0018</code>
+  so two parallel agents can't collide on the same sequential number.
+</p>
+
+<hr class="section">
+
+<h2 id="filemap">Where Each Concern Lives</h2>
+
+<table>
+  <thead><tr><th>Concern</th><th>Path</th></tr></thead>
+  <tbody>
+    <tr><td>React SPA, pages, components</td><td><span class="path">src/</span></td></tr>
+    <tr><td>Shared client libraries (D1 client, exports, BBCode, references)</td><td><span class="path">src/lib/</span></td></tr>
+    <tr><td>Production HTTP handlers (Pages Functions)</td><td><span class="path">functions/api/**.ts</span></td></tr>
+    <tr><td>Server-shared helpers (JWT, proxies, drift-managed siblings)</td><td><span class="path">api/_lib/</span></td></tr>
+    <tr><td>Local dev Express server</td><td><span class="path">server.ts</span></td></tr>
+    <tr><td>Cloudflare Worker (D1/R2 gateway)</td><td><span class="path">worker/</span></td></tr>
+    <tr><td>D1 migrations</td><td><span class="path">worker/migrations/</span></td></tr>
+    <tr><td>Foundry module source</td><td><span class="path">module/dauligor-pairing/</span></td></tr>
+    <tr><td>Active app documentation</td><td><span class="path">docs/{architecture,features,platform,ui,database/structure}/</span></td></tr>
+    <tr><td>Module contracts</td><td><span class="path">module/dauligor-pairing/docs/</span></td></tr>
+    <tr><td>Branch coordination</td><td><span class="path">handoffs/</span></td></tr>
+    <tr><td>Working drafts &amp; forward roadmaps</td><td><span class="path">docs/_drafts/</span></td></tr>
+  </tbody>
+</table>
+
+<hr class="section">
+
+<h2 id="status">System Status Snapshot</h2>
+
+<p>As of 2026-05-27:</p>
+
+<table>
+  <thead><tr><th>Subsystem</th><th>Status</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>Firebase Auth exit</td><td><span class="pill planned">Planned</span></td><td>Two-stage exit plan exists; not started.</td></tr>
+    <tr><td>Compendium core (classes, spells, feats, items, scaling)</td><td><span class="pill live">Live</span></td><td>Full editors + Foundry export round-trip.</td></tr>
+    <tr><td>Content proposals</td><td><span class="pill live">Live</span></td><td>Shipped May 2026 (Phase 1 &rarr; 4.6 + cascade).</td></tr>
+    <tr><td>Spellbook manager (4-layer)</td><td><span class="pill live">Live</span></td><td>All 4 layers shipped; Foundry round-trip handed off to importer agent.</td></tr>
+    <tr><td>ItemBumpUses advancement v1</td><td><span class="pill live">Live</span></td><td>End-to-end: authoring + builder runtime + Foundry actor export.</td></tr>
+    <tr><td>Live-content bridge &mdash; Phase 1 foundation</td><td><span class="pill live">Live</span></td><td>Composite uniqueness, content_hash columns, deterministic Foundry _id helper.</td></tr>
+    <tr><td>BBCode audit + fixes</td><td><span class="pill flight">In Flight</span></td><td>Active branch scope. Specific defects being enumerated.</td></tr>
+    <tr><td>Cross-reference authoring</td><td><span class="pill flight">In Flight</span></td><td>Active branch scope. Add missing kinds (<code>item</code>, <code>article</code>, <code>feat</code>) + picker UI in editor toolbar.</td></tr>
+    <tr><td>Live-content bridge &mdash; Phase 1.5 (hash-on-upsert)</td><td><span class="pill planned">Planned</span></td><td>Up Next, after BBCode + cross-ref authoring land.</td></tr>
+    <tr><td>Article system unification</td><td><span class="pill planned">Planned</span></td><td>Up Next. Blocks Phase 2.</td></tr>
+    <tr><td>Live-content bridge &mdash; Phase 2 (live viewer)</td><td><span class="pill planned">Planned</span></td><td>Up Next. Gated on article unification.</td></tr>
+    <tr><td>Live-content bridge &mdash; Phases 3-5</td><td><span class="pill planned">Planned</span></td><td>Drag-construct, update detection, hardening.</td></tr>
+    <tr><td>Races + Backgrounds (full data layer)</td><td><span class="pill planned">Planned</span></td><td>Scaffolding only today; no DB tables, no importers.</td></tr>
+    <tr><td>Systems overview page (in-app)</td><td><span class="pill planned">Planned</span></td><td>An <code>/systems</code> page mirroring this doc.</td></tr>
+  </tbody>
+</table>
+
+<p class="companion">
+  Forward-looking detail on every "In Flight" and "Planned" item lives in
+  <a href="_drafts/pending-tasks-2026-05-27.html"><code>docs/_drafts/pending-tasks-2026-05-27.html</code></a>.
+</p>
+
+</div>
+</body>
+</html>

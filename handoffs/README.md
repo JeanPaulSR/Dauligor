@@ -10,6 +10,8 @@ Every in-progress branch has a folder named after it (slashes → hyphens, so `c
 
 Convention for files inside a branch folder:
 - `manifest.md` — declares the files this branch is touching + open requests to other branches
+- `current-functionality.md` — user-facing snapshot of what the area this branch touches does **today on main** (the "before")
+- `changes-being-made.md` — user-facing summary of what this branch will change once it merges (the "after"). See [Documentation sync to `main`](#documentation-sync-to-main-keep-every-branch-informed) below.
 - `YYYY-MM-DD-<topic>.md` — individual handoffs, named by date + topic
 
 When a branch lands on main, its handoff history doesn't have to be deleted — it stays as institutional memory. But the `manifest.md` should be removed (or the row removed from `BRANCH_REGISTRY.md`) so other branches know the files are free.
@@ -30,6 +32,33 @@ When a branch needs to touch a file owned by another active branch:
 6. **Requesting branch rebases** to pick up the change once it lands on the owning branch (or once both merge to main).
 
 The point is to avoid two branches editing the same file in non-mergeable ways, and to keep one source of truth for any file. The owning branch's edit is canonical; the requesting branch consumes the result.
+
+## Documentation sync to `main` (keep every branch informed)
+
+Documentation comes in two kinds, and they live in different places:
+
+- **User-facing updates + explanations** — what's currently true and what's changing,
+  written for a human to review. These live **inside each branch's handoff folder** as two
+  files:
+  - `current-functionality.md` — what the area this branch touches does today.
+  - `changes-being-made.md` — what this branch will change once it merges.
+- **Purely architectural docs** — human-reviewable references like the `docs/*.html`
+  overviews. These live in **`/docs`**.
+
+**Push documentation changes to `main` as you make them** — don't wait for the code to
+merge. Cherry-pick the doc/handoff commits onto `main` and rebase your branch. Because the
+coordination docs live on `main`, every other branch sees incoming changes the moment they
+pull/rebase, so nobody is blindsided by work landing from a sibling branch.
+
+> Keep doc changes in their **own commits** (separate from code) so they're clean to
+> cherry-pick. A commit that mixes docs and code can't be promoted to `main` without
+> dragging unfinished code along.
+
+**When a branch's code lands on `main`:** *promote* — fold the branch's
+`changes-being-made.md` content into the canonical current-state docs (the
+`current-functionality.md` snapshot and the relevant `/docs` architectural docs), then clear
+the now-stale `changes-being-made.md` entry. This keeps `main` an accurate, always-current
+picture of both *what is* and *what's coming*.
 
 ## Subfolder for `main/`
 

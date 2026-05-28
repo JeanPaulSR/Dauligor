@@ -1,9 +1,9 @@
 # Branch: `system-applications`
 
 Started: 2026-05-27
-Owner: TBD (next agent to pick up the live-content bridge work)
-Goal: Wire Phase 1.5 hash-on-upsert, complete the article-system schema revamp, then ship Phase 2 of the live-content bridge (read-only live viewer + DauligorViewer + custom enrichers + endpoints).
-Status: **planned** (branch not yet created; this manifest reserves scope so other concurrent branches can route around the planned files)
+Owner: Claude
+Goal: Multi-step. **First step (now)**: BBCode audit-and-fix pass + cross-reference authoring (add missing `[ref|…]` kinds + editor picker UI). **Then**: original branch scope — Phase 1.5 hash-on-upsert, article-system schema revamp, Phase 2 live viewer of the live-content bridge.
+Status: **active** (branch created 2026-05-27 off `main`)
 
 ## Background
 
@@ -16,6 +16,19 @@ Full plan + reference material:
 ## Primary files (exclusive)
 
 Files this branch claims for non-trivial structural changes. Other branches should request edits via the shared-files protocol rather than editing directly.
+
+**BBCode audit + fixes (current step):**
+- `src/lib/bbcode.ts` — fix enumerated defects in tag parsing, rendering, and round-trip; also adds new `[ref|…]` kinds (overlap with Article system revamp below — same file, coordinated)
+- `api/_lib/_bbcode.ts` — drift-managed server mirror of `bbcodeToHtml`; quote + hr fixes mirrored here. Any render-side BBCode change must land in both.
+- `src/components/BBCodeRenderer.tsx` — display-side defect fixes if any are renderer-level
+- `src/components/MarkdownEditor.tsx` — TipTap-extension level fixes if any are editor-level
+- `src/components/MarkdownToolbar.tsx` — Visual-mode toolbar handlers (spoiler toggle + literal-marker fallback). NOTE: also listed under cross-ref authoring below (Cross-Reference button) — same file, coordinated.
+- `src/index.css` — BBCode render styles under `@layer components` (`.prose .ref-link`, `.prose a`, `.prose .spoiler`, etc.). Append-only: add new `.prose …` selectors, don't reorder existing rules.
+- `src/pages/dev/BBCodeTester.tsx` (new) — dev page for capturing and reproducing BBCode bugs (editor + live preview + round-trip diff + presets)
+
+**Cross-reference authoring (current step):**
+- `src/components/MarkdownToolbar.tsx` — add "Cross-Reference" button
+- `src/components/CrossRefPicker.tsx` (new) — picker dialog: choose kind, search by name, click to insert
 
 **Article system revamp:**
 - `src/pages/wiki/Wiki.tsx` — routes consume identifier instead of slug

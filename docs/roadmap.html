@@ -1,0 +1,1066 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Archive — Roadmap</title>
+<style>
+  :root {
+    --parchment: #f5f2e8;
+    --parchment-soft: #faf7ed;
+    --ink: #1a1a1a;
+    --ink-soft: #3a3a3a;
+    --muted: #6b6457;
+    --gold: #c5a059;
+    --gold-deep: #8a6d2f;
+    --blood: #7a1f1f;
+    --leaf: #355c3a;
+    --card: #fbf8ee;
+    --rule: #d8cfb8;
+    --code-bg: #2b2620;
+    --code-ink: #f0e9d2;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 10px rgba(0,0,0,0.04);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--parchment);
+    color: var(--ink);
+    font-family: "Inter", -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 15px;
+    line-height: 1.65;
+  }
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 40px 32px 80px;
+  }
+  header.hero {
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 24px;
+    margin-bottom: 32px;
+  }
+  header.hero .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    font-size: 11px;
+    color: var(--gold-deep);
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  header.hero h1 {
+    font-family: "Cormorant Garamond", "Georgia", serif;
+    font-weight: 600;
+    font-size: 46px;
+    line-height: 1.05;
+    margin: 0 0 10px;
+    color: var(--ink);
+  }
+  header.hero .tagline {
+    font-family: "Cormorant Garamond", "Georgia", serif;
+    font-style: italic;
+    font-size: 19px;
+    color: var(--muted);
+    margin: 0 0 14px;
+  }
+  header.hero .meta {
+    font-size: 13px;
+    color: var(--muted);
+  }
+  h2 {
+    font-family: "Cormorant Garamond", "Georgia", serif;
+    font-size: 32px;
+    font-weight: 600;
+    margin: 56px 0 6px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--gold);
+    color: var(--ink);
+  }
+  h2 .h2-sub {
+    display: block;
+    font-family: "Inter", sans-serif;
+    font-size: 13px;
+    font-style: italic;
+    font-weight: 400;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  h3 {
+    font-family: "Cormorant Garamond", "Georgia", serif;
+    font-size: 23px;
+    font-weight: 600;
+    margin: 0 0 8px;
+    color: var(--ink);
+  }
+  h4 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--gold-deep);
+    margin: 18px 0 4px;
+    font-weight: 700;
+  }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0 8px 24px; padding: 0; }
+  li { margin: 5px 0; }
+  code {
+    font-family: "JetBrains Mono", "Consolas", monospace;
+    font-size: 13px;
+    background: rgba(138, 109, 47, 0.12);
+    color: var(--ink);
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+  .item-card {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-left: 4px solid var(--gold);
+    border-radius: 4px;
+    padding: 22px 26px;
+    margin: 18px 0;
+    box-shadow: var(--shadow);
+  }
+  .item-card.now { border-left-color: var(--blood); }
+  .item-card.next { border-left-color: var(--gold); }
+  .item-card.bench { border-left-color: var(--muted); }
+  .item-card.shipped { border-left-color: var(--leaf); }
+  .item-card .pill-row {
+    margin: 0 0 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .pill {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 99px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    background: rgba(138, 109, 47, 0.15);
+    color: var(--gold-deep);
+  }
+  .pill.live   { background: rgba(53, 92, 58, 0.18);  color: var(--leaf); }
+  .pill.now    { background: rgba(122, 31, 31, 0.12); color: var(--blood); }
+  .pill.next   { background: rgba(197, 160, 89, 0.30); color: var(--gold-deep); }
+  .pill.bench  { background: rgba(107, 100, 87, 0.18); color: var(--ink-soft); }
+  .pill.dep    { background: rgba(26, 26, 26, 0.08);  color: var(--ink-soft); }
+  .pill.size-s { background: rgba(53, 92, 58, 0.12);  color: var(--leaf); }
+  .pill.size-m { background: rgba(197, 160, 89, 0.18); color: var(--gold-deep); }
+  .pill.size-l { background: rgba(122, 31, 31, 0.10); color: var(--blood); }
+  .toc {
+    background: var(--parchment-soft);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 18px 24px;
+    margin-bottom: 36px;
+    box-shadow: var(--shadow);
+  }
+  .toc h4 { margin: 0 0 10px; }
+  .toc ol { margin: 0 0 0 22px; }
+  .toc a { color: var(--gold-deep); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; color: var(--blood); }
+  .callout {
+    background: rgba(122, 31, 31, 0.06);
+    border: 1px solid rgba(122, 31, 31, 0.25);
+    border-radius: 4px;
+    padding: 14px 18px;
+    margin: 16px 0;
+    font-size: 14px;
+  }
+  .callout strong { color: var(--blood); }
+  .quote {
+    border-left: 3px solid var(--gold);
+    padding: 4px 0 4px 16px;
+    margin: 14px 0;
+    color: var(--ink-soft);
+    font-style: italic;
+  }
+  hr.section {
+    border: none;
+    border-top: 1px solid var(--rule);
+    margin: 40px 0;
+  }
+  .section-intro {
+    font-style: italic;
+    color: var(--muted);
+    margin-bottom: 18px;
+    padding-left: 12px;
+    border-left: 2px solid var(--rule);
+  }
+  .what-row {
+    display: grid;
+    grid-template-columns: 95px 1fr;
+    gap: 16px;
+    margin: 12px 0;
+    align-items: baseline;
+  }
+  .what-row .lab {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--gold-deep);
+    font-weight: 700;
+    padding-top: 2px;
+  }
+  .what-row .val { font-size: 14px; }
+  .stack-note {
+    font-size: 12.5px;
+    color: var(--muted);
+    border-top: 1px dashed var(--rule);
+    padding-top: 10px;
+    margin-top: 14px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="eyebrow">Project Roadmap</div>
+  <h1>What We're Building</h1>
+  <p class="tagline">Where The Archive is going, in plain language.</p>
+  <div class="meta">
+    Last updated: 2026-05-27 &middot; Living document &mdash;
+    items move between sections as work progresses.
+    Companion: <a href="system-overview.html"><code>docs/system-overview.html</code></a> (what the system is today).
+  </div>
+</header>
+
+<div class="toc">
+  <h4>Contents</h4>
+  <ol>
+    <li><a href="#how-to-read">How to read this page</a></li>
+    <li><a href="#right-now">Right now &mdash; active work</a></li>
+    <li><a href="#up-next">Up next &mdash; clear path, not yet started</a></li>
+    <li><a href="#tail-end">Tail-end &mdash; follow-ups on shipped work</a></li>
+    <li><a href="#bench">On the bench &mdash; ideas with no current owner</a></li>
+    <li><a href="#shipped">Recently shipped &mdash; for context</a></li>
+  </ol>
+</div>
+
+<h2 id="how-to-read">How to read this page</h2>
+
+<p>
+  The roadmap is split into five sections based on <strong>how close each item is to
+  being worked on</strong>, not how big it is. An item moves down the page as it gets
+  picked up: from "On the bench" &rarr; "Up next" &rarr; "Right now" &rarr; "Recently
+  shipped." A few one-line conventions:
+</p>
+
+<ul>
+  <li>
+    <strong>Coloured pills</strong> show the item's current state and rough size.
+    <span class="pill now">Right now</span>
+    <span class="pill next">Up next</span>
+    <span class="pill bench">On the bench</span>
+    <span class="pill live">Shipped</span>
+    <span class="pill size-s">Small</span>
+    <span class="pill size-m">Medium</span>
+    <span class="pill size-l">Large</span>
+  </li>
+  <li>
+    <strong>"What it is"</strong> is a plain-English description for someone who hasn't
+    read the code. <strong>"Why it matters"</strong> says who benefits and how.
+    <strong>"Status"</strong> tracks what's done and what's left.
+  </li>
+  <li>
+    <strong>Dependencies</strong> are listed when an item is waiting on another piece to
+    land first.
+  </li>
+</ul>
+
+<hr class="section">
+
+<h2 id="right-now">
+  Right now &mdash; active work
+  <span class="h2-sub">Two app-side prerequisites before the larger initiatives below pay off.</span>
+</h2>
+
+<p class="section-intro">
+  Two pieces. The first cleans up known defects in the BBCode rich-text system so the
+  authoring layer is reliable before we lean on it. The second adds the missing authoring
+  UX for cross-references &mdash; linking spells, items, feats, articles, and so on &mdash;
+  so admins can actually wire content together inside the app. Both must land before any
+  of the larger initiatives below pay off; the live-content bridge in particular renders
+  references that nobody can currently author.
+</p>
+
+<div class="item-card now">
+  <div class="pill-row">
+    <span class="pill now">Right now</span>
+    <span class="pill size-m">Medium</span>
+    <span class="pill dep">Independent</span>
+  </div>
+  <h3>1. BBCode audit &mdash; fix the rich-text foundation</h3>
+
+  <div class="what-row">
+    <div class="lab">What it is</div>
+    <div class="val">
+      BBCode is the storage format for every piece of rich-text content in The Archive
+      &mdash; lore articles, class descriptions, spell text, feat text, item descriptions,
+      DM notes. It's converted to HTML for display by the BBCode renderer and round-tripped
+      through the TipTap visual editor. There are several known defects in how specific
+      tags parse, render, or survive the round-trip; this item is a focused audit-and-fix
+      pass to address them.
+    </div>
+  </div>
+
+  <div class="what-row">
+    <div class="lab">Why it matters</div>
+    <div class="val">
+      BBCode sits in the critical path for everything else on this roadmap. Every authoring
+      action goes through it. The cross-reference picker below will write BBCode. The
+      live-content bridge will read BBCode and rewrite it for Foundry. If BBCode has
+      corner-case defects today, every dependent feature inherits them &mdash; and we'll
+      trip over them constantly while testing the work above. Fixing them first removes
+      that risk.
+    </div>
+  </div>
+
+  <div class="what-row">
+    <div class="lab">Status</div>
+    <div class="val">
+      Defects are catalogued as a checklist; the <code>/dev/bbcode</code> tester's preset
+      cases double as the regression surface so fixed bugs don't quietly return.
+      <br><br>
+      <strong>Batch 1 (reported 2026-05-28) &mdash; all fixed:</strong>
+      <ul>
+        <li>
+          &#10003; <strong>Quote trailing blank line.</strong> <code>[quote]…[/quote]</code>
+          with a trailing newline produced malformed HTML
+          (<code>&lt;blockquote&gt;…&lt;p&gt;&lt;/blockquote&gt;&lt;/p&gt;</code>) and an empty
+          line after the quote. The inner content is now trimmed and internal newlines become
+          <code>&lt;br&gt;</code>, so no <code>\n\n</code> survives inside the block to break
+          the paragraph splitter.
+        </li>
+        <li>
+          &#10003; <strong>Horizontal-rule double slash.</strong> <code>[hr]</code> rendered as
+          <code>&lt;hr//&gt;</code> and broke its own round-trip. The block-normaliser regex no
+          longer recaptures the self-closing slash.
+        </li>
+        <li>
+          &#10003; <strong>Spoiler / Comment toolbar buttons inert in Visual mode.</strong> The
+          editor's WYSIWYG path had no handler, so the buttons silently did nothing. Spoiler now
+          toggles its TipTap mark; any unhandled tag wraps the selection in literal markers
+          instead of no-opping.
+        </li>
+        <li>
+          &#10003; <strong>Links invisible on the dark theme.</strong> Plain <code>[url]</code>
+          links inherited the typography plugin's dark default colour and vanished against the
+          charcoal background. <code>.prose a</code> now uses the theme accent (gold).
+        </li>
+      </ul>
+      <em>Quote, hr, and round-trip stability verified programmatically against the real
+      converter; spoiler-button + link-colour fixes verified via the dev page. Server mirror
+      (<code>api/_lib/_bbcode.ts</code>) updated in lockstep for the quote + hr fixes.</em>
+      <br><br>
+      <strong>Batch 2 (reported 2026-05-28):</strong>
+      <ul>
+        <li>
+          &#10003; <strong>Quote captured trailing whitespace</strong> (editor &rarr; source).
+          TipTap wraps quote content in <code>&lt;p&gt;</code>; the reverse converter kept it and
+          the generic <code>&lt;p&gt;&rarr;\n\n</code> pass turned it into
+          <code>[quote]Text\n\n[/quote]</code>. The blockquote handler now strips inner
+          <code>&lt;p&gt;</code> and trims.
+        </li>
+        <li>
+          &#10003; <strong>Editor links rendered black, no pointer cursor.</strong> The editor
+          surface is <code>.ProseMirror</code>, not <code>.prose</code>, so the Batch 1 link rule
+          didn't reach it. Added <code>.ProseMirror a</code> (theme gold + underline + pointer).
+        </li>
+        <li>
+          &#10003; <strong>Link entry used the browser's <code>window.prompt</code>.</strong>
+          Replaced with an in-app dialog (works in both Visual and Source modes; captures the
+          selection on open).
+        </li>
+        <li>
+          &#10003; <strong>Formatting an empty selection did nothing useful.</strong> A collapsed
+          cursor now expands to the word under it before applying spoiler / comment / small, so
+          one click wraps the word instead of emitting empty markers.
+        </li>
+        <li>
+          &#10003; <strong>Wraps captured surrounding whitespace</strong> (e.g.
+          <code>[b]Test [/b]</code>). Leading/trailing whitespace now stays outside the markers in
+          both modes &rarr; <code>[b]Test[/b]</code>.
+        </li>
+        <li>
+          &#10003; <strong>Comment hid its text</strong> &mdash; resolved by removing the toolbar
+          button (product decision 2026-05-28). <code>[comment]</code> compiles to a hidden HTML
+          comment by design; it silently hid wrapped text, which read as a bug. The tag still
+          parses if hand-typed in Source mode, but it's no longer a first-class authoring action.
+          (<code>[secret]</code> covers DM-only-but-visible content.)
+        </li>
+      </ul>
+      <em>Quote round-trip verified programmatically (incl. no regression on the Batch 1
+      multi-line case); link dialog, word-wrap, and whitespace-tight wraps verified via the dev
+      page. The quote fix is in <code>htmlToBbcode</code> (client-only — no server mirror needed).</em>
+      <br><br>
+      <em>Report further defects via the dev page's "Copy bug report" button &mdash; they'll
+      be appended as Batch 3.</em>
+    </div>
+  </div>
+</div>
+
+<div class="item-card now">
+  <div class="pill-row">
+    <span class="pill now">Right now</span>
+    <span class="pill size-m">Medium</span>
+    <span class="pill dep">Builds on #1</span>
+  </div>
+  <h3>2. Cross-reference authoring &mdash; let admins link content together</h3>
+
+  <div class="what-row">
+    <div class="lab">What it is</div>
+    <div class="val">
+      Today there is no convenient way to link one piece of Dauligor content to another.
+      The BBCode primitive exists &mdash; <code>[ref|kind|id]Display[/ref]</code> renders
+      as a styled cross-reference link &mdash; but only three kinds are wired up:
+      <code>spell</code>, <code>class</code>, <code>condition</code>. There is no
+      <code>item</code>, <code>article</code>, <code>feat</code>, <code>race</code>, or
+      <code>background</code> kind, and there is no editor button anywhere that inserts a
+      cross-reference. The only way to author one today is to switch the editor into raw
+      Source mode and type the BBCode by hand, knowing the target's identifier in advance.
+    </div>
+  </div>
+
+  <div class="what-row">
+    <div class="lab">Why it matters</div>
+    <div class="val">
+      A campaign-management app whose admins cannot easily link articles to relevant
+      spells, NPCs to factions, or quests to magic items is missing one of the core
+      utilities of the genre. This piece closes that gap. It also produces the authored
+      content that the live-content bridge later renders &mdash; without cross-references
+      in the data, the bridge has nothing to resolve.
+    </div>
+  </div>
+
+  <div class="what-row">
+    <div class="lab">Status</div>
+    <div class="val">
+      Two concrete pieces of work:
+      <ul>
+        <li>
+          Add the missing kinds to the BBCode resolver (<code>item</code>,
+          <code>article</code>, <code>feat</code>; plus <code>race</code> and
+          <code>background</code> once those tables exist). Each kind needs a URL route
+          and matching round-trip support so the TipTap editor doesn't drop the
+          reference on edit.
+        </li>
+        <li>
+          Add a <strong>Cross-Reference</strong> button to the editor toolbar that opens
+          a picker dialog: choose a kind, search by name within that kind, click to insert.
+          Works in both Source mode (inserts the BBCode) and Visual mode (inserts the
+          equivalent link node).
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="stack-note">
+    <strong>Built on top of:</strong> piece #1, because the picker writes BBCode through
+    the editor toolbar and we don't want it landing in a defective tag pipeline.
+  </div>
+</div>
+
+<hr class="section">
+
+<h2 id="up-next">
+  Up next &mdash; clear path, not yet started
+  <span class="h2-sub">The live-content bridge (Foundry-side payoff), plus the long-standing races + backgrounds gap.</span>
+</h2>
+
+<p class="section-intro">
+  Once the app-side authoring foundation is solid, the live-content bridge becomes the
+  next big initiative. It's a multi-phase plan that turns the Foundry VTT companion
+  module from a static content importer into a live viewer of canonical Dauligor content.
+  Phase 1 foundation already shipped; the pieces below carry it through to a complete
+  experience. Races + backgrounds is a separate, independent track that closes a
+  long-standing content-type gap.
+</p>
+
+<div class="item-card next">
+  <div class="pill-row">
+    <span class="pill next">Up next</span>
+    <span class="pill size-s">Small</span>
+    <span class="pill dep">Independent</span>
+  </div>
+  <h3>3. Content hashing &mdash; "this content changed" signal</h3>
+
+  <div class="what-row">
+    <div class="lab">What it is</div>
+    <div class="val">
+      Every piece of content in the database (spells, classes, feats, items, features, etc.)
+      gets a small fingerprint &mdash; a hash &mdash; computed from the meaningful parts of
+      its data. When the DM edits a spell, the fingerprint changes. When nothing changes,
+      neither does the fingerprint.
+    </div>
+  </div>
+
+  <div class="what-row">
+    <div class="lab">Why it matters</div>
+    <div class="val">
+      The Foundry module already imports Dauligor content into a player's game world. After
+      this lands, the module will be able to ask "is the copy on this character's sheet
+      still up to date?" and answer the question by comparing the local fingerprint
+      against the latest one from the app. Without fingerprints, the only ways to detect
+      drift are <em>"compare every field"</em> (slow) or <em>"re-fetch everything just in
+      case"</em> (wasteful).
+    </div>
+  </div>
+
+  <div class="what-row">
+    <div class="lab">Status</div>
+    <div class="val">
+      The database columns to hold the fingerprints exist (added 2026-05-27, currently
+      empty). What remains:
+      <ul>
+        <li>A small piece of code that computes the fingerprint every time a piece of content is saved.</li>
+        <li>A one-time backfill that walks every existing row and fills in its fingerprint.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="item-card next">
+  <div class="pill-row">
+    <span class="pill next">Up next</span>
+    <span class="pill size-m">Medium</span>
+    <span class="pill dep">Blocks #5</span>
+  </div>
+  <h3>4. Article system unification &mdash; make wiki articles addressable</h3>
+
+  <div class="what-row">
+    <div class="lab">What it is</div>
+    <div class="val">
+      Today, wiki articles are organised by hierarchy &mdash; a region article contains
+      city articles, a city contains neighbourhoods, and so on. They don't carry a
+      <em>stable identifier</em> that's safe to use as a link from anywhere else. Every
+      other content type in the app does carry one (spells, classes, feats &mdash; they're
+      addressable by a short slug paired with their source book). Articles need to catch up.
+    </div>
+  </div>
+
+  <div class="what-row">
+    <div class="lab">Why it matters</div>
+    <div class="val">
+      Three concrete problems disappear once articles have stable identifiers:
+      <ul>
+        <li>
+          <strong>Cross-references stop breaking.</strong> Today, an
+          <code>@article[deep-shadow-cult]</code> link is ambiguous &mdash; two campaigns
+          can each have an article named "Deep Shadow Cult" and the link has no way to
+          tell them apart. After this lands, every article is addressable as
+          <code>(identifier, source)</code>, which is unique.
+        </li>
+        <li>
+          <strong>"System pages" become possible.</strong> A new article type &mdash; a
+          parent article with a set of named glossary children &mdash; needs to be able to
+          link to a specific child without using its database row ID. (This mirrors how
+          dnd5e's Conditions and Rules journals work in Foundry.)
+        </li>
+        <li>
+          <strong>Deep links from Foundry work.</strong> The viewer in piece #5 needs to be
+          able to compose a stable URL pointing back at the app for "open in browser."
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="what-row">
+    <div class="lab">Status</div>
+    <div class="val">
+      Plan finalised; database migrations not yet written. Sequence:
+      <ol>
+        <li>Add an <code>identifier</code> column to the articles table; backfill from existing slugs.</li>
+        <li>Add a <code>source</code> column so identifiers can be scoped per book.</li>
+        <li>Add the uniqueness constraint once duplicates are resolved.</li>
+        <li>Add a content fingerprint column (same shape as piece #3).</li>
+        <li>Update the wiki routes and the BBCode <code>@article[…]</code> resolver to use the new identifier.</li>
+      </ol>
+    </div>
+  </div>
+</div>
+
+<div class="item-card next">
+  <div class="pill-row">
+    <span class="pill next">Up next</span>
+    <span class="pill size-l">Large</span>
+    <span class="pill dep">Waits on #4</span>
+  </div>
+  <h3>5. Live viewer &mdash; Foundry reads canonical content from the app</h3>
+
+  <div class="what-row">
+    <div class="lab">What it is</div>
+    <div class="val">
+      The first half of the live-content bridge. After this lands, Foundry text that
+      mentions a Dauligor article (e.g., <code>@article[the-shattered-spire]</code>) will
+      become a clickable link inside any Foundry window &mdash; journal entries, item
+      descriptions, chat cards, anywhere text is shown. Clicking the link opens a Foundry
+      window that fetches the article's current HTML from the app, renders it
+      <em>fresh from the source</em>, and caches it for the current world so the next click
+      is instant.
+    </div>
+  </div>
+
+  <div class="what-row">
+    <div class="lab">Why it matters</div>
+    <div class="val">
+      Today, every piece of Dauligor content that reaches Foundry is a copy. When the DM
+      edits an article in the app, the copies in Foundry don't update. Players who saw
+      the old version on their item card continue to see the old version forever. After
+      this lands, reference-style content (articles, conditions, rules) is always live &mdash;
+      there's nothing to update because there's no copy.
+    </div>
+  </div>
+
+  <div class="what-row">
+    <div class="lab">Status</div>
+    <div class="val">
+      Specification finalised; no code yet. The shape:
+      <ul>
+        <li>New endpoints on the app side that serve article HTML and a short hover-tooltip summary.</li>
+        <li>A new content type (<em>system page</em>) for parent-plus-glossary structures like Conditions and Rules.</li>
+        <li>A new Foundry window class that handles the click-to-open behaviour.</li>
+        <li>Foundry text enrichers that detect the new reference syntax and rewrite it into clickable links.</li>
+        <li>A per-world cache so opening the same article twice is instant, and so the table can read offline.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="stack-note">
+    <strong>Built on top of:</strong> piece #3 (so the cache can detect when its copy is
+    stale) and piece #4 (so links can address articles unambiguously).
+  </div>
+</div>
+
+<div class="item-card next">
+  <div class="pill-row">
+    <span class="pill next">Up next</span>
+    <span class="pill size-m">Medium</span>
+    <span class="pill dep">Waits on #5</span>
+  </div>
+  <h3>6. Drag-and-drop construction — Foundry items built on demand</h3>
+
+  <div class="what-row">
+    <div class="lab">What it is</div>
+    <div class="val">
+      The other half of the live-content bridge. After the viewer lands, this piece
+      teaches the module to handle drag-and-drop of mechanical content. When a player drags
+      a Fireball reference onto their character sheet, the module fetches the current
+      Fireball data from the app, builds a real Foundry item out of it, and drops it into
+      the inventory &mdash; complete with the proper damage rolls, save DC, scaling, and
+      visual effects.
+    </div>
+  </div>
+
+  <div class="what-row">
+    <div class="lab">Why it matters</div>
+    <div class="val">
+      Drag-and-drop is the everyday gesture for adding mechanical content to a character.
+      Today, that gesture requires the content to already exist in a compendium &mdash;
+      which means the DM has to have run an import in advance. After this lands, the
+      content doesn't need to be pre-imported. The drag just works.
+      <br><br>
+      The content created this way is a <em>real</em> Foundry item, not a live placeholder,
+      because mechanics (damage rolls, ability checks, animations) need a concrete document
+      to attach to. But each created item carries a fingerprint so the next piece can detect
+      when it's gone stale.
+    </div>
+  </div>
+
+  <div class="what-row">
+    <div class="lab">Status</div>
+    <div class="val">
+      Design done; relies on a stable Foundry-ID derivation helper that shipped in early
+      May 2026. Implementation pattern reuses the existing batch-import code, exposed as a
+      single-item path.
+    </div>
+  </div>
+</div>
+
+<div class="item-card next">
+  <div class="pill-row">
+    <span class="pill next">Up next</span>
+    <span class="pill size-s">Small</span>
+    <span class="pill dep">Waits on #3 + #6</span>
+  </div>
+  <h3>7. Update detection — stale content tells you it's stale</h3>
+
+  <div class="what-row">
+    <div class="lab">What it is</div>
+    <div class="val">
+      Once every piece of Dauligor-authored content in Foundry carries a fingerprint, the
+      module can periodically ask the app "any of these out of date?" The app returns a
+      list of items whose fingerprint has changed since the player's copy was made. The
+      module shows a subtle glow on stale item sheets; clicking the glow opens a diff
+      modal where the player can opt in to a refresh or stamp the current fingerprint to
+      silence the glow until the next change.
+    </div>
+  </div>
+
+  <div class="what-row">
+    <div class="lab">Why it matters</div>
+    <div class="val">
+      The "stale Fireball" problem that the live-content bridge was designed to solve only
+      half-disappears with the viewer. The other half &mdash; for content that has to be a
+      real Foundry item, like spells and equipment &mdash; needs this piece. After this
+      lands, drift becomes a problem players are <em>aware of</em> and can fix in one click,
+      instead of an invisible issue that quietly desyncs the table from the canon.
+    </div>
+  </div>
+
+  <div class="what-row">
+    <div class="lab">Status</div>
+    <div class="val">
+      Design done. Requires the fingerprint backfill from piece #3 to be populated
+      everywhere.
+    </div>
+  </div>
+</div>
+
+<div class="item-card next">
+  <div class="pill-row">
+    <span class="pill next">Up next</span>
+    <span class="pill size-s">Small</span>
+    <span class="pill dep">Waits on #6 + #7</span>
+  </div>
+  <h3>8. Hardening — offline snapshots, auth audit, documentation</h3>
+
+  <div class="what-row">
+    <div class="lab">What it is</div>
+    <div class="val">
+      The polish pass that follows the live-content bridge build-out. Three concrete
+      pieces:
+      <ul>
+        <li>
+          A one-click <strong>"bake to world"</strong> snapshot button that converts the
+          per-world cache into real, persistent Foundry journal entries &mdash; useful for
+          tables that play in offline / no-internet venues.
+        </li>
+        <li>
+          An <strong>auth audit</strong> on the module endpoints. Today they serve public
+          reads, which is fine while the app is open-source and content is shareable. If
+          that changes, a per-world API key model is ready to swap in.
+        </li>
+        <li>
+          A proper <strong>architecture document</strong> for the whole live-content bridge,
+          replacing the working spec that's been guiding the build-out.
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="what-row">
+    <div class="lab">Why it matters</div>
+    <div class="val">
+      Without the snapshot, tables that lose internet during a session lose access to live
+      content. Without the auth audit, the option to gate content is left informal. Without
+      the document, future-Claude (and future contributors) have to reverse-engineer the
+      design from code.
+    </div>
+  </div>
+</div>
+
+<div class="item-card next">
+  <div class="pill-row">
+    <span class="pill next">Up next</span>
+    <span class="pill size-l">Large</span>
+    <span class="pill dep">Independent</span>
+  </div>
+  <h3>9. Races and Backgrounds — first-class content types</h3>
+
+  <div class="what-row">
+    <div class="lab">What it is</div>
+    <div class="val">
+      Today, races and backgrounds exist in the compendium as <em>placeholder pages</em>.
+      You can browse them; you can open an editor; but there are no proper database tables
+      for them and no proper Foundry export. They piggy-back on the feats system: a "race"
+      is currently a feat with <code>feat_type='race'</code>. That works for the simplest
+      cases and explodes the moment a race needs anything beyond a list of traits
+      (subraces, size categories, speed differences).
+    </div>
+  </div>
+
+  <div class="what-row">
+    <div class="lab">Why it matters</div>
+    <div class="val">
+      Player character creation is incomplete without first-class race and background
+      support. The placeholders today are a known gap that DMs work around by treating
+      races as "just feats." Closing this gap means players can author a custom Tabaxi
+      Sailor (with subraces and starting equipment) end-to-end inside the app, export it
+      to Foundry, and play with it.
+    </div>
+  </div>
+
+  <div class="what-row">
+    <div class="lab">Status</div>
+    <div class="val">
+      Plan written; not started. Required pieces:
+      <ul>
+        <li>Two new database tables (<code>races</code>, <code>backgrounds</code>) with the standard entity fields plus type-specific extras.</li>
+        <li>Server-side export endpoints so the Foundry module can fetch them.</li>
+        <li>Module-side importers that drop them as Foundry items of the right type.</li>
+        <li>Editor surfaces that show the type-specific fields (size, speed, languages, subraces for races; skill / tool / equipment / starting feature for backgrounds).</li>
+        <li>A documented decision about what happens to the existing "feat as race" pattern &mdash; coexistence or retirement.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<hr class="section">
+
+<h2 id="tail-end">
+  Tail-end &mdash; follow-ups on shipped work
+  <span class="h2-sub">Mostly-complete tracks that have one or two small loose ends.</span>
+</h2>
+
+<p class="section-intro">
+  These are the small remaining tasks on initiatives that have already shipped their main
+  value. Low priority &mdash; each one is a polish item, not a missing feature.
+</p>
+
+<div class="item-card bench">
+  <div class="pill-row">
+    <span class="pill bench">Tail-end</span>
+    <span class="pill size-s">Small</span>
+  </div>
+  <h3>Module-side item importer for scaling columns</h3>
+
+  <div class="what-row">
+    <div class="lab">What it is</div>
+    <div class="val">
+      The app side already serves item data with embedded scaling tables (a "scaling table"
+      is something like "this dagger does +1 damage per character tier"). The Foundry
+      module side doesn't yet consume that endpoint &mdash; an item importer exists for the
+      base item data but doesn't read the scaling rows. Pattern is identical to the feat
+      importer that already does this.
+    </div>
+  </div>
+
+  <div class="what-row">
+    <div class="lab">Why it matters</div>
+    <div class="val">
+      Without this, DMs can author scaling items in the app and the values show up in the
+      browser, but the module exports them without the scaling intact. Round-trip is
+      incomplete.
+    </div>
+  </div>
+</div>
+
+<div class="item-card bench">
+  <div class="pill-row">
+    <span class="pill bench">Tail-end</span>
+    <span class="pill size-s">Small</span>
+  </div>
+  <h3>Stale-language sweep on module-side docs</h3>
+
+  <div class="what-row">
+    <div class="lab">What it is</div>
+    <div class="val">
+      The system's "scaling" concept was originally class-only, then extended to feats,
+      races, backgrounds, and items. Three core module-side docs got the corresponding
+      language updates; eight other docs still read as if scaling were a class-only
+      feature.
+    </div>
+  </div>
+
+  <div class="what-row">
+    <div class="lab">Why it matters</div>
+    <div class="val">
+      A contributor or AI agent reading those eight docs would conclude that scaling only
+      applies to classes, which is no longer true.
+    </div>
+  </div>
+</div>
+
+<div class="item-card bench">
+  <div class="pill-row">
+    <span class="pill bench">Tail-end</span>
+    <span class="pill size-s">Small</span>
+  </div>
+  <h3>ItemBumpUses follow-ups</h3>
+
+  <div class="what-row">
+    <div class="lab">What it is</div>
+    <div class="val">
+      "ItemBumpUses" is a feature that lets one piece of content (a feat or an item) bump
+      the uses-per-day counter on another piece of content. Example: a feat that says
+      "your Sneak Attack feature gets one extra use per short rest." Version 1 shipped
+      end-to-end in May 2026. A few extension cases remain: feats bumping other feats,
+      items bumping things (instead of only feats bumping things), and a module-side audit
+      surface for "where did this bump come from?"
+    </div>
+  </div>
+
+  <div class="what-row">
+    <div class="lab">Why it matters</div>
+    <div class="val">
+      The bumping mechanic is in production and works for the common case; these
+      follow-ups extend it to the long tail of less-common cases.
+    </div>
+  </div>
+</div>
+
+<hr class="section">
+
+<h2 id="bench">
+  On the bench &mdash; ideas with no current owner
+  <span class="h2-sub">Captured so they don't get lost; no near-term path to picking them up.</span>
+</h2>
+
+<div class="item-card bench">
+  <div class="pill-row">
+    <span class="pill bench">Bench</span>
+    <span class="pill size-m">Medium</span>
+  </div>
+  <h3>In-app "Systems" page</h3>
+
+  <div class="what-row">
+    <div class="lab">What it is</div>
+    <div class="val">
+      A first-class page inside the app (likely at <code>/systems</code>) that lists the
+      major systems The Archive exposes &mdash; Worlds, Permissions, Content Proposals,
+      Tags, Spell Rules, Sources, Class Spell Lists, Modular Options, Compendium, Wiki,
+      Foundry Export. Each entry is one modular section with a one-paragraph "what it
+      does," a list of the pages that surface it, the permission model, and links to the
+      deeper documentation.
+    </div>
+  </div>
+
+  <div class="what-row">
+    <div class="lab">Why it matters</div>
+    <div class="val">
+      Today, a new DM has to learn The Archive by clicking around. A Systems page would
+      let them scan one screen and see what's available without having to navigate the
+      sidebar speculatively. It's also the natural place for "what's coming next"
+      callouts &mdash; turning this roadmap from a separate doc into an in-app feature.
+    </div>
+  </div>
+</div>
+
+<div class="item-card bench">
+  <div class="pill-row">
+    <span class="pill bench">Bench</span>
+    <span class="pill size-l">Large</span>
+  </div>
+  <h3>Self-rolled authentication (Firebase exit)</h3>
+
+  <div class="what-row">
+    <div class="lab">What it is</div>
+    <div class="val">
+      Replace Firebase Authentication with an in-house implementation built on the
+      Cloudflare stack. Firebase Auth currently issues the JWT tokens that the rest of the
+      app trusts &mdash; it's the only Firebase service still in use. A two-stage exit plan
+      exists: first drop the Firebase Admin SDK (replace with direct REST calls), then
+      replace the JWT issuer entirely.
+    </div>
+  </div>
+
+  <div class="what-row">
+    <div class="lab">Why it matters</div>
+    <div class="val">
+      Strictly optional today &mdash; Firebase Auth works fine and is free at our scale.
+      The reasons to do it are <em>fewer moving parts</em> (one less vendor) and <em>full
+      control over the auth flow</em> (which matters if we want features like passkeys or
+      magic-link login that Firebase Auth doesn't make easy). No urgency.
+    </div>
+  </div>
+</div>
+
+<hr class="section">
+
+<h2 id="shipped">
+  Recently shipped &mdash; for context
+  <span class="h2-sub">Major work that landed in the last few months. Useful for understanding what the system can already do.</span>
+</h2>
+
+<div class="item-card shipped">
+  <div class="pill-row">
+    <span class="pill live">Shipped May 2026</span>
+  </div>
+  <h3>Live-content bridge — Phase 1 foundation</h3>
+  <p>
+    The groundwork that the "Right now" section is building on. Three database changes
+    added uniqueness constraints and fingerprint columns to the content tables; one new
+    helper computes a stable Foundry document ID from a Dauligor source ID. None of this
+    is user-visible on its own &mdash; it's the foundation that pieces #1 through #6 build
+    on top of.
+  </p>
+</div>
+
+<div class="item-card shipped">
+  <div class="pill-row">
+    <span class="pill live">Shipped May 2026</span>
+  </div>
+  <h3>Content proposals</h3>
+  <p>
+    A workflow where users with the <em>Librarian</em> role (or anyone holding the
+    additive <code>content-creator</code> permission) can propose changes to content &mdash;
+    tags, spell rules, spell lists &mdash; without write access to the underlying tables.
+    Proposals enter a review queue; staff approve, reject, or revert. Proposals that drift
+    from the current state of the content during review are flagged so reviewers don't
+    silently overwrite intervening changes.
+  </p>
+</div>
+
+<div class="item-card shipped">
+  <div class="pill-row">
+    <span class="pill live">Shipped May 2026</span>
+  </div>
+  <h3>Spellbook manager (four layers)</h3>
+  <p>
+    A comprehensive system for how spells reach a character. Layer 1 is the per-class
+    spell list (which spells does a Bard even know about?). Layer 2 is the rules that
+    expand or restrict those lists (a feat that lets you cast a single Wizard spell, a
+    subclass that adds Cleric spells to your Wizard list). Layer 3 is the actual
+    preparation interface in Foundry &mdash; filters, detail pane, prepared / known / in
+    spellbook hierarchy, favourites, caps. Layer 4 is loadouts (preset combinations of
+    prepared spells you can switch between).
+  </p>
+</div>
+
+<div class="item-card shipped">
+  <div class="pill-row">
+    <span class="pill live">Shipped May 2026</span>
+  </div>
+  <h3>ItemBumpUses v1</h3>
+  <p>
+    The "let one piece of content bump another piece of content's uses-per-day" feature
+    described in the tail-end section above. Version 1 covers the common case end-to-end:
+    a feat that bumps a class feature, exported to Foundry with the bump baked into the
+    target's uses-max formula, with an audit trail flag explaining where the bump came
+    from.
+  </p>
+</div>
+
+<div class="item-card shipped">
+  <div class="pill-row">
+    <span class="pill live">Shipped May 2026</span>
+  </div>
+  <h3>Spell list decoupling</h3>
+  <p>
+    Per-class spell lists now live on a dedicated endpoint that's read-through-fresh, not
+    baked into a per-class bundle. The DM can edit a spell's tags and see the spell move
+    in or out of class lists immediately, without a manual rebake. Lightweight summaries
+    + per-spell full payloads + tag-driven recompute on save.
+  </p>
+</div>
+
+<div class="item-card shipped">
+  <div class="pill-row">
+    <span class="pill live">Shipped May 2026</span>
+  </div>
+  <h3>Class slug routes</h3>
+  <p>
+    Class URLs migrated from database-ID form (the unreadable
+    <code>/compendium/classes/view/sjsnEpcMI1KSHbb1GeUO</code>) to human-readable slug
+    form (<code>/compendium/classes/view/cleric_phb</code>). Matches the convention
+    already used by feats, spells, items, and facilities.
+  </p>
+</div>
+
+</div>
+</body>
+</html>
