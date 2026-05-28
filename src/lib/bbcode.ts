@@ -265,7 +265,18 @@ export function htmlToBbcode(html: string): string {
   }
 
   // Special
-  bbcode = bbcode.replace(/<blockquote>([\s\S]*?)<\/blockquote>/gi, '[quote]$1[/quote]');
+  // Strip the <p> wrappers TipTap nests inside a blockquote (paragraph
+  // boundaries → a single newline) and trim, so a one-line quote doesn't
+  // inherit a trailing \n\n from the generic <p>→\n\n pass further down
+  // — that produced [quote]Text\n\n[/quote] (the "empty line after the
+  // quote" report). <br> tags are left for the global <br>→\n pass.
+  bbcode = bbcode.replace(/<blockquote>([\s\S]*?)<\/blockquote>/gi, (_m, inner) => {
+    const cleaned = String(inner)
+      .replace(/<\/p>\s*<p[^>]*>/gi, '\n')
+      .replace(/<\/?p[^>]*>/gi, '')
+      .trim();
+    return `[quote]${cleaned}[/quote]`;
+  });
   bbcode = bbcode.replace(/<div[^>]*class="indent-block"[^>]*>([\s\S]*?)<\/div>/gi, '[indent]$1[/indent]');
   bbcode = bbcode.replace(/<div[^>]*style="[^"]*padding-left:\s*2rem;?[^"]*"[^>]*>([\s\S]*?)<\/div>/gi, '[indent]$1[/indent]');
   bbcode = bbcode.replace(/<code>([\s\S]*?)<\/code>/gi, '[code]$1[/code]');

@@ -278,6 +278,13 @@
   .ProseMirror blockquote { @apply border-l-2 border-gold/20 pl-4 italic; }
   .ProseMirror ul { @apply list-disc pl-5; }
   .ProseMirror ol { @apply list-decimal pl-5; }
+  /* Links inside the editor surface. The editor content isn't `.prose`,
+     so the `.prose a` rule doesn't reach it — without this, editor links
+     render in the browser default (near-black) and show no pointer
+     cursor (Link is configured openOnClick:false). Match the theme
+     accent and restore the pointer. */
+  .ProseMirror a { @apply text-gold underline decoration-gold/40 underline-offset-2 cursor-pointer transition-colors; }
+  .ProseMirror a:hover { @apply decoration-gold/70; }
   .ProseMirror .column-resize-handle {
     position: absolute;
     right: -2px; top: 0; bottom: -2px;
