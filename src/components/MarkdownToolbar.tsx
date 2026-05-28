@@ -3,7 +3,7 @@ import {
   Bold, Italic, Underline, Strikethrough, AlignCenter, AlignLeft, AlignRight, AlignJustify,
   List, ListOrdered, Heading1, Heading2, Heading3, Heading4, 
   Quote, Code, Link, Eye, EyeOff, Type, Minus, Hash, 
-  EyeOff as Spoiler, MessageSquare as Comment, Subscript, Superscript,
+  EyeOff as Spoiler, Subscript, Superscript,
   Undo, Redo, FileCode, Indent, Outdent, Table as TableIcon
 } from 'lucide-react';
 import { Button } from './ui/button';
@@ -278,7 +278,10 @@ export default function MarkdownToolbar({
     { icon: Subscript, label: 'Subscript', action: () => insertText('[sub]', '[/sub]'), active: editor?.isActive('subscript') },
     { icon: Superscript, label: 'Superscript', action: () => insertText('[sup]', '[/sup]'), active: editor?.isActive('superscript') },
     { icon: Spoiler, label: 'Spoiler', action: () => insertText('[spoiler]', '[/spoiler]') },
-    { icon: Comment, label: 'Comment (Hidden)', action: () => insertText('[comment]', '[/comment]') },
+    // [comment] (hidden HTML comment) removed from the toolbar per product
+    // decision 2026-05-28 — it silently hid the wrapped text, which read
+    // as a bug. The tag still parses if hand-typed in Source mode; [secret]
+    // covers DM-only-but-visible content.
     { icon: Minus, label: 'Horizontal Rule', action: () => insertText('[hr]', '') },
     { icon: Hash, label: 'Line Break', action: () => insertText('[br]', '') },
   ];

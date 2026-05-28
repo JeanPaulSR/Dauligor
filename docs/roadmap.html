@@ -386,11 +386,11 @@
           both modes &rarr; <code>[b]Test[/b]</code>.
         </li>
         <li>
-          &#9888; <strong>Comment hides its text</strong> &mdash; <em>open design question, not a
-          bug.</em> <code>[comment]</code> compiles to an HTML comment (<code>&lt;!-- … --&gt;</code>),
-          which is invisible by design. Needs a product decision: keep as a hidden authoring note,
-          remove the button, or repurpose it as a visible styled aside. (Note: <code>[secret]</code>
-          already covers DM-only-but-visible content.)
+          &#10003; <strong>Comment hid its text</strong> &mdash; resolved by removing the toolbar
+          button (product decision 2026-05-28). <code>[comment]</code> compiles to a hidden HTML
+          comment by design; it silently hid wrapped text, which read as a bug. The tag still
+          parses if hand-typed in Source mode, but it's no longer a first-class authoring action.
+          (<code>[secret]</code> covers DM-only-but-visible content.)
         </li>
       </ul>
       <em>Quote round-trip verified programmatically (incl. no regression on the Batch 1
