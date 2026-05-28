@@ -36,23 +36,28 @@ Proposal-mode logic lives *inside* these files, but the files themselves are own
 
 ## Open requests to other branches
 
-- [ ] `(2026-05-28)` Request **`compendium-editors`** to implement Parts B + C of
-  [2026-05-28-cross-referential-cluster-design.md](2026-05-28-cross-referential-cluster-design.md)
-  once proposal-system ships Parts A + D:
-  - **Part B** — route scaling-column save/delete through the proposal
-    accumulator when `isProposalMode` (`ScalingColumnsPanel.tsx`,
-    `SubclassEditor.tsx`, `scaling/ScalingEditor.tsx`). Consumes the new
-    `scaling_column` proposable entity type.
-  - **Part C** — overlay current-active-block draft creates into the
-    cross-reference pickers (`ClassEditor`, `SubclassEditor`,
-    `UniqueOptionGroupEditor`, shared `EntityPicker` gains a `draftEntries`
-    prop). Consumes the proposal-system picker-overlay helper.
-  - Blocks: content-creators authoring full class clusters (the reported bug).
+- [ ] `(2026-05-28)` **`compendium-editors`: implement Parts B + C.** Ready to
+  pick up — full actionable spec (plain-language summary + before/after code +
+  contracts + how to pull Part A) is in
+  **[2026-05-28-compendium-editors-handoff.md](2026-05-28-compendium-editors-handoff.md)**.
+  - **Part A is built** (`scaling_column` type + `useProposalDraftOptions`
+    helper) on **`proposal-system`** — rebase onto it to consume.
+  - **Part B** — route scaling-column save/delete through the accumulator
+    (`ScalingColumnsPanel.tsx` + `SubclassEditor.tsx` + `scaling/ScalingEditor.tsx`).
+  - **Part C** — overlay active-block draft creates into the cross-ref pickers
+    (`ClassEditor` / `SubclassEditor` / `UniqueOptionGroupEditor`, `EntityPicker`
+    gains a `draftEntries` prop).
+  - Not blocked by our Part D (approval side) — that's independent.
 
 ## Handoff log
 
 Newest at the top. Each entry: date + link to the handoff doc in this same folder.
 
+- `2026-05-28` — [2026-05-28-compendium-editors-handoff.md](2026-05-28-compendium-editors-handoff.md):
+  ready-to-pick-up spec for `compendium-editors` (Parts B + C) — plain-language
+  summary + before/after code + the `useProposalDraftOptions` / `scaling_column`
+  contracts + how to pull Part A. Open Request above points at it. Pushed to
+  `main` so the branch can find it.
 - `2026-05-28` — **Part A built + held on this branch; design hardened.**
   Part A (`scaling_column` proposable type, `useProposalDraftOptions` helper,
   local migration `20260528-1200`) is committed on `proposal-system` but was
