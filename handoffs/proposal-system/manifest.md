@@ -36,10 +36,27 @@ Proposal-mode logic lives *inside* these files, but the files themselves are own
 
 ## Open requests to other branches
 
-- _none yet_
+- [ ] `(2026-05-28)` Request **`compendium-editors`** to implement Parts B + C of
+  [2026-05-28-cross-referential-cluster-design.md](2026-05-28-cross-referential-cluster-design.md)
+  once proposal-system ships Parts A + D:
+  - **Part B** — route scaling-column save/delete through the proposal
+    accumulator when `isProposalMode` (`ScalingColumnsPanel.tsx`,
+    `SubclassEditor.tsx`, `scaling/ScalingEditor.tsx`). Consumes the new
+    `scaling_column` proposable entity type.
+  - **Part C** — overlay current-active-block draft creates into the
+    cross-reference pickers (`ClassEditor`, `SubclassEditor`,
+    `UniqueOptionGroupEditor`, shared `EntityPicker` gains a `draftEntries`
+    prop). Consumes the proposal-system picker-overlay helper.
+  - Blocks: content-creators authoring full class clusters (the reported bug).
 
 ## Handoff log
 
 Newest at the top. Each entry: date + link to the handoff doc in this same folder.
 
+- `2026-05-28` — [2026-05-28-cross-referential-cluster-design.md](2026-05-28-cross-referential-cluster-design.md):
+  design for proposing cross-referential class clusters (columns/subclasses/
+  option-groups). Root cause + agreed architecture (D1 approve-whole-block,
+  `scaling_column` as a proposable type, active-block picker overlay).
+  proposal-system owns Parts A + D; compendium-editors owns Parts B + C
+  (see Open request above).
 - `2026-05-28` — branch (re)activated as `proposal-system`. Landed two fixes to main before the rename: `9cdf1c6` (scope block UI to `/proposals/edit/*` only — kill `useEntityWriter` global block-mode auto-promotion) + `3c0d6d2` (FeatsEditor proposal-mode CREATE scroll/undo preservation).
