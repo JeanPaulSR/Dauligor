@@ -7,6 +7,8 @@ import {
   Undo, Redo, FileCode, Indent, Outdent, Table as TableIcon
 } from 'lucide-react';
 import { Button } from './ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
+import { Input } from './ui/input';
 import { Editor } from '@tiptap/react';
 
 interface MarkdownToolbarProps {
@@ -47,7 +49,83 @@ export default function MarkdownToolbar({
     }
   }
 
+  const [linkDialogOpen, setLinkDialogOpen] = React.useState(false);
+  const [linkUrl, setLinkUrl] = React.useState('');
+  // Selection captured when the link dialog opens — opening it pulls
+  // focus off the textarea (TipTap keeps its own selection in state).
+  const linkCtxRef = React.useRef<{ mode: 'visual' | 'source'; start: number; end: number; text: string } | null>(null);
+
+  // Grow a collapsed selection to cover the word under the cursor, so a
+  // single click + format wraps the word instead of emitting empty
+  // markers. An explicit (non-empty) selection is left untouched.
+  // Visual-mode only.
+  const expandSelectionToWord = () => {
+    if (!editor) return;
+    const sel = editor.state.selection;
+    if (!sel.empty) return;
+    const $pos = editor.state.doc.resolve(sel.from);
+    const parentText = $pos.parent.textContent;
+    const offset = $pos.parentOffset;
+    let s = offset;
+    let e = offset;
+    while (s > 0 && /\S/.test(parentText[s - 1])) s--;
+    while (e < parentText.length && /\S/.test(parentText[e])) e++;
+    if (s === e) return; // cursor isn't on a word
+    const base = $pos.start();
+    editor.commands.setTextSelection({ from: base + s, to: base + e });
+  };
+
+  // Open the in-app link dialog (replaces window.prompt). Captures the
+  // active selection so we can apply the link after the dialog closes.
+  const openLinkDialog = () => {
+    if (isWYSIWYG && editor) {
+      linkCtxRef.current = { mode: 'visual', start: 0, end: 0, text: '' };
+    } else if (textareaRef.current) {
+      const ta = textareaRef.current;
+      linkCtxRef.current = {
+        mode: 'source',
+        start: ta.selectionStart,
+        end: ta.selectionEnd,
+        text: ta.value.substring(ta.selectionStart, ta.selectionEnd),
+      };
+    } else {
+      return;
+    }
+    setLinkUrl('');
+    setLinkDialogOpen(true);
+  };
+
+  const confirmLink = () => {
+    const url = linkUrl.trim();
+    const ctx = linkCtxRef.current;
+    setLinkDialogOpen(false);
+    if (!url || !ctx) return;
+    if (ctx.mode === 'visual' && editor) {
+      if (editor.state.selection.empty) {
+        // No selection — drop the URL itself in as linked text.
+        editor.chain().focus().insertContent(
+          `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
+        ).run();
+      } else {
+        editor.chain().focus().setLink({ href: url }).run();
+      }
+    } else if (ctx.mode === 'source' && textareaRef.current) {
+      const ta = textareaRef.current;
+      const label = ctx.text || url;
+      const insert = `[url=${url}]${label}[/url]`;
+      const newValue = ta.value.substring(0, ctx.start) + insert + ta.value.substring(ctx.end);
+      onUpdate(newValue);
+      setTimeout(() => {
+        ta.focus();
+        const pos = ctx.start + insert.length;
+        ta.setSelectionRange(pos, pos);
+      }, 0);
+    }
+  };
+
   const insertText = (before: string, after: string = '') => {
+    // Links route through the in-app dialog in either mode.
+    if (before === '[url=url]') { openLinkDialog(); return; }
     if (isWYSIWYG && editor) {
       // Handle TipTap commands
       switch (before) {
@@ -69,12 +147,7 @@ export default function MarkdownToolbar({
         case '[code]': editor.chain().focus().toggleCode().run(); break;
         case '[sub]': editor.chain().focus().toggleSubscript().run(); break;
         case '[sup]': editor.chain().focus().toggleSuperscript().run(); break;
-        case '[spoiler]': editor.chain().focus().toggleMark('spoiler').run(); break;
-        case '[url=url]': {
-          const url = window.prompt('Enter URL:', 'https://');
-          if (url) editor.chain().focus().setLink({ href: url }).run();
-          break;
-        }
+        case '[spoiler]': expandSelectionToWord(); editor.chain().focus().toggleMark('spoiler').run(); break;
         case '[hr]': editor.chain().focus().setHorizontalRule().run(); break;
         case '[br]': editor.chain().focus().setHardBreak().run(); break;
         case '[table]': editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(); break;
@@ -97,12 +170,18 @@ export default function MarkdownToolbar({
         default: {
           // Tags without a dedicated TipTap command (e.g. [comment],
           // [small]) used to fall through here and silently do nothing.
-          // Wrap the current selection in the literal BBCode markers so
-          // the button always does something; the markers round-trip
-          // through htmlToBbcode on save and render correctly.
+          // Grow a bare cursor to the word under it, then wrap the
+          // selection's non-whitespace core in the literal BBCode markers
+          // (whitespace stays outside, so we get [small]word[/small] not
+          // [small]word [/small]). The markers round-trip through
+          // htmlToBbcode on save and render correctly.
+          expandSelectionToWord();
           const { from, to } = editor.state.selection;
           const selected = editor.state.doc.textBetween(from, to, ' ');
-          editor.chain().focus().insertContent(`${before}${selected}${after}`).run();
+          const lead = selected.match(/^\s*/)?.[0] ?? '';
+          const trail = selected.match(/\s*$/)?.[0] ?? '';
+          const core = selected.slice(lead.length, selected.length - trail.length);
+          editor.chain().focus().insertContent(`${lead}${before}${core}${after}${trail}`).run();
           break;
         }
       }
@@ -130,13 +209,19 @@ export default function MarkdownToolbar({
         textarea.setSelectionRange(start - before.length, end - before.length);
       }, 0);
     } else {
-      // Add tags
-      // Check if selection already contains tags partially (e.g. bolding a mixed selection)
-      const newValue = text.substring(0, start) + before + selectedText + after + text.substring(end);
+      // Add tags. Move leading/trailing whitespace OUT of the wrap so a
+      // word selected by double-click (which can include a trailing
+      // space) yields [b]Test[/b] not [b]Test [/b].
+      const lead = selectedText.match(/^\s*/)?.[0] ?? '';
+      const trail = selectedText.match(/\s*$/)?.[0] ?? '';
+      const core = selectedText.slice(lead.length, selectedText.length - trail.length);
+      const wrapped = core ? `${lead}${before}${core}${after}${trail}` : `${before}${after}`;
+      const newValue = text.substring(0, start) + wrapped + text.substring(end);
       onUpdate(newValue);
       setTimeout(() => {
         textarea.focus();
-        textarea.setSelectionRange(start + before.length, end + before.length);
+        const coreStart = start + lead.length + before.length;
+        textarea.setSelectionRange(coreStart, coreStart + core.length);
       }, 0);
     }
   };
@@ -322,6 +407,28 @@ export default function MarkdownToolbar({
           )}
         </div>
       )}
+
+      <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Insert link</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <Input
+              autoFocus
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); confirmLink(); } }}
+              placeholder="https://example.com"
+              className="field-input"
+            />
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="ghost" size="sm" onClick={() => setLinkDialogOpen(false)}>Cancel</Button>
+              <Button type="button" size="sm" className="btn-gold-solid" onClick={confirmLink}>Insert</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
