@@ -64,6 +64,7 @@ import BackgroundsList from './pages/compendium/BackgroundsList';
 import BackgroundEditor from './pages/compendium/BackgroundEditor';
 import CharacterList from './pages/characters/CharacterList';
 import CharacterBuilder from './pages/characters/CharacterBuilder';
+import BBCodeTester from './pages/dev/BBCodeTester';
 import CharacterErrorBoundary from './pages/characters/CharacterErrorBoundary';
 import { TooltipProvider } from './components/ui/tooltip';
 import CampaignManager from './pages/campaign/CampaignManager';
@@ -412,6 +413,11 @@ export default function App() {
                   <Route path="/admin/statuses" element={<StatusesEditor userProfile={effectiveProfile} />} />
                   <Route path="/admin/images" element={<ImageManager userProfile={effectiveProfile} />} />
                   <Route path="/images/view" element={<ImageViewer userProfile={effectiveProfile} />} />
+                  {/* Dev tools — admin-only. BBCode tester for the
+                      ongoing BBCode audit + cross-reference authoring
+                      work. Lives under /dev/* so other dev surfaces
+                      can sit alongside. */}
+                  <Route path="/dev/bbcode" element={<AdminOnly userProfile={effectiveProfile}><BBCodeTester userProfile={effectiveProfile} /></AdminOnly>} />
                   <Route path="/settings" element={<Settings user={user} userProfile={effectiveProfile} />} />
                   <Route path="/profile/:username" element={<Profile viewerProfile={effectiveProfile} />} />
                   <Route path="/construction" element={<Construction />} />

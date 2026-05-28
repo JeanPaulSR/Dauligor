@@ -446,6 +446,36 @@ export default function Sidebar({
 
       {isStaff && (
         <div className={`p-4 border-t border-gold/10 shrink-0 space-y-2 ${isCollapsed && !isOpen ? 'p-2' : ''}`}>
+          {/* Dev — admin-only BBCode tester (and a home for future dev tools) */}
+          {isAdmin && (
+            <Link to="/dev/bbcode" onClick={() => onClose?.()}>
+              {(!isCollapsed || isOpen) ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className={`w-full justify-start gap-2 text-xs text-ink/60 hover:text-gold hover:bg-gold/5 ${
+                    location.pathname === '/dev/bbcode' ? 'text-gold bg-gold/10' : ''
+                  }`}
+                >
+                  <Bug className="w-3.5 h-3.5 shrink-0" /> BBCode Tester
+                </Button>
+              ) : (
+                <Tooltip>
+                  <TooltipTrigger render={
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="w-10 h-10 mx-auto text-ink/60 hover:text-gold hover:bg-gold/5"
+                    >
+                      <Bug className="w-5 h-5" />
+                    </Button>
+                  } />
+                  <TooltipContent side="right">BBCode Tester</TooltipContent>
+                </Tooltip>
+              )}
+            </Link>
+          )}
+
           {/* Image Manager */}
           <Link to="/admin/images" onClick={() => onClose?.()}>
             {(!isCollapsed || isOpen) ? (
