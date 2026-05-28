@@ -172,35 +172,66 @@ The correctness constraint: cross-references resolve only if the cluster
 approves together. Today the admin queue approves **per-row**; rejecting one
 piece of a referenced cluster would leave a dangling reference live.
 
-**DECIDED: D1 — approve-whole-block.** Admin approves the block; the server
-applies every revision in dependency order (parents before children,
-referents after referenced) and returns a partial-failure report. D1 has no
-multi-statement transaction, so application is best-effort-ordered: a failure
-mid-cluster is reported with which rows landed and which didn't, and the
-block stays open for the admin to retry/resolve. This matches the "block is
-the unit of work" mental model the proposer already has.
+**DECIDED: D1 — approve-whole-block, applied atomically.** Admin approves the
+block; the server (1) validates references, (2) runs the per-revision drift
+check, then (3) applies every revision as a **single `env.DB.batch()`**, which
+D1 runs as one transaction and rolls back entirely on any failure
+(`worker/index.js` already exposes the batch path at the `/query` handler). So
+there is no partial-application state — the block lands whole or not at all.
+This matches the "block is the unit of work" mental model the proposer already
+has.
 
-> **Rejected alternative — D2 (per-row ref-integrity gate):** keep per-row
-> approval but refuse to approve a revision referencing a not-yet-live draft
-> id. Smaller change, but pushes manual approval-ordering onto the admin.
-> Rejected in favor of D1's better proposer/admin experience.
+> **Correction (2026-05-28 hardening pass):** an earlier draft of this section
+> said "D1 has no multi-statement transaction, so apply best-effort and report
+> partial failure." That was wrong — `env.DB.batch()` is atomic. Part D uses
+> it, which eliminates the half-built-cluster failure mode (S1 below).
 
-The cascade engine (`api/_lib/cascadeStrategies.ts`) is the natural place to
-express "this revision depends on that one" — it already models
-`cascade_parent_revision_id`. Dependency ordering for D1's apply pass is
-derived from the intra-cluster id references (parent_id, class_id, group_id,
-and the column/group id refs inside advancements + mappings).
+Three guards run **before** the batch. All live in the proposal/approval layer
+— none touch the admin-direct write path or the shared schema (see
+[Failure modes](#failure-modes-considered) for why that boundary matters):
+
+1. **Reference-integrity validation.** Walk each revision's id references — the
+   FK columns (`subclass.class_id`, `item.group_id`) and the JSON-embedded refs
+   (`scaling_column.parent_id`, advancement `scaling_column_id` /
+   `quantity_column_id`, `class.unique_option_mappings`, `group.class_ids`,
+   `subclass.unique_option_group_ids`). Each referenced id must resolve to a
+   live row OR another revision in the same block; refuse with a precise report
+   otherwise. This is the only thing standing between a dropped/forgotten draft
+   reference and a live-but-broken class — the schema has **no FK** on the JSON
+   refs, so D1 itself will never catch a dangling one.
+2. **Per-revision drift check.** The existing snapshot-vs-current conflict
+   detection runs for every revision. Any drift blocks the whole block (coarser
+   than per-row, but correct) and surfaces the 3-way diff.
+3. **Dependency ordering.** Order the batch so FK parents precede FK children
+   (class → subclass, group → item). The only reference *cycle* — class ↔
+   option-group — is entirely JSON (no FK), so it does not constrain INSERT
+   order and is benign.
+
+> **Rejected as the approval *model* — D2 (per-row ref-integrity gate):** keep
+> per-row approval but refuse a revision referencing a not-yet-live draft id.
+> Rejected as the *model* (it pushes manual ordering onto the admin) — **but
+> its integrity check is adopted** as guard #1 inside D1.
+
+The cascade engine (`api/_lib/cascadeStrategies.ts`) already models
+`cascade_parent_revision_id` and is the natural place to express
+"this revision depends on that one" for block-level **reject**.
 
 ### Admin-side surface for D1
 
-- `functions/api/admin/proposals/[[path]].ts` gains an "approve block"
-  action that loads every `pending` revision in the bundle, topologically
-  orders them by intra-cluster reference, and applies in sequence via
-  `applyApprovedOperation`.
-- Partial-failure report shape: `{ applied: [...ids], failed: [{id, error}], remaining: [...ids] }`.
-  The block stays `submitted` (not fully approved) until all land.
-- The existing per-row approve stays for non-cluster proposals (a lone tag,
-  a lone spell) — block-approve is additive, not a replacement.
+- `functions/api/admin/proposals/[[path]].ts` gains an **approve-block**
+  action: load every `pending` revision in the bundle → validate refs →
+  drift-check → order → apply as one `env.DB.batch()` (atomic).
+- **Block-level / cascade reject** so an admin can't approve a class but reject
+  its columns/subclasses and orphan them. Per-row reject stays only for lone,
+  non-cluster proposals.
+- **Block edit-lock:** once a block is `submitted`, the proposer can't add new
+  drafts to it until it's returned/rejected — closes the edit-during-approve
+  race (S6 below). (Verify the current block lifecycle enforces this.)
+- Result shape: `{ ok: true, applied: [...ids] }` on success, or
+  `{ ok: false, stage: 'refs' | 'drift' | 'apply', failures: [...] }` with
+  **nothing applied** (atomic) on refusal.
+- The existing per-row approve stays for non-cluster proposals (a lone tag, a
+  lone spell) — block-approve is additive, not a replacement.
 
 ---
 
@@ -210,7 +241,7 @@ and the column/group id refs inside advancements + mappings).
 |---|---|---|
 | `scaling_column` entity type + config | `api/_lib/proposals.ts`, `src/lib/proposalAware.ts` | **proposal-system** |
 | entity_type CHECK migration | `worker/migrations/<ts>_*.sql` (shared, append-only) | **proposal-system** |
-| Picker-overlay helper (flatten drafts) | `src/hooks/useProposalEntityDrafts.ts` (or a new sibling) | **proposal-system** |
+| Picker-overlay helper (flatten drafts) | `src/hooks/useProposalDraftOptions.ts` (new sibling of `useProposalEntityDrafts`) | **proposal-system** |
 | Block-atomic approval / ref-integrity | `functions/api/admin/proposals/[[path]].ts`, `api/_lib/proposals.ts`, `api/_lib/cascadeStrategies.ts` | **proposal-system** |
 | Route column save/delete through accumulator | `src/components/compendium/ScalingColumnsPanel.tsx`, `src/pages/compendium/{SubclassEditor,scaling/ScalingEditor}.tsx` | **compendium-editors** |
 | Overlay drafts in pickers | `src/pages/compendium/{ClassEditor,SubclassEditor,UniqueOptionGroupEditor}.tsx`, `src/components/ui/EntityPicker.tsx` | **compendium-editors** |
@@ -244,13 +275,40 @@ Confirmed (no work beyond Part C):
 
 ---
 
-## Implementation checklist (once design is agreed)
+## Failure modes considered
+
+Worst-case pass, 2026-05-28. The recurring answer to "what would fixing this
+do to the normal (admin-direct) flow?" is **nothing** — because we refuse to
+push integrity down into the shared schema. The schema is deliberately loose
+(only `subclass.class_id` + `item.group_id` are enforced FKs; every other
+cross-ref is a plain TEXT column or JSON, with no FK). The admin-direct flow
+*relies* on that looseness (author refs in any order, delete referenced rows,
+tolerate dangling refs that the exporter skips). So every proposal-cluster
+guard lives in the **approval layer**, never as a new FK/CHECK.
+
+| # | Worst case | How the design handles it | Fixing it the "schema" way would… |
+|---|---|---|---|
+| **S1** | Apply fails halfway → live, half-built class | Single `env.DB.batch()` = atomic, full rollback. No partial state. | n/a (batch is approval-only; admin-direct unaffected) |
+| **S2** | Dangling JSON ref (advancement → dropped column) lands silently — no FK to catch it | **Guard #1: reference-integrity validation** before the batch, in the approval handler | Adding FKs would block admins from saving a class that references a not-yet-created column, and from deleting referenced columns — **breaks normal flow.** So we validate at approval instead. |
+| **S3** | class ↔ option-group reference cycle | Benign — the cycle is JSON-only (no FK); only FK edges need ordering, and they're a DAG | n/a |
+| **S4** | Per-row reject orphans a cluster piece | **Block-level / cascade reject** | n/a (proposal-layer) |
+| **S5** | Live row drifts between draft and approval | **Guard #2: per-revision drift check**; any drift blocks the whole block | n/a (reuses existing conflict detection) |
+| **S6** | Proposer edits the block mid-approval | **Block edit-lock on `submitted`** | n/a (block lifecycle) |
+| S7 | Re-approval idempotency | Dissolves under atomic batch (no partial state); still skip already-`approved` revisions | n/a |
+| S8 | Stale/deleted draft shows in picker | `useProposalDraftOptions` iterates `createdIds`, which drops CREATE+DELETE-collapsed drafts | n/a |
+| S9 | Huge cluster exceeds `batch()` limits | Known ceiling; realistic clusters are small. Chunking would sacrifice atomicity — flagged, not solved | n/a |
+| S10 | Remote migration not applied before B+C ship | Gated: run `20260528-1200` on remote **before** B+C reach prod | n/a |
+| S11 | `ON DELETE CASCADE` wipes children on a class/group delete | Already true for admin-direct; the cascade-preview should surface it | this is existing behavior, not new |
+
+---
+
+## Implementation checklist
 
 **proposal-system (this branch):**
-- [ ] `scaling_column` in `PROPOSABLE_ENTITY_TYPES` + `ENTITY_CONFIGS` + `ProposalEntityType`
-- [ ] migration: extend `pending_revisions.entity_type` CHECK (local-first)
-- [ ] picker-overlay helper (flatten active-block draft creates per type)
-- [ ] approval model (D1 or D2) + reference-integrity validation
+- [x] **Part A** `scaling_column` in `PROPOSABLE_ENTITY_TYPES` + `ENTITY_CONFIGS` + `ProposalEntityType` — *committed on `proposal-system` (held off `main` pending the full feature)*
+- [x] **Part A** migration `20260528-1200`: `pending_revisions.entity_type` CHECK — *applied to **local** D1 only; remote pending explicit go-ahead before B+C ship*
+- [x] **Part A** picker-overlay helper — `src/hooks/useProposalDraftOptions.ts`
+- [ ] **Part D** approve-whole-block: atomic `env.DB.batch()` apply + guard #1 reference-integrity validation + guard #2 per-revision drift check + dependency ordering + block-level/cascade reject + block edit-lock
 - [ ] update `proposal-editor-pattern.md` + `content-proposals.md` (note the
       block-mode auto-promotion removal from `9cdf1c6` while here)
 

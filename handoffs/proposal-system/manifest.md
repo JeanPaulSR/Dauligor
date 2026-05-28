@@ -53,6 +53,21 @@ Proposal-mode logic lives *inside* these files, but the files themselves are own
 
 Newest at the top. Each entry: date + link to the handoff doc in this same folder.
 
+- `2026-05-28` — **Part A built + held on this branch; design hardened.**
+  Part A (`scaling_column` proposable type, `useProposalDraftOptions` helper,
+  local migration `20260528-1200`) is committed on `proposal-system` but was
+  **removed from `main`** (force-reset `abb7fc5`→`3e0e346`) — held off `main`
+  until the full feature is agreed. A worst-case pass hardened **Part D** in
+  the design doc: approve-whole-block now applies via an **atomic
+  `env.DB.batch()`** (an earlier draft wrongly claimed D1 can't transact),
+  with pre-apply **reference-integrity validation** + **per-revision drift
+  check** + **block-level/cascade reject** + **block edit-lock**. New
+  "Failure modes considered" section records the S1–S11 analysis and the
+  governing principle: all integrity lives in the **approval layer**, never
+  as new FKs/CHECKs (the loose schema is what the admin-direct flow relies on).
+  **Consequence for the Open Request:** B + C are *not* unblocked from `main`
+  yet (Part A isn't there) — `compendium-editors` either rebases onto
+  `proposal-system` or waits for Part A to land on `main`.
 - `2026-05-28` — [2026-05-28-cross-referential-cluster-design.md](2026-05-28-cross-referential-cluster-design.md):
   design for proposing cross-referential class clusters (columns/subclasses/
   option-groups). Root cause + agreed architecture (D1 approve-whole-block,

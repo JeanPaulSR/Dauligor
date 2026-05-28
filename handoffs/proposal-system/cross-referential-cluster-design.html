@@ -218,9 +218,9 @@
 
   <h2>How "approve whole block" works <span class="muted" style="font-size:14px">(Part D)</span></h2>
   <div class="step"><div class="n">1</div><div class="b"><b>Admin clicks "Approve block."</b> The server gathers every pending revision in that block.</div></div>
-  <div class="step"><div class="n">2</div><div class="b"><b>It orders them by dependency.</b> Things that are referenced (columns, the class) get applied before the things that reference them (advancements, option items).</div></div>
-  <div class="step"><div class="n">3</div><div class="b"><b>It applies them in sequence.</b> Because the ids never changed, every cross-reference resolves as it lands.</div></div>
-  <div class="step"><div class="n">4</div><div class="b"><b>If something fails mid-way, it reports exactly what landed and what didn't</b> — the block stays open so the admin can fix and retry. (The database can't wrap all of this in a single transaction, so we're honest about partial application rather than pretending it's atomic.)</div></div>
+  <div class="step"><div class="n">2</div><div class="b"><b>It checks everything first.</b> Every referenced id (a column, a class) must already be live or be part of this same block, and nothing the block touches can have changed since it was drafted. If a check fails it refuses and says exactly why — with nothing changed yet.</div></div>
+  <div class="step"><div class="n">3</div><div class="b"><b>It applies the whole block as one atomic transaction</b>, ordered so referenced things land first. Because the ids never changed, every cross-reference resolves as it lands. (The database's <code>batch()</code> runs it all as a single transaction.)</div></div>
+  <div class="step"><div class="n">4</div><div class="b"><b>All-or-nothing.</b> If any single step errors, the whole batch rolls back — so you never get a half-built, broken class on the live site. Either the entire block lands or none of it does.</div></div>
 
   <h2>What already exists vs. what's new</h2>
   <p class="muted">Verified against current <code>main</code> before proposing any code:</p>
