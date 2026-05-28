@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Proposing Class Clusters — Design Explainer</title>
+<style>
+  :root{
+    --ink:#1a1a1a; --muted:#5b5b53; --gold:#c5a059; --gold-deep:#9a7b38;
+    --blood:#8b0000; --bg:#f5f5f0; --card:#ffffff; --line:#e3ddcd;
+    --good:#2f7d4f; --good-bg:#eaf5ee; --bad-bg:#fbecec; --warn-bg:#fbf5e6;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.55; padding:0 0 80px;
+  }
+  .wrap{max-width:980px; margin:0 auto; padding:0 24px}
+  header.hero{
+    background:linear-gradient(160deg,#1a1a1e,#2a2118);
+    color:#f3ead2; padding:48px 0 40px; border-bottom:3px solid var(--gold);
+  }
+  header.hero .wrap{display:block}
+  .kicker{text-transform:uppercase; letter-spacing:.22em; font-size:12px; color:var(--gold); font-weight:700; margin:0 0 10px}
+  h1{font-family:Georgia,"Times New Roman",serif; font-size:34px; margin:0 0 12px; font-weight:700}
+  .lede{font-size:17px; color:#d9d0bb; max-width:760px; margin:0}
+  h2{font-family:Georgia,serif; font-size:24px; margin:46px 0 6px; padding-bottom:8px; border-bottom:2px solid var(--line)}
+  h2 .num{color:var(--gold-deep); font-size:18px; margin-right:10px}
+  h3{font-size:16px; margin:22px 0 8px; letter-spacing:.01em}
+  p{margin:10px 0}
+  code{background:#f0ece0; border:1px solid var(--line); border-radius:4px; padding:1px 6px; font-family:"SF Mono",Consolas,Menlo,monospace; font-size:13px; color:#3a2f15}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:18px 0}
+  .grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:18px 0}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px 18px 16px; box-shadow:0 1px 2px rgba(0,0,0,.04)}
+  .card h3{margin-top:0}
+  .tag{display:inline-block; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; padding:3px 9px; border-radius:20px; vertical-align:middle}
+  .tag.bug{background:var(--bad-bg); color:var(--blood); border:1px solid #e3b7b7}
+  .tag.me{background:#eef3fb; color:#2f5694; border:1px solid #c3d4ee}
+  .tag.them{background:var(--warn-bg); color:var(--gold-deep); border:1px solid #e6d3a3}
+  .tag.good{background:var(--good-bg); color:var(--good); border:1px solid #b9ddc6}
+  .pill-row{display:flex; gap:8px; flex-wrap:wrap; margin:6px 0 0}
+  .callout{border-left:4px solid var(--gold); background:#fbf7ec; padding:14px 18px; border-radius:0 8px 8px 0; margin:18px 0}
+  .callout.key{border-left-color:var(--good); background:var(--good-bg)}
+  .callout b{color:var(--gold-deep)}
+  .callout.key b{color:var(--good)}
+  ul{margin:8px 0; padding-left:22px} li{margin:5px 0}
+  .muted{color:var(--muted); font-size:14px}
+  table{width:100%; border-collapse:collapse; margin:16px 0; font-size:14px; background:var(--card); border:1px solid var(--line); border-radius:8px; overflow:hidden}
+  th,td{text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+  th{background:#f3efe3; font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:#6a5d3a}
+  tr:last-child td{border-bottom:none}
+  .check{color:var(--good); font-weight:700} .cross{color:var(--blood); font-weight:700}
+  /* cluster diagram */
+  .diagram{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:8px; margin:18px 0}
+  .legend{display:flex; gap:18px; flex-wrap:wrap; font-size:12.5px; color:var(--muted); padding:6px 12px 10px}
+  .legend span{display:inline-flex; align-items:center; gap:6px}
+  .swatch{width:12px; height:3px; border-radius:2px; display:inline-block}
+  .step{display:flex; gap:14px; align-items:flex-start; margin:12px 0}
+  .step .n{flex:0 0 30px; height:30px; border-radius:50%; background:var(--gold); color:#fff; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:14px}
+  .step .b{flex:1}
+  .foot{margin-top:40px; padding-top:18px; border-top:1px solid var(--line); color:var(--muted); font-size:13px}
+  @media(max-width:760px){.grid2,.grid3{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <p class="kicker">Proposal System · Design Explainer</p>
+    <h1>Letting content-creators build whole classes through proposals</h1>
+    <p class="lede">A class isn't one thing — it's a <em>cluster</em> of pieces that point at each other
+    (scaling columns, subclasses, unique option groups). The proposal system was built for independent
+    entities, so authoring a full class as a content-creator breaks in two specific ways. This explains
+    why, and the plan to fix it.</p>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <h2>What the user hit</h2>
+  <div class="grid2">
+    <div class="card">
+      <span class="tag bug">Bug 1</span>
+      <h3>Draft pieces are invisible to each other</h3>
+      <p class="muted">You create a scaling column / option group / class as a draft in your block —
+      then go to use it somewhere else, and it's not in the dropdown. A created column can't be picked
+      in the class. An option group can't be found. A class can't be selected inside the option group.</p>
+    </div>
+    <div class="card">
+      <span class="tag bug">Bug 2</span>
+      <h3>Some pieces can't be saved at all</h3>
+      <p class="muted">Saving scaling columns (and other nested pieces) inside the class / subclass
+      editor fails with a permission error — even though saving the class itself works fine.</p>
+    </div>
+  </div>
+
+  <h2>Why it happens</h2>
+  <p>The proposal system has one mental model: <b>one independent entity, one whole-row change, queued for review.</b>
+  That's perfect for a spell or a tag. But a <b>class is a web of cross-references</b>, and two assumptions break:</p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 920 360" width="100%" role="img" aria-label="Class cluster reference diagram">
+      <defs>
+        <marker id="arr" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 z" fill="#9a7b38"/>
+        </marker>
+        <marker id="arrBlood" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 z" fill="#8b0000"/>
+        </marker>
+      </defs>
+
+      <!-- CLASS center -->
+      <rect x="370" y="150" width="180" height="60" rx="10" fill="#2a2118" stroke="#c5a059" stroke-width="2"/>
+      <text x="460" y="176" text-anchor="middle" fill="#f3ead2" font-size="17" font-family="Georgia" font-weight="700">CLASS</text>
+      <text x="460" y="195" text-anchor="middle" fill="#c5a059" font-size="11">the entity being authored</text>
+
+      <!-- scaling columns -->
+      <rect x="60" y="40" width="200" height="56" rx="9" fill="#fff" stroke="#e3ddcd"/>
+      <text x="160" y="62" text-anchor="middle" font-size="14" font-weight="700">scaling_columns</text>
+      <text x="160" y="80" text-anchor="middle" font-size="11" fill="#5b5b53">parent_id → class</text>
+
+      <!-- subclasses -->
+      <rect x="60" y="270" width="200" height="56" rx="9" fill="#fff" stroke="#e3ddcd"/>
+      <text x="160" y="292" text-anchor="middle" font-size="14" font-weight="700">subclasses</text>
+      <text x="160" y="310" text-anchor="middle" font-size="11" fill="#5b5b53">class_id → class</text>
+
+      <!-- option groups -->
+      <rect x="660" y="40" width="200" height="56" rx="9" fill="#fff" stroke="#e3ddcd"/>
+      <text x="760" y="62" text-anchor="middle" font-size="14" font-weight="700">unique_option_groups</text>
+      <text x="760" y="80" text-anchor="middle" font-size="11" fill="#5b5b53">class_ids ∋ class</text>
+
+      <!-- option items -->
+      <rect x="660" y="270" width="200" height="56" rx="9" fill="#fff" stroke="#e3ddcd"/>
+      <text x="760" y="292" text-anchor="middle" font-size="14" font-weight="700">unique_option_items</text>
+      <text x="760" y="310" text-anchor="middle" font-size="11" fill="#5b5b53">group_id → group</text>
+
+      <!-- arrows: class references columns (advancements) -->
+      <path d="M370,168 C300,150 250,110 260,92" fill="none" stroke="#8b0000" stroke-width="2" marker-end="url(#arrBlood)"/>
+      <text x="300" y="120" font-size="10.5" fill="#8b0000">advancements →<tspan x="300" dy="12">column ids</tspan></text>
+
+      <!-- subclass -> class -->
+      <path d="M260,290 C320,270 360,235 388,212" fill="none" stroke="#9a7b38" stroke-width="2" marker-end="url(#arr)"/>
+      <!-- subclass -> own columns (curved up) -->
+      <path d="M160,270 C150,200 150,140 150,100" fill="none" stroke="#9a7b38" stroke-width="1.5" stroke-dasharray="4 4" marker-end="url(#arr)"/>
+      <text x="95" y="190" font-size="10.5" fill="#5b5b53">subclass also<tspan x="95" dy="12">owns columns</tspan></text>
+
+      <!-- class <-> option groups (bidirectional-ish) -->
+      <path d="M550,168 C630,150 670,110 670,92" fill="none" stroke="#8b0000" stroke-width="2" marker-end="url(#arrBlood)"/>
+      <text x="585" y="120" font-size="10.5" fill="#8b0000">unique_option_<tspan x="585" dy="12">mappings → groups</tspan></text>
+
+      <!-- group -> items -->
+      <path d="M760,96 L760,270" fill="none" stroke="#9a7b38" stroke-width="2" marker-end="url(#arr)"/>
+      <!-- items -> columns (cross side) -->
+      <path d="M660,300 C470,330 320,120 262,92" fill="none" stroke="#8b0000" stroke-width="1.4" stroke-dasharray="4 4" marker-end="url(#arrBlood)"/>
+      <text x="430" y="345" font-size="10.5" fill="#8b0000">option items → scaling columns</text>
+    </svg>
+    <div class="legend">
+      <span><span class="swatch" style="background:#8b0000"></span> reference by id (the part that breaks)</span>
+      <span><span class="swatch" style="background:#9a7b38"></span> ownership / parent link</span>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Broken assumption #1 — "every piece is savable on its own"</h3>
+      <p class="muted">The proposal "writer" only catches saves for the <em>one</em> entity type the editor
+      is bound to (the class). Nested pieces — scaling columns — are written with a different, direct path
+      that skips the proposal queue and hits the database gate, which refuses non-staff users. So a
+      content-creator gets a permission error. <b>Scaling columns aren't even on the list of things the
+      proposal system knows how to handle.</b></p>
+    </div>
+    <div class="card">
+      <h3>Broken assumption #2 — "references point at things that already exist"</h3>
+      <p class="muted">Drafts live in a staging table, not the real tables. Every dropdown ("pick a column",
+      "pick a class") reads only the <em>real</em> tables. So anything you just created in your block —
+      which is still a draft — simply isn't there to pick.</p>
+    </div>
+  </div>
+
+  <div class="callout key">
+    <b>The insight that makes this easy.</b> Every id in this cluster is generated on the client as a
+    permanent UUID, and the proposal system <b>keeps ids unchanged through approval</b>. So a reference you
+    author against a draft id (e.g. "this advancement uses <em>that</em> draft column") is <b>already
+    correct</b> — it lights up the moment both sides go live. We don't need to rewrite ids or resolve
+    placeholders. We only need three things: let nested pieces be <b>saved</b>, let pickers <b>see</b> the
+    block's drafts, and make the cluster <b>approve as one unit</b>.
+  </div>
+
+  <h2>The fix, in four parts</h2>
+  <div class="grid2">
+    <div class="card">
+      <div class="pill-row"><span class="tag">Part A</span><span class="tag me">proposal-system (me)</span></div>
+      <h3>Teach the system about scaling columns</h3>
+      <p class="muted">Add <code>scaling_column</code> as a thing the proposal system can carry: a config
+      entry, a type entry, and a small DB migration so the staging table accepts it. This alone removes the
+      permission error's root cause.</p>
+    </div>
+    <div class="card">
+      <div class="pill-row"><span class="tag">Part B</span><span class="tag them">compendium-editors</span></div>
+      <h3>Route column saves through the queue</h3>
+      <p class="muted">Change the column editor panel so that, in proposal mode, saving a column goes into
+      the block instead of straight to the database.</p>
+    </div>
+    <div class="card">
+      <div class="pill-row"><span class="tag">Part C</span><span class="tag them">compendium-editors</span></div>
+      <h3>Show block drafts in the pickers</h3>
+      <p class="muted">Make the dropdowns merge in the current block's drafts (clearly marked "in this
+      block") so a just-created column / group / class is selectable. Uses a small helper I provide.</p>
+    </div>
+    <div class="card">
+      <div class="pill-row"><span class="tag">Part D</span><span class="tag me">proposal-system (me)</span></div>
+      <h3>Approve the whole block at once</h3>
+      <p class="muted">A new admin action applies every piece of the block in dependency order (the class
+      before the things that point at it, etc.) so references never go live pointing at a rejected draft.</p>
+    </div>
+  </div>
+
+  <h2>How "approve whole block" works <span class="muted" style="font-size:14px">(Part D)</span></h2>
+  <div class="step"><div class="n">1</div><div class="b"><b>Admin clicks "Approve block."</b> The server gathers every pending revision in that block.</div></div>
+  <div class="step"><div class="n">2</div><div class="b"><b>It orders them by dependency.</b> Things that are referenced (columns, the class) get applied before the things that reference them (advancements, option items).</div></div>
+  <div class="step"><div class="n">3</div><div class="b"><b>It applies them in sequence.</b> Because the ids never changed, every cross-reference resolves as it lands.</div></div>
+  <div class="step"><div class="n">4</div><div class="b"><b>If something fails mid-way, it reports exactly what landed and what didn't</b> — the block stays open so the admin can fix and retry. (The database can't wrap all of this in a single transaction, so we're honest about partial application rather than pretending it's atomic.)</div></div>
+
+  <h2>What already exists vs. what's new</h2>
+  <p class="muted">Verified against current <code>main</code> before proposing any code:</p>
+  <table>
+    <tr><th>Piece</th><th>State</th><th>Reusable scaffolding</th></tr>
+    <tr><td><code>scaling_column</code> proposable type (Part A)</td><td><span class="cross">✗ new</span></td><td>The migration pattern is established — I copy the existing table-rebuild template.</td></tr>
+    <tr><td>Picker-overlay helper (Part A/C)</td><td><span class="cross">✗ new</span></td><td><span class="check">✓</span> <code>getDraftedEntities</code> already returns the draft data; I just wrap it into a picker-friendly list.</td></tr>
+    <tr><td>Draft overlay in cross-ref pickers (Part C)</td><td><span class="cross">✗ new</span></td><td>Editors already import draft hooks for their <em>own</em> list — not for cross-refs yet.</td></tr>
+    <tr><td>Approve-whole-block (Part D)</td><td><span class="cross">✗ new</span></td><td><span class="check">✓</span> <code>cascade_parent_revision_id</code> already models dependencies; nothing consumes it for ordered apply yet.</td></tr>
+  </table>
+
+  <h2>Who builds what</h2>
+  <table>
+    <tr><th>Owner</th><th>Parts</th><th>Why</th></tr>
+    <tr><td><span class="tag me">proposal-system</span></td><td>A + D + the helper</td><td>Pure proposal plumbing — server allowlist, migration, block-approval. My branch's exclusive files.</td></tr>
+    <tr><td><span class="tag them">compendium-editors</span></td><td>B + C</td><td>The class/subclass/option editors + the shared picker are that branch's owned files. Handed off via an Open Request once A + the helper land (B and C depend on them).</td></tr>
+  </table>
+
+  <div class="callout">
+    <b>Decisions locked (2026-05-28).</b>
+    Approve-whole-block (not per-row gating) · scaling columns this pass, class <em>features</em> deferred ·
+    pickers show the current active block's drafts only · deleting a referenced draft just <em>warns</em>
+    for now (no auto-cascade yet).
+  </div>
+
+  <div class="foot">
+    Full technical version: <code>handoffs/proposal-system/2026-05-28-cross-referential-cluster-design.md</code>.
+    Live contract for proposal-mode editors: <code>docs/architecture/proposal-editor-pattern.md</code>.
+    This explainer is the plain-language companion to those.
+  </div>
+
+</div>
+</body>
+</html>
