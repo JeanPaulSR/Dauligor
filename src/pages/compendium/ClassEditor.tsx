@@ -4324,6 +4324,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
               parentType="class"
               columns={scalingColumns}
               onColumnsChanged={() => setLoadTick((t) => t + 1)}
+              userProfile={userProfile}
               label="Class Columns"
             />
           ) : null}

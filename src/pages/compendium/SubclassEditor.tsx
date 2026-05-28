@@ -48,6 +48,7 @@ import { ScrollArea } from '../../components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Checkbox } from '../../components/ui/checkbox';
 import AdvancementManager, { Advancement } from '../../components/compendium/AdvancementManager';
+import ScalingColumnsPanel from '../../components/compendium/ScalingColumnsPanel';
 import ReferenceSyntaxHelp from '../../components/reference/ReferenceSyntaxHelp';
 import ReferenceSheetDialog from '../../components/reference/ReferenceSheetDialog';
 import { buildSpellFormulaShortcutRows, normalizeSpellFormulaShortcuts } from '../../lib/referenceSyntax';
@@ -85,17 +86,6 @@ function getReferenceIdentifier(sourceId: string, fallback: string, prefix: stri
   return slugify(fallback || prefix.replace(/-$/u, ''));
 }
 
-function getScalingBreakpoints(values: Record<string, any> = {}) {
-  let lastValue: string | undefined;
-  return Object.entries(values)
-    .sort(([a], [b]) => Number(a) - Number(b))
-    .filter(([, value]) => {
-      const normalized = String(value ?? '');
-      if (!normalized || normalized === lastValue) return false;
-      lastValue = normalized;
-      return true;
-    });
-}
 
 function buildEmptySubclassSpellcastingState() {
   return {
@@ -682,18 +672,6 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
         setLoadTick(t => t + 1);
       } catch (error) {
         toast.error("Failed to delete feature");
-      }
-    }
-  };
-
-  const handleDeleteScaling = async (colId: string) => {
-    if (confirm("Delete this column?")) {
-      try {
-        await deleteDocument('scaling_columns', colId);
-        toast.success("Column deleted");
-        setLoadTick(t => t + 1);
-      } catch (error) {
-        toast.error("Failed to delete column");
       }
     }
   };
@@ -1404,79 +1382,14 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
 
         <div className="lg:col-span-1 space-y-6">
           {id && (
-            <div className="p-4 border border-gold/20 bg-card/50 space-y-4 rounded-xl">
-              <div className="section-header">
-                <h2 className="label-text text-gold uppercase tracking-tighter">Table Columns</h2>
-                <Link to={`/compendium/scaling/new?parentId=${id}&parentType=subclass`}>
-                  <Button size="sm" className="h-6 btn-gold">
-                    <Plus className="w-3 h-3 mr-1" /> Add
-                  </Button>
-                </Link>
-              </div>
-              <div className="space-y-4">
-                {scalingColumns.map(col => (
-                  <div key={col.id} className="p-3 bg-gold/5 border border-gold/10 rounded space-y-2 group relative">
-                    <div className="flex items-center justify-between">
-                      <Input
-                        value={col.name}
-                        onChange={e => {
-                          // upsertDocument fires INSERT ... ON CONFLICT(id) DO UPDATE;
-                          // SQLite checks NOT NULL on the insert-side row before
-                          // routing to UPDATE, so we must supply parent_id +
-                          // parent_type even on a name-only patch.
-                          upsertDocument("scaling_columns", col.id, {
-                            name: e.target.value,
-                            parent_id: id,
-                            parent_type: "subclass",
-                          });
-                          queueRebake('scalingColumn', col.id);
-                        }}
-                        className="h-6 text-[11px] font-bold bg-transparent border-none p-0 focus-visible:ring-0"
-                      />
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Link to={`/compendium/scaling/edit/${col.id}?parentId=${id}&parentType=subclass`}>
-                          <Button variant="ghost" size="sm" className="h-5 w-5 p-0 text-gold"><Edit className="w-3 h-3" /></Button>
-                        </Link>
-                        <Button variant="ghost" size="sm" onClick={() => handleDeleteScaling(col.id)} className="h-5 w-5 p-0 text-blood"><Trash2 className="w-3 h-3" /></Button>
-                      </div>
-                    </div>
-
-                    <details className="group/details">
-                      <summary className="text-[9px] uppercase font-black tracking-widest text-gold/50 cursor-pointer select-none flex items-center justify-between hover:text-gold transition-colors [&::-webkit-details-marker]:hidden">
-                        Breakpoints
-                        <ChevronDown className="w-3 h-3 transition-transform group-open/details:rotate-180" />
-                      </summary>
-                      <div className="mt-2 space-y-2">
-                        {getScalingBreakpoints(col.values || {}).length > 0 ? (
-                          <div className="flex flex-col gap-1 w-full">
-                            {getScalingBreakpoints(col.values || {}).map(([level, value]) => (
-                              <div key={level} className="flex items-center gap-3 rounded border border-gold/10 bg-background/60 px-3 py-1.5 w-full">
-                                <span className="text-[9px] font-black tracking-widest text-gold whitespace-nowrap min-w-[2.5rem]">Lvl {level}</span>
-                                <div className="h-px bg-gold/10 flex-1" />
-                                <span className="text-[11px] font-black text-ink">{String(value)}</span>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-[10px] text-ink/30 italic">No saved matrix values yet.</p>
-                        )}
-                      </div>
-                    </details>
-
-                    <div className="pt-1">
-                      <Link to={`/compendium/scaling/edit/${col.id}?parentId=${id}&parentType=subclass`}>
-                        <Button variant="ghost" size="sm" className="w-full h-6 text-[9px] font-bold uppercase tracking-widest text-gold/60 hover:text-gold hover:bg-gold/5 border border-gold/10">
-                          Open Full Matrix Editor
-                        </Button>
-                      </Link>
-                    </div>
-                  </div>
-                ))}
-                {scalingColumns.length === 0 && (
-                  <p className="text-[10px] text-ink/30 text-center italic py-4">No scaling columns defined.</p>
-                )}
-              </div>
-            </div>
+            <ScalingColumnsPanel
+              parentId={id}
+              parentType="subclass"
+              columns={scalingColumns}
+              onColumnsChanged={() => setLoadTick(t => t + 1)}
+              userProfile={userProfile}
+              label="Table Columns"
+            />
           )}
         </div>
       </div>

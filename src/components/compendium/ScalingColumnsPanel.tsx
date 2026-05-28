@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, Trash2, Edit, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { upsertDocument, deleteDocument } from '../../lib/d1';
 import { queueRebake } from '../../lib/moduleExport';
+import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
+import { actionLabel } from '../../lib/proposalAware';
 
 /**
  * Shared "Scaling Columns" sidebar — the small editor block that
@@ -19,15 +20,20 @@ import { queueRebake } from '../../lib/moduleExport';
  * (class, subclass, feat, race, background, item). Same UX, same
  * D1 paths — only the `(parentId, parentType)` pair varies.
  *
- * Why the panel writes directly to D1 on edit
- * --------------------------------------------
- * Each callsite carries its own loadTick / fetch loop; the panel
- * doesn't try to manage the columns array itself. It fires
- * upsertDocument on inline name changes (per-keystroke; legacy
- * pattern preserved from ClassEditor) and deleteDocument on
- * delete, then calls back via `onColumnsChanged` so the parent
- * can re-fetch. `queueRebake` keeps the module-export cache
- * invalidation honest.
+ * Persistence (Part B — proposal-aware)
+ * -------------------------------------
+ * Writes route through `useProposalAccumulator('scaling_column', …)`,
+ * which auto-routes by context:
+ *   - admin / direct route → immediate `upsertDocument`/`deleteDocument`
+ *     (same as the legacy path).
+ *   - content-creator inside a <ProposalEditorWrapper> block → the write
+ *     is QUEUED into the block instead of hitting the staff-only DB gate
+ *     (which used to 403 a content-creator on `scaling_columns`).
+ * `parent_type` may be any of the six `ScalingOwnerType`s — the proposal
+ * approval side resolves all of them (per the cross-referential-cluster
+ * design). Rename commits on blur (not per-keystroke) so block mode
+ * doesn't flood the queue. `queueRebake` is skipped in block mode — the
+ * module rebake fires on approval, not on queueing.
  *
  * Owner types
  * -----------
@@ -69,6 +75,13 @@ export interface ScalingColumnsPanelProps {
    * parent can re-fetch and re-render with the canonical state.
    */
   onColumnsChanged: () => void;
+  /**
+   * The active (effective) user profile. Drives the proposal-aware
+   * writer: admins write directly; content-creators inside a block
+   * queue the write. Omitting it makes the writer read-only (writes
+   * throw) — every mount site should pass `effectiveProfile`.
+   */
+  userProfile?: any;
   /** Sidebar header — defaults to "Scaling Columns". */
   label?: string;
   /** Singular noun for the empty state — defaults to "scaling column". */
@@ -102,14 +115,44 @@ export default function ScalingColumnsPanel({
   parentType,
   columns,
   onColumnsChanged,
+  userProfile,
   label = 'Scaling Columns',
   noun = 'scaling column',
 }: ScalingColumnsPanelProps) {
+  // Proposal-aware writer. Inside a <ProposalEditorWrapper> it queues
+  // into the active block; on admin-direct routes it writes immediately.
+  const writer = useProposalAccumulator('scaling_column', userProfile);
+  // Null on admin-direct routes; non-null inside a block. Used to skip
+  // the module rebake (it fires on approval, not on queueing).
+  const inBlock = useProposalContextOptional() !== null;
+
+  // Local edit buffer for inline renames so typing stays responsive and
+  // the write commits once on blur (block mode would otherwise queue one
+  // change per keystroke).
+  const [nameDrafts, setNameDrafts] = useState<Record<string, string>>({});
+
+  const commitRename = async (col: ScalingColumnRow) => {
+    const draft = nameDrafts[col.id];
+    if (draft === undefined || draft === (col.name ?? '')) return;
+    try {
+      await writer.update(col.id, {
+        name: draft,
+        parent_id: parentId,
+        parent_type: parentType,
+      });
+      if (!inBlock) queueRebake('scalingColumn', col.id);
+      onColumnsChanged();
+    } catch (error) {
+      console.error('[ScalingColumnsPanel] rename failed:', error);
+      toast.error(`Failed to rename ${noun}`);
+    }
+  };
+
   const handleDelete = async (scalingId: string) => {
     try {
-      await deleteDocument('scaling_columns', scalingId);
-      toast.success(`Scaling column deleted`);
-      queueRebake('scalingColumn', scalingId);
+      await writer.remove(scalingId);
+      if (!inBlock) queueRebake('scalingColumn', scalingId);
+      toast.success(actionLabel(writer.mode, 'deleted'));
       onColumnsChanged();
     } catch (error) {
       console.error('[ScalingColumnsPanel] delete failed:', error);
@@ -138,19 +181,16 @@ export default function ScalingColumnsPanel({
             <div key={col.id} className="p-3 bg-gold/5 border border-gold/10 rounded space-y-2 group relative">
               <div className="flex items-center justify-between">
                 <Input
-                  value={col.name ?? ''}
-                  onChange={(e) => {
-                    // upsertDocument fires INSERT ... ON CONFLICT(id) DO UPDATE;
-                    // SQLite checks NOT NULL on the insert-side row before
-                    // routing to UPDATE, so we must supply parent_id +
-                    // parent_type even on a name-only patch of an existing
-                    // scaling column.
-                    upsertDocument('scaling_columns', col.id, {
-                      name: e.target.value,
-                      parent_id: parentId,
-                      parent_type: parentType,
-                    });
-                    queueRebake('scalingColumn', col.id);
+                  value={nameDrafts[col.id] ?? col.name ?? ''}
+                  onChange={(e) =>
+                    setNameDrafts((prev) => ({ ...prev, [col.id]: e.target.value }))
+                  }
+                  // Commit on blur (and on Enter) rather than per keystroke:
+                  // in block mode a per-keystroke writer.update would queue
+                  // a change for every character typed.
+                  onBlur={() => commitRename(col)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                   }}
                   className="h-6 text-[11px] font-bold bg-transparent border-none p-0 focus-visible:ring-0"
                 />

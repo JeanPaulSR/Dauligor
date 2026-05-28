@@ -1443,6 +1443,7 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
                   parentType={scalingOwnerType}
                   columns={scalingColumns}
                   onColumnsChanged={() => setScalingLoadTick((t) => t + 1)}
+                  userProfile={userProfile}
                   label={scalingLabel}
                 />
               ) : scalingAllowed ? (

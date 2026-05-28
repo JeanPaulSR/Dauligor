@@ -12,8 +12,10 @@ import {
   Save,
   LayoutGrid
 } from 'lucide-react';
-import { fetchDocument, upsertDocument, deleteDocument } from '../../../lib/d1';
+import { fetchDocument } from '../../../lib/d1';
 import { slugify } from '../../../lib/utils';
+import { useProposalAccumulator, useProposalContextOptional } from '../../../lib/proposalAccumulator';
+import { actionLabel } from '../../../lib/proposalAware';
 
 const SCALE_TYPES: { value: ScaleType; label: string; hint: string }[] = [
   { value: 'number', label: 'Number', hint: 'Plain numeric value per level (Rages, Maneuvers Known, Brutal Critical Dice).' },
@@ -47,6 +49,18 @@ export default function ScalingEditor({ userProfile }: { userProfile: any }) {
   const [type, setType] = useState<ScaleType>('number');
   const [distanceUnits, setDistanceUnits] = useState('ft');
   const [values, setValues] = useState<Record<string, string>>({});
+
+  // Proposal-aware writer (Part B). Inside a <ProposalEditorWrapper>
+  // block, content-creators queue the column instead of hitting the
+  // staff-only DB gate (the old direct upsert 403'd them).
+  // NOTE: the `scaling_column` proposal config's writableColumns is
+  // {id, name, parent_id, parent_type, values} — it currently strips
+  // `type` / `identifier` / `distance_units` (real columns added by
+  // migration 20260508-1158). Flagged to proposal-system; until their
+  // config is widened, a *proposed* column loses those fields on
+  // approval. The direct (admin) path is unaffected.
+  const writer = useProposalAccumulator('scaling_column', userProfile);
+  const inBlock = useProposalContextOptional() !== null;
 
   useEffect(() => {
     if (id) {
@@ -109,10 +123,18 @@ export default function ScalingEditor({ userProfile }: { userProfile: any }) {
       }
 
       const saveId = id || crypto.randomUUID();
-      await upsertDocument('scaling_columns', saveId, d1Data);
+      if (id) {
+        await writer.update(saveId, d1Data);
+      } else {
+        await writer.create({ ...d1Data, id: saveId });
+      }
 
       navigate(-1);
-      toast.success('Scaling column saved');
+      toast.success(
+        writer.mode === 'proposal'
+          ? (inBlock ? 'Scaling column added to block' : 'Scaling column submitted for review')
+          : 'Scaling column saved',
+      );
     } catch (error) {
       console.error("Error saving scaling column:", error);
       toast.error('Failed to save scaling column.');
@@ -261,8 +283,8 @@ export default function ScalingEditor({ userProfile }: { userProfile: any }) {
             onClick={async () => {
               if (confirm('Delete this scaling column?')) {
                 try {
-                  await deleteDocument('scaling_columns', id);
-                  toast.success('Scaling column deleted');
+                  await writer.remove(id);
+                  toast.success(actionLabel(writer.mode, 'deleted'));
                   navigate(-1);
                 } catch (error) {
                   toast.error('Failed to delete scaling column');

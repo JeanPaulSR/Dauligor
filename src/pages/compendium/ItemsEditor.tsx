@@ -1167,6 +1167,7 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
               parentType="item"
               columns={scalingColumns}
               onColumnsChanged={() => setScalingLoadTick((t) => t + 1)}
+              userProfile={userProfile}
               label="Item Columns"
             />
           ) : (
