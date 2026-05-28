@@ -40,8 +40,8 @@ Proposal-mode logic lives *inside* these files, but the files themselves are own
   pick up — full actionable spec (plain-language summary + before/after code +
   contracts + how to pull Part A) is in
   **[2026-05-28-compendium-editors-handoff.md](2026-05-28-compendium-editors-handoff.md)**.
-  - **Part A is built** (`scaling_column` type + `useProposalDraftOptions`
-    helper) on **`proposal-system`** — rebase onto it to consume.
+  - **Part A is on `main`** (`scaling_column` type + `useProposalDraftOptions`
+    helper, commit `b5237e1`) — just pull/rebase `main` to consume.
   - **Part B** — route scaling-column save/delete through the accumulator
     (`ScalingColumnsPanel.tsx` + `SubclassEditor.tsx` + `scaling/ScalingEditor.tsx`).
   - **Part C** — overlay active-block draft creates into the cross-ref pickers
@@ -53,6 +53,11 @@ Proposal-mode logic lives *inside* these files, but the files themselves are own
 
 Newest at the top. Each entry: date + link to the handoff doc in this same folder.
 
+- `2026-05-28` — **Part A landed on `main`** (`b5237e1`). Reversed the earlier
+  "held off main" call so `compendium-editors` can build B + C straight off
+  `main` (no rebase-onto-branch needed). Part A stays inert in prod until B + C
+  ship; the remote D1 migration still needs running — with go-ahead — before
+  that point. `proposal-system` is now level with `main`.
 - `2026-05-28` — [2026-05-28-compendium-editors-handoff.md](2026-05-28-compendium-editors-handoff.md):
   ready-to-pick-up spec for `compendium-editors` (Parts B + C) — plain-language
   summary + before/after code + the `useProposalDraftOptions` / `scaling_column`

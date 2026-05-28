@@ -33,23 +33,18 @@ plumbing are all ours (see [What you do NOT touch](#what-you-do-not-touch)).
 
 ---
 
-## Prerequisite — get Part A first
+## Prerequisite — get Part A (it's on `main`)
 
-Part A is **built and committed on the `proposal-system` branch**, intentionally
-**not on `main` yet** (held back until the full feature is ready). To build B + C
-you need it in your tree:
-
-```
-git rebase origin/proposal-system        # or cherry-pick the Part A commit
-```
-
-Part A is one commit (`feat(proposals): Part A — scaling_column …`) and adds:
-- `scaling_column` to the proposable entity types + its config (`api/_lib/proposals.ts`, `src/lib/proposalAware.ts`)
+Part A is **on `main`** (commit `b5237e1`, `feat(proposals): Part A …`). Just
+pull/rebase `main` and you have everything you need to build B + C:
+- `scaling_column` proposable entity type + config (`api/_lib/proposals.ts`, `src/lib/proposalAware.ts`)
 - `src/hooks/useProposalDraftOptions.ts` — the picker helper
-- a local-only DB migration (you don't need to run anything; it's applied on our local D1, and lands on remote with the rest of the feature)
+- the entity_type CHECK migration `worker/migrations/20260528-1200_*.sql`
 
-> If you'd rather build against `main`, ping us — we can land Part A on `main`
-> first. Otherwise rebasing onto `proposal-system` is the standard path.
+> **DB note (not your action):** that migration is applied to **local** D1 only.
+> It lands on **remote** D1 — with explicit go-ahead — before B + C ship to
+> prod. Until then Part A is inert in prod (nothing submits a `scaling_column`
+> proposal yet), so it's safe on `main`. You don't need to run anything.
 
 ---
 

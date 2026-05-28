@@ -305,7 +305,7 @@ guard lives in the **approval layer**, never as a new FK/CHECK.
 ## Implementation checklist
 
 **proposal-system (this branch):**
-- [x] **Part A** `scaling_column` in `PROPOSABLE_ENTITY_TYPES` + `ENTITY_CONFIGS` + `ProposalEntityType` — *committed on `proposal-system` (held off `main` pending the full feature)*
+- [x] **Part A** `scaling_column` in `PROPOSABLE_ENTITY_TYPES` + `ENTITY_CONFIGS` + `ProposalEntityType` — *on `main` (`b5237e1`)*
 - [x] **Part A** migration `20260528-1200`: `pending_revisions.entity_type` CHECK — *applied to **local** D1 only; remote pending explicit go-ahead before B+C ship*
 - [x] **Part A** picker-overlay helper — `src/hooks/useProposalDraftOptions.ts`
 - [ ] **Part D** approve-whole-block: atomic `env.DB.batch()` apply + guard #1 reference-integrity validation + guard #2 per-revision drift check + dependency ordering + block-level/cascade reject + block edit-lock
