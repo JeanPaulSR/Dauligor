@@ -6,6 +6,23 @@
 > and the visual [cross-referential-cluster-design.html](cross-referential-cluster-design.html).
 > **This doc is the actionable spec — start here.**
 
+> ## ⚠ SCOPE EXPANDED (2026-05-28)
+> Your [cross-reference audit](../../docs/architecture/compendium-editors/proposal-cross-reference-audit.html)
+> was right and the owner chose **full scope**. See the reply
+> [handoffs/compendium-editors/2026-05-28-proposal-system-reply.md](../compendium-editors/2026-05-28-proposal-system-reply.md).
+> Net deltas to the spec below:
+> - **Part B also covers `feature`** (not just `scaling_column`) and **all six**
+>   column owners (`class|subclass|feat|race|background|item`), not class/subclass.
+> - **Part C covers all four picker layers** (L1 AdvancementManager · L2
+>   RequirementsEditor · L3 SpellAdvancementEditors · L4 EntityPicker) per your
+>   audit's layer table — not just the L4 `EntityPicker` `draftEntries` prop
+>   described below.
+> - The Part B/C sketches below are still accurate *as far as they go* (the
+>   `scaling_column` + `EntityPicker` mechanics); treat your audit's matrix +
+>   layer table as the complete surface.
+> - `feature` as a proposable type is being added by `proposal-system` — the
+>   feature slice of B/C waits on that commit; the column/cluster slice doesn't.
+
 ---
 
 ## The simple version

@@ -190,15 +190,28 @@ Three guards run **before** the batch. All live in the proposal/approval layer
 — none touch the admin-direct write path or the shared schema (see
 [Failure modes](#failure-modes-considered) for why that boundary matters):
 
-1. **Reference-integrity validation.** Walk each revision's id references — the
-   FK columns (`subclass.class_id`, `item.group_id`) and the JSON-embedded refs
-   (`scaling_column.parent_id`, advancement `scaling_column_id` /
-   `quantity_column_id`, `class.unique_option_mappings`, `group.class_ids`,
-   `subclass.unique_option_group_ids`). Each referenced id must resolve to a
-   live row OR another revision in the same block; refuse with a precise report
-   otherwise. This is the only thing standing between a dropped/forgotten draft
-   reference and a live-but-broken class — the schema has **no FK** on the JSON
-   refs, so D1 itself will never catch a dangling one.
+1. **Reference-integrity validation.** Walk **every** draftable id reference on
+   each revision and require each to resolve to a live row OR another revision
+   in the same block; refuse with a precise report otherwise. "Every" means the
+   **complete matrix** in the
+   [cross-reference audit](../../docs/architecture/compendium-editors/proposal-cross-reference-audit.html#guard1)
+   — not the original ⅓. Beyond the FK columns (`subclass.class_id`,
+   `item.group_id`) and the first-pass JSON refs (`scaling_column.parent_id`,
+   advancement `scaling_column_id`/`quantity_column_id`,
+   `class.unique_option_mappings`, `group.class_ids`,
+   `subclass.unique_option_group_ids`), guard #1 now also walks: advancement
+   `optionScalingColumnId` / `optionGroupId` / `pool` / `optionalPool` /
+   `excludedOptionIds`; GrantSpells `resolver.spellIds` / `resolver.ruleId`;
+   `countsAsClassId` / `classId` / `scopeClassId`; ItemBumpUses `target.id`;
+   the entire `requirements_tree` leaves (class/subclass/spell/spell_rule/
+   option-item/option-group); `unique_option_item` column refs; `tags` /
+   `required_tags` / `tag_ids` (+ `tag.group_id`); `item.container_id`; and —
+   now that `feature` is proposable — the feature back-links
+   (`usesFeatureId`, requirements `feature` leaf, ItemBumpUses
+   `target.kind='feature'`, `unique_option_groups.feature_id`) **plus** a
+   feature's own internal references (its `advancements` re-drag the whole set).
+   The schema has **no FK** on any of these, so guard #1 is the only thing that
+   catches a dropped reference before it goes live dangling.
 2. **Per-revision drift check.** The existing snapshot-vs-current conflict
    detection runs for every revision. Any drift blocks the whole block (coarser
    than per-row, but correct) and surfaces the 3-way diff.
@@ -254,24 +267,40 @@ for Parts B + C (which consume the new entity type + helper).
 
 ## Decisions
 
-Locked 2026-05-28 (user sign-off):
+> **Revised 2026-05-28** after the
+> [compendium-editors cross-reference audit](../../docs/architecture/compendium-editors/proposal-cross-reference-audit.html).
+> The audit showed the original "`scaling_column` only" scope left the headline
+> use case broken: a proposed class with no **features** is a shell that 403s
+> the moment a feature is added, and guard #1 covered only ~⅓ of the draftable
+> references. User re-decided for **full scope** — decisions 2–4 below supersede
+> the earlier "scaling_column only / defer features" call.
 
-1. **Approval model: D1 — approve-whole-block.** (See [Part D](#part-d--block-atomic-approval--reference-integrity-proposal-system).)
-2. **Scope: `scaling_column` only this pass.** Class **features** are
-   deferred to a follow-up (bigger surface, not in the report).
-3. **Picker draft visibility: current active block only.** Never other
-   open blocks, never other users' drafts — matches how drafts scope
-   everywhere else in the system.
-4. **Draft-nested-delete: warn, don't cascade.** Dropping a draft column
-   that a draft advancement references surfaces a warning; auto-scrub /
-   cascade is a later enhancement.
+1. **Approval model: D1 — approve-whole-block.** (See [Part D](#part-d--block-atomic-approval--reference-integrity-proposal-system).) *(unchanged)*
+2. **Scope: the full authorable cluster.** Both `scaling_column` **and
+   `feature`** are proposable this pass. Guard #1 + the picker overlays cover
+   **every** draftable reference in the audit matrix — not just the
+   column/option-group subset. (`feature` is an interior node: it re-opens the
+   advancement reference graph + the `unique_option_groups.feature_id` back-link,
+   so it's a real lift — accepted deliberately.)
+3. **`scaling_column` owners: all six.** `class | subclass | feat | race |
+   background | item` all route through the accumulator; guard #1 resolves all
+   parent types. (Supersedes the earlier class/subclass-only framing.)
+4. **Picker overlays cover all four injection layers** — L1 AdvancementManager,
+   L2 RequirementsEditor, L3 SpellAdvancementEditors, L4 EntityPicker — per the
+   audit's layer breakdown. (Supersedes the handoff's L4-only framing.)
+5. **Picker draft visibility: current active block only.** Never other open
+   blocks, never other users' drafts. Cross-block dead-ends must be **legible**
+   (a "this is in another block" affordance), not empty dropdowns. *(unchanged +
+   the legibility ask from the audit)*
+6. **Draft-nested-delete: warn, don't cascade.** Dropping a draft entity that a
+   draft reference points at surfaces a warning; auto-scrub / cascade is a later
+   enhancement. *(unchanged)*
 
-Confirmed (no work beyond Part C):
+Confirmed (no extra server work):
 
-5. **Subclass-of-a-draft-class** — the subclass *row* proposal stores
+7. **Subclass-of-a-draft-class** — the subclass *row* proposal stores
    `class_id = <draft class uuid>` fine; the subclass editor's class picker
-   just needs the Part C overlay so the draft class is selectable. No extra
-   server work.
+   just needs the Part C overlay so the draft class is selectable.
 
 ---
 

@@ -36,23 +36,31 @@ Proposal-mode logic lives *inside* these files, but the files themselves are own
 
 ## Open requests to other branches
 
-- [ ] `(2026-05-28)` **`compendium-editors`: implement Parts B + C.** Ready to
-  pick up — full actionable spec (plain-language summary + before/after code +
-  contracts + how to pull Part A) is in
-  **[2026-05-28-compendium-editors-handoff.md](2026-05-28-compendium-editors-handoff.md)**.
-  - **Part A is on `main`** (`scaling_column` type + `useProposalDraftOptions`
-    helper, commit `b5237e1`) — just pull/rebase `main` to consume.
-  - **Part B** — route scaling-column save/delete through the accumulator
-    (`ScalingColumnsPanel.tsx` + `SubclassEditor.tsx` + `scaling/ScalingEditor.tsx`).
-  - **Part C** — overlay active-block draft creates into the cross-ref pickers
-    (`ClassEditor` / `SubclassEditor` / `UniqueOptionGroupEditor`, `EntityPicker`
-    gains a `draftEntries` prop).
-  - Not blocked by our Part D (approval side) — that's independent.
+- [ ] `(2026-05-28)` **`compendium-editors`: implement Parts B + C — FULL SCOPE.**
+  They audited the original handoff and found it under-scoped; owner chose full
+  coverage. Decisions + division of labor in the reply:
+  **[handoffs/compendium-editors/2026-05-28-proposal-system-reply.md](../compendium-editors/2026-05-28-proposal-system-reply.md)**.
+  Build spec = their [cross-reference audit](../../docs/architecture/compendium-editors/proposal-cross-reference-audit.html)
+  (matrix + 4-layer table) + the [design doc](2026-05-28-cross-referential-cluster-design.md).
+  - **Part B** — route saves through the accumulator (skip `queueRebake` in
+    block): `scaling_column` for **all six** owners **+ `feature`**.
+  - **Part C** — draft overlays at **all four** picker layers (L1 Advancement /
+    L2 Requirements / L3 SpellAdvancement / L4 EntityPicker).
+  - Column/cluster slice unblocked now (`scaling_column` + helper on `main`); the
+    **feature** slice waits on our `feature`-type commit (in progress).
 
 ## Handoff log
 
 Newest at the top. Each entry: date + link to the handoff doc in this same folder.
 
+- `2026-05-28` — **Scope expanded to full coverage after compendium-editors'
+  cross-reference audit.** Their audit showed "scaling_column only" left a
+  proposed class as a feature-less shell + guard #1 covered ~⅓ of refs. Owner
+  re-decided: **`feature` proposable too · full guard-#1 walk · all 6
+  `scaling_column` owners · picker overlays at all 4 layers.** Design doc
+  Decisions + Part D guard #1 updated; reply filed at
+  [../compendium-editors/2026-05-28-proposal-system-reply.md](../compendium-editors/2026-05-28-proposal-system-reply.md).
+  Next on this branch: add `feature` proposable type (Part A+) then Part D.
 - `2026-05-28` — **Part A landed on `main`** (`b5237e1`). Reversed the earlier
   "held off main" call so `compendium-editors` can build B + C straight off
   `main` (no rebase-onto-branch needed). Part A stays inert in prod until B + C
