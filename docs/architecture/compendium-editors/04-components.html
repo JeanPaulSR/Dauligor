@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>04 — Shared components · Compendium Editors</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+
+<nav class="crumbs">
+  <a href="../../../AGENTS.md">AGENTS.md</a>
+  <span class="sep">/</span>
+  <a href="../">architecture</a>
+  <span class="sep">/</span>
+  <a href="index.html">compendium-editors</a>
+  <span class="sep">/</span>
+  04 &mdash; Shared components
+</nav>
+
+<header class="hero">
+  <h1>04 &mdash; Shared components</h1>
+  <div class="sub">A collaborative walkthrough: document each shared widget, flag UI-side issues, fix what we can as we go.</div>
+  <div class="meta">
+    <span class="badge gold">walkthrough</span>
+    <span class="badge outline">component-by-component</span>
+  </div>
+</header>
+
+<div class="callout info">
+  <strong>This page works differently from 01&ndash;03.</strong>
+  Those were read-then-review. This one is a <em>walkthrough</em>: we take one shared component at
+  a time, I document what it does and how it's wired, you (and I) toss UI-side issues onto its
+  list, and we try to handle the ones we can right then. The
+  <a href="#issues-log">global UI-issues log</a> tracks everything found across all components so
+  nothing gets lost between sessions.
+</div>
+
+<div class="toc">
+  <h4>On this page</h4>
+  <ol>
+    <li><a href="#method">How the walkthrough works</a></li>
+    <li><a href="#template">The per-component template</a></li>
+    <li><a href="#order">Coverage order</a></li>
+    <li><a href="#issues-log">Global UI-issues log</a></li>
+    <li><a href="#status">Walkthrough status</a></li>
+  </ol>
+</div>
+
+<h2 id="method">How the walkthrough works</h2>
+
+<ol>
+  <li><strong>Pick a component</strong> (from the <a href="#order">coverage order</a>, or you name one out of order).</li>
+  <li><strong>I document it</strong> against its source &mdash; purpose, props, internal state, data shape, who mounts it, gotchas. Each component gets its own sub-page under <code>components/</code>.</li>
+  <li><strong>We flag UI issues</strong> &mdash; you call out what bugs you about it; I add what I notice. Each lands as a row in the component's local issue list and in the <a href="#issues-log">global log</a>.</li>
+  <li><strong>We handle what we can</strong> &mdash; quick UI fixes get made during the walkthrough (separate from the docs branch if they're real code changes; this branch is documentation-first, so code fixes either go on a sibling branch or get flagged for one). Bigger ones get logged with enough detail to action later.</li>
+  <li><strong>Move to the next component.</strong></li>
+</ol>
+
+<div class="callout">
+  <strong>Note on code changes from this branch.</strong>
+  <code>compendium-editors</code> is a documentation branch (its manifest claims only
+  <code>docs/**</code>). If a UI fix we find is a real source-code change, it should land on a
+  separate branch &mdash; otherwise this branch's scope creeps into <code>src/**</code> and collides
+  with the editor-cleanup work itself. The walkthrough's job is to <em>find and specify</em> the
+  issues precisely; small/safe fixes can be split off, larger ones become roadmap step-1/step-3
+  work items. (If you'd rather this branch also carry the fixes, say so and I'll widen the
+  manifest.)
+</div>
+
+<h2 id="template">The per-component template</h2>
+
+<p>Each component sub-page follows this shape:</p>
+
+<table class="compact">
+  <tr><th style="width:22%">Section</th><th>Contents</th></tr>
+  <tr><td><strong>Source</strong></td><td>File + the key types/exports</td></tr>
+  <tr><td><strong>Purpose</strong></td><td>What it does and the user-facing affordance, in plain language</td></tr>
+  <tr><td><strong>Props</strong></td><td>Annotated table &mdash; type, default, behavior; mandatory props in bold</td></tr>
+  <tr><td><strong>Internal state vs consumer state</strong></td><td>What the component owns vs what the mounting editor manages via callbacks</td></tr>
+  <tr><td><strong>Data shape</strong></td><td>The value it reads / emits (the <code>Advancement</code> array, the <code>Requirement</code> tree, the activities/effects JSON, etc.)</td></tr>
+  <tr><td><strong>Consumers</strong></td><td>Every editor that mounts it + the context props each passes</td></tr>
+  <tr><td><strong>UI issues</strong></td><td>The running list for this component &mdash; status, description, proposed fix</td></tr>
+  <tr><td><strong>Gotchas</strong></td><td>Context-dependent behavior; things that look like bugs but are intentional</td></tr>
+</table>
+
+<h2 id="order">Coverage order</h2>
+
+<p>
+  Step-1-relevant components first (the ones the Backgrounds / Races / Items editors mount), since
+  that's where the roadmap goes next. You can override the order any time by naming a component.
+</p>
+
+<table class="compact">
+  <tr><th style="width:6%">#</th><th>Component(s)</th><th>Why this slot</th></tr>
+  <tr>
+    <td>1</td>
+    <td><code>CompendiumEditorShell</code></td>
+    <td>The Pattern E backbone. Backgrounds / Races / Items all live inside it. Understand the shell before its tenants.</td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td><code>TagPicker</code> (+ inline <code>SpellTagPicker</code>)</td>
+    <td>Mounted by feats + items; the tags &rarr; junction migration (A1) may pair here.</td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td><code>AdvancementManager</code></td>
+    <td>Heaviest shared widget; class/subclass/feat/item/race/background all mount it. Changes ripple widest.</td>
+  </tr>
+  <tr>
+    <td>4</td>
+    <td><code>ActivityEditor</code></td>
+    <td>Per-type automation forms; mounted nearly everywhere.</td>
+  </tr>
+  <tr>
+    <td>5</td>
+    <td><code>ActiveEffectEditor</code></td>
+    <td>Companion to ActivityEditor; same broad consumer set.</td>
+  </tr>
+  <tr>
+    <td>6</td>
+    <td><code>RequirementsEditor</code></td>
+    <td>Feats + option items; structured prereq tree.</td>
+  </tr>
+  <tr>
+    <td>7</td>
+    <td><code>FilterBar</code> + <code>SectionFilterPanel</code> + <code>SpellFilterShell</code></td>
+    <td>The filter trio shared by browsers + managers.</td>
+  </tr>
+  <tr>
+    <td>8</td>
+    <td><code>ScalingColumnsPanel</code></td>
+    <td>Class/subclass/feat/item scaling tables; polymorphic owner (A3 confirmed uniform).</td>
+  </tr>
+  <tr>
+    <td>9</td>
+    <td>Detail panels: <code>FeatDetailPanel</code>, <code>ItemDetailPanel</code>, <code>SpellDetailPanel</code></td>
+    <td>The right-pane previews reused from the public browsers.</td>
+  </tr>
+  <tr>
+    <td>10</td>
+    <td>Mechanic field sets: <code>ItemUsesField</code>, <code>WeaponMechanicsFields</code>, <code>ArmorMechanicsFields</code>, <code>ToolMechanicsFields</code>, <code>WeaponPropertiesPicker</code>, <code>WeaponTypeSelect</code>, <code>ProficienciesEditor</code></td>
+    <td>Items + classes mechanic sub-forms.</td>
+  </tr>
+  <tr>
+    <td>11</td>
+    <td>List/hero accessories: <code>EntityListSection</code>, <code>EntityEditModal</code>, <code>FeaturesView</code>, <code>FeatureModalHero</code>, <code>ModularChoiceView</code>, <code>RuleMembershipPanel</code></td>
+    <td>Supporting widgets for the bespoke + class editors.</td>
+  </tr>
+  <tr>
+    <td>12</td>
+    <td>Workbenches: <code>FeatImportWorkbench</code>, <code>ItemImportWorkbench</code>, <code>SpellImportWorkbench</code></td>
+    <td>Foundry-import mode tabs (consume the module export contract; light-touch here).</td>
+  </tr>
+  <tr>
+    <td>13</td>
+    <td>Auxiliaries: <code>ActiveEffectKeyInput</code>, <code>BakeNowButton</code>, <code>ClassImageEditor</code>, <code>SpellArtPreview</code>, the two shells' read-only cousins</td>
+    <td>Small single-purpose helpers.</td>
+  </tr>
+</table>
+
+<h2 id="issues-log">Global UI-issues log</h2>
+
+<p>
+  Every UI issue found during the walkthrough lands here, newest at the bottom. Each row links to
+  the component sub-page where it's detailed. Status: <span class="badge blood">open</span> /
+  <span class="badge gold">in progress</span> / <span class="badge leaf">fixed</span> /
+  <span class="badge muted">deferred</span>.
+</p>
+
+<table class="compact">
+  <tr>
+    <th style="width:6%">#</th>
+    <th style="width:18%">Component</th>
+    <th>Issue</th>
+    <th style="width:14%">Status</th>
+    <th style="width:18%">Where it lands</th>
+  </tr>
+  <tr>
+    <td>I1</td>
+    <td><a href="components/compendium-editor-shell.html#ui-issues">CompendiumEditorShell</a></td>
+    <td>List card may be pinned to 280px on narrow viewports (inline <code>width</code> fights responsive <code>flex-1</code> at &lt;lg)</td>
+    <td><span class="badge outline">verify</span></td>
+    <td>Visual review on a narrow viewport, then a CSS/className fix on this branch</td>
+  </tr>
+  <tr>
+    <td>I2</td>
+    <td><a href="components/compendium-editor-shell.html#ui-issues">CompendiumEditorShell</a></td>
+    <td>List card declares its 280px width three ways (className + inline + constant) &mdash; collapse to one source of truth</td>
+    <td><span class="badge muted">deferred</span></td>
+    <td>Fold into the I1 fix</td>
+  </tr>
+</table>
+
+<h2 id="status">Walkthrough status</h2>
+
+<table class="compact">
+  <tr><th>Component</th><th>Sub-page</th><th>Status</th></tr>
+  <tr>
+    <td><strong>CompendiumEditorShell</strong></td>
+    <td><a href="components/compendium-editor-shell.html">components/compendium-editor-shell.html</a></td>
+    <td><span class="badge blood">drafted from source</span> &mdash; 2 issues flagged (I1 verify, I2 cosmetic); awaiting your issues + visual review</td>
+  </tr>
+  <tr>
+    <td colspan="3" style="text-align:center;color:var(--muted);font-style:italic">
+      Next: add your issues to the shell, then pick component #2 (default order: TagPicker).
+    </td>
+  </tr>
+</table>
+
+<nav class="page-pager">
+  <a href="03-tables.html">&larr; Prev: 03 &mdash; Tables &amp; relations</a>
+  <a href="05-endpoints.html">Next: 05 &mdash; Endpoints &rarr;</a>
+</nav>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CompendiumEditorShell · Components · Compendium Editors</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="wrap">
+
+<nav class="crumbs">
+  <a href="../../../../AGENTS.md">AGENTS.md</a>
+  <span class="sep">/</span>
+  <a href="../../">architecture</a>
+  <span class="sep">/</span>
+  <a href="../index.html">compendium-editors</a>
+  <span class="sep">/</span>
+  <a href="../04-components.html">04 &mdash; Components</a>
+  <span class="sep">/</span>
+  CompendiumEditorShell
+</nav>
+
+<header class="hero">
+  <h1>CompendiumEditorShell</h1>
+  <div class="sub">The Pattern E backbone &mdash; the 3-pane master-detail layout that Spells / Feats / Items live inside.</div>
+  <div class="meta">
+    <span class="badge gold">component 1 of walkthrough</span>
+    <span class="badge blood">drafted from source</span>
+    <span class="badge outline">visual review pending</span>
+  </div>
+</header>
+
+<div class="callout info">
+  <strong>Walkthrough component #1.</strong>
+  Documented from source (<code class="path">src/components/compendium/CompendiumEditorShell.tsx</code>,
+  ~826 lines). I've flagged a couple of things to verify visually &mdash; the
+  <a href="#ui-issues">UI issues</a> section is where your observations go too. After you've added
+  yours, we spin up the app to confirm the layout ones.
+</div>
+
+<h2 id="source">Source</h2>
+
+<ul>
+  <li><strong>File:</strong> <code class="path">src/components/compendium/CompendiumEditorShell.tsx</code></li>
+  <li><strong>Exported types:</strong> <code>EditorMode</code>, <code>EditorSubTab</code>, <code>TagsSubTab</code>, <code>EditorListColumn&lt;TRow&gt;</code>, <code>CompendiumEditorShellProps&lt;TRow&gt;</code></li>
+  <li><strong>Export:</strong> <code>CompendiumEditorShell&lt;TRow&gt;(props)</code> &mdash; generic over the list row type</li>
+  <li><strong>Sibling:</strong> <code>CompendiumBrowserShell</code> (the read-only public-browser counterpart with the same 3-pane rhythm)</li>
+</ul>
+
+<h2 id="purpose">Purpose</h2>
+
+<p>
+  One shell that owns all the chrome shared by every Pattern E editor page, so the editor files
+  themselves only have to supply data + field bodies. It owns:
+</p>
+
+<ul>
+  <li><strong>The top toolbar</strong> &mdash; back-link + a mode switcher (Foundry-Import / Manual-Editor) + an admin-actions slot.</li>
+  <li><strong>The FilterBar row</strong> &mdash; search + filter modal + result count + "New {entity}" button.</li>
+  <li><strong>The 3-pane viewport-locked layout</strong> &mdash; compact virtualised list (280px) | tabbed editor (flex) | read-only preview (420px).</li>
+  <li><strong>The super-tab strip</strong> &mdash; Editor vs Tags &mdash; with consumer-supplied inner sub-tabs.</li>
+  <li><strong>The single <code>&lt;form&gt;</code> wrapper</strong> so the submit button fires regardless of which super-tab is mounted (Radix unmounts inactive tab content, but the form reads from the consumer's controlled <code>formData</code>, so unmounting is harmless).</li>
+  <li><strong>Responsive collapse</strong> &mdash; xl+ shows all three panes; lg&ndash;xl drops the preview; below lg it's a single-pane master-detail drilldown.</li>
+  <li><strong>Proposal-aware chrome</strong> &mdash; cascade banner, read-only banner, Edit-Base swap, chrome-offset bump.</li>
+</ul>
+
+<h2 id="props">Props</h2>
+
+<p>Grouped as the source groups them. Mandatory props in bold.</p>
+
+<h4>Branding</h4>
+<table class="compact">
+  <tr><th>Prop</th><th>Type</th><th>Notes</th></tr>
+  <tr><td><strong>entityName</strong></td><td><code>{ singular, plural }</code></td><td>Drives default labels ("New Spell", "Back To Spells", empty-state copy)</td></tr>
+  <tr><td><strong>backPath</strong></td><td><code>string</code></td><td>Back-link href (e.g. <code>/compendium/spells</code>)</td></tr>
+  <tr><td>backLabel</td><td><code>string</code></td><td>Defaults to <code>Back To {plural}</code></td></tr>
+</table>
+
+<h4>Mode tabs</h4>
+<table class="compact">
+  <tr><th>Prop</th><th>Type</th><th>Notes</th></tr>
+  <tr><td><strong>modes</strong></td><td><code>EditorMode[]</code></td><td>Typically Foundry-Import (adminOnly) + Manual-Editor. The manual mode gets the 3-pane layout; others render their <code>render</code> node full-bleed</td></tr>
+  <tr><td>defaultModeKey</td><td><code>string</code></td><td>Defaults to the first non-admin mode (or first mode if all admin)</td></tr>
+  <tr><td>manualEditorModeKey</td><td><code>string</code></td><td>Which mode key gets the 3-pane layout. Default <code>'manual-editor'</code></td></tr>
+  <tr><td><strong>isAdmin</strong></td><td><code>boolean</code></td><td>Gates adminOnly mode triggers</td></tr>
+  <tr><td>adminActions</td><td><code>ReactNode</code></td><td>Trailing toolbar slot (Backfill / Purge / etc.)</td></tr>
+</table>
+
+<h4>List data + selection</h4>
+<table class="compact">
+  <tr><th>Prop</th><th>Type</th><th>Notes</th></tr>
+  <tr><td><strong>listRows</strong></td><td><code>TRow[]</code></td><td>The already-filtered rows (the shell doesn't filter; the consumer does)</td></tr>
+  <tr><td><strong>listColumns</strong></td><td><code>EditorListColumn&lt;TRow&gt;[]</code></td><td>Each: <code>key</code>, <code>label</code>, CSS-grid <code>width</code>, optional <code>align</code>, <code>render(row)</code></td></tr>
+  <tr><td>listRowHeight</td><td><code>number</code></td><td>Default 36px</td></tr>
+  <tr><td><strong>loading</strong></td><td><code>boolean</code></td><td>Shows "Loading…" in the list body</td></tr>
+  <tr><td><strong>selectedId</strong></td><td><code>string | null</code></td><td>Currently-edited row id</td></tr>
+  <tr><td><strong>onSelect / onNew / getRowId</strong></td><td>callbacks</td><td>Selection + new-entity + row-id extraction</td></tr>
+  <tr><td>emptyListMessage</td><td><code>string | ReactNode</code></td><td>Override empty-state (proposal mode passes a teaching block)</td></tr>
+</table>
+
+<h4>Filter / Identity / Save / Proposal / Super-tabs / Preview</h4>
+<table class="compact">
+  <tr><th>Group</th><th>Key props</th></tr>
+  <tr><td>Filter row</td><td><code>search</code>, <code>onSearchChange</code>, <code>searchPlaceholder</code>, <code>activeFilterCount</code>, <code>isFilterOpen</code>, <code>setIsFilterOpen</code>, <code>resetFilters</code>, <code>renderFilters</code> (usually a <code>SectionFilterPanel</code>), <code>filterTitle</code></td></tr>
+  <tr><td>Identity row</td><td><code>identityName</code>, <code>identitySourceAbbrev</code>, <code>identitySourceFullName</code> (chip tooltip), <code>identitySubtitle</code></td></tr>
+  <tr><td>Save lifecycle</td><td><code>onSave</code>, <code>onDelete</code> (omit to hide Delete), <code>onReset</code>, <code>saving</code>, <code>formId</code> (stable per entity)</td></tr>
+  <tr><td>Proposal-aware</td><td><code>isReadOnly</code>, <code>onUnlockBase</code> (swaps action row for "Edit Base"), <code>cascadeBanner</code>, <code>readonlyBanner</code> (default provided), <code>proposalMode</code> (bumps chrome offset 200→320)</td></tr>
+  <tr><td>Super-tab content</td><td><code>editorSubTabs</code> (Basics/Mechanics/Activities/Effects), <code>tagsSubTabs</code> (Tags/Prereqs/Rules), <code>tagsSuperTabCount</code> (badge)</td></tr>
+  <tr><td>Preview</td><td><code>renderPreview(selectedId)</code> &mdash; the xl+ right pane</td></tr>
+</table>
+
+<h2 id="state">Internal state vs consumer state</h2>
+
+<table class="compact">
+  <tr><th>Owned by the shell</th><th>Owned by the consumer (editor)</th></tr>
+  <tr>
+    <td>
+      <ul>
+        <li><code>paneHeight</code> (viewport-derived, resize listener)</li>
+        <li><code>listView</code> ('list' | 'editor') for the &lt;lg drilldown</li>
+        <li><code>editorView</code> ('editor' | 'tags') super-tab</li>
+        <li><code>editorSubTab</code> + <code>tagsSubTab</code> inner-tab selection</li>
+        <li>The <code>spell-list-fullscreen</code> body class (added on mount, removed on unmount)</li>
+      </ul>
+    </td>
+    <td>
+      <ul>
+        <li><code>formData</code> &mdash; the entire field state</li>
+        <li><code>selectedId</code> + the selection logic (incl. the <a href="../02-data-flow.html#post-save">preserve-selection idiom</a>)</li>
+        <li>Filter state (search, active filters) &mdash; the shell just renders it</li>
+        <li>The actual save / delete / reset logic</li>
+        <li>Proposal-mode wiring (the shell receives resolved <code>isReadOnly</code> / banners as props)</li>
+      </ul>
+    </td>
+  </tr>
+</table>
+
+<p>
+  Notable: <strong>the super-tab + sub-tab state persists across <code>selectedId</code> changes.</strong>
+  A proposer editing Tags &gt; Prereqs on Fireball who clicks Frostbite stays on Tags &gt; Prereqs.
+  Only <code>onNew</code> resets to Editor &gt; first-sub-tab (the shell's <code>handleNew</code>
+  resets the view before calling the consumer's <code>onNew</code>).
+</p>
+
+<h2 id="data-shape">Data shape</h2>
+
+<p>
+  The shell is generic over <code>TRow</code> &mdash; it doesn't care what an entity row looks like.
+  It only touches rows through the consumer-supplied <code>getRowId</code> and the
+  <code>listColumns[].render</code> functions. The actual field editing happens in the
+  <code>editorSubTabs[].render()</code> / <code>tagsSubTabs[].render()</code> bodies, which the
+  consumer supplies and which read/write the consumer's own <code>formData</code>. So the shell
+  has no opinion on the entity's data shape at all &mdash; that's the point.
+</p>
+
+<h2 id="consumers">Consumers</h2>
+
+<table class="compact">
+  <tr><th>Editor</th><th>Modes</th><th>editorSubTabs</th><th>tagsSubTabs</th></tr>
+  <tr>
+    <td><code class="path">SpellsEditor.tsx</code></td>
+    <td>Foundry Import + Manual Editor</td>
+    <td>Basics / Mechanics / Activities / Effects</td>
+    <td>Tags / Prereqs / Rules</td>
+  </tr>
+  <tr>
+    <td><code class="path">FeatsEditor.tsx</code></td>
+    <td>Foundry Import + Manual Editor</td>
+    <td>(feat-shaped)</td>
+    <td>Prereqs / Tags</td>
+  </tr>
+  <tr>
+    <td><code class="path">ItemsEditor.tsx</code></td>
+    <td>Foundry Import + Manual Editor</td>
+    <td>(item-shaped, type-dispatching)</td>
+    <td>(item-shaped)</td>
+  </tr>
+  <tr>
+    <td><code class="path">RaceEditor.tsx</code> / <code class="path">BackgroundEditor.tsx</code></td>
+    <td colspan="3">Wrap <code>FeatsEditor</code> with <code>scopeFeatType</code> &mdash; inherit its shell usage</td>
+  </tr>
+</table>
+
+<h2 id="ui-issues">UI issues</h2>
+
+<p>
+  My initial observations from the source, plus room for yours. Status:
+  <span class="badge blood">open</span> / <span class="badge gold">in progress</span> /
+  <span class="badge leaf">fixed</span> / <span class="badge muted">deferred</span> /
+  <span class="badge outline">verify</span>.
+</p>
+
+<div class="card priority-now">
+  <h3>I1 &mdash; <span class="badge outline">verify</span> List card may be pinned to 280px on narrow viewports</h3>
+  <p>
+    The list <code>Card</code> (line ~477) carries an inline
+    <code>style={{ width: 280px, height: paneHeight }}</code> that applies at
+    <em>every</em> breakpoint. At <code>&lt;lg</code> with <code>listView==='list'</code> the card
+    also gets <code>flex flex-1</code> (meant to fill the column), but the inline <code>width:280px</code>
+    likely wins &mdash; so on a phone the list could render as a 280px column with empty space to its
+    right instead of full-width.
+  </p>
+  <p>
+    <strong>Proposed fix:</strong> drop the inline <code>width</code> (and the redundant
+    <code>lg:w-[280px]</code> className) in favor of a responsive class: full-width below lg, 280px
+    at lg+. Same likely applies to the inline <code>height</code> fighting <code>flex-1</code>.
+    <em>Needs visual confirmation on a narrow viewport before changing &mdash; this is a "verify" not
+    a confirmed bug.</em>
+  </p>
+</div>
+
+<div class="card priority-later">
+  <h3>I2 &mdash; <span class="badge muted">cosmetic</span> Redundant width declarations on the list card</h3>
+  <p>
+    The list card sets its 280px width three ways: the <code>lg:w-[280px]</code> className, the
+    <code>LIST_COL_WIDTH_PX</code> inline style, and the layout assumption. Whatever the fix for I1,
+    collapsing these to a single source of truth (one constant, one place) avoids future drift.
+  </p>
+</div>
+
+<div class="card priority-info">
+  <h3>I3 &mdash; (your slot)</h3>
+  <p>
+    What bugs you about this shell when you use it? Layout, spacing, the super-tab behavior, the
+    mobile drilldown, the filter row, the save/reset/delete row &mdash; anything. Tell me and it lands
+    here with a proposed fix.
+  </p>
+</div>
+
+<h2 id="gotchas">Gotchas</h2>
+
+<ul>
+  <li>
+    <strong>The body class is named <code>spell-list-fullscreen</code> but applies to all Pattern E
+    editors.</strong> Historical name &mdash; the CSS rules (in <code>src/index.css</code>) strip the
+    global container padding + hide the footer for any fullscreen page. If we ever rename it, it's
+    a coordinated change across the shell, the browsers, and the CSS.
+  </li>
+  <li>
+    <strong>Inactive tab content unmounts (Radix default).</strong> The single <code>&lt;form&gt;</code>
+    wrapping both super-tabs is what makes Save work anyway &mdash; the submit reads the consumer's
+    controlled <code>formData</code>, not the (unmounted) DOM fields. Don't switch to uncontrolled
+    inputs inside the sub-tabs or Save will silently drop the unmounted ones.
+  </li>
+  <li>
+    <strong>The <code>&lt;fieldset disabled={isReadOnly}&gt;</code> wraps each super-tab body, but
+    the action row (Save/Reset/Delete) lives OUTSIDE both fieldsets</strong> (in the identity row),
+    so the buttons stay clickable in read-only/browse mode. Intentional &mdash; the Edit-Base swap
+    needs the button live even when the form is locked.
+  </li>
+  <li>
+    <strong>chromeOffset is 200 normally, 320 in proposal mode.</strong> If the proposal wrapper's
+    banner/footer height changes, this magic number needs to track it or the bottom pane gets
+    clipped / leaves a gap.
+  </li>
+</ul>
+
+<nav class="page-pager">
+  <a href="../04-components.html">&larr; Back to 04 &mdash; Components</a>
+  <a href="../04-components.html">Next component &rarr; (you pick)</a>
+</nav>
+
+</div>
+</body>
+</html>

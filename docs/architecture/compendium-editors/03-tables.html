@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>03 — Tables &amp; relations · Compendium Editors</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+
+<nav class="crumbs">
+  <a href="../../../AGENTS.md">AGENTS.md</a>
+  <span class="sep">/</span>
+  <a href="../">architecture</a>
+  <span class="sep">/</span>
+  <a href="index.html">compendium-editors</a>
+  <span class="sep">/</span>
+  03 &mdash; Tables &amp; relations
+</nav>
+
+<header class="hero">
+  <h1>03 &mdash; Tables &amp; relations</h1>
+  <div class="sub">How catalog entities relate to each other, what's stored as JSON vs separate columns, the polymorphic patterns, and the cascade rules.</div>
+  <div class="meta">
+    <span class="badge leaf">reviewed</span>
+    <span class="badge outline">answers captured 2026-05-27</span>
+  </div>
+</header>
+
+<div class="callout success">
+  <strong>Review pass 1 complete.</strong>
+  Your answers are captured below as <a href="#answers">Your clarifications</a>. One correction
+  folded in: the source-scoped identifier convention is the existing <code>firebolt_phb</code>
+  form (underscore + source abbreviation), not the hyphenated form I'd originally proposed &mdash; the
+  <a href="#uniqueness">uniqueness section</a> is updated to match.
+</div>
+
+<div class="toc">
+  <h4>On this page</h4>
+  <ol>
+    <li><a href="#idioms">The four storage idioms</a></li>
+    <li><a href="#map">The entity-relation map</a></li>
+    <li><a href="#polymorphic">The three polymorphic patterns</a></li>
+    <li><a href="#json-or-table">JSON columns vs separate tables</a></li>
+    <li><a href="#tags">Tags &mdash; current state and migration plan</a></li>
+    <li><a href="#uniqueness">Source-scoped uniqueness</a></li>
+    <li><a href="#cascade">Foreign keys + cascade behavior</a></li>
+    <li><a href="#atomic">Pattern D &mdash; atomic multi-table writes</a></li>
+    <li><a href="#hash">Future: the <code>content_hash</code> column</a></li>
+    <li><a href="#new-tables">New tables go in camelCase, in <code>PERSISTENT_TABLES</code></a></li>
+    <li><a href="#findings">Findings &mdash; what stood out</a></li>
+    <li><a href="#answers">Your clarifications</a></li>
+  </ol>
+</div>
+
+<h2 id="idioms">The four storage idioms</h2>
+
+<p>Every column in the compendium tables is one of four things:</p>
+
+<table>
+  <tr>
+    <th style="width:20%">Idiom</th>
+    <th>What it holds</th>
+    <th style="width:30%">Example</th>
+  </tr>
+  <tr>
+    <td><strong>Flat scalar</strong></td>
+    <td>A single string, number, or 0/1 boolean. Direct SQL column with a simple type.</td>
+    <td><code>name</code>, <code>identifier</code>, <code>level</code>, <code>rarity</code>, <code>magical</code></td>
+  </tr>
+  <tr>
+    <td><strong>FK column</strong></td>
+    <td>Points at another row's primary key. Usually <code>_id</code> suffix. <code>PRAGMA foreign_keys = ON</code> enforces them.</td>
+    <td><code>source_id</code> &rarr; <code>sources.id</code>; <code>parent_id</code> &rarr; <code>classes.id</code> or <code>subclasses.id</code>; <code>class_id</code> on <code>subclasses</code></td>
+  </tr>
+  <tr>
+    <td><strong>JSON column</strong></td>
+    <td>A serialized JSON value (object or array). Auto-parsed on read by <code>queryD1</code>'s allowlist. Read-only at the SQL level &mdash; you can't <code>WHERE</code> on a JSON path efficiently.</td>
+    <td><code>activities</code>, <code>effects</code>, <code>advancements</code>, <code>proficiencies</code>, <code>spellcasting</code>, <code>tag_ids</code></td>
+  </tr>
+  <tr>
+    <td><strong>Junction table</strong></td>
+    <td>A two-FK row connecting two entities. Mostly used by the lore family; the rest of the compendium uses JSON arrays for tag-style relationships today.</td>
+    <td><code>lore_article_eras</code>, <code>lore_article_campaigns</code>, <code>lore_article_tags</code>, <code>lore_secret_eras</code></td>
+  </tr>
+</table>
+
+<p>
+  The choice between JSON column and junction table is the design decision worth understanding;
+  see <a href="#json-or-table">section below</a>. The other three idioms are uncontroversial.
+</p>
+
+<h2 id="map">The entity-relation map</h2>
+
+<p>The big picture of how the catalog entities link to each other:</p>
+
+<div class="pipeline">
+  <span class="stage">sources</span>
+  <span class="arrow">&larr;</span>
+  <span class="stage">classes<br>subclasses<br>spells<br>feats<br>items<br>facilities<br>features</span>
+  <span class="arrow">&rarr;</span>
+  <span class="stage">scaling_columns<br>unique_option_groups<br>tags / tag_groups</span>
+</div>
+
+<p>
+  Read it left-to-right: <strong><code>sources</code></strong> is the universal FK target &mdash; every
+  catalog row points at the sourcebook (PHB, XGE, DMG, homebrew, etc.) it came from. The catalog
+  entities <em>are</em> the content (classes, spells, etc.). They produce relations forward to
+  scaling tables, option groups, tags, and back-link via FK to their owning class / subclass /
+  feature.
+</p>
+
+<p>The links inside the catalog cluster, expressed as plain sentences:</p>
+
+<ul>
+  <li><strong>Subclasses belong to one class.</strong> <code>subclasses.class_id</code> &rarr; <code>classes.id</code>.</li>
+  <li><strong>Features belong to a class OR a subclass.</strong> <code>features.parent_id</code> &rarr; <code>classes.id</code> OR <code>subclasses.id</code>; <code>features.parent_type</code> says which. (Polymorphic; see <a href="#polymorphic">below</a>.)</li>
+  <li><strong>Scaling columns belong to a class OR a subclass OR a feat OR an item.</strong> Same polymorphic pattern.</li>
+  <li><strong>Items reference a base proficiency definition.</strong> A weapon-item points at a <code>weapons</code> row; an armor-item at <code>armor</code>; a tool-item at <code>tools</code>. (Polymorphic FK chain; see <a href="#polymorphic">below</a>.)</li>
+  <li><strong>Unique option groups (Metamagic, Invocations, Maneuvers, etc.) belong to a feature.</strong> <code>unique_option_groups.feature_id</code> &rarr; <code>features.id</code>. The option items inside the group sit in <code>unique_option_items</code> with a group FK.</li>
+  <li><strong>Spells carry a lightweight summary alongside.</strong> <code>spells</code> + <code>spell_summaries</code> &mdash; the summary table is denormalized for picker performance. Spell rules + spell lists are independent tables that resolve "which spells does this class actually know" through the rules engine.</li>
+  <li><strong>Tags live in <code>tags</code> + <code>tag_groups</code>.</strong> Today most entities reference tags via JSON arrays (<code>spells.tags</code>, <code>feats.tags</code>, <code>items.tags</code>, <code>classes.tag_ids</code>). The future plan is to migrate these to junction tables; see <a href="#tags">below</a>.</li>
+</ul>
+
+<p>
+  The <strong>lore family</strong> sits next to the catalog cluster but on its own: <code>lore_articles</code> with seven supporting tables (four <code>lore_meta_*</code> for characters/locations/organizations/deities, three junction families for eras/campaigns/tags, plus <code>lore_links</code> and <code>lore_secrets</code>). It's the canonical Pattern D consumer; out of scope here in any depth (owned by <code>system-applications</code>).
+</p>
+
+<h2 id="polymorphic">The three polymorphic patterns</h2>
+
+<p>"Polymorphic" appears three times in the schema, each with a different flavor and a different reason:</p>
+
+<div class="card priority-info">
+  <h3>1. <code>parent_id</code> + <code>parent_type</code> &mdash; "which entity owns this child?"</h3>
+  <p>
+    Used by: <code>features</code>, <code>scaling_columns</code>.
+  </p>
+  <p>
+    Why: a feature can be owned by a class or a subclass; a scaling column can be owned by a
+    class, subclass, feat, or item. Rather than one nullable FK per possible parent type, store
+    the FK in <code>parent_id</code> and the type in <code>parent_type</code>. Queries are
+    <code>WHERE parent_id = ? AND parent_type = 'class'</code>.
+  </p>
+  <p>
+    Trade-off: the FK can't be enforced by SQL (since <code>parent_id</code> doesn't know which
+    table to point at), so referential integrity is enforced at the application layer. The
+    upside is one polymorphic pattern instead of N FKs per child table.
+  </p>
+</div>
+
+<div class="card priority-info">
+  <h3>2. <code>base_*_id</code> &mdash; "which proficiency definition does this item reference?"</h3>
+  <p>
+    Used by: <code>items</code> only.
+  </p>
+  <p>
+    An item row carries three FK columns: <code>base_weapon_id</code>, <code>base_armor_id</code>,
+    <code>base_tool_id</code>. Exactly one is non-null per row, driven by <code>item_type</code>.
+    Each points at a row in <code>weapons</code> / <code>armor</code> / <code>tools</code> &mdash; the
+    proficiency definition tables that hold rules-level shape (Greatsword's category, weapon type,
+    properties, etc.).
+  </p>
+  <p>
+    Why a chain instead of a single polymorphic <code>parent_id</code>: SQL <em>can</em> enforce
+    each individual FK, and proficiency resolution code can just check the three columns in
+    sequence. Sibling field <code>base_item</code> (TEXT) preserves Foundry's slug verbatim so a
+    re-resolve can wire the FK later if the proficiency definition arrives after the item.
+  </p>
+</div>
+
+<div class="card priority-info">
+  <h3>3. <code>feat_type</code> discriminator &mdash; placeholder, not real polymorphism</h3>
+  <p>
+    Used by: <code>feats</code>.
+  </p>
+  <p>
+    The <code>feats</code> table currently holds rows of six feat-type variants:
+    <code>feat</code>, <code>class</code>, <code>subclass</code>, <code>race</code>,
+    <code>background</code>, <code>monster</code>. Of those, <code>race</code> and
+    <code>background</code> are <strong>placeholder behavior</strong> until they get their own
+    tables (per <a href="01-survey.html#answers">summary A1</a> and
+    <a href="01-survey.html#roadmap">roadmap step 1</a>).
+  </p>
+  <p>
+    This is a different shape of "polymorphic" &mdash; it's a single table doing two jobs. The other
+    two patterns above are real polymorphism (designed-in); this one is mid-migration.
+  </p>
+</div>
+
+<h2 id="json-or-table">JSON columns vs separate tables</h2>
+
+<p>
+  The big design decision the schema makes repeatedly. Reasonable rules of thumb based on what the
+  schema actually does today:
+</p>
+
+<table>
+  <tr>
+    <th style="width:32%">Use JSON column when&hellip;</th>
+    <th>Use a separate table when&hellip;</th>
+  </tr>
+  <tr>
+    <td>The data is deeply nested (arrays of objects with sub-arrays)</td>
+    <td>The data has its own identity worth referencing (an FK target)</td>
+  </tr>
+  <tr>
+    <td>It belongs entirely to one parent (no cross-references)</td>
+    <td>Multiple parents share the same children</td>
+  </tr>
+  <tr>
+    <td>You don't need to filter SQL queries by its contents</td>
+    <td>You want to <code>WHERE</code> on it ("find all classes with the Combat tag")</td>
+  </tr>
+  <tr>
+    <td>The shape changes over time and rigid columns would churn the schema</td>
+    <td>The shape is stable</td>
+  </tr>
+  <tr>
+    <td>Atomicity is "save the whole thing or none of it" already satisfied by writing one row</td>
+    <td>Atomicity needs <code>batchQueryD1</code> + a transaction</td>
+  </tr>
+</table>
+
+<p>
+  Concrete examples from the current schema:
+</p>
+
+<ul>
+  <li>
+    <strong><code>advancements</code> &mdash; JSON.</strong> A class's advancement timeline is an
+    array of typed rules (HitPoints / ItemChoice / ASI / Subclass / ...). Deeply nested; belongs
+    entirely to the class; rarely queried by its inner contents. JSON is the right call. The
+    <code>classes.md</code> schema doc has a direct quote on this: "JSON for fields like
+    <code>advancements</code> because they are deeply nested arrays of rules that change
+    frequently. This avoids creating dozens of junction tables for a single entity."
+  </li>
+  <li>
+    <strong><code>activities</code> + <code>effects</code> &mdash; JSON.</strong> Same reasoning,
+    repeated on every Foundry-automatable entity. Each one is a Foundry document shape; the editor
+    composes them as JSON and the export emits them as JSON. No cross-entity reference happens
+    through these fields.
+  </li>
+  <li>
+    <strong><code>proficiencies</code> &mdash; JSON.</strong> Class proficiencies are a nested
+    object (saves, skills, tools, weapons, armor, languages, each with choices and fixed lists).
+    The proficiency catalog tables (<code>skills</code>, <code>tools</code>, etc.) are the queryable
+    side; the class's <em>composition</em> of those proficiencies is JSON.
+  </li>
+  <li>
+    <strong><code>tags</code> on each entity &mdash; JSON array <em>today</em>, junction table
+    <em>tomorrow</em>.</strong> See <a href="#tags">below</a>. This is the canonical case of
+    "we'd rather have a junction but JSON was faster to ship."
+  </li>
+  <li>
+    <strong>Lore meta + junctions &mdash; separate tables.</strong> Lore articles have multiple
+    referenceable children (characters, locations, organizations, deities); each has its own
+    table. Lore articles also relate to multiple eras + multiple campaigns + multiple tags; each
+    of those is a junction table. Junctions are the right call because the relationships are
+    many-to-many and queryable.
+  </li>
+</ul>
+
+<h2 id="tags">Tags &mdash; current state and migration plan</h2>
+
+<p>
+  <strong>Current.</strong> Tags live in two tables: <code>tags</code> (the leaves) and
+  <code>tag_groups</code> (the parents, supporting the "subtag implies its parent" invariant the
+  TagPicker enforces). Entities reference tags via JSON arrays on their own row:
+  <code>spells.tags</code>, <code>feats.tags</code>, <code>items.tags</code>,
+  <code>classes.tag_ids</code>. The arrays carry tag IDs; the picker resolves them to display names + parent
+  groups at render time.
+</p>
+
+<p>
+  <strong>Why JSON.</strong> The original migration shipped this way because it was the smallest
+  change from the Firestore-era shape (Firestore had tags as embedded arrays). It also has a
+  practical benefit: filtering an entity by its tags is a client-side operation that already has
+  the array on hand &mdash; no extra query.
+</p>
+
+<p>
+  <strong>The cost.</strong> SQL queries that need to find "all classes with this tag" can't use
+  an index. They're stuck doing <code>LIKE '%' || tag_id || '%'</code> on the JSON column &mdash;
+  works for occasional admin queries, doesn't scale to runtime filtering.
+</p>
+
+<p>
+  <strong>The migration plan.</strong> The patterns doc flags this as Priority 6:
+  "Migrate JSON-array tag references (<code>classes.tag_ids</code>, <code>feats.tags</code>,
+  <code>items.tags</code>, <code>spells.tags</code>) into proper junction tables." When that lands,
+  filtering by tag becomes an indexed query, and the JSON arrays go away.
+</p>
+
+<p>
+  In the meantime, the editor side treats <code>tags</code> as a JSON array of IDs and the public
+  browsers do client-side filtering through the same arrays. The TagPicker enforces the
+  "subtag-implies-parent" invariant at toggle time so the array stays consistent.
+</p>
+
+<h2 id="uniqueness">Source-scoped uniqueness</h2>
+
+<p>
+  Identifiers (the URL-safe slug used in routes and references) are <strong>not globally unique</strong>
+  &mdash; they're unique <em>per source</em>. The reasoning: it's legitimate for the same name to
+  appear in two sourcebooks. Blade of Disaster exists in FRHF and TCE with mechanical differences;
+  both deserve a row.
+</p>
+
+<p>
+  The migrations that landed this:
+</p>
+
+<table>
+  <tr>
+    <th>Migration</th>
+    <th>What it added</th>
+  </tr>
+  <tr>
+    <td><code>20260526-2300</code></td>
+    <td><code>UNIQUE(source_id, identifier)</code> on <code>feats</code> and <code>items</code></td>
+  </tr>
+  <tr>
+    <td><code>20260527-1400</code></td>
+    <td><code>UNIQUE(source_id, identifier)</code> on <code>spells</code>, <code>classes</code>, <code>subclasses</code></td>
+  </tr>
+  <tr>
+    <td><code>20260527-1410</code></td>
+    <td><code>UNIQUE(parent_type, parent_id, identifier)</code> on <code>features</code></td>
+  </tr>
+</table>
+
+<p>
+  The features constraint is the polymorphic-parent variant: a feature's identifier is unique
+  within its owning class or subclass, not globally. That's the right granularity &mdash; two classes
+  can both have an "ability-score-improvement" feature without colliding.
+</p>
+
+<p>
+  <strong>Editor behavior on conflict.</strong> When the constraint fires (someone tries to save
+  an entity with a duplicate identifier in the same source), the upsert throws and the editor's
+  error handler surfaces it via <code>toast.error</code>. The identifier auto-generation in
+  <code>normalizeCompendiumData</code> uses <code>slugify(name)</code>, which means the conflict
+  surface is "two entities with the exact same name from the same source" &mdash; rare enough to be a
+  real authoring signal.
+</p>
+
+<p>
+  <strong>The source-scoped identifier convention already exists in routing.</strong> Hash-links
+  use the <code>&lt;identifier&gt;_&lt;sourceAbbrev&gt;</code> form &mdash; e.g. the spell Firebolt is
+  reached at <code>#firebolt_phb</code>. This is built by <code>useCompendiumHashLink</code> for
+  the Spell / Feat / Item / Facilities browsers, and the class routes adopted the same form
+  (<code>cleric_phb</code>) via <code>buildClassSlug</code> / <code>useClassRouteId</code>. The
+  separator is an underscore and the suffix is the source's abbreviation (lowercased), not a slug.
+</p>
+<p>
+  <strong>You confirmed it's worth adopting in general</strong> &mdash; the source-scoped form is the
+  right model wherever an identifier needs to disambiguate the same name across sourcebooks. The
+  stored <code>identifier</code> column today is still the bare slug (<code>firebolt</code>); the
+  source suffix is composed at link-build time. Standardising on the <code>_&lt;sourceAbbrev&gt;</code>
+  form more broadly is the direction.
+</p>
+
+<h2 id="cascade">Foreign keys + cascade behavior</h2>
+
+<p>
+  D1 runs with <code>PRAGMA foreign_keys = ON</code> by default &mdash; FK constraints are enforced.
+  Three behaviors apply, depending on the FK:
+</p>
+
+<table>
+  <tr>
+    <th style="width:24%">Behavior</th>
+    <th>When it's used</th>
+    <th>Concrete example</th>
+  </tr>
+  <tr>
+    <td><strong>ON DELETE SET NULL</strong></td>
+    <td>The child can survive losing its parent. Deleting the parent leaves the child intact with the FK cleared.</td>
+    <td><code>items.source_id</code> &mdash; if a sourcebook is removed, the items it published stay in the catalog with no source.</td>
+  </tr>
+  <tr>
+    <td><strong>ON DELETE CASCADE</strong></td>
+    <td>The child cannot exist without its parent. Deleting the parent deletes the child too.</td>
+    <td><code>unique_option_items.group_id</code> &mdash; deleting an option group deletes its items. Also why <a href="02-data-flow.html#rules">AGENTS rule #2 bans <code>INSERT OR REPLACE</code></a>: it triggers a cascade because <code>OR REPLACE</code> internally deletes and reinserts.</td>
+  </tr>
+  <tr>
+    <td><strong>No cascade (application-managed)</strong></td>
+    <td>The relationship is polymorphic, so SQL can't enforce it. The editor or a future cascade-delete handler is responsible.</td>
+    <td><code>features.parent_id</code> + <code>scaling_columns.parent_id</code> &mdash; deleting a class doesn't auto-delete its features today. See <a href="01-survey.html#answers">summary A4</a> for the future cascade-delete rules.</td>
+  </tr>
+</table>
+
+<p>
+  <strong>The future class cascade-delete rules</strong> (from A4, captured for cross-reference):
+</p>
+
+<ul>
+  <li>Deleting a class cascades to: its subclasses, its class features, its advancements (the advancement rows).</li>
+  <li>Deleting a class does <strong>not</strong> cascade to anything those advancements <em>grant</em> &mdash; e.g., an advancement granting Warlock Invocations leaves the Invocation option items intact (they're independent content possibly referenced elsewhere).</li>
+  <li>Implementation will batch the delete via <code>batchQueryD1</code> &mdash; one transaction, all-or-nothing.</li>
+</ul>
+
+<h2 id="atomic">Pattern D &mdash; atomic multi-table writes</h2>
+
+<p>
+  When one logical save needs to touch multiple tables, the editor uses <code>batchQueryD1</code>
+  to wrap all the SQL in a single D1 transaction. Either every query succeeds or none of them do.
+  No half-written state.
+</p>
+
+<p>
+  The canonical consumer today is <code>src/lib/lore.ts</code>'s <code>upsertLoreArticle</code>:
+  one batch writes the parent <code>lore_articles</code> row, the relevant
+  <code>lore_meta_&lt;type&gt;</code> row, plus replaces all rows in the four junction tables
+  (<code>lore_article_eras</code>, <code>lore_article_campaigns</code>,
+  <code>lore_article_tags</code>, <code>lore_links</code>) for this article. The "replace" pattern
+  is <code>DELETE WHERE article_id = ?</code> followed by <code>INSERT</code> rows for the new
+  associations &mdash; both inside the same transaction so the deletes don't surface to readers.
+</p>
+
+<p>
+  Future Pattern D consumers per the survey + answers:
+</p>
+
+<ul>
+  <li>Class cascade-delete (per A4) &mdash; class + subclasses + features + advancements.</li>
+  <li>Character builder finalization &mdash; character row + selections + inventory + spell list &mdash; all atomic.</li>
+  <li>Any new entity that owns multiple child tables &mdash; the principle of "start with separate tables" (per <a href="01-survey.html#answers">A1</a>) tends to land more Pattern D over time.</li>
+</ul>
+
+<h2 id="hash">Future: the <code>content_hash</code> column</h2>
+
+<p>
+  As of the Phase 1 foundation patches landed on <code>main</code> on 2026-05-27, the following
+  tables grew a <code>content_hash TEXT</code> column: <code>spells</code>, <code>feats</code>,
+  <code>items</code>, <code>classes</code>, <code>subclasses</code>, <code>features</code>,
+  <code>unique_option_groups</code>.
+</p>
+
+<p>
+  Today the column is NULL on every row. Population is Phase 1.5 work owned by the
+  <code>system-applications</code> branch: every editor save will compute a SHA-256 of a canonical
+  JSON serialization of the row's content fields (allowlist of fields that constitute "meaningful
+  content"), and store it.
+</p>
+
+<p>
+  What it's for: enables the Foundry-side live-content bridge to detect "this Fireball on an
+  actor was authored against a stale version of the source." Foundry can compare the hash on the
+  actor's embedded copy against the catalog's current hash; mismatch &rarr; offer to refresh.
+</p>
+
+<p>
+  <strong>Operational note for editor-side work:</strong> when the hash hook lands, every editor's
+  save path picks it up transparently &mdash; the hook lives inside <code>upsertDocument</code> /
+  per-entity helpers. Editors don't need to do anything to participate. The only thing that
+  matters from the editor's perspective is: <strong>the allowlist of "content fields"</strong>.
+  Fields that the hash hook considers "content" are the ones whose changes count as a meaningful
+  edit; fields like <code>updated_at</code> or caller-specific state don't count. The system-applications
+  branch will land the canonical list. Editors don't tune it.
+</p>
+
+<h2 id="new-tables">New tables go in camelCase, in <code>PERSISTENT_TABLES</code></h2>
+
+<p>
+  Two conventions decided 2026-05-27 (per <a href="02-data-flow.html#answers">A1 + A3 in section 02</a>)
+  that apply to any new tables landing during the editor cleanup:
+</p>
+
+<table>
+  <tr>
+    <th style="width:25%">Convention</th>
+    <th>Why</th>
+  </tr>
+  <tr>
+    <td>New tables use <strong>camelCase</strong> column names (e.g. <code>imageUrl</code>, not <code>image_url</code>).</td>
+    <td>
+      Aligns with Foundry's convention (camelCase end-to-end) and with React form state. Eliminates
+      the editor &harr; D1 dance for the new tables from day one. Existing tables keep their snake_case
+      until a separate migration pass.
+    </td>
+  </tr>
+  <tr>
+    <td>New compendium tables are added to <code>PERSISTENT_TABLES</code> in <code>src/lib/d1.ts</code>.</td>
+    <td>
+      Compendium content is read-heavy + changes rarely &mdash; the same reason items / feats / spells /
+      sources are already in the list. The 1-hour sessionStorage cache pays for itself within the
+      first navigation.
+    </td>
+  </tr>
+</table>
+
+<p>
+  <strong>Direct application:</strong> when Backgrounds and Races get promoted to their own
+  tables in <a href="01-survey.html#roadmap">roadmap step 1</a>, those tables follow both
+  conventions out of the gate.
+</p>
+
+<h2 id="findings">Findings &mdash; what stood out</h2>
+
+<div class="card priority-now">
+  <h3>F1 &mdash; The schema has three different polymorphic patterns, each for a different reason</h3>
+  <p>
+    <code>parent_id</code>+<code>parent_type</code> (features / scaling), <code>base_*_id</code>
+    chain (items), and <code>feat_type</code> discriminator (races/backgrounds placeholder). Worth
+    knowing them apart: the first two are designed-in and SQL-enforced where possible; the third
+    is a placeholder that gets unwound when its target tables land. Conflating them would lead
+    someone to expect the wrong cascade behavior.
+  </p>
+</div>
+
+<div class="card priority-next">
+  <h3>F2 &mdash; The JSON-array tag pattern is the largest "ship faster, fix later" debt</h3>
+  <p>
+    Four entities (<code>spells</code>, <code>feats</code>, <code>items</code>, <code>classes</code>)
+    reference tags via JSON arrays. The migration plan (Priority 6) is well-known but unscheduled.
+    When step 3 of the roadmap (shared widgets) reaches the TagPicker, this would be a natural
+    moment to revisit &mdash; the picker's behavior is unaffected, but the underlying storage shift
+    would unlock SQL-side filtering and shed the <code>LIKE</code>-on-JSON workaround.
+  </p>
+</div>
+
+<div class="card priority-next">
+  <h3>F3 &mdash; <code>features.parent_id</code> is unenforced by SQL on purpose</h3>
+  <p>
+    Polymorphic FKs can't be CHECK-constrained in SQLite, so the application layer is responsible.
+    Practical impact: a class deletion today leaves features with stale <code>parent_id</code>
+    values pointing at nothing. This is the orphan-features problem documented historically; the
+    cascade-delete handler (A4) fixes it.
+  </p>
+</div>
+
+<div class="card priority-later">
+  <h3>F4 &mdash; Items' polymorphic <code>base_*_id</code> chain is more elegant than it looks</h3>
+  <p>
+    Three FK columns (<code>base_weapon_id</code> / <code>base_armor_id</code> /
+    <code>base_tool_id</code>), exactly one non-null, dispatched by <code>item_type</code>. The
+    chain lets each individual FK be SQL-enforced (unlike <code>parent_id</code>+<code>parent_type</code>).
+    The sibling <code>base_item</code> slug column preserves Foundry's value for re-resolution if
+    the FK fails to wire at import time. Nice design.
+  </p>
+</div>
+
+<div class="card priority-later">
+  <h3>F5 &mdash; The lore family is the model for what catalog tables would become if we kept normalizing</h3>
+  <p>
+    One parent table, four metadata variants, four junction tables. Pattern D enforced atomicity via
+    <code>batchQueryD1</code>. If the catalog ever fully migrates off JSON-array tags AND adopts
+    cascade-delete for classes, the catalog cluster ends up shaped more like the lore family. Not
+    a destination on any roadmap; a useful "what would full normalization look like?" reference.
+  </p>
+</div>
+
+<h2 id="answers">Your clarifications</h2>
+
+<div class="card priority-info">
+  <h3>A1 &mdash; Tags &rarr; junction tables: fold into step 3 if it's easier there</h3>
+  <p>
+    <strong>You said:</strong> if it's easier, add it to step 3 (shared-widget cleanup). So the
+    tags &rarr; junction migration is a step-3 candidate, paired with the TagPicker work &mdash; done
+    then <em>if</em> doing it alongside the picker cleanup is the lower-friction path. Not a
+    standalone priority; an opportunistic one.
+  </p>
+</div>
+
+<div class="card priority-info">
+  <h3>A2 &mdash; The source-scoped identifier convention already exists &mdash; <code>firebolt_phb</code></h3>
+  <p>
+    <strong>You said:</strong> we already have a source-scoped identifier convention in routing &mdash;
+    e.g. the spell Firebolt is reached at <code>#firebolt_phb</code>. It's worth adopting in
+    general regardless.
+  </p>
+  <p>
+    Correcting my earlier proposal: the convention is <code>&lt;identifier&gt;_&lt;sourceAbbrev&gt;</code>
+    (underscore separator, source abbreviation), already built by <code>useCompendiumHashLink</code>
+    for Spell / Feat / Item / Facilities and by the class routes via <code>buildClassSlug</code>.
+    The <a href="#uniqueness">uniqueness section</a> is updated to document the real form. The
+    direction: standardise on <code>_&lt;sourceAbbrev&gt;</code> more broadly.
+  </p>
+</div>
+
+<div class="card priority-info">
+  <h3>A3 &mdash; Polymorphic parent on non-class scaling owners: no concerns</h3>
+  <p>
+    <strong>You said:</strong> nothing comes to mind. So the polymorphic
+    <code>parent_id</code>+<code>parent_type</code> pattern handling class / subclass / feat / item
+    scaling owners is fine as-is; I'll document it as the uniform mechanism when section 04 reaches
+    the scaling columns panel.
+  </p>
+</div>
+
+<div class="card priority-info">
+  <h3>A4 &mdash; <code>content_hash</code> stale-detection is pure module-side</h3>
+  <p>
+    <strong>You said:</strong> pure module side. The app editors do <strong>not</strong> surface
+    "N stale consumers" warnings. The hash hook on the editor save path is transparent (just
+    populates the column); all stale-detection UX lives on the Foundry side. Confirmed out of scope
+    for this branch.
+  </p>
+</div>
+
+<nav class="page-pager">
+  <a href="02-data-flow.html">&larr; Prev: 02 &mdash; Data flow</a>
+  <a href="04-components.html">Next: 04 &mdash; Shared components &rarr;</a>
+</nav>
+
+</div>
+</body>
+</html>

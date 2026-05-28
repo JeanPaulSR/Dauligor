@@ -1,0 +1,326 @@
+/* Compendium Editors — Process Reference shared styles.
+   Color palette and typography match docs/_drafts/pending-tasks-2026-05-27.html
+   (the parchment / gold / ink Dauligor doc aesthetic). */
+
+:root {
+  --parchment: #f5f2e8;
+  --parchment-soft: #faf7ed;
+  --ink: #1a1a1a;
+  --ink-soft: #3a3a3a;
+  --muted: #6b6457;
+  --gold: #c5a059;
+  --gold-deep: #8a6d2f;
+  --blood: #7a1f1f;
+  --leaf: #355c3a;
+  --steel: #2c4a5e;
+  --card: #fbf8ee;
+  --rule: #d8cfb8;
+  --code-bg: #2b2620;
+  --code-ink: #f0e9d2;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 4px 10px rgba(0, 0, 0, 0.04);
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--parchment);
+  color: var(--ink);
+  font-family: "Inter", -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.wrap {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 40px 32px 80px;
+}
+
+/* ─── Breadcrumb + page nav ─────────────────────────────────────── */
+nav.crumbs {
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+nav.crumbs a {
+  color: var(--gold-deep);
+  text-decoration: none;
+}
+nav.crumbs a:hover {
+  text-decoration: underline;
+  color: var(--blood);
+}
+nav.crumbs span.sep {
+  margin: 0 8px;
+  color: var(--rule);
+}
+
+nav.page-pager {
+  margin-top: 60px;
+  padding-top: 22px;
+  border-top: 1px solid var(--rule);
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 14px;
+}
+nav.page-pager a {
+  color: var(--gold-deep);
+  text-decoration: none;
+  padding: 8px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--parchment-soft);
+}
+nav.page-pager a:hover {
+  border-color: var(--gold);
+  color: var(--blood);
+}
+nav.page-pager .empty {
+  visibility: hidden;
+}
+
+/* ─── Hero header ───────────────────────────────────────────────── */
+header.hero {
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 20px;
+  margin-bottom: 30px;
+}
+header.hero h1 {
+  font-family: "Cormorant Garamond", "Georgia", serif;
+  font-weight: 600;
+  font-size: 40px;
+  line-height: 1.1;
+  margin: 0 0 6px;
+  color: var(--ink);
+}
+header.hero .sub {
+  color: var(--muted);
+  font-size: 14px;
+}
+header.hero .meta {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ─── Badges ────────────────────────────────────────────────────── */
+.badge {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.badge.gold { background: var(--gold); color: #fff; }
+.badge.blood { background: var(--blood); color: #fff; }
+.badge.leaf { background: var(--leaf); color: #fff; }
+.badge.steel { background: var(--steel); color: #fff; }
+.badge.muted { background: #d8cfb8; color: var(--ink-soft); }
+.badge.outline {
+  background: transparent;
+  border: 1px solid var(--gold-deep);
+  color: var(--gold-deep);
+}
+
+/* ─── Headings ──────────────────────────────────────────────────── */
+h2 {
+  font-family: "Cormorant Garamond", "Georgia", serif;
+  font-size: 28px;
+  font-weight: 600;
+  margin: 48px 0 14px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--gold);
+  color: var(--ink);
+}
+h3 {
+  font-family: "Cormorant Garamond", "Georgia", serif;
+  font-size: 21px;
+  font-weight: 600;
+  margin: 28px 0 8px;
+  color: var(--ink);
+}
+h4 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  color: var(--gold-deep);
+  margin: 18px 0 6px;
+}
+
+/* ─── Inline content ────────────────────────────────────────────── */
+p { margin: 8px 0; }
+ul, ol { margin: 8px 0 8px 22px; padding: 0; }
+li { margin: 4px 0; }
+code {
+  font-family: "JetBrains Mono", "Consolas", monospace;
+  font-size: 13px;
+  background: rgba(138, 109, 47, 0.12);
+  color: var(--ink);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+pre {
+  background: var(--code-bg);
+  color: var(--code-ink);
+  padding: 14px 16px;
+  border-radius: 5px;
+  overflow-x: auto;
+  font-family: "JetBrains Mono", "Consolas", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  box-shadow: var(--shadow);
+}
+pre code { background: transparent; color: inherit; padding: 0; }
+.path {
+  font-family: "JetBrains Mono", "Consolas", monospace;
+  font-size: 13px;
+  color: var(--gold-deep);
+}
+
+/* ─── Cards ─────────────────────────────────────────────────────── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--gold);
+  border-radius: 4px;
+  padding: 16px 20px;
+  margin: 14px 0;
+  box-shadow: var(--shadow);
+}
+.card.priority-now    { border-left-color: var(--blood); }
+.card.priority-next   { border-left-color: var(--gold); }
+.card.priority-later  { border-left-color: var(--muted); }
+.card.priority-parked { border-left-color: var(--leaf); }
+.card.priority-info   { border-left-color: var(--steel); }
+.card h3 { margin-top: 0; }
+.card .meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0 10px;
+}
+.card.stub {
+  background: var(--parchment-soft);
+  border-style: dashed;
+  border-left-color: var(--muted);
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* ─── Tables ────────────────────────────────────────────────────── */
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 14px 0;
+  background: var(--parchment-soft);
+  box-shadow: var(--shadow);
+  border-radius: 4px;
+  overflow: hidden;
+}
+th, td {
+  text-align: left;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--rule);
+  font-size: 14px;
+  vertical-align: top;
+}
+th {
+  background: rgba(138, 109, 47, 0.10);
+  font-weight: 600;
+  color: var(--gold-deep);
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.6px;
+}
+tr:last-child td { border-bottom: none; }
+table.compact th, table.compact td { padding: 6px 10px; font-size: 13px; }
+
+/* ─── Callouts ──────────────────────────────────────────────────── */
+.callout {
+  background: rgba(122, 31, 31, 0.06);
+  border: 1px solid rgba(122, 31, 31, 0.25);
+  border-radius: 4px;
+  padding: 12px 16px;
+  margin: 14px 0;
+  font-size: 14px;
+}
+.callout strong { color: var(--blood); }
+.callout.info {
+  background: rgba(44, 74, 94, 0.06);
+  border-color: rgba(44, 74, 94, 0.25);
+}
+.callout.info strong { color: var(--steel); }
+.callout.success {
+  background: rgba(53, 92, 58, 0.06);
+  border-color: rgba(53, 92, 58, 0.25);
+}
+.callout.success strong { color: var(--leaf); }
+
+/* ─── Table of contents (landing page) ──────────────────────────── */
+.toc {
+  background: var(--parchment-soft);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 14px 20px;
+  margin-bottom: 30px;
+  box-shadow: var(--shadow);
+}
+.toc h4 { margin: 0 0 8px; }
+.toc ol { margin: 0 0 0 20px; }
+.toc.cols ol { columns: 2; column-gap: 32px; }
+.toc a { color: var(--gold-deep); text-decoration: none; }
+.toc a:hover { text-decoration: underline; color: var(--blood); }
+
+/* ─── Section divider ───────────────────────────────────────────── */
+hr.section {
+  border: none;
+  border-top: 1px solid var(--rule);
+  margin: 36px 0;
+}
+
+/* ─── Process flow / pipeline diagrams ──────────────────────────── */
+.pipeline {
+  background: var(--parchment-soft);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 18px;
+  margin: 14px 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  font-family: "JetBrains Mono", "Consolas", monospace;
+  font-size: 13px;
+}
+.pipeline .stage {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--gold);
+  padding: 8px 12px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.pipeline .arrow { color: var(--gold-deep); font-weight: 600; }
+
+/* ─── Drift list ────────────────────────────────────────────────── */
+.drift {
+  background: rgba(122, 31, 31, 0.04);
+  border: 1px solid rgba(122, 31, 31, 0.18);
+  border-left: 4px solid var(--blood);
+  border-radius: 4px;
+  padding: 14px 18px;
+  margin: 14px 0;
+}
+.drift h4 { color: var(--blood); margin: 0 0 8px; }
+.drift .item {
+  margin: 8px 0;
+  padding-left: 8px;
+  border-left: 2px solid rgba(122, 31, 31, 0.25);
+}
+.drift .item .doc { font-style: italic; color: var(--muted); font-size: 13px; }
+.drift .item .truth { color: var(--ink); }
