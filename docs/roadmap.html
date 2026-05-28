@@ -275,23 +275,150 @@
 
 <h2 id="right-now">
   Right now &mdash; active work
-  <span class="h2-sub">In flight on the <code>system-applications</code> branch as of 2026-05-27.</span>
+  <span class="h2-sub">Two app-side prerequisites before the larger initiatives below pay off.</span>
 </h2>
 
 <p class="section-intro">
-  Three pieces, intended to ship in this order. Each one unblocks the next. Together they
-  are the first half of a larger plan called the <em>live-content bridge</em> &mdash; the
-  effort to turn the Foundry VTT companion module from a static content importer into a
-  live viewer that always shows the freshest Dauligor content.
+  Two pieces. The first cleans up known defects in the BBCode rich-text system so the
+  authoring layer is reliable before we lean on it. The second adds the missing authoring
+  UX for cross-references &mdash; linking spells, items, feats, articles, and so on &mdash;
+  so admins can actually wire content together inside the app. Both must land before any
+  of the larger initiatives below pay off; the live-content bridge in particular renders
+  references that nobody can currently author.
 </p>
 
 <div class="item-card now">
   <div class="pill-row">
     <span class="pill now">Right now</span>
+    <span class="pill size-m">Medium</span>
+    <span class="pill dep">Independent</span>
+  </div>
+  <h3>1. BBCode audit &mdash; fix the rich-text foundation</h3>
+
+  <div class="what-row">
+    <div class="lab">What it is</div>
+    <div class="val">
+      BBCode is the storage format for every piece of rich-text content in The Archive
+      &mdash; lore articles, class descriptions, spell text, feat text, item descriptions,
+      DM notes. It's converted to HTML for display by the BBCode renderer and round-tripped
+      through the TipTap visual editor. There are several known defects in how specific
+      tags parse, render, or survive the round-trip; this item is a focused audit-and-fix
+      pass to address them.
+    </div>
+  </div>
+
+  <div class="what-row">
+    <div class="lab">Why it matters</div>
+    <div class="val">
+      BBCode sits in the critical path for everything else on this roadmap. Every authoring
+      action goes through it. The cross-reference picker below will write BBCode. The
+      live-content bridge will read BBCode and rewrite it for Foundry. If BBCode has
+      corner-case defects today, every dependent feature inherits them &mdash; and we'll
+      trip over them constantly while testing the work above. Fixing them first removes
+      that risk.
+    </div>
+  </div>
+
+  <div class="what-row">
+    <div class="lab">Status</div>
+    <div class="val">
+      User has flagged the need; specific defects to be enumerated. Once the list is
+      assembled, each becomes a checklist item with a focused fix. The audit should also
+      establish a small regression-test surface so the same defects don't return.
+      <br><br>
+      <em>Awaiting enumeration of known bugs from the user &mdash; placeholder list below
+      will be populated as bugs are reported.</em>
+      <ul>
+        <li><em>(to be filled in)</em></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="item-card now">
+  <div class="pill-row">
+    <span class="pill now">Right now</span>
+    <span class="pill size-m">Medium</span>
+    <span class="pill dep">Builds on #1</span>
+  </div>
+  <h3>2. Cross-reference authoring &mdash; let admins link content together</h3>
+
+  <div class="what-row">
+    <div class="lab">What it is</div>
+    <div class="val">
+      Today there is no convenient way to link one piece of Dauligor content to another.
+      The BBCode primitive exists &mdash; <code>[ref|kind|id]Display[/ref]</code> renders
+      as a styled cross-reference link &mdash; but only three kinds are wired up:
+      <code>spell</code>, <code>class</code>, <code>condition</code>. There is no
+      <code>item</code>, <code>article</code>, <code>feat</code>, <code>race</code>, or
+      <code>background</code> kind, and there is no editor button anywhere that inserts a
+      cross-reference. The only way to author one today is to switch the editor into raw
+      Source mode and type the BBCode by hand, knowing the target's identifier in advance.
+    </div>
+  </div>
+
+  <div class="what-row">
+    <div class="lab">Why it matters</div>
+    <div class="val">
+      A campaign-management app whose admins cannot easily link articles to relevant
+      spells, NPCs to factions, or quests to magic items is missing one of the core
+      utilities of the genre. This piece closes that gap. It also produces the authored
+      content that the live-content bridge later renders &mdash; without cross-references
+      in the data, the bridge has nothing to resolve.
+    </div>
+  </div>
+
+  <div class="what-row">
+    <div class="lab">Status</div>
+    <div class="val">
+      Two concrete pieces of work:
+      <ul>
+        <li>
+          Add the missing kinds to the BBCode resolver (<code>item</code>,
+          <code>article</code>, <code>feat</code>; plus <code>race</code> and
+          <code>background</code> once those tables exist). Each kind needs a URL route
+          and matching round-trip support so the TipTap editor doesn't drop the
+          reference on edit.
+        </li>
+        <li>
+          Add a <strong>Cross-Reference</strong> button to the editor toolbar that opens
+          a picker dialog: choose a kind, search by name within that kind, click to insert.
+          Works in both Source mode (inserts the BBCode) and Visual mode (inserts the
+          equivalent link node).
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="stack-note">
+    <strong>Built on top of:</strong> piece #1, because the picker writes BBCode through
+    the editor toolbar and we don't want it landing in a defective tag pipeline.
+  </div>
+</div>
+
+<hr class="section">
+
+<h2 id="up-next">
+  Up next &mdash; clear path, not yet started
+  <span class="h2-sub">The live-content bridge (Foundry-side payoff), plus the long-standing races + backgrounds gap.</span>
+</h2>
+
+<p class="section-intro">
+  Once the app-side authoring foundation is solid, the live-content bridge becomes the
+  next big initiative. It's a multi-phase plan that turns the Foundry VTT companion
+  module from a static content importer into a live viewer of canonical Dauligor content.
+  Phase 1 foundation already shipped; the pieces below carry it through to a complete
+  experience. Races + backgrounds is a separate, independent track that closes a
+  long-standing content-type gap.
+</p>
+
+<div class="item-card next">
+  <div class="pill-row">
+    <span class="pill next">Up next</span>
     <span class="pill size-s">Small</span>
     <span class="pill dep">Independent</span>
   </div>
-  <h3>1. Content hashing — "this content changed" signal</h3>
+  <h3>3. Content hashing &mdash; "this content changed" signal</h3>
 
   <div class="what-row">
     <div class="lab">What it is</div>
@@ -328,13 +455,13 @@
   </div>
 </div>
 
-<div class="item-card now">
+<div class="item-card next">
   <div class="pill-row">
-    <span class="pill now">Right now</span>
+    <span class="pill next">Up next</span>
     <span class="pill size-m">Medium</span>
-    <span class="pill dep">Blocks #3</span>
+    <span class="pill dep">Blocks #5</span>
   </div>
-  <h3>2. Article system unification — make wiki articles addressable</h3>
+  <h3>4. Article system unification &mdash; make wiki articles addressable</h3>
 
   <div class="what-row">
     <div class="lab">What it is</div>
@@ -366,7 +493,7 @@
           dnd5e's Conditions and Rules journals work in Foundry.)
         </li>
         <li>
-          <strong>Deep links from Foundry work.</strong> The viewer in piece #3 needs to be
+          <strong>Deep links from Foundry work.</strong> The viewer in piece #5 needs to be
           able to compose a stable URL pointing back at the app for "open in browser."
         </li>
       </ul>
@@ -381,20 +508,20 @@
         <li>Add an <code>identifier</code> column to the articles table; backfill from existing slugs.</li>
         <li>Add a <code>source</code> column so identifiers can be scoped per book.</li>
         <li>Add the uniqueness constraint once duplicates are resolved.</li>
-        <li>Add a content fingerprint column (same shape as piece #1).</li>
+        <li>Add a content fingerprint column (same shape as piece #3).</li>
         <li>Update the wiki routes and the BBCode <code>@article[…]</code> resolver to use the new identifier.</li>
       </ol>
     </div>
   </div>
 </div>
 
-<div class="item-card now">
+<div class="item-card next">
   <div class="pill-row">
-    <span class="pill now">Right now</span>
+    <span class="pill next">Up next</span>
     <span class="pill size-l">Large</span>
-    <span class="pill dep">Waits on #2</span>
+    <span class="pill dep">Waits on #4</span>
   </div>
-  <h3>3. Live viewer — Foundry reads canonical content from the app</h3>
+  <h3>5. Live viewer &mdash; Foundry reads canonical content from the app</h3>
 
   <div class="what-row">
     <div class="lab">What it is</div>
@@ -435,31 +562,18 @@
   </div>
 
   <div class="stack-note">
-    <strong>Built on top of:</strong> piece #1 (so the cache can detect when its copy is
-    stale) and piece #2 (so links can address articles unambiguously).
+    <strong>Built on top of:</strong> piece #3 (so the cache can detect when its copy is
+    stale) and piece #4 (so links can address articles unambiguously).
   </div>
 </div>
-
-<hr class="section">
-
-<h2 id="up-next">
-  Up next &mdash; clear path, not yet started
-  <span class="h2-sub">No active branch, but the design is settled and the work order is known.</span>
-</h2>
-
-<p class="section-intro">
-  These pieces continue the live-content bridge and round out one big missing content type
-  (races + backgrounds). They're not blocked by anything outside the project &mdash; just
-  waiting for the right-now work to ship and for a slot on someone's queue.
-</p>
 
 <div class="item-card next">
   <div class="pill-row">
     <span class="pill next">Up next</span>
     <span class="pill size-m">Medium</span>
-    <span class="pill dep">Waits on Right Now</span>
+    <span class="pill dep">Waits on #5</span>
   </div>
-  <h3>4. Drag-and-drop construction — Foundry items built on demand</h3>
+  <h3>6. Drag-and-drop construction — Foundry items built on demand</h3>
 
   <div class="what-row">
     <div class="lab">What it is</div>
@@ -502,9 +616,9 @@
   <div class="pill-row">
     <span class="pill next">Up next</span>
     <span class="pill size-s">Small</span>
-    <span class="pill dep">Waits on Right Now + #4</span>
+    <span class="pill dep">Waits on #3 + #6</span>
   </div>
-  <h3>5. Update detection — stale content tells you it's stale</h3>
+  <h3>7. Update detection — stale content tells you it's stale</h3>
 
   <div class="what-row">
     <div class="lab">What it is</div>
@@ -532,7 +646,7 @@
   <div class="what-row">
     <div class="lab">Status</div>
     <div class="val">
-      Design done. Requires the fingerprint backfill from "Right now #1" to be populated
+      Design done. Requires the fingerprint backfill from piece #3 to be populated
       everywhere.
     </div>
   </div>
@@ -542,9 +656,9 @@
   <div class="pill-row">
     <span class="pill next">Up next</span>
     <span class="pill size-s">Small</span>
-    <span class="pill dep">Waits on #4 + #5</span>
+    <span class="pill dep">Waits on #6 + #7</span>
   </div>
-  <h3>6. Hardening — offline snapshots, auth audit, documentation</h3>
+  <h3>8. Hardening — offline snapshots, auth audit, documentation</h3>
 
   <div class="what-row">
     <div class="lab">What it is</div>
@@ -587,7 +701,7 @@
     <span class="pill size-l">Large</span>
     <span class="pill dep">Independent</span>
   </div>
-  <h3>7. Races and Backgrounds — first-class content types</h3>
+  <h3>9. Races and Backgrounds — first-class content types</h3>
 
   <div class="what-row">
     <div class="lab">What it is</div>
