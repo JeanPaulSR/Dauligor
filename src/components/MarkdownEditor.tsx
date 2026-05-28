@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import MarkdownToolbar from './MarkdownToolbar';
+import ReferenceAutocomplete from './ReferenceAutocomplete';
 import { bbcodeToHtml, htmlToBbcode } from '../lib/bbcode';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -386,15 +387,18 @@ export default function MarkdownEditor({
         onMouseDown={fillContainer ? undefined : handleMouseDown}
       >
         {isWYSIWYG ? (
-          <div 
+          <>
+          <div
             ref={contentRef}
-            className="prose prose-sm max-w-none cursor-text flex-grow flex flex-col min-h-0" 
+            className="prose prose-sm max-w-none cursor-text flex-grow flex flex-col min-h-0"
           >
-            <EditorContent 
+            <EditorContent
               editor={editor}
-              className="flex-grow flex flex-col overflow-hidden min-h-0" 
+              className="flex-grow flex flex-col overflow-hidden min-h-0"
             />
           </div>
+          {editor && <ReferenceAutocomplete editor={editor} enabled={isWYSIWYG} />}
+          </>
         ) : (
           <textarea 
             ref={textareaRef}

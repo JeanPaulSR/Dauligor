@@ -63,6 +63,41 @@ const KIND_CONFIG: Record<string, KindConfig> = {
 /** The reference kinds with a backing table + search/resolve support today. */
 export const REFERENCEABLE_KINDS = Object.keys(KIND_CONFIG) as RefKind[];
 
+/** Which kinds each sigil searches. `@` = entity documents, `&` = rules. */
+export const FAMILY_KINDS: Record<'entity' | 'rule', RefKind[]> = {
+  entity: ['spell', 'class', 'subclass', 'feat', 'item', 'article'],
+  rule: ['condition'],
+};
+
+/**
+ * Search across all kinds in a sigil family in a single query (one D1
+ * round-trip). Powers the inline @/& autocomplete: `@` → entity family,
+ * `&` → rule family. Results carry their `kind` so the inserted reference
+ * is `@<kind>[id]{name}`.
+ */
+export async function searchReferenceFamily(
+  family: 'entity' | 'rule',
+  query: string,
+  limit = 8,
+): Promise<RefSearchResult[]> {
+  const kinds = FAMILY_KINDS[family];
+  if (!kinds || kinds.length === 0) return [];
+  const like = `%${escapeLike(query.trim())}%`;
+  const subqueries = kinds.map((k) => {
+    const cfg = KIND_CONFIG[k];
+    return (
+      `SELECT * FROM (SELECT '${k}' AS kind, ${cfg.idCol} AS id, ${cfg.nameCol} AS name ` +
+      `FROM ${cfg.table} WHERE ${cfg.idCol} IS NOT NULL AND ${cfg.idCol} != '' ` +
+      `AND (${cfg.nameCol} LIKE ? ESCAPE '\\' OR ${cfg.idCol} LIKE ? ESCAPE '\\') ` +
+      `ORDER BY ${cfg.nameCol} LIMIT ${limit})`
+    );
+  });
+  const sql = subqueries.join(' UNION ALL ') + ` ORDER BY name LIMIT ${limit}`;
+  const params = kinds.flatMap(() => [like, like]);
+  const rows = await queryD1<{ kind: string; id: string; name: string | null }>(sql, params);
+  return rows.map((r) => ({ kind: r.kind as RefKind, id: String(r.id), name: String(r.name ?? r.id) }));
+}
+
 /**
  * Search a single kind by name or identifier. Returns up to `limit`
  * matches ordered by name. Empty query returns the first `limit` rows.
