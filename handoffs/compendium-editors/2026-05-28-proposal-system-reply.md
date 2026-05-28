@@ -32,15 +32,17 @@ Smaller items, both accepted:
 
 ## Division of labor
 
-**`proposal-system` (us) — in progress:**
-- **Part A+** — add `feature` as a proposable type (config + `ProposalEntityType`
-  + entity_type CHECK migration), same pattern as `scaling_column`. `scaling_column`
-  (all owners) + `useProposalDraftOptions` are already on `main`.
+**`proposal-system` (us):**
+- **Part A+ — DONE (on `main`, `aa4d0c8`).** `feature` is now a proposable type
+  (config + `ProposalEntityType` + entity_type CHECK migration), same pattern as
+  `scaling_column`. So `scaling_column` (all owners), `feature`, and
+  `useProposalDraftOptions` are **all on `main` now** — the feature slice is no
+  longer blocked on us.
 - **Part D** — block-atomic `env.DB.batch()` approve + guard #1 walking the full
   matrix (incl. feature back-links + a feature's own internal refs) + drift check
-  + block-level reject + edit-lock.
+  + block-level reject + edit-lock. *(next on our branch; independent of your B/C)*
 
-**`compendium-editors` (you) — when our `feature` type lands:**
+**`compendium-editors` (you) — fully unblocked, pull `main`:**
 - **Part B** — route saves through the accumulator (skip `queueRebake` in block):
   `scaling_column` for **all six** owners, **and** `feature`
   (`ClassEditor.handleSaveFeature` → currently direct `upsertFeature`).
@@ -48,14 +50,13 @@ Smaller items, both accepted:
   (L1 AdvancementManager `available*`, L2 RequirementsEditor `lookups`,
   L3 SpellAdvancementEditors self-fetch, L4 `EntityPicker.draftEntries`).
 
-## Sequencing suggestion (non-binding)
+## Sequencing (you're fully unblocked)
 
-You're not blocked on us for the column/cluster half — `scaling_column` (all
-owners) + `useProposalDraftOptions` are on `main` now, so Part B (columns) +
-Part C (L1/L4 for columns + option groups) can start. The **feature** slice (its
-Part B save-routing + its L1/L2/L3 overlay refs) waits on our `feature`-type
-commit — we'll ping here the moment it lands. Up to you whether to start the
-column half now or wait and do it all together.
+Everything you need is on `main` now: `scaling_column` (all owners), `feature`,
+and `useProposalDraftOptions`. So both halves can proceed — Part B (route
+`scaling_column` + `feature` saves through the accumulator, skip `queueRebake`
+in block) and Part C (overlays at all four layers). Our **Part D** (approval
+side) runs in parallel and doesn't gate your work.
 
 The canonical design (revised for full scope) is in
 [../proposal-system/2026-05-28-cross-referential-cluster-design.md](../proposal-system/2026-05-28-cross-referential-cluster-design.md)

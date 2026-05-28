@@ -46,13 +46,19 @@ Proposal-mode logic lives *inside* these files, but the files themselves are own
     block): `scaling_column` for **all six** owners **+ `feature`**.
   - **Part C** — draft overlays at **all four** picker layers (L1 Advancement /
     L2 Requirements / L3 SpellAdvancement / L4 EntityPicker).
-  - Column/cluster slice unblocked now (`scaling_column` + helper on `main`); the
-    **feature** slice waits on our `feature`-type commit (in progress).
+  - **Fully unblocked** — `scaling_column` (all owners), `feature`, and
+    `useProposalDraftOptions` are all on `main` (`aa4d0c8`). Both halves can
+    proceed; our Part D (approval) runs in parallel and doesn't gate B/C.
 
 ## Handoff log
 
 Newest at the top. Each entry: date + link to the handoff doc in this same folder.
 
+- `2026-05-28` — **`feature` is now a proposable type** (`aa4d0c8` on `main`).
+  Existing `features`-table entity registered in the allowlist + config +
+  migration `20260528-1400` (local-only). compendium-editors is now fully
+  unblocked for both halves (columns + features). Next on this branch: **Part D**
+  (atomic approve + full guard #1 walk).
 - `2026-05-28` — **Scope expanded to full coverage after compendium-editors'
   cross-reference audit.** Their audit showed "scaling_column only" left a
   proposed class as a feature-less shell + guard #1 covered ~⅓ of refs. Owner
