@@ -4,6 +4,8 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { resolveReference, type RefResolved } from '../../lib/references';
 import HoverCardView from './HoverCardView';
+import ClassPreviewCard from '../compendium/ClassPreviewCard';
+import ClassPreviewPane from '../compendium/ClassPreviewPane';
 
 /**
  * App-wide reference hover card.
@@ -66,6 +68,10 @@ function computePos(rect: DOMRect): CardPos {
 export default function ReferenceHoverCard() {
   const navigate = useNavigate();
   const [chain, setChain] = useState<ChainCard[]>([]);
+  // A clicked `@class[…]` ref opens the full class preview pane as an in-place
+  // overlay (instead of navigating away). Holds the resolved ref so the pane
+  // can fetch by primary key and "View Page" can still route to the class view.
+  const [paneClass, setPaneClass] = useState<RefResolved | null>(null);
   const [pinned, setPinned] = useState<PinnedCard[]>(() => {
     try {
       const raw = sessionStorage.getItem(STORAGE_KEY);
@@ -329,10 +335,12 @@ export default function ReferenceHoverCard() {
 
   const closePin = (pinId: string) => setPinned((prev) => prev.filter((p) => p.pinId !== pinId));
 
-  if (chain.length === 0 && pinned.length === 0) return null;
+  if (chain.length === 0 && pinned.length === 0 && !paneClass) return null;
 
-  return createPortal(
+  return (
     <>
+      {createPortal(
+        <>
       {chain.map((c, d) => {
         const style = { left: c.pos.left, top: c.pos.top, bottom: c.pos.bottom, zIndex: 120 + d };
         if (c.variant === 'prereq') {
@@ -351,6 +359,42 @@ export default function ReferenceHoverCard() {
             >
               <div className="text-[10px] uppercase tracking-wide text-gold/70 mb-1">Full prerequisite</div>
               <div className="text-xs text-ink/90">{c.prereqText}</div>
+            </div>
+          );
+        }
+        // Classes render the app's own preview card (image + name + source +
+        // preview), clickable through to the class view.
+        if (c.variant === 'ref' && c.kind === 'class' && c.data) {
+          const cls = c.data;
+          return (
+            <div
+              key={`${c.key}-${d}`}
+              ref={(el) => {
+                cardElsRef.current[d] = el;
+              }}
+              data-hc-card=""
+              data-hc-depth={d}
+              className="fixed w-[300px]"
+              style={style}
+              onMouseEnter={cancelHide}
+              onMouseLeave={scheduleReap}
+            >
+              <ClassPreviewCard
+                name={cls.name}
+                imageUrl={cls.imageUrl}
+                preview={cls.summary}
+                sourceLabel={cls.sourceLabel ?? undefined}
+                onClick={() => {
+                  // Open the preview pane overlay instead of navigating away.
+                  // The pane's "View Page" routes through to the full class view.
+                  setPaneClass(cls);
+                  rootSourceElRef.current = null;
+                  setChain([]);
+                  cancelShow();
+                  cancelHide();
+                }}
+                className="w-full h-[340px]"
+              />
             </div>
           );
         }
@@ -387,7 +431,23 @@ export default function ReferenceHoverCard() {
           }}
         />
       ))}
-    </>,
-    document.body,
+        </>,
+        document.body,
+      )}
+      {paneClass ? (
+        <ClassPreviewPane
+          classId={paneClass.docId ?? paneClass.id}
+          open
+          onClose={() => setPaneClass(null)}
+          onViewPage={() => {
+            // Read-only overlay: only "View Page" is wired (no Edit), routing
+            // to the full class view the ref already resolved.
+            const route = paneClass.route;
+            setPaneClass(null);
+            if (route) navigate(route);
+          }}
+        />
+      ) : null}
+    </>
   );
 }
