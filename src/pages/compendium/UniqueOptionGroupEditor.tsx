@@ -380,7 +380,10 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
 
   const handleSaveItem = async (e?: React.SyntheticEvent) => {
     e?.preventDefault();
-    if (!id) return;
+    // effectiveId, not id: a group created in this block carries its minted id
+    // here even before useParams.id is set, so options can be added to a
+    // just-created group without a reload (Issue 2 / reload-gap fix).
+    if (!effectiveId) return;
 
     try {
       // Pull JSON fields off either case, default to safe empty shapes.
@@ -410,7 +413,7 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
       const d1Data = {
         name: editingItem?.name || 'New Option',
         description: editingItem?.description || '',
-        group_id: id,
+        group_id: effectiveId,
         source_id: editingItem?.source_id || editingItem?.sourceId || sourceId,
         level_prerequisite: parseInt(editingItem?.levelPrerequisite || editingItem?.level_prerequisite) || 0,
         level_prereq_is_total: Boolean(editingItem?.levelPrereqIsTotal ?? editingItem?.level_prereq_is_total) ? 1 : 0,
@@ -661,7 +664,7 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
           </div>
 
           {/* Individual Options */}
-          {id && (
+          {effectiveId && (
             <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
               <div className="section-header">
                 <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Individual Options</h2>
