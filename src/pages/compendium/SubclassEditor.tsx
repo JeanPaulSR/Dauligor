@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link, useSearchParams, useLocation } from 'reac
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
 import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
 import { useBlockDraftPickerOptions } from '../../hooks/useBlockDraftPickerOptions';
+import { useBlockDraftedList } from '../../hooks/useBlockDraftedList';
 import { actionLabel, applyProposalWrite } from '../../lib/proposalAware';
 import { useProposalReview, resolveReviewPayload, ReviewFieldHighlight } from '../../lib/proposalReview';
 import { DeletedEntityBanner } from '../../components/proposals/TombstoneRow';
@@ -207,6 +208,11 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
 
   // Features & Columns
   const [features, setFeatures] = useState<any[]>([]);
+  // F2 — merge this subclass's queued draft features into the level grid so a
+  // just-added feature is visible in a block (not gone until reload). Unchanged
+  // on admin-direct routes. (parentFeatures, the inherited class features, are
+  // NOT overlaid — they belong to the parent class.)
+  const displayFeatures = useBlockDraftedList('feature', features, { parentId: id, parentType: 'subclass' });
   const [parentFeatures, setParentFeatures] = useState<any[]>([]);
   const [scalingColumns, setScalingColumns] = useState<any[]>([]);
   const [advancements, setAdvancements] = useState<Advancement[]>([]);
@@ -1174,7 +1180,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                     .slice()
                     .sort((a: number, b: number) => a - b);
 
-                  const deprecatedFeatures = features.filter(f => !validLevels.includes(f.level));
+                  const deprecatedFeatures = displayFeatures.filter(f => !validLevels.includes(f.level));
 
                   return (
                     <>
@@ -1183,7 +1189,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                           f.level === level &&
                           (f.isSubclassFeature === true || f.is_subclass_feature === 1)
                         );
-                        const levelSubclassFeatures = features.filter(f => f.level === level);
+                        const levelSubclassFeatures = displayFeatures.filter(f => f.level === level);
 
                         return (
                           <div key={level} className="space-y-2">
@@ -1312,7 +1318,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                         </div>
                       )}
 
-                      {validLevels.length === 0 && features.length === 0 && (
+                      {validLevels.length === 0 && displayFeatures.length === 0 && (
                         <p className="py-4 text-center muted-text italic">No features added.</p>
                       )}
                     </>

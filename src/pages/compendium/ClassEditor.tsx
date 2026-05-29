@@ -34,6 +34,7 @@ import { normalizeFeatureData, denormalizeCompendiumData } from '../../lib/compe
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
 import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
 import { useBlockDraftPickerOptions } from '../../hooks/useBlockDraftPickerOptions';
+import { useBlockDraftedList } from '../../hooks/useBlockDraftedList';
 import { actionLabel, applyProposalWrite } from '../../lib/proposalAware';
 import { useProposalReview, ReviewFieldHighlight } from '../../lib/proposalReview';
 import { ReviewBanner } from '../../components/proposals/ReviewBanner';
@@ -633,6 +634,10 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   const optionGroupDraftOptions = useBlockDraftPickerOptions('unique_option_group');
   const optionItemDraftOptions = useBlockDraftPickerOptions('unique_option_item');
   const featDraftOptions = useBlockDraftPickerOptions('feat');
+  // F2 — the Features list shows live rows; in a block, merge this class's
+  // queued draft features in so a just-added feature is visible (not gone until
+  // a reload). Unchanged on admin-direct routes.
+  const displayFeatures = useBlockDraftedList('feature', features, { parentId: id, parentType: 'class' });
   const [advancements, setAdvancements] = useState<Advancement[]>([]);
 
   const normalizeEditorAdvancements = useCallback((list: any[] = [], defaultLevel = 1, dieOverride?: number) => (
@@ -3221,7 +3226,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                     </Button>
                   </div>
                   <div className="divide-y divide-gold/10">
-                    {features.map((feature) => (
+                    {displayFeatures.map((feature) => (
                       <div key={feature.id} className="py-2 flex items-center justify-between group">
                         <div className="flex items-center gap-3">
                           <span className="text-xs font-mono text-gold/60 w-4">L{feature.level}</span>
@@ -3247,7 +3252,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                         </div>
                       </div>
                     ))}
-                    {features.length === 0 && <p className="py-4 text-center muted-text italic">No features added.</p>}
+                    {displayFeatures.length === 0 && <p className="py-4 text-center muted-text italic">No features added.</p>}
                   </div>
                 </div>
               )}

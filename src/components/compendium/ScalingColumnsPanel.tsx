@@ -8,6 +8,7 @@ import { queueRebake } from '../../lib/moduleExport';
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
 import { actionLabel } from '../../lib/proposalAware';
 import ScalingMatrixEditor from './ScalingMatrixEditor';
+import { useBlockDraftedList } from '../../hooks/useBlockDraftedList';
 
 /**
  * Shared "Scaling Columns" sidebar — the small editor block that
@@ -127,6 +128,12 @@ export default function ScalingColumnsPanel({
   // the module rebake (it fires on approval, not on queueing).
   const inBlock = useProposalContextOptional() !== null;
 
+  // F2 — own-list draft overlay. The parent passes the LIVE columns; in a block
+  // a just-queued column has no live row yet, so merge the block's draft creates
+  // (scoped to this parent) in so the author sees it in the panel instead of it
+  // "vanishing." Returns `columns` unchanged on admin-direct routes.
+  const displayColumns = useBlockDraftedList('scaling_column', columns, { parentId, parentType });
+
   // Local edit buffer for inline renames so typing stays responsive and
   // the write commits once on blur (block mode would otherwise queue one
   // change per keystroke).
@@ -179,7 +186,7 @@ export default function ScalingColumnsPanel({
       </div>
 
       <div className="space-y-4">
-        {columns.map((col) => {
+        {displayColumns.map((col) => {
           const valuesMap = (typeof col.values === 'string'
             ? (() => { try { return JSON.parse(col.values as string); } catch { return {}; } })()
             : col.values) as Record<string, any> || {};
@@ -256,7 +263,7 @@ export default function ScalingColumnsPanel({
             </div>
           );
         })}
-        {columns.length === 0 && (
+        {displayColumns.length === 0 && (
           <p className="text-[10px] text-ink/30 text-center italic py-4">
             No {noun}s defined.
           </p>
