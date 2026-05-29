@@ -183,6 +183,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
   const [sourceId, setSourceId] = useState('');
   const [description, setDescription] = useState('');
   const [lore, setLore] = useState('');
+  const [preview, setPreview] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [imageDisplay, setImageDisplay] = useState<ImageDisplay>(DEFAULT_DISPLAY);
   const [cardImageUrl, setCardImageUrl] = useState('');
@@ -374,6 +375,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
           setName(remapped.name || '');
           setSourceId(remapped.sourceId || '');
           setDescription(remapped.description || '');
+          setPreview(remapped.preview || '');
           setLore(remapped.lore || '');
           setImageUrl(remapped.imageUrl || '');
           setImageDisplay(remapped.imageDisplay || DEFAULT_DISPLAY);
@@ -529,6 +531,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
       classId: parentClass?.id || classId,
       sourceId,
       description,
+      preview,
       lore,
       imageUrl,
       imageDisplay,
@@ -552,6 +555,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
       class_id: subclassData.classId,
       source_id: subclassData.sourceId,
       description: subclassData.description,
+      preview: subclassData.preview,
       lore: subclassData.lore,
       image_url: subclassData.imageUrl,
       image_display: subclassData.imageDisplay,
@@ -912,13 +916,22 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
               </div>
             </div>
             <div className="space-y-4">
+              <ReviewFieldHighlight columnKey="preview">
+                <MarkdownEditor
+                  value={preview}
+                  onChange={setPreview}
+                  placeholder="A short flavourful teaser shown on the subclass card and the reference hover preview..."
+                  minHeight="80px"
+                  label="Subclass Preview"
+                />
+              </ReviewFieldHighlight>
               <ReviewFieldHighlight columnKey="description">
                 <MarkdownEditor
                   value={description}
                   onChange={setDescription}
                   placeholder="A brief thematic overview for the grid view..."
                   minHeight="80px"
-                  label="Description (Short Preview)"
+                  label="Description"
                 />
               </ReviewFieldHighlight>
               <ReviewFieldHighlight columnKey="lore">
