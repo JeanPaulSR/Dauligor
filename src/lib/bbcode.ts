@@ -38,7 +38,17 @@ export interface BbcodeViewContext {
 export type RefKind =
   | 'spell' | 'class' | 'subclass' | 'feat' | 'item' | 'condition' | 'article' | 'option-group';
 
-export function resolveRefRoute(kind: string, id: string, anchor?: string): string | null {
+export function resolveRefRoute(kind: string, id: string, anchor?: string, opts?: { rule?: boolean }): string | null {
+  // Rule references (the `&` sigil) resolve into system pages:
+  // `&condition[prone]` -> `/system/condition#prone`. The page identifier IS the
+  // kind (locked: identifier = kind); the entry id is the `#anchor` (an explicit
+  // `#anchor` overrides it). The /system reader handles a not-yet-authored page.
+  if (opts?.rule) {
+    const target = anchor || id;
+    return target
+      ? `/system/${encodeURIComponent(kind)}#${encodeURIComponent(target)}`
+      : `/system/${encodeURIComponent(kind)}`;
+  }
   const safeId = encodeURIComponent(id);
   const frag = anchor ? `#${encodeURIComponent(anchor)}` : '';
   switch (kind) {
@@ -47,14 +57,11 @@ export function resolveRefRoute(kind: string, id: string, anchor?: string): stri
     case 'feat':      return `/compendium/feats?focus=${safeId}${frag}`;
     case 'item':      return `/compendium/items?focus=${safeId}${frag}`;
     case 'article':   return `/wiki/article/${safeId}${frag}`;
-    // `&condition` (and other `&` rule refs) intentionally have NO route
-    // yet. They must NOT link to the /admin/statuses editor — that's an
-    // admin tool, not a reader surface. Rule refs are destined for the
-    // future system-page article type (Foundry-journal-like, addressable
-    // by section anchor); until that ships they resolve as dangling. The
-    // hover card still surfaces the condition's name/summary via
-    // resolveReference — only click-through navigation is deferred.
-    // subclass + unknown kinds likewise have no clean public route yet.
+    // Rule (`&`) refs no longer fall through here — they route to the
+    // system-page reader via the `opts.rule` branch above (and must NOT link to
+    // /admin/statuses, an admin-only tool). What's left here is entity (`@`)
+    // kinds with no public page yet — subclass, and any unknown kind — which
+    // stay routeless (rendered as a non-clickable badge).
     default:          return null;
   }
 }
@@ -128,8 +135,24 @@ export function bbcodeToHtml(text: string, context?: BbcodeViewContext): string 
   // '&amp;' and any {display} text is already escaped. Skipped in editor
   // mode so references stay as plain, editable text (see BbcodeViewContext).
   if (!context?.editor) {
+    // Pre-pass — accept Foundry / dnd5e's `&Reference[type=key]` syntax so
+    // pasted compendium content renders without rewriting. Translates to the
+    // internal `&kind[entry]` form (which the main parser below handles):
+    //   &Reference[condition]              → &condition[]        (page-level)
+    //   &Reference[condition=paralyzed]    → &condition[paralyzed]
+    //   &Reference[type=key flags]{Label}  → trailing flags stripped, {Label} preserved
     html = html.replace(
-      /(@|&amp;)([a-z][a-z0-9-]*)\[([^\]\s]+)\](?:#([\w-]+))?(?:\{([^}]*)\})?/gi,
+      /&amp;Reference\[([a-z][a-z0-9_-]*)(?:=([a-z0-9_-]+))?[^\]]*\](?:\{([^}]*)\})?/gi,
+      (_match, kind, entry, display) => {
+        const k = String(kind).toLowerCase();
+        const e = entry ? String(entry).toLowerCase() : '';
+        const disp = display != null ? `{${display}}` : '';
+        return `&amp;${k}[${e}]${disp}`;
+      },
+    );
+
+    html = html.replace(
+      /(@|&amp;)([a-z][a-z0-9-]*)\[([^\]\s]*)\](?:#([\w-]+))?(?:\{([^}]*)\})?/gi,
       (_match, rawSigil, rawKind, rawId, rawAnchor, rawDisplay) => {
         const sigilAttr = rawSigil === '@' ? '@' : '&amp;';
         const kind = String(rawKind).toLowerCase();
@@ -137,8 +160,8 @@ export function bbcodeToHtml(text: string, context?: BbcodeViewContext): string 
         const anchor = rawAnchor ? String(rawAnchor) : '';
         const display = (rawDisplay != null && rawDisplay !== '')
           ? rawDisplay
-          : humanizeRefId(kind, id);
-        const route = resolveRefRoute(kind, id, anchor);
+          : humanizeRefId(kind, id || kind);
+        const route = resolveRefRoute(kind, id, anchor, { rule: rawSigil !== '@' });
         const safeKind = escapeAttr(kind);
         const data =
           `data-ref-sigil="${sigilAttr}" data-ref-kind="${safeKind}" data-ref-id="${escapeAttr(id)}"` +
