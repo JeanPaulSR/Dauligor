@@ -95,13 +95,23 @@ doesn't). Not a bug per se, but the toast can't be used to tell a user whether t
 block — consider a block-aware label when `useProposalContextOptional()` is non-null. (Your call; it's
 your wording.)
 
-### F2 — list/panel overlays for own-type block-draft CREATEs (we'll fix on our side)
+### F2 — list/panel overlays for own-type block-draft CREATEs (DONE our side; one piece is yours)
 
-Lists/panels that render only the live DB fetch hide just-queued drafts. `FeatsEditor` already overlays
-its list via `useProposalEntityDrafts('feat')`, so a queued feat shows; but the **option-group list**
-and the **`ScalingColumnsPanel` list** don't, so a queued new group/column is invisible (can't be
-re-opened to add children). This is ours — same `useProposalEntityDrafts` overlay feats use, applied to
-those lists. Flagging only because it interacts with the block flow you may be testing.
+**Now overlaid on our side** via a new `useBlockDraftedList` helper: the `ScalingColumnsPanel`, the
+class/subclass feature lists, and the class's subclass list — a just-queued column/feature/subclass now
+shows up where it was authored. **One piece needs you:** the option-group *catalog list* route
+(`/proposals/edit/option-groups`) is mounted WITHOUT `ProposalEditorWrapper` (App.tsx), so a draft group
+can't surface there — wrapping that route is yours.
+
+### F3 — `subclasses.preview` column incoming (from `system-applications`) — add it to your subclass writableColumns
+
+`system-applications` added migration `20260529-1200_subclass_preview.sql`
+(`ALTER TABLE subclasses ADD COLUMN preview TEXT` — a short blurb mirroring `classes.preview`, authored
+in SubclassEditor). When it merges, your `subclass` `ENTITY_CONFIG.writableColumns` should include
+**`preview`**, or a *proposed* subclass silently drops the blurb on approval (same class as the R1
+scaling-column gap). Flagging now so it's caught at merge time — coordinate with `system-applications`
+on timing. (I reviewed the migration: a plain additive column on `subclasses`, independent of the
+proposal tables — no conflict with the entity_type migrations.)
 
 ---
 
