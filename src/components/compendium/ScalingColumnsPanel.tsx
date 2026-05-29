@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { Plus, Trash2, Edit, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { Dialog, DialogContent } from '../ui/dialog';
 import { queueRebake } from '../../lib/moduleExport';
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
 import { actionLabel } from '../../lib/proposalAware';
+import ScalingMatrixEditor from './ScalingMatrixEditor';
 
 /**
  * Shared "Scaling Columns" sidebar — the small editor block that
@@ -131,6 +132,13 @@ export default function ScalingColumnsPanel({
   // change per keystroke).
   const [nameDrafts, setNameDrafts] = useState<Record<string, string>>({});
 
+  // Full matrix-editor modal. `undefined` = closed; `null` = creating a
+  // new column; a string = editing that column. Mounting the editor here
+  // (inside the parent's proposal wrapper) instead of navigating to
+  // /compendium/scaling/* keeps a content-creator's save inside the block.
+  const [editingColumnId, setEditingColumnId] = useState<string | null | undefined>(undefined);
+  const closeEditor = () => setEditingColumnId(undefined);
+
   const commitRename = async (col: ScalingColumnRow) => {
     const draft = nameDrafts[col.id];
     if (draft === undefined || draft === (col.name ?? '')) return;
@@ -161,14 +169,13 @@ export default function ScalingColumnsPanel({
   };
 
   return (
+    <>
     <div className="p-4 border border-gold/20 bg-card/50 space-y-4 rounded-xl">
       <div className="section-header">
         <h2 className="label-text text-gold uppercase tracking-tighter">{label}</h2>
-        <Link to={`/compendium/scaling/new?parentId=${parentId}&parentType=${parentType}`}>
-          <Button size="sm" className="h-6 btn-gold">
-            <Plus className="w-3 h-3 mr-1" /> Add
-          </Button>
-        </Link>
+        <Button size="sm" className="h-6 btn-gold" onClick={() => setEditingColumnId(null)}>
+          <Plus className="w-3 h-3 mr-1" /> Add
+        </Button>
       </div>
 
       <div className="space-y-4">
@@ -195,11 +202,14 @@ export default function ScalingColumnsPanel({
                   className="h-6 text-[11px] font-bold bg-transparent border-none p-0 focus-visible:ring-0"
                 />
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Link to={`/compendium/scaling/edit/${col.id}?parentId=${parentId}&parentType=${parentType}`}>
-                    <Button variant="ghost" size="sm" className="h-5 w-5 p-0 text-gold">
-                      <Edit className="w-3 h-3" />
-                    </Button>
-                  </Link>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-5 w-5 p-0 text-gold"
+                    onClick={() => setEditingColumnId(col.id)}
+                  >
+                    <Edit className="w-3 h-3" />
+                  </Button>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -234,11 +244,14 @@ export default function ScalingColumnsPanel({
               </details>
 
               <div className="pt-1">
-                <Link to={`/compendium/scaling/edit/${col.id}?parentId=${parentId}&parentType=${parentType}`}>
-                  <Button variant="ghost" size="sm" className="w-full h-6 text-[9px] font-bold uppercase tracking-widest text-gold/60 hover:text-gold hover:bg-gold/5 border border-gold/10">
-                    Open Full Matrix Editor
-                  </Button>
-                </Link>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setEditingColumnId(col.id)}
+                  className="w-full h-6 text-[9px] font-bold uppercase tracking-widest text-gold/60 hover:text-gold hover:bg-gold/5 border border-gold/10"
+                >
+                  Open Full Matrix Editor
+                </Button>
               </div>
             </div>
           );
@@ -250,5 +263,21 @@ export default function ScalingColumnsPanel({
         )}
       </div>
     </div>
+
+    <Dialog open={editingColumnId !== undefined} onOpenChange={(open) => { if (!open) closeEditor(); }}>
+      <DialogContent className="dialog-content max-w-2xl max-h-[90vh] overflow-y-auto">
+        {editingColumnId !== undefined && (
+          <ScalingMatrixEditor
+            columnId={editingColumnId}
+            parentId={parentId}
+            parentType={parentType}
+            userProfile={userProfile}
+            onSaved={() => { closeEditor(); onColumnsChanged(); }}
+            onDeleted={() => { closeEditor(); onColumnsChanged(); }}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
