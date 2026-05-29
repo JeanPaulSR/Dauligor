@@ -206,12 +206,16 @@ Three guards run **before** the batch. All live in the proposal/approval layer
    the entire `requirements_tree` leaves (class/subclass/spell/spell_rule/
    option-item/option-group); `unique_option_item` column refs; `tags` /
    `required_tags` / `tag_ids` (+ `tag.group_id`); `item.container_id`; and —
-   now that `feature` is proposable — the feature back-links
+   now that `feature` is proposable — **`feature.parent_id` → draft
+   class/subclass** (the headline "propose Druid *with Wild Shape*" case: a
+   draft feature whose parent is the draft class), the feature back-links
    (`usesFeatureId`, requirements `feature` leaf, ItemBumpUses
    `target.kind='feature'`, `unique_option_groups.feature_id`) **plus** a
-   feature's own internal references (its `advancements` re-drag the whole set).
-   The schema has **no FK** on any of these, so guard #1 is the only thing that
-   catches a dropped reference before it goes live dangling.
+   feature's own internal references (its `advancements` re-drag the whole
+   advancement set — scaling columns, option groups/items, feats, spell grants
+   — which can themselves be same-block drafts). The schema has **no FK** on any
+   of these, so guard #1 is the only thing that catches a dropped reference
+   before it goes live dangling.
 2. **Per-revision drift check.** The existing snapshot-vs-current conflict
    detection runs for every revision. Any drift blocks the whole block (coarser
    than per-row, but correct) and surfaces the 3-way diff.

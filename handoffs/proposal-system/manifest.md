@@ -54,6 +54,18 @@ Proposal-mode logic lives *inside* these files, but the files themselves are own
 
 Newest at the top. Each entry: date + link to the handoff doc in this same folder.
 
+- `2026-05-29` — **Responded to compendium-editors' B/C follow-up** (reply:
+  [../compendium-editors/2026-05-29-proposal-system-reply.md](../compendium-editors/2026-05-29-proposal-system-reply.md)).
+  Shipped: **R1** — `scaling_column.writableColumns` += `type`/`identifier`/
+  `distance_units` (a proposed dice column was losing its type on approval);
+  **R3** — `ProposalEditorWrapper` block-entry gate (user directive: must have
+  an active block before authoring; editor body replaced by a pick/create gate,
+  `PickOrCreateBlockDialog` gains a `required` mode); **F1** —
+  `useProposalAccumulator` reports `mode:'block'` in a wrapper so the toast says
+  "added to block" not "submitted for review". **R2** confirmed in the design
+  (guard #1 now names `feature.parent_id`→draft class/subclass). Open follow-up:
+  routing-enforcement so content-creators can't reach a non-wrapped editor route
+  (App.tsx — coordinate w/ system-applications + compendium-editors).
 - `2026-05-28` — **`feature` is now a proposable type** (`aa4d0c8` on `main`).
   Existing `features`-table entity registered in the allowlist + config +
   migration `20260528-1400` (local-only). compendium-editors is now fully
