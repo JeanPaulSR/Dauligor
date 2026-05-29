@@ -80,7 +80,9 @@ function createTemporaryPassword(length = 14) {
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  // Port is env-driven so parallel agents/branches can run side by side
+  // (e.g. PORT=3001). Defaults to 3000 to match the documented setup.
+  const PORT = Number(process.env.PORT) || 3000;
   // Body limit bumped from the 100kb default to 50mb so bulk
   // Foundry imports (spells, feats, items) can flow through the
   // local /api/d1/query proxy. Each Foundry-shaped entity carries
