@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Compendium Proposal-Mode — Self-Test Checklist</title>
+<style>
+  :root {
+    --parch: #f4ecd8; --parch2: #ece0c4; --ink: #2b2419; --ink2: #5c5142;
+    --gold: #9a7b34; --gold-line: #c9a96133; --green: #3f6f43; --red: #8a2f2f;
+    --amber: #8a5a1f; --blue: #2f5a8a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--parch); color: var(--ink);
+    font: 15px/1.6 "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+    padding: 2.5rem 1rem 6rem;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  h1 { font-size: 1.9rem; color: var(--gold); margin: 0 0 .25rem; letter-spacing: -.01em; }
+  h2 {
+    font-size: 1.25rem; color: var(--gold); margin: 2.4rem 0 .6rem;
+    border-bottom: 2px solid var(--gold-line); padding-bottom: .3rem;
+  }
+  h3 { font-size: 1.02rem; margin: 1.4rem 0 .35rem; color: var(--ink); }
+  p, li { color: var(--ink); }
+  .sub { color: var(--ink2); font-style: italic; margin-top: 0; }
+  code { background: var(--parch2); padding: .08em .4em; border-radius: 3px; font-size: .86em; font-family: "SF Mono", Consolas, monospace; }
+  .card { background: #fffaf0; border: 1px solid var(--gold-line); border-radius: 10px; padding: 1rem 1.2rem; margin: .9rem 0; box-shadow: 0 1px 0 #0000000a; }
+  .legend { display:flex; gap:1rem; flex-wrap:wrap; margin:.5rem 0 0; font-size:.86rem; color:var(--ink2); }
+  .pill { display:inline-block; padding:.05em .55em; border-radius:999px; font-size:.74rem; font-weight:700; letter-spacing:.03em; text-transform:uppercase; }
+  .pill.go { background:#dff0df; color:var(--green); }
+  .pill.stop { background:#f4dada; color:var(--red); }
+  .pill.todo { background:#dde7f4; color:var(--blue); }
+  .banner { border-left: 5px solid var(--gold); background:#fff7e6; padding:.8rem 1rem; border-radius: 0 8px 8px 0; margin:1rem 0 1.5rem; }
+  .chk { list-style:none; padding-left:0; margin:.4rem 0; }
+  .chk > li { position:relative; padding-left:1.9rem; margin:.55rem 0; }
+  .chk > li::before {
+    content:"\2610"; position:absolute; left:0; top:-1px; font-size:1.2rem; color:var(--gold); line-height:1.4;
+  }
+  .exp { display:block; color:var(--ink2); font-size:.9rem; margin-top:.15rem; }
+  .exp b { color: var(--green); font-style: normal; }
+  .stopcard { border-color:#e0bcbc; background:#fdf3f3; }
+  .stopcard h3 { color: var(--red); }
+  .todocard { border-color:#bcccE0; background:#f3f6fb; }
+  .todocard h3 { color: var(--blue); }
+  .route { color: var(--gold); font-weight: 600; }
+  hr { border:none; border-top:1px solid var(--gold-line); margin:2rem 0; }
+  .tag { font-size:.7rem; color:#fff; background:var(--gold); border-radius:4px; padding:.05em .4em; margin-left:.4em; vertical-align:middle; }
+  .small { font-size:.85rem; color:var(--ink2); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Compendium Proposal-Mode — Self-Test Checklist</h1>
+  <p class="sub">Branch <code>compendium-editors</code> · for manual spot-checking in the running dev app · 2026-05-29</p>
+
+  <div class="banner">
+    <strong>Where the code is right now.</strong> Your worktree is rebased onto the latest <code>main</code>,
+    so it already has proposal-system's <em>block-entry gate</em>, the <em>"added to block"</em> toast, and the
+    <code>scaling_column</code>/<code>feature</code> writable-column fix. On top of that, <strong>Part&nbsp;B</strong>
+    (scaling-column + feature saves route through the proposal queue) and <strong>Part&nbsp;C</strong> (draft entities
+    are selectable in every cross-reference picker) are done and committed. <strong>Update (this session):</strong>
+    the list/panel "show my draft" overlays (F2), the new-entity child-section unlock (reload-gap), the subclass
+    draft-parent display, and load-draft-on-open are now <strong>implemented</strong> — they moved from "skip" to
+    the <em>"Recently fixed — verify"</em> section below. <strong>Still not built:</strong> the
+    <em>approve / atomic-batch</em> side (proposal-system's Part&nbsp;D), and the option-group <em>catalog-list</em>
+    draft view (that route isn't wrapped). The two local DB migrations that let those proposal types reach the
+    server are also <strong>not applied yet</strong>.
+  </div>
+
+  <div class="legend">
+    <span><span class="pill go">Check</span> works now — verify it</span>
+    <span><span class="pill stop">Skip</span> not wired — don't waste time</span>
+    <span><span class="pill todo">To&nbsp;do</span> still on the list</span>
+  </div>
+
+  <h2>0 · Setup — the two modes you'll switch between</h2>
+  <div class="card">
+    <p style="margin-top:0"><strong>Admin-direct mode</strong> — reach editors via <span class="route">/compendium/&hellip;</span>
+    (e.g. <span class="route">/compendium/classes</span>, <span class="route">/compendium/feats</span>,
+    <span class="route">/compendium/items</span>, <span class="route">/compendium/unique-options</span>). As admin, saves
+    write straight to the DB. Toasts say <em>"&hellip;created / updated / deleted."</em> This is the no-regression baseline.</p>
+    <p style="margin-bottom:0"><strong>Block mode</strong> — reach editors via <span class="route">/proposals/edit/&hellip;</span>
+    (e.g. <span class="route">/proposals/edit/classes</span>, <span class="route">/proposals/edit/feats</span>,
+    <span class="route">/proposals/edit/option-groups</span>). You'll hit a "pick or create a block" gate first; once a block
+    is active, the editor mounts and saves are <em>queued into the block</em>. Toasts say <em>"&hellip;added to block."</em>
+    <span class="small">(You can do this as admin — you don't need a content-creator account for the UX checks. The
+    content-creator "no longer gets a 403" win is verified later at the full end-to-end, which needs the DB migration.)</span></p>
+  </div>
+
+  <h2><span class="pill go">Check</span> &nbsp;1 · No regression in admin-direct mode</h2>
+  <p class="sub">Most important: confirm routing feature/scaling saves through the new writer didn't break ordinary editing. Do these via <span class="route">/compendium/*</span>, no block.</p>
+  <ul class="chk">
+    <li>Edit an existing class → <strong>Class Columns</strong> panel → add a column, rename it (blur the field), open the matrix editor, save values, delete a column.
+      <span class="exp"><b>Expect:</b> each action persists immediately; toasts are "created/updated/deleted" (NOT "added to block"); columns survive a page reload.</span></li>
+    <li>Same class → <strong>Features</strong> → add a feature, edit it, delete it.
+      <span class="exp"><b>Expect:</b> saves immediately, shows in the feature list, survives reload.</span></li>
+    <li>Open a feat (<span class="route">/compendium/feats</span>) that allows scaling → add a column → reference it in a <code>ScaleValue</code> advancement → save → reopen.
+      <span class="exp"><b>Expect:</b> the advancement still points at the column after reopen; no console errors.</span></li>
+    <li>Open an item (<span class="route">/compendium/items</span>) with an advancement → confirm the advancement editor + any scaling reference still save.</li>
+    <li>Open a class's <strong>Subclasses</strong> tab → edit a subclass → add/edit/delete a subclass feature.
+      <span class="exp"><b>Expect:</b> saves immediately, persists.</span></li>
+  </ul>
+  <p class="small">If anything here behaves differently than it did last week, that's a real regression — flag it.</p>
+
+  <h2><span class="pill go">Check</span> &nbsp;2 · proposal-system's new behaviors (now in your worktree)</h2>
+  <ul class="chk">
+    <li>Go to <span class="route">/proposals/edit/classes</span> (or feats / items / option-groups) with <em>no</em> active block.
+      <span class="exp"><b>Expect:</b> a "pick or create a block" gate appears <em>instead of</em> the editor body — you can't author until a block exists.</span></li>
+    <li>Create or pick a block → the editor mounts normally.</li>
+    <li>Make any save inside the block.
+      <span class="exp"><b>Expect:</b> the toast reads <em>"&hellip;added to block"</em> (the old confusing "submitted for review" wording is gone in-block).</span></li>
+  </ul>
+
+  <h2><span class="pill go">Check</span> &nbsp;3 · Part C — draft entities selectable in pickers</h2>
+  <p class="sub">This is the headline new work. Do it in a block, on an <strong>existing</strong> class/feat (not a brand-new one — see Skip&nbsp;§2). Remember: a freshly-queued draft will NOT show up in its own list/panel yet (that's F2, Skip&nbsp;§1) — you're checking that it shows up in the <em>picker</em>.</p>
+
+  <h3>3a · Scaling column (cleanest single-editor check)</h3>
+  <ul class="chk">
+    <li>In a block, edit an existing class → <strong>Class Columns</strong> → <strong>Add</strong> a column → fill the matrix → save.
+      <span class="exp"><b>Expect:</b> toast "added to block." The column will <em>not</em> appear in the Class Columns panel (F2 gap — expected, not a bug).</span></li>
+    <li>Same class → <strong>Progression &amp; Advancements</strong> → add/edit an advancement that has a scaling-column dropdown (e.g. <code>ScaleValue</code>, or a Trait/ItemChoice using scaling) → open the dropdown.
+      <span class="exp"><b>Expect:</b> your just-created column appears as <em>"&lt;name&gt; (in this block)"</em> and is selectable.</span></li>
+  </ul>
+
+  <h3>3b · Feature</h3>
+  <ul class="chk">
+    <li>Same block/class → add a feature (feature modal → save → "added to block").</li>
+    <li>In an advancement that links features (the <em>availableFeatures</em> picker) → confirm the draft feature shows as <em>"(in this block)."</em></li>
+  </ul>
+
+  <h3>3c · Cross-editor, same block <span class="tag">thorough</span></h3>
+  <p class="small">These prove a reference can cross editor boundaries inside one block. More fiddly; optional if short on time.</p>
+  <ul class="chk">
+    <li><strong>Option group:</strong> in the same block, go to <span class="route">/proposals/edit/option-groups/new</span> → create a group → save. Back in the class editor (same block) → an advancement that references option groups shows the draft group "(in this block)."</li>
+    <li><strong>Feat:</strong> create a feat draft in <span class="route">/proposals/edit/feats</span> (same block) → in a class advancement that grants feats (<code>ItemGrant</code>), the draft feat appears.</li>
+    <li><strong>Requirements (L2):</strong> in a feat editor (in block) → open the <strong>Requirements</strong> builder → a class / subclass / spell-rule / option-group leaf picker shows same-block drafts.</li>
+    <li><strong>Spell advancements (L3):</strong> in a <code>GrantSpells</code> / <code>ExtendSpellList</code> advancement → the spell / rule / class pickers show same-block drafts.</li>
+    <li><strong>Class restriction (L4):</strong> in the option-group editor (in block) → "Class Restrictions" picker → shows same-block draft classes.</li>
+  </ul>
+
+  <hr />
+
+  <h2><span class="pill go">Verify</span> &nbsp;Recently fixed (were "skip" — now wired)</h2>
+  <p class="sub">Implemented this session — these are the ones to actually exercise now.</p>
+
+  <div class="card">
+    <h3>1 · Drafts now appear in their own list / panel (F2)</h3>
+    <p style="margin:0 0 .4rem">A queued draft now shows up where you authored it, no reload:</p>
+    <ul class="chk">
+      <li>Add a scaling column in a block → it appears in the <strong>Columns panel</strong> (with breakpoints), not just the advancement dropdown.</li>
+      <li>Add a feature in a block → it appears in the class's <strong>Features list</strong> / the subclass <strong>level grid</strong>.</li>
+    </ul>
+    <p class="small" style="margin:.3rem 0 0"><b>Still partial:</b> the option-group <em>catalog list</em> (<code>/proposals/edit/option-groups</code>) won't show a draft group yet — that route isn't wrapped (proposal-system). You can still add options to a new group (see §2).</p>
+  </div>
+
+  <div class="card">
+    <h3>2 · New entity's child sections unlock without reload (reload-gap)</h3>
+    <p style="margin:0 0 .4rem">Create a <strong>new</strong> class / subclass / option group in a block, then immediately:</p>
+    <ul class="chk">
+      <li>Class / Subclass → the <strong>Columns panel</strong> and <strong>Features</strong> are usable right away — no reload.</li>
+      <li>Option group → the <strong>Individual Options</strong> section shows and <strong>Add Option</strong> works straight away (this was your Issue&nbsp;2).</li>
+    </ul>
+    <p class="small" style="margin:.3rem 0 0">Child sections gate on the client-minted id now, not the URL id.</p>
+  </div>
+
+  <div class="card">
+    <h3>3 · Subclass under a <em>draft</em> parent class now displays <span class="tag">you flagged this</span></h3>
+    <p style="margin:0">In a block, create a class, then add a subclass to it (both still drafts). The subclass editor now
+    <strong>shows the draft parent class</strong> (name / hit die / reference labels), resolved from the block
+    instead of a failed live fetch — and the <code>class_id</code> link was always correct. (Bonus: re-opening a
+    draft scaling column in the matrix editor now loads its draft values too, instead of a blank form.)</p>
+  </div>
+
+  <hr />
+
+  <h2><span class="pill stop">Skip</span> &nbsp;Still not wired — don't test yet</h2>
+
+  <div class="card stopcard">
+    <h3>Approving a block (seeing the cluster go live)</h3>
+    <p style="margin:0"><strong>Update:</strong> the two local migrations are now applied, so the CHECK no
+    longer rejects <code>scaling_column</code>/<code>feature</code> rows — <strong>submitting (flushing) a
+    block is now testable</strong> (hard-reload first; restart the dev server only if a 500 lingers). What's
+    still <strong>not built</strong> is the <strong>approve / atomic-batch</strong> side (proposal-system's
+    Part&nbsp;D — the integrity walk + apply-as-one-unit). So you can author + submit a block, but don't
+    expect "approve it and watch the class go live with everything attached" to work yet — that's their
+    next step. <span class="small">(Also note: the flush endpoint inserts revisions one-by-one, not
+    atomically, so a half-failed flush can leave stray draft staging rows — harmless, cleared by dropping
+    the block. Flagged to proposal-system.)</span></p>
+  </div>
+
+  <hr />
+
+  <h2><span class="pill todo">To do</span> &nbsp;What still needs building</h2>
+
+  <div class="card todocard">
+    <h3>Our side (compendium-editors)</h3>
+    <ul style="margin:.2rem 0">
+      <li><strong>§3 hand-back doc</strong> to proposal-system — the picker-coverage table, payload-shape confirmation, the <code>parent_type</code> values in play, and a sample block for them to validate guard&nbsp;#1 against.</li>
+      <li><strong>Option-group catalog list</strong> — wrap <code>/proposals/edit/option-groups</code> so a draft group shows in the list (coordinate with proposal-system, who owns the wrapper). Also: draft option <em>items</em> don't yet survive a reload (<code>option_item</code> keys on <code>group_id</code>, not <code>parent_id</code>; optimistic state covers the in-session case).</li>
+      <li><em>Done this session:</em> F2 list/panel overlays (#17), the reload-gap unlock (#16), subclass draft-parent + draft-column load.</li>
+    </ul>
+  </div>
+
+  <div class="card todocard">
+    <h3>proposal-system side (Part D — paused, waiting on us)</h3>
+    <ul style="margin:.2rem 0">
+      <li><strong>guard #1</strong> reference-integrity walk over the cross-reference graph (incl. the feature graph) + the atomic <em>approve-whole-block</em> + dependency ordering + block-level reject + edit-lock.</li>
+      <li>Apply the two <code>entity_type</code> migrations to <strong>local</strong> D1 (we'll bracket this with a dev-server restart at the e2e step) and <strong>remote</strong> D1 (they run it, with explicit go-ahead).</li>
+    </ul>
+  </div>
+
+  <p class="small" style="margin-top:2rem">Open this file via your existing docs server (it lives in <code>docs/architecture/compendium-editors/</code>) or just open it directly in a browser.</p>
+
+</div>
+</body>
+</html>

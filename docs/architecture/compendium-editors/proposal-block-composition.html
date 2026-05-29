@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>How a Class is Built in a Proposal Block — Deep Dive</title>
+<style>
+  :root{--parch:#f4ecd8;--parch2:#ece0c4;--ink:#2b2419;--ink2:#5c5142;--gold:#9a7b34;
+    --line:#c9a96133;--green:#3f6f43;--red:#8a2f2f;--blue:#2f5a8a;--amber:#8a5a1f;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--parch);color:var(--ink);
+    font:15px/1.65 "Iowan Old Style","Palatino Linotype",Georgia,serif;padding:2.5rem 1rem 6rem;}
+  .wrap{max-width:920px;margin:0 auto;}
+  h1{font-size:2rem;color:var(--gold);margin:0 0 .2rem;letter-spacing:-.01em;}
+  h2{font-size:1.3rem;color:var(--gold);margin:2.6rem 0 .6rem;border-bottom:2px solid var(--line);padding-bottom:.3rem;}
+  h3{font-size:1.05rem;margin:1.5rem 0 .35rem;}
+  .sub{color:var(--ink2);font-style:italic;margin-top:.1rem;}
+  code{background:var(--parch2);padding:.08em .4em;border-radius:3px;font-size:.85em;font-family:"SF Mono",Consolas,monospace;}
+  pre{background:#fffaf0;border:1px solid var(--line);border-radius:8px;padding:.8rem 1rem;overflow:auto;font-size:.82rem;line-height:1.5;}
+  .card{background:#fffaf0;border:1px solid var(--line);border-radius:10px;padding:1rem 1.2rem;margin:1rem 0;}
+  .banner{border-left:5px solid var(--gold);background:#fff7e6;padding:.85rem 1.1rem;border-radius:0 8px 8px 0;margin:1rem 0 1.6rem;}
+  ol.principles{counter-reset:p;list-style:none;padding-left:0;}
+  ol.principles>li{position:relative;padding:.5rem 0 .5rem 2.4rem;border-top:1px solid var(--line);}
+  ol.principles>li:first-child{border-top:none;}
+  ol.principles>li::before{counter-increment:p;content:counter(p);position:absolute;left:0;top:.55rem;
+    width:1.6rem;height:1.6rem;border-radius:50%;background:var(--gold);color:#fff;font-weight:700;
+    display:flex;align-items:center;justify-content:center;font-size:.85rem;font-family:sans-serif;}
+  table{border-collapse:collapse;width:100%;margin:.8rem 0;font-size:.9rem;}
+  th,td{border:1px solid var(--line);padding:.45rem .6rem;text-align:left;vertical-align:top;}
+  th{background:var(--parch2);color:var(--gold);font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;}
+  .pill{display:inline-block;padding:.05em .55em;border-radius:999px;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;}
+  .fixed{background:#dff0df;color:var(--green);} .open{background:#dde7f4;color:var(--blue);} .verify{background:#f6e7c8;color:var(--amber);}
+  .who{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;}
+  .who.ours{color:var(--green);} .who.theirs{color:var(--blue);}
+  .flow{font-family:"SF Mono",Consolas,monospace;font-size:.8rem;line-height:1.9;background:#fffaf0;border:1px solid var(--line);border-radius:8px;padding:1rem 1.2rem;}
+  .flow b{color:var(--gold);}
+  .small{font-size:.86rem;color:var(--ink2);}
+  hr{border:none;border-top:1px solid var(--line);margin:2rem 0;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>How a Class is Built in a Proposal Block</h1>
+<p class="sub">Deep dive into the proposal-block composition model + the bugs we hit authoring a class — branch <code>compendium-editors</code>, 2026-05-29.</p>
+
+<div class="banner">
+<strong>The one-sentence version.</strong> A class isn't a single save — it's a <em>cluster</em> of separate
+entities (the class row, each of its features, each scaling column, option groups + their items, and the
+advancements that live on the class), each queued as its own <em>proposal revision</em> into <em>one block</em>,
+all cross-referencing each other by client-minted UUIDs, and (eventually) approved together as a unit. Every
+bug you hit was a place where that "proposal-by-proposal" composition leaked — a child gated on a parent that
+isn't live <em>yet</em>, or a create mis-queued as an update against a row that doesn't exist <em>yet</em>.
+</div>
+
+<h2>1 · The model — a class is a cluster, not a row</h2>
+<p>When an author builds, say, a Druid in a block, they're really creating a graph of entities that all land together:</p>
+<pre>class:Druid (id C)
+ ├─ feature:Wild Shape (parent_id = C)         ← features table, parent_id → class
+ │    └─ advancements[] (on the feature)
+ ├─ feature:Druidic (parent_id = C)
+ ├─ scaling_column:"Beast CR" (parent_id = C)   ← scaling_columns, parent_id → class
+ ├─ advancements[] on the class                 ← stored on the class row; reference ↓
+ │    ├─ ScaleValue → scaling_column "Beast CR"
+ │    ├─ ItemGrant  → option_group / feat
+ │    └─ GrantSpells→ spell / spell_rule / class
+ ├─ unique_option_group:"Wild Shape Forms" (+ items)   ← group_id → its items
+ └─ subclass:"Circle of the Moon" (class_id = C)        ← subclasses, class_id → class</pre>
+<p>Each node is a <strong>separate row in a separate table</strong>, so each is a <strong>separate proposal
+revision</strong>. They all reference each other by id. The whole point of the block is to let those references
+resolve even though <em>none of the rows exist live yet</em>.</p>
+
+<h2>2 · The six principles that make it work</h2>
+<ol class="principles">
+<li><strong>Client-minted UUIDs, stable through approval.</strong> Every new entity gets its id <em>now</em>, on the client. A feature's <code>parent_id</code> can point at the class's id before the class is live, because the same id is used at author-time and at approval-time.</li>
+<li><strong>The block accumulates in two stages.</strong> Each editor save calls <code>useProposalAccumulator</code> → <code>queueChange</code> into an in-memory <em>queue</em>; "Save Progress / Submit" <em>flushes</em> the queue to the server as <code>pending_revisions</code> rows (the persisted <em>drafts</em>).</li>
+<li><strong>The editor shows live + drafts merged.</strong> <code>getDraftedEntities</code> overlays the block's drafts onto the live fetch (→ <code>byId</code>/<code>createdIds</code>). Pickers read it via <code>useProposalDraftOptions</code>; lists/panels via <code>useBlockDraftedList</code>. So you <em>see</em> what you're building.</li>
+<li><strong>CREATE-then-EDIT folds into one CREATE.</strong> You must never end up POSTing an <em>update</em> for an entity that only exists as a same-block <em>create</em> — the server tries to snapshot a live row, finds nothing, and 404s. The flush folds them (dedupe in-queue; patch the existing create draft across flushes).</li>
+<li><strong>Children are authored under a not-yet-live parent.</strong> A class created in-block has no route <code>id</code> (URL stays on <code>/new</code>). Child sections must gate on <code>effectiveId = routeId ?? pendingCreateId</code> (the client-minted id, set via <code>recordCreate</code>), not the raw route id — otherwise the Features/Columns/Subclasses sections stay locked until a reload.</li>
+<li><strong>Approve atomically.</strong> On approval the whole block applies in dependency order with reference-integrity (guard #1). <span class="who theirs">proposal-system Part D — not built yet.</span></li>
+</ol>
+
+<h2>3 · The machinery (the layers a save passes through)</h2>
+<div class="flow">
+editor save (handleSave / handleSaveFeature / matrix editor)<br>
+ │ &nbsp;decides <b>create vs update</b> &nbsp;←—— <span style="color:var(--red)">Issue 3 lived here</span><br>
+ ▼<br>
+<b>useProposalAccumulator</b>(type).create/update/remove<br>
+ │ &nbsp;create: mint/keep id → queueChange(op:create, payload incl. id)<br>
+ │ &nbsp;update: queueChange(op:update, entity_id)<br>
+ ▼<br>
+<b>ctx.queueChange</b> → in-memory <b>queue</b> (ProposalEditorWrapper)<br>
+ │<br>
+ ├──▶ <b>getDraftedEntities</b>(drafts + queue) → byId / createdIds &nbsp;(display overlay)<br>
+ │ &nbsp; &nbsp; ├─ useProposalDraftOptions → pickers &nbsp;←— <span style="color:var(--amber)">Issue 2 (name) reads here</span><br>
+ │ &nbsp; &nbsp; └─ useBlockDraftedList → lists / panels<br>
+ │<br>
+ ▼ &nbsp;("Save Progress")<br>
+<b>postQueuedChanges</b>(queue, bundleId, existingDrafts)<br>
+ │ &nbsp;1. dedupe: fold CREATE+UPDATE… → one CREATE (same in-memory flush)<br>
+ │ &nbsp;2. partition vs existingDrafts: match a prior CREATE draft → <b>PATCH</b> it; else <b>POST</b> new<br>
+ ▼<br>
+POST /api/proposals → per-row INSERT into <b>pending_revisions</b><br>
+ │ &nbsp;update rows snapshot the live entity → <b>404 if no live row</b> &nbsp;←— <span style="color:var(--red)">the 404</span><br>
+ ▼<br>
+(later) admin approves → <b>atomic apply + guard #1</b> &nbsp;<span class="who theirs">Part D, pending</span>
+</div>
+<p class="small">Also: <code>useProposalSingleWorkId</code> gives <code>effectiveId</code> + <code>recordCreate</code> — the principle-5 "author under a not-yet-live parent" mechanism. After a create the editor calls <code>recordCreate(id)</code>, so <code>effectiveId</code> flips to the minted id without a route change.</p>
+
+<h2>4 · The bugs, diagnosed against the model</h2>
+
+<div class="card">
+<h3><span class="pill fixed">Fixed</span> &nbsp;Issue 1 — Class Features locked until reload &nbsp;<span class="who ours">ours</span></h3>
+<p><strong>Violated principle 5.</strong> The Features <em>tab button</em> and <code>handleSaveFeature</code> already used <code>effectiveId</code>, but the Features <em>tab content</em> was still wrapped in <code>{id && (…)}</code> (ClassEditor line 3179). On a class created in-block, <code>id</code> (route param) is null, so the tab was clickable but its body rendered nothing until a reload set the id. <strong>Fix:</strong> <code>{id && …}</code> → <code>{effectiveId && …}</code> (the same gate the subclasses content + scaling panel already got). Now child sections unlock the moment the class is queued.</p>
+</div>
+
+<div class="card">
+<h3><span class="pill fixed">Fixed</span> &nbsp;Issue 3 — 404 "update on missing feature" → can't link advancements, scaling "didn't save" &nbsp;<span class="who ours">ours</span></h3>
+<p><strong>Violated principle 4 — and it was the big one.</strong> The "Add Feature" button <em>pre-mints</em> the new feature's id (<code>id: crypto.randomUUID()</code>, line 3187). My feature-slice <code>handleSaveFeature</code> then decided create-vs-update with <code>isCreate = !editingFeature.id</code> — which is <em>never</em> true for a new feature (the id is already there). So a brand-new feature was queued as an <strong>UPDATE</strong>. On flush, the endpoint tries to snapshot the live <code>feature</code> row, finds none, and throws <code>404 "Cannot propose update on missing feature"</code>.</p>
+<p>Worse: that 404 is thrown mid-flush, so it <strong>aborts the entire flush</strong> — which is why the scaling column and everything else queued in the same block "didn't save" either. And you "couldn't link advancements" because every feature save bounced.</p>
+<p class="small">Why admin-direct never hit it: the old path called <code>upsertFeature</code> (insert-or-update), which happily creates when the row is absent. Routing through <code>create</code>/<code>update</code> for proposals removed that safety net and exposed the bad branch.</p>
+<p><strong>Fix:</strong> decide create-vs-update by <em>live-row membership</em>, not id-presence:</p>
+<pre>const isCreate = !features.some(f =&gt; String(f.id) === String(editingFeature.id));</pre>
+<p>So a new feature <em>or</em> a same-block draft feature is a CREATE (the accumulator folds repeat creates / patches the existing draft — principle 4), and only a genuinely live feature is an UPDATE (where the snapshot succeeds). Applied in ClassEditor + SubclassEditor.</p>
+</div>
+
+<div class="card">
+<h3><span class="pill verify">Verify</span> &nbsp;Issue 2 — scaling column shows "(unnamed draft)" &nbsp;<span class="who ours">ours (needs a repro)</span></h3>
+<p>The picker shows <code>(unnamed draft)</code> when the queued <code>scaling_column</code> payload's <code>name</code> is empty. The matrix editor <em>does</em> include <code>name</code> in its create payload (ScalingMatrixEditor line 163), and <code>getDraftedEntities</code> merges a later rename onto the create — so an empty name means the column was created (and never renamed) <strong>without a name typed in the modal</strong>. Next time: confirm whether the modal's Name field was filled at save. If it was filled and still shows unnamed, there's a capture bug to chase; if it was blank, that's expected. (Now that Issue 3 no longer aborts the flush, re-test this in isolation.)</p>
+</div>
+
+<h2>5 · Still open — mostly proposal-system's</h2>
+<table>
+<tr><th>Item</th><th>What / why</th><th>Owner</th></tr>
+<tr><td><span class="pill open">Open</span> Flush staleness</td><td>The cross-flush fold (principle 4) matches an UPDATE against the prior CREATE draft using <code>existingDrafts = drafts.filter(bundle)</code>. <code>drafts</code> is a React cache refreshed async after each flush — if it lags, a create-then-update across two flushes can miss the existing draft and POST a duplicate/orphan. Our liveness-based <code>isCreate</code> avoids the 404 (it re-creates → folds), but the cache lag is theirs to harden.</td><td class="who theirs">proposal-system</td></tr>
+<tr><td><span class="pill open">Open</span> Non-atomic flush endpoint</td><td><code>POST /api/proposals</code> inserts revisions one-by-one in a loop (no transaction), so a mid-batch failure leaves partial draft staging rows. A block flush should be atomic (or roll back).</td><td class="who theirs">proposal-system</td></tr>
+<tr><td><span class="pill open">Open</span> Approve / atomic apply (Part D)</td><td>guard #1 reference-integrity walk + apply-whole-block-as-a-unit (principle 6). Not built — so "approve the block and watch the class go live" doesn't work yet.</td><td class="who theirs">proposal-system</td></tr>
+<tr><td><span class="pill open">Open</span> Option-group catalog list</td><td><code>/proposals/edit/option-groups</code> is mounted without the wrapper, so a draft group can't show in the catalog list (you can still add options to a new group in its editor).</td><td class="who theirs">proposal-system (wrap the route)</td></tr>
+<tr><td><span class="pill verify">Verify</span> Scaling name capture</td><td>Issue 2 above.</td><td class="who ours">ours</td></tr>
+</table>
+
+<h2>6 · How to test it now</h2>
+<p>Hard-reload (you've applied the local migrations), then in a block create a new class and, without reloading:
+add a feature (it should save + appear in the Features list), add a scaling column, link a ScaleValue advancement
+to it, add a subclass. Submit the block — it should flush without the 404. See
+<a href="proposal-mode-test-checklist.html">proposal-mode-test-checklist.html</a> for the full pass.
+<strong>Approve</strong> still won't land the cluster (Part D pending) — that's expected.</p>
+
+</div>
+</body>
+</html>
