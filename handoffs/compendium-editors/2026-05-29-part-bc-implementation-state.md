@@ -109,14 +109,20 @@ LoreEditor; 1× `characterShared.ts:520` arg count). None in touched files.
 
 ## LEFT — the remaining work
 
-1. **L1 overlay for scaling_column** (last bit of the scaling slice; now UNBLOCKED since columns are
-   created in-block via the modal). At ClassEditor/SubclassEditor/FeatsEditor/ItemsEditor, change
-   `availableScalingColumns={scalingColumns}` → `availableScalingColumns={[...scalingColumns,
-   ...useProposalDraftOptions('scaling_column')]}` before it's passed to `<AdvancementManager>`. Also
-   the inline `<select>` over `scalingColumns` in ClassEditor's advancement dropdowns. Plus the
-   "in this block" visual affordance on draft entries + cross-block legibility (don't render an empty
-   dropdown as if broken). ClassEditor scaling/AdvancementManager mounts are ~`4271-4278` and
-   ~`4695-4701`.
+1. ~~**L1 overlay for scaling_column**~~ **DONE (2026-05-29).** All four parent editors
+   (ClassEditor/SubclassEditor/FeatsEditor/ItemsEditor) now call
+   `useProposalDraftOptions('scaling_column')` once at top level, bake an `(in this block)` suffix
+   into the draft names, and spread the result into the picker arrays only — never the save payload
+   (ClassEditor `classColumns:` ~`1452`) or the `ScalingColumnsPanel` list (~`4335`). ClassEditor uses
+   a single `scalingColumnPickerOptions` const for its 2 `AdvancementManager` mounts + 2 inline
+   `<select>`s; the others spread `scalingColumnDraftOptions` at their mount sites (FeatsEditor keeps
+   the `scalingAllowed` gate; SubclassEditor appends after its own `(Subclass)`/`(Class)` suffixed
+   arrays). Type-clean (7-error baseline unchanged). The baked-name affordance shows uniformly in
+   native `<select>`s and shadcn dropdowns with zero `AdvancementManager` edits. **Remaining polish
+   (deferred):** empty-dropdown empty-state ("don't render an empty dropdown as if broken") + a
+   parent-scoping refinement (a draft column from a *different* draft owner in the same block surfaces
+   unscoped, since `DraftOption` carries no `parent_id`; harmless in the one-entity-per-block common
+   case).
 2. **Feature slice (Part B feature)** — the headline "propose a class with Wild Shape" win. Features
    are authored INLINE in ClassEditor's feature modal (`handleSaveFeature` ~`1071-1161`, the
    `upsertFeature` calls ~`1140`/`1147`; `handleDeleteFeature` ~`1163`) and in SubclassEditor — all
@@ -146,6 +152,50 @@ LoreEditor; 1× `characterShared.ts:520` arg count). None in touched files.
   editor is now a modal inside the parent wrapper, so in-block saves queue correctly. proposal-system
   just needs to confirm their approval path handles an in-block `scaling_column` create (it should —
   it's a normal queued proposal now).
+
+## Known issue — proposal-mode child-section unlock requires reload (DEFERRED, user-flagged 2026-05-29)
+
+User spot-check finding: in the **normal (admin-direct)** editor, saving a class flips the editor into
+"edit-existing" mode, which **auto-unlocks child sections** — the Class Features panel and the Class
+Columns / `ScalingColumnsPanel` are gated on a truthy class `id` (e.g. `{id ? <ScalingColumnsPanel …/>
+: null}` at ClassEditor ~`4321`), and the direct save sets/navigates that id. In **proposal-block**
+mode the class CREATE is *queued* (client-minted id, no live row, editor state doesn't flip), so those
+child sections stay locked and the user must **manually reload** the page to author features / columns
+on the just-proposed class. "Who knows what else is auto-unlocked" — there may be other gated affordances.
+
+Why it matters: this is a **soft prerequisite for the feature slice** — you can't add Wild Shape to a
+proposed Druid if the Features panel is locked until reload. Likely fix: after a block-queue create,
+flip the editor into edit-mode using the client-minted id (don't gate child sections on a *live* row;
+gate on "id exists" which is true the moment the draft is queued). This is OUR editor-state concern
+(Part B wiring), not proposal-system's. Tracked as a task. Deferred per user ("a note that we should
+handle later").
+
+## Spot-check findings (2026-05-29) — list/panel draft-overlay gaps + toast-wording trap
+
+User spot-checked in a **block** (confirmed: the new feat appeared in its list via the wrapper-gated
+`useProposalEntityDrafts('feat')` overlay — that only returns rows in a block). Three findings:
+
+- **Toast-wording trap (correct a prior misread).** `useProposalAccumulator` returns **`mode:'proposal'`
+  INSIDE a wrapper** (proposalAccumulator.ts ~214), so `actionLabel` shows **"…submitted for review"**
+  even when queuing into a block. "added to block" (`mode==='block'`) comes only from `useEntityWriter`
+  OUTSIDE the accumulator — a different path. So the toast does **not** distinguish block-queue from
+  standalone; don't use it as the signal. The reliable in-block signal is `useProposalContextOptional()
+  !== null` / the `/proposals/edit/*` route / the wrapper's Submit-Changes UI. (Recorded because it
+  misled diagnosis once.)
+- **List/panel overlays missing for own-type block-draft CREATEs (task #17).** Lists/panels that render
+  only the live DB fetch hide just-queued drafts. Confirmed: (1) `ScalingColumnsPanel` list
+  (`columns={scalingColumns}`) omits block-draft columns (they DO show in the advancement picker via L1);
+  (2) the **option-group list** lacks the `useProposalEntityDrafts('unique_option_group')` overlay that
+  FeatsEditor has (`draftedFeatEntities` ~603) → a queued new group is invisible and can't be reopened to
+  add options. Fix = apply the feat-style list overlay to the option-group list + the scaling panel.
+- **Block-entry gate (user directive, for the proposal-system note).** The real standalone hazard is
+  reaching an editor via the non-proposal route as a content-creator (→ true `mode='proposal'` standalone,
+  no block). User: *"set it so that you need to create a block before being able to enter into the proposal
+  editors."* That's a routing/UX gate over `ProposalEditorWrapper` + `PickOrCreateBlockDialog` (proposal-
+  system infra). Fold into the proposal-system note.
+
+> User decision: these are a **later phase** — "continue in order instead." Next implementation slice is the
+> **feature slice** (features + subclass saves), per the user's Issue-3 confirmation.
 
 ## Decisions / principles to honor
 
