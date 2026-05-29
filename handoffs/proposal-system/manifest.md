@@ -3,7 +3,7 @@
 Started: `2026-05-28`
 Owner: `Claude`
 Goal: `Own and evolve the content-proposals subsystem — queue/drafts/blocks, cascade engine, review mode, and proposal-mode editor wiring. Specific task per session.`
-Status: `active`
+Status: `paused` — Part D (atomic approve + guard #1) deferred until `compendium-editors` finishes B/C and hands back. See [2026-05-29-partD-paused-awaiting-bc.md](2026-05-29-partD-paused-awaiting-bc.md).
 
 > Lives in the `loving-banach-d76c40` worktree directory (the dir
 > couldn't be renamed to match the branch — Windows locks the active
@@ -54,6 +54,12 @@ Proposal-mode logic lives *inside* these files, but the files themselves are own
 
 Newest at the top. Each entry: date + link to the handoff doc in this same folder.
 
+- `2026-05-29` — **Part D paused; handed off to compendium-editors to finish B/C
+  first.** [2026-05-29-partD-paused-awaiting-bc.md](2026-05-29-partD-paused-awaiting-bc.md)
+  documents the full proposal-system state + the §3 checklist I need back at
+  handback (final overlay coverage, queued payload shapes, parent_types in play,
+  any new refs, a sample block) so guard #1 + the atomic approve are built
+  against what's actually wired. Branch status → `paused`.
 - `2026-05-29` — **Responded to compendium-editors' B/C follow-up** (reply:
   [../compendium-editors/2026-05-29-proposal-system-reply.md](../compendium-editors/2026-05-29-proposal-system-reply.md)).
   Shipped: **R1** — `scaling_column.writableColumns` += `type`/`identifier`/
