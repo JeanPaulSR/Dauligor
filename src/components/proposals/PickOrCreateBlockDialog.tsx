@@ -44,6 +44,13 @@ export type PickOrCreateBlockDialogProps = {
   title?: string;
   /** Optional description override. */
   description?: string;
+  /**
+   * Block-entry gate mode. When true the dialog hides its Cancel
+   * button — the caller (ProposalEditorWrapper) is using it to force
+   * block selection before authoring, and there's no "cancel" path
+   * (dismissing just returns to the gate panel, which re-prompts).
+   */
+  required?: boolean;
 };
 
 export function PickOrCreateBlockDialog({
@@ -54,6 +61,7 @@ export function PickOrCreateBlockDialog({
   onCreate,
   title = 'Pick a block to submit into',
   description = "You haven't opened a block yet. Choose one of your existing open blocks, or create a new one to bundle these changes.",
+  required = false,
 }: PickOrCreateBlockDialogProps) {
   // The create form lives in BlockMetadataDialog; this dialog opens
   // it when the user clicks "+ Create new block". The two dialogs
@@ -115,9 +123,13 @@ export function PickOrCreateBlockDialog({
             )}
           </div>
           <DialogFooter className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
+            {required ? (
+              <span />
+            ) : (
+              <Button variant="outline" onClick={() => onOpenChange(false)}>
+                Cancel
+              </Button>
+            )}
             <Button
               onClick={handleCreateRequest}
               className="gap-2 bg-gold text-white"

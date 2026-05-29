@@ -281,7 +281,14 @@ const ENTITY_CONFIGS: Record<EntityType, EntityConfig> = {
   scaling_column: {
     tableName: "scaling_columns",
     pkColumn: "id",
-    writableColumns: new Set(["id", "name", "parent_id", "parent_type", "values"]),
+    // `type` ('number'|'dice'|'string'|'cr'|'distance'), `identifier`, and
+    // `distance_units` were added by migration 20260508-1158 and are part of
+    // the editor's payload. Omitting them dropped a proposed column's type on
+    // approval (a "dice" column reverted to the 'number' default). (R1 fix.)
+    writableColumns: new Set([
+      "id", "name", "parent_id", "parent_type", "values",
+      "type", "identifier", "distance_units",
+    ]),
     jsonColumns: new Set(["values"]),
   },
   // Class/subclass features — the existing `features` table. Writable
