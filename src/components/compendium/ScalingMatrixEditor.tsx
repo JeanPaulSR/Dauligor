@@ -7,6 +7,7 @@ import { Trash2, Save } from 'lucide-react';
 import { fetchDocument } from '../../lib/d1';
 import { slugify } from '../../lib/utils';
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
+import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
 import { actionLabel } from '../../lib/proposalAware';
 
 /**
@@ -93,6 +94,10 @@ export default function ScalingMatrixEditor({
   // queues into the active block for content-creators.
   const writer = useProposalAccumulator('scaling_column', userProfile);
   const inBlock = useProposalContextOptional() !== null;
+  // When editing a column that's still a block draft (created in this block,
+  // no live row yet), load it from the queue instead of a live fetch that
+  // would come back empty. Empty outside a <ProposalEditorWrapper>.
+  const columnDrafts = useProposalEntityDrafts('scaling_column');
 
   // Keep parent identity in sync if the host reuses the widget for a
   // different owner (the modal may stay mounted across selections).
@@ -106,7 +111,7 @@ export default function ScalingMatrixEditor({
     if (columnId) {
       let active = true;
       const load = async () => {
-        const data = await fetchDocument<any>('scaling_columns', columnId);
+        const data = columnDrafts.byId.get(columnId) ?? await fetchDocument<any>('scaling_columns', columnId);
         if (!active || !data) return;
         setName(data.name || '');
         setIdentifier(data.identifier || '');
