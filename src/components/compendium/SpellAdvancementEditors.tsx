@@ -4,6 +4,7 @@ import { fetchCollection } from '../../lib/d1';
 import { fetchSpellSummaries } from '../../lib/spellSummary';
 import { fetchAllRules, type SpellRule } from '../../lib/spellRules';
 import EntityPicker from '../ui/EntityPicker';
+import { useBlockDraftPickerOptions } from '../../hooks/useBlockDraftPickerOptions';
 import { cn } from '../../lib/utils';
 
 /**
@@ -47,20 +48,26 @@ export function GrantSpellsConfigEditor({
 }) {
   const cfg = useNormalizedGrantSpellsCfg(configuration);
   const { spells, rules, classes } = useSpellAdvancementFoundation();
+  // Block-draft overlays (Part C L3). GrantSpells/ExtendSpellList self-fetch
+  // their spell/rule/class catalogs, so the same-block-draft overlay lives here
+  // rather than at a parent. Empty outside a <ProposalEditorWrapper>.
+  const spellDraftOptions = useBlockDraftPickerOptions('spell');
+  const ruleDraftOptions = useBlockDraftPickerOptions('spell_rule');
+  const classDraftOptions = useBlockDraftPickerOptions('class');
 
   const updateField = (patch: Record<string, any>) => onChange({ ...configuration, ...patch });
   const updateResolver = (patch: Record<string, any>) =>
     onChange({ ...configuration, resolver: { ...(configuration.resolver || {}), ...patch } });
 
   const spellEntities = useMemo(
-    () => spells.map(s => ({ id: s.id, name: s.name, hint: s.level === 0 ? 'C' : `L${s.level}` })),
-    [spells],
+    () => [...spells.map(s => ({ id: s.id, name: s.name, hint: s.level === 0 ? 'C' : `L${s.level}` })), ...spellDraftOptions],
+    [spells, spellDraftOptions],
   );
   const ruleEntities = useMemo(
-    () => rules.map(r => ({ id: r.id, name: r.name, hint: r.description ? r.description.slice(0, 24) : undefined })),
-    [rules],
+    () => [...rules.map(r => ({ id: r.id, name: r.name, hint: r.description ? r.description.slice(0, 24) : undefined })), ...ruleDraftOptions],
+    [rules, ruleDraftOptions],
   );
-  const classEntities = useMemo(() => classes.map(c => ({ id: c.id, name: c.name })), [classes]);
+  const classEntities = useMemo(() => [...classes.map(c => ({ id: c.id, name: c.name })), ...classDraftOptions], [classes, classDraftOptions]);
 
   return (
     <div className="space-y-4">
@@ -189,20 +196,26 @@ export function ExtendSpellListConfigEditor({
 }) {
   const cfg = useNormalizedExtendCfg(configuration);
   const { spells, rules, classes } = useSpellAdvancementFoundation();
+  // Block-draft overlays (Part C L3). GrantSpells/ExtendSpellList self-fetch
+  // their spell/rule/class catalogs, so the same-block-draft overlay lives here
+  // rather than at a parent. Empty outside a <ProposalEditorWrapper>.
+  const spellDraftOptions = useBlockDraftPickerOptions('spell');
+  const ruleDraftOptions = useBlockDraftPickerOptions('spell_rule');
+  const classDraftOptions = useBlockDraftPickerOptions('class');
 
   const updateField = (patch: Record<string, any>) => onChange({ ...configuration, ...patch });
   const updateResolver = (patch: Record<string, any>) =>
     onChange({ ...configuration, resolver: { ...(configuration.resolver || {}), ...patch } });
 
   const spellEntities = useMemo(
-    () => spells.map(s => ({ id: s.id, name: s.name, hint: s.level === 0 ? 'C' : `L${s.level}` })),
-    [spells],
+    () => [...spells.map(s => ({ id: s.id, name: s.name, hint: s.level === 0 ? 'C' : `L${s.level}` })), ...spellDraftOptions],
+    [spells, spellDraftOptions],
   );
   const ruleEntities = useMemo(
-    () => rules.map(r => ({ id: r.id, name: r.name })),
-    [rules],
+    () => [...rules.map(r => ({ id: r.id, name: r.name })), ...ruleDraftOptions],
+    [rules, ruleDraftOptions],
   );
-  const classEntities = useMemo(() => classes.map(c => ({ id: c.id, name: c.name })), [classes]);
+  const classEntities = useMemo(() => [...classes.map(c => ({ id: c.id, name: c.name })), ...classDraftOptions], [classes, classDraftOptions]);
 
   return (
     <div className="space-y-4">

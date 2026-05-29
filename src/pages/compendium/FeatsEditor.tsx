@@ -270,6 +270,11 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
   const scalingColumnDraftOptions = useBlockDraftPickerOptions('scaling_column');
   const optionGroupDraftOptions = useBlockDraftPickerOptions('unique_option_group');
   const featDraftOptions = useBlockDraftPickerOptions('feat');
+  // Also merged into the RequirementsEditor lookups (Part C L2) so a feat's
+  // prerequisites can reference a same-block draft class / subclass / spell-rule.
+  const classDraftOptions = useBlockDraftPickerOptions('class');
+  const subclassDraftOptions = useBlockDraftPickerOptions('subclass');
+  const spellRuleDraftOptions = useBlockDraftPickerOptions('spell_rule');
   const focusMode = proposalContext?.focusMode ?? 'drafts';
   const focusModeEnabled = proposalContext?.focusModeEnabled ?? false;
   const reviewMode = useProposalReview();
@@ -691,12 +696,15 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
   }, [displayEntries, search, sourceNameById, focusModeEnabled, focusMode, draftedFeatIds, unlockedBaseIds, scopeFeatType, axisFilters]);
 
   const requirementsLookups: RequirementsEditorLookups = useMemo(() => ({
-    classes: classes.map((c: any) => ({ id: c.id, name: c.name })),
-    subclasses: subclasses.map((s: any) => ({ id: s.id, name: s.name })),
-    spellRules: spellRules.map((r: any) => ({ id: r.id, name: r.name })),
-    optionGroups: allOptionGroups.map((g) => ({ id: g.id, name: g.name, items: g.items })),
+    classes: [...classes.map((c: any) => ({ id: c.id, name: c.name })), ...classDraftOptions],
+    subclasses: [...subclasses.map((s: any) => ({ id: s.id, name: s.name })), ...subclassDraftOptions],
+    spellRules: [...spellRules.map((r: any) => ({ id: r.id, name: r.name })), ...spellRuleDraftOptions],
+    optionGroups: [
+      ...allOptionGroups.map((g) => ({ id: g.id, name: g.name, items: g.items })),
+      ...optionGroupDraftOptions.map((d) => ({ id: d.id, name: d.name, items: null })),
+    ],
     proficiencies: proficiencyPools,
-  }), [classes, subclasses, spellRules, allOptionGroups, proficiencyPools]);
+  }), [classes, subclasses, spellRules, allOptionGroups, proficiencyPools, classDraftOptions, subclassDraftOptions, spellRuleDraftOptions, optionGroupDraftOptions]);
 
   const requirementsTextLookup = useMemo(() => {
     // Proficiency pools land keyed by their Foundry identifier

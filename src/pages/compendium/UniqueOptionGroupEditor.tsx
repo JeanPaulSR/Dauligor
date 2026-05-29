@@ -33,6 +33,7 @@ import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
 import AdvancementManager from '../../components/compendium/AdvancementManager';
 import FeatureModalHero from '../../components/compendium/FeatureModalHero';
 import RequirementsEditor, { RequirementsEditorLookups } from '../../components/compendium/RequirementsEditor';
+import { useBlockDraftPickerOptions } from '../../hooks/useBlockDraftPickerOptions';
 import {
   Requirement,
   parseRequirementTree,
@@ -114,6 +115,13 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
    * "Category" hint badge to disambiguate.
    */
   const [proficiencyPools, setProficiencyPools] = useState<RequirementsEditorLookups['proficiencies']>({});
+  // Block-draft overlays (Part C L2) for the RequirementsEditor lookups, so an
+  // option item's prerequisites can reference a same-block draft class /
+  // subclass / spell-rule / option-group. Empty outside a <ProposalEditorWrapper>.
+  const classDraftOptions = useBlockDraftPickerOptions('class');
+  const subclassDraftOptions = useBlockDraftPickerOptions('subclass');
+  const spellRuleDraftOptions = useBlockDraftPickerOptions('spell_rule');
+  const optionGroupDraftOptions = useBlockDraftPickerOptions('unique_option_group');
   // Tab state for the option-item modal — mirrors ClassEditor's feature
   // modal so authoring an option (Maneuver / Invocation / Infusion) feels
   // identical to authoring a class feature.
@@ -643,7 +651,7 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
               <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Class Restrictions</label>
               <p className="text-[9px] text-ink/30 italic -mt-1">If none selected, this group is visible to all classes in the advancement editor.</p>
               <EntityPicker
-                entities={classes.map((c: any) => ({ id: c.id, name: c.name }))}
+                entities={[...classes.map((c: any) => ({ id: c.id, name: c.name })), ...classDraftOptions]}
                 selectedIds={groupClassIds}
                 onChange={setGroupClassIds}
                 searchPlaceholder="Search classes…"
@@ -897,10 +905,10 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                       requirementsTree: next,
                     }))}
                     lookups={{
-                      classes: classes.map((c: any) => ({ id: c.id, name: c.name })),
-                      subclasses: subclasses.map((s: any) => ({ id: s.id, name: s.name })),
-                      spellRules: spellRules.map((r: any) => ({ id: r.id, name: r.name })),
-                      optionGroups: allOptionGroups,
+                      classes: [...classes.map((c: any) => ({ id: c.id, name: c.name })), ...classDraftOptions],
+                      subclasses: [...subclasses.map((s: any) => ({ id: s.id, name: s.name })), ...subclassDraftOptions],
+                      spellRules: [...spellRules.map((r: any) => ({ id: r.id, name: r.name })), ...spellRuleDraftOptions],
+                      optionGroups: [...allOptionGroups, ...optionGroupDraftOptions.map((d) => ({ id: d.id, name: d.name, items: null }))],
                       proficiencies: proficiencyPools,
                     }}
                   />
