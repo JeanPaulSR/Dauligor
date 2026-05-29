@@ -36,7 +36,7 @@ export interface BbcodeViewContext {
  * Foundry-side reference handling is the deferred live-content-bridge's job.
  */
 export type RefKind =
-  | 'spell' | 'class' | 'subclass' | 'feat' | 'item' | 'condition' | 'article';
+  | 'spell' | 'class' | 'subclass' | 'feat' | 'item' | 'condition' | 'article' | 'option-group';
 
 export function resolveRefRoute(kind: string, id: string, anchor?: string): string | null {
   const safeId = encodeURIComponent(id);

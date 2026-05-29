@@ -16,6 +16,7 @@
 import { batchQueryD1, queryD1 } from './d1';
 import { resolveRefRoute, type RefKind } from './bbcode';
 import { parseRequirementTree, resolveDetailPrereq, type RequirementFormatLookup } from './requirements';
+import { slugifyReferenceSegment } from './referenceSyntax';
 
 /** Escape LIKE wildcards so the user's query matches literally. */
 function escapeLike(s: string): string {
@@ -42,8 +43,20 @@ export interface RefResolved extends RefSearchResult {
    * line surface the complete requirement when hovered. '' when none.
    */
   prereqFull: string;
+  /** Card image for image-led kinds (classes); absent/null otherwise. */
+  imageUrl?: string | null;
+  /** Source abbreviation for image-led cards (classes), e.g. "PHB". */
+  sourceLabel?: string | null;
   /** In-app route, or null when the kind has no public route yet (e.g. subclass, condition). */
   route: string | null;
+  /**
+   * Resolved DB primary-key id — distinct from `id`, which is the semantic
+   * identifier/slug used in the `@kind[id]` syntax. Lets a host load the full
+   * document by primary key (e.g. opening the class preview pane, which
+   * fetches via `fetchDocument('classes', pk)`). Absent for derived-slug kinds
+   * (option groups) that have no single backing row.
+   */
+  docId?: string;
 }
 
 interface KindConfig {
@@ -52,12 +65,33 @@ interface KindConfig {
   nameCol: string;
   /** SQL expression producing the hover-card summary for this kind. */
   summaryExpr: string;
+  /** SQL expression for a card image (classes show an image-led preview card). */
+  imageExpr?: string;
+  /** SQL expression for a source label (classes show the source abbreviation). */
+  sourceExpr?: string;
   /** Short-description override column — highest-priority prereq (feats). */
   shortTextCol?: string;
   /** Free-text requirements column — lowest-priority prereq (feats). */
   freeTextCol?: string;
   /** Structured requirement-tree column → the composite prereq (feats). */
   treeCol?: string;
+  /**
+   * Kinds without a stored slug identifier (unique option groups key by a
+   * random id). The reference id is derived as slugify(name) — names are
+   * unique — and matched in JS: search returns slugify(name) as the id, and
+   * resolve fetches the (small) table and matches slugify(name) === id.
+   */
+  deriveSlugId?: boolean;
+  /**
+   * Child-options table for drill-down kinds (option groups → their items).
+   * A composite id `<group-slug>:<item-slug>` resolves to one option inside a
+   * group. itemNameCol/itemSummaryExpr default to name/description.
+   */
+  itemsTable?: string;
+  /** FK column on the items table pointing back to the parent group row. */
+  itemFkCol?: string;
+  itemNameCol?: string;
+  itemSummaryExpr?: string;
 }
 
 /**
@@ -70,12 +104,15 @@ interface KindConfig {
  */
 const KIND_CONFIG: Record<string, KindConfig> = {
   spell:     { table: 'spells',            idCol: 'identifier', nameCol: 'name',  summaryExpr: 'description' },
-  class:     { table: 'classes',           idCol: 'identifier', nameCol: 'name',  summaryExpr: "COALESCE(NULLIF(preview, ''), description)" },
-  subclass:  { table: 'subclasses',        idCol: 'identifier', nameCol: 'name',  summaryExpr: 'description' },
+  class:     { table: 'classes',           idCol: 'identifier', nameCol: 'name',  summaryExpr: "COALESCE(NULLIF(preview, ''), description)", imageExpr: "COALESCE(NULLIF(card_image_url, ''), image_url)", sourceExpr: "(SELECT abbreviation FROM sources WHERE sources.id = classes.source_id)" },
+  subclass:  { table: 'subclasses',        idCol: 'identifier', nameCol: 'name',  summaryExpr: "COALESCE(NULLIF(preview, ''), description)" },
   feat:      { table: 'feats',             idCol: 'identifier', nameCol: 'name',  summaryExpr: 'description', shortTextCol: 'requirements_short_text', freeTextCol: 'requirements', treeCol: 'requirements_tree' },
   item:      { table: 'items',             idCol: 'identifier', nameCol: 'name',  summaryExpr: 'description' },
   condition: { table: 'status_conditions', idCol: 'identifier', nameCol: 'name',  summaryExpr: 'description' },
   article:   { table: 'lore_articles',     idCol: 'slug',       nameCol: 'title', summaryExpr: 'excerpt' },
+  // No stored slug — keyed by slugify(name) (names are unique). idCol=name so
+  // the search query filters by name; the resolved/search id is slugified.
+  'option-group': { table: 'unique_option_groups', idCol: 'name', nameCol: 'name', summaryExpr: 'description', deriveSlugId: true, itemsTable: 'unique_option_items', itemFkCol: 'group_id' },
 };
 
 /** The reference kinds with a backing table + search/resolve support today. */
@@ -83,7 +120,7 @@ export const REFERENCEABLE_KINDS = Object.keys(KIND_CONFIG) as RefKind[];
 
 /** Which kinds each sigil searches. `@` = entity documents, `&` = rules. */
 export const FAMILY_KINDS: Record<'entity' | 'rule', RefKind[]> = {
-  entity: ['spell', 'class', 'subclass', 'feat', 'item', 'article'],
+  entity: ['spell', 'class', 'subclass', 'feat', 'item', 'article', 'option-group'],
   rule: ['condition'],
 };
 
@@ -123,9 +160,13 @@ export async function searchReferenceFamily(
     (s: { results?: Array<{ kind: string; id: string; name: string | null }> }) => s?.results ?? [],
   );
   rows.sort((a, b) => String(a.name ?? a.id).localeCompare(String(b.name ?? b.id)));
-  return rows
-    .slice(0, limit)
-    .map((r) => ({ kind: r.kind as RefKind, id: String(r.id), name: String(r.name ?? r.id) }));
+  return rows.slice(0, limit).map((r) => {
+    const kind = r.kind as RefKind;
+    const name = String(r.name ?? r.id);
+    // Kinds without a stored slug (option groups) key by slugify(name).
+    const id = KIND_CONFIG[kind]?.deriveSlugId ? slugifyReferenceSegment(name) : String(r.id);
+    return { kind, id, name };
+  });
 }
 
 /**
@@ -147,6 +188,37 @@ export async function searchReferences(
     `ORDER BY ${cfg.nameCol} LIMIT ?`;
   const rows = await queryD1<{ id: string; name: string | null }>(sql, [like, like, limit]);
   return rows.map((r) => ({ kind: kind as RefKind, id: String(r.id), name: String(r.name ?? r.id) }));
+}
+
+/**
+ * Drill-down: the options inside one option group. Powers the @-autocomplete
+ * after the user picks a group. Returns composite ids `<group-slug>:<item-slug>`
+ * so inserting one yields `@option-group[metamagic:twin-spell]{Twin Spell}`.
+ */
+export async function searchOptionGroupItems(
+  groupSlug: string,
+  query = '',
+  limit = 30,
+): Promise<RefSearchResult[]> {
+  const cfg = KIND_CONFIG['option-group'];
+  if (!cfg?.itemsTable) return [];
+  const groups = await queryD1<{ gid: string; name: string | null }>(
+    `SELECT id AS gid, ${cfg.nameCol} AS name FROM ${cfg.table}`,
+  );
+  const group = groups.find((g) => slugifyReferenceSegment(String(g.name ?? '')) === groupSlug);
+  if (!group) return [];
+  const nameCol = cfg.itemNameCol ?? 'name';
+  const like = `%${escapeLike(query.trim())}%`;
+  const items = await queryD1<{ name: string | null }>(
+    `SELECT ${nameCol} AS name FROM ${cfg.itemsTable} WHERE ${cfg.itemFkCol} = ? ` +
+      `AND ${nameCol} LIKE ? ESCAPE '\\' ORDER BY ${nameCol} LIMIT ${limit}`,
+    [group.gid, like],
+  );
+  return items.map((it) => ({
+    kind: 'option-group' as RefKind,
+    id: `${groupSlug}:${slugifyReferenceSegment(String(it.name ?? ''))}`,
+    name: String(it.name ?? ''),
+  }));
 }
 
 /**
@@ -186,10 +258,39 @@ function getRequirementLookup(): Promise<RequirementFormatLookup> {
 export async function resolveReference(kind: string, id: string): Promise<RefResolved | null> {
   const cfg = KIND_CONFIG[kind];
   if (!cfg) return null;
-  const cols = [`${cfg.idCol} AS id`, `${cfg.nameCol} AS name`, `${cfg.summaryExpr} AS summary`];
+  if (cfg.deriveSlugId) {
+    // id is `<group-slug>` or `<group-slug>:<item-slug>`. These rows have no
+    // stored slug, so match slugify(name) over the (small) tables in JS.
+    const [groupSlug, itemSlug] = id.split(':');
+    const groups = await queryD1<{ gid: string; name: string | null; summary: string | null }>(
+      `SELECT id AS gid, ${cfg.nameCol} AS name, ${cfg.summaryExpr} AS summary FROM ${cfg.table}`,
+    );
+    const group = groups.find((g) => slugifyReferenceSegment(String(g.name ?? '')) === groupSlug);
+    if (!group) return null;
+    const base = { kind: kind as RefKind, id, prereq: '', prereqFull: '', route: resolveRefRoute(kind, id) };
+    if (!itemSlug) {
+      return { ...base, name: String(group.name ?? id), summary: String(group.summary ?? '') };
+    }
+    // A specific option inside the group.
+    if (!cfg.itemsTable) return null;
+    const nameCol = cfg.itemNameCol ?? 'name';
+    const items = await queryD1<{ name: string | null; summary: string | null }>(
+      `SELECT ${nameCol} AS name, ${cfg.itemSummaryExpr ?? 'description'} AS summary FROM ${cfg.itemsTable} WHERE ${cfg.itemFkCol} = ?`,
+      [group.gid],
+    );
+    const item = items.find((it) => slugifyReferenceSegment(String(it.name ?? '')) === itemSlug);
+    if (!item) return null;
+    return { ...base, name: String(item.name ?? id), summary: String(item.summary ?? '') };
+  }
+  // `id AS doc_id` carries the real primary key alongside the semantic `id`
+  // (which is the identifier/slug for every configured kind). Hosts that need
+  // to fetch the full document by PK (e.g. the class preview pane) read docId.
+  const cols = [`${cfg.idCol} AS id`, `${cfg.nameCol} AS name`, `${cfg.summaryExpr} AS summary`, 'id AS doc_id'];
   if (cfg.shortTextCol) cols.push(`${cfg.shortTextCol} AS prereq_short`);
   if (cfg.freeTextCol) cols.push(`${cfg.freeTextCol} AS prereq_free`);
   if (cfg.treeCol) cols.push(`${cfg.treeCol} AS requirements_tree`);
+  if (cfg.imageExpr) cols.push(`${cfg.imageExpr} AS image`);
+  if (cfg.sourceExpr) cols.push(`${cfg.sourceExpr} AS source_label`);
   const sql = `SELECT ${cols.join(', ')} FROM ${cfg.table} WHERE ${cfg.idCol} = ? LIMIT 1`;
   const rows = await queryD1<{
     id: string;
@@ -198,6 +299,9 @@ export async function resolveReference(kind: string, id: string): Promise<RefRes
     prereq_short?: string | null;
     prereq_free?: string | null;
     requirements_tree?: unknown;
+    image?: string | null;
+    source_label?: string | null;
+    doc_id?: string | null;
   }>(sql, [id]);
   const row = rows[0];
   if (!row) return null;
@@ -225,6 +329,9 @@ export async function resolveReference(kind: string, id: string): Promise<RefRes
     summary: String(row.summary ?? ''),
     prereq,
     prereqFull,
+    imageUrl: row.image ?? null,
+    sourceLabel: row.source_label ?? null,
     route: resolveRefRoute(kind, String(row.id)),
+    docId: row.doc_id != null ? String(row.doc_id) : undefined,
   };
 }
