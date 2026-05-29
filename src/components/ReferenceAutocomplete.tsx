@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { Editor } from '@tiptap/react';
 import { searchReferenceFamily, type RefSearchResult } from '../lib/references';
 
@@ -160,11 +161,38 @@ export default function ReferenceAutocomplete({ editor, enabled }: Props) {
     return () => dom.removeEventListener('keydown', onKeyDown, true);
   }, [editor, enabled, close, select]);
 
+  // Keep the menu glued to the trigger text while the view scrolls. The
+  // coords captured at trigger time are viewport-relative (position:fixed),
+  // so without this the menu stays put on screen while the text scrolls out
+  // from under it. Recompute from the sigil's doc position on any scroll
+  // (capture phase catches scroll in the editor's own scroll container too)
+  // and on resize. coordsAtPos can throw if the position is gone — close then.
+  useEffect(() => {
+    if (!editor || !enabled) return;
+    const reposition = () => {
+      const m = menuRef.current;
+      if (!m) return;
+      let coords;
+      try {
+        coords = editor.view.coordsAtPos(m.from);
+      } catch {
+        return close();
+      }
+      setMenu((prev) => (prev ? { ...prev, left: coords.left, top: coords.bottom } : prev));
+    };
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
+    return () => {
+      window.removeEventListener('scroll', reposition, true);
+      window.removeEventListener('resize', reposition);
+    };
+  }, [editor, enabled, close]);
+
   if (!menu) return null;
 
-  return (
+  return createPortal(
     <div
-      className="fixed z-[100] w-72 max-h-64 overflow-y-auto rounded-md border border-gold/30 bg-card shadow-xl shadow-black/30 py-1"
+      className="fixed z-[100] w-72 max-h-64 overflow-y-auto custom-scrollbar rounded-md border border-gold/30 bg-card shadow-xl shadow-black/30 py-1"
       style={{ left: menu.left, top: menu.top + 4 }}
       onMouseDown={(e) => e.preventDefault() /* keep editor focus */}
     >
@@ -194,6 +222,7 @@ export default function ReferenceAutocomplete({ editor, enabled }: Props) {
           </button>
         ))
       )}
-    </div>
+    </div>,
+    document.body,
   );
 }

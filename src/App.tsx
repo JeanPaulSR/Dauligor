@@ -78,6 +78,7 @@ import ProposalEditorComingSoon from './pages/proposals/ProposalEditorComingSoon
 import { ProposalEditorWrapper } from './components/proposals/ProposalEditorWrapper';
 
 import DebugConsole from './components/DebugConsole';
+import ReferenceHoverCard from './components/reference/ReferenceHoverCard';
 import { Toaster } from 'sonner';
 
 export default function App() {
@@ -450,6 +451,7 @@ export default function App() {
               </div>
             </footer>
             {effectiveProfile?.role === 'admin' && <DebugConsole />}
+            <ReferenceHoverCard />
             <Toaster position="top-center" richColors />
           </div>
         </div>

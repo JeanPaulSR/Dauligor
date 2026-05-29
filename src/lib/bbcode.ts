@@ -46,9 +46,15 @@ export function resolveRefRoute(kind: string, id: string, anchor?: string): stri
     case 'class':     return `/compendium/classes/view/${safeId}${frag}`;
     case 'feat':      return `/compendium/feats?focus=${safeId}${frag}`;
     case 'item':      return `/compendium/items?focus=${safeId}${frag}`;
-    case 'condition': return `/admin/statuses?focus=${safeId}${frag}`;
     case 'article':   return `/wiki/article/${safeId}${frag}`;
-    // subclass + unknown kinds have no clean public route yet → dangling.
+    // `&condition` (and other `&` rule refs) intentionally have NO route
+    // yet. They must NOT link to the /admin/statuses editor — that's an
+    // admin tool, not a reader surface. Rule refs are destined for the
+    // future system-page article type (Foundry-journal-like, addressable
+    // by section anchor); until that ships they resolve as dangling. The
+    // hover card still surfaces the condition's name/summary via
+    // resolveReference — only click-through navigation is deferred.
+    // subclass + unknown kinds likewise have no clean public route yet.
     default:          return null;
   }
 }
@@ -140,8 +146,11 @@ export function bbcodeToHtml(text: string, context?: BbcodeViewContext): string 
         if (route) {
           return `<a class="ref-link ref-${safeKind}" ${data} href="${escapeAttr(route)}">${display}</a>`;
         }
-        // Unknown/unrouteable kind (e.g. subclass today) — styled, non-clickable
-        // badge so the reference is visible but clearly unresolved.
+        // No route → styled, non-clickable badge (gold-dotted, help cursor)
+        // so the reference is visible but clearly "not clickable yet". Covers
+        // both the truly-unrouteable (subclass, unknown kinds) and the
+        // deliberately-deferred (`&condition` + other `&` rule refs, pending
+        // the system-page article type — see resolveRefRoute).
         return `<span class="ref-link ref-${safeKind} ref-dangling" ${data}>${display}</span>`;
       }
     );
@@ -316,11 +325,31 @@ export function htmlToBbcode(html: string): string {
   bbcode = bbcode.replace(/<sub>([\s\S]*?)<\/sub>/gi, '[sub]$1[/sub]');
   bbcode = bbcode.replace(/<sup>([\s\S]*?)<\/sup>/gi, '[sup]$1[/sup]');
   
-  // Cross-references need no reverse handling: in editor mode the editor
-  // never renders them to anchors (they stay as `@kind[id]{display}` text),
-  // so they round-trip as plain text. Any stray reader-rendered ref-link
-  // anchor that somehow reached here would be handled by the generic
-  // <a href> -> [url] pass below — but that path doesn't occur in practice.
+  // Cross-references: rebuild reader-rendered ref-links back into source
+  // syntax. In EDITOR mode refs stay as `@kind[id]{display}` text (never
+  // anchors), so normal editing round-trips them as plain text. But READER
+  // HTML — which DOES contain `<a class="ref-link" data-ref-*>` (routed) and
+  // `<span class="ref-link … ref-dangling">` (no-route) — round-trips through
+  // here too (e.g. the /dev/bbcode diagnostic). Without this pass those
+  // anchors fall through to the generic `<a href>` → `[url]` rule and the
+  // reference is corrupted. Must run BEFORE the link + span-strip passes.
+  // Reconstructed ids/display stay HTML-escaped here; the entity-decode pass
+  // at the end of this function restores `&amp;`→`&` etc.
+  bbcode = bbcode.replace(
+    /<(a|span)\b([^>]*\bref-link\b[^>]*)>([\s\S]*?)<\/\1>/gi,
+    (match, _tag, attrs, inner) => {
+      const kind = /\bdata-ref-kind="([^"]*)"/i.exec(attrs)?.[1];
+      const id = /\bdata-ref-id="([^"]*)"/i.exec(attrs)?.[1];
+      if (!kind || !id) return match; // not a real ref — leave for later passes
+      const sigilRaw = /\bdata-ref-sigil="([^"]*)"/i.exec(attrs)?.[1] ?? '@';
+      const sigil = sigilRaw === '@' ? '@' : '&';
+      const anchor = /\bdata-ref-anchor="([^"]*)"/i.exec(attrs)?.[1] ?? '';
+      const display = inner.replace(/<[^>]+>/g, '').trim();
+      const frag = anchor ? `#${anchor}` : '';
+      const disp = display ? `{${display}}` : '';
+      return `${sigil}${kind}[${id}]${frag}${disp}`;
+    },
+  );
 
   // Links
   bbcode = bbcode.replace(/<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (match, url, text) => {
