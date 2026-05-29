@@ -270,6 +270,7 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
   const scalingColumnDraftOptions = useBlockDraftPickerOptions('scaling_column');
   const optionGroupDraftOptions = useBlockDraftPickerOptions('unique_option_group');
   const featDraftOptions = useBlockDraftPickerOptions('feat');
+  const optionItemDraftOptions = useBlockDraftPickerOptions('unique_option_item');
   // Also merged into the RequirementsEditor lookups (Part C L2) so a feat's
   // prerequisites can reference a same-block draft class / subclass / spell-rule.
   const classDraftOptions = useBlockDraftPickerOptions('class');
@@ -397,6 +398,10 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
     name: string;
     items: Array<{ id: string; name: string }>;
   }>>([]);
+  // Flat option-item list (with groupId) for AdvancementManager — it resolves a
+  // group's items from `availableOptionItems.filter(i => i.groupId === groupId)`,
+  // so a feat advancement that grants/chooses from an option group needs these.
+  const [allOptionItems, setAllOptionItems] = useState<any[]>([]);
   const [proficiencyPools, setProficiencyPools] = useState<
     Partial<Record<ProficiencyKind, Array<{ id: string; name: string; hint?: string }>>>
   >({});
@@ -535,6 +540,9 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
             .map((it: any) => ({ id: it.id, name: it.name })),
         }));
         setAllOptionGroups(groupsWithItems);
+        // denormalize → camelCase so items carry `groupId` (+ levelPrerequisite),
+        // the shape AdvancementManager's group→items filter expects.
+        setAllOptionItems(optionItemRows.map((i: any) => denormalizeCompendiumData(i)));
 
         const mergeProf = (
           entriesArr: any[],
@@ -1428,7 +1436,7 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
                 // GROUPS, not raw items. Leaving the prop empty mirrors the
                 // pattern in ClassEditor where group-level choice is the
                 // primary path.
-                availableOptionItems={[]}
+                availableOptionItems={[...allOptionItems, ...optionItemDraftOptions]}
                 // Scaling columns owned by THIS feat. Passing them
                 // lets a ScaleValue advancement reference the
                 // feat's own progression tables (e.g. a feat that
