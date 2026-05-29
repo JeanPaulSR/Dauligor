@@ -637,7 +637,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   // F2 — the Features list shows live rows; in a block, merge this class's
   // queued draft features in so a just-added feature is visible (not gone until
   // a reload). Unchanged on admin-direct routes.
-  const displayFeatures = useBlockDraftedList('feature', features, { parentId: id, parentType: 'class' });
+  const displayFeatures = useBlockDraftedList('feature', features, { parentId: effectiveId, parentType: 'class' });
   const [advancements, setAdvancements] = useState<Advancement[]>([]);
 
   const normalizeEditorAdvancements = useCallback((list: any[] = [], defaultLevel = 1, dieOverride?: number) => (
@@ -1094,7 +1094,10 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
 
   const handleSaveFeature = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!id) return;
+    // effectiveId, not id: a class created in a block carries its minted id
+    // here even though useParams.id is still null on the /new route, so features
+    // can be authored without a reload (reload-gap fix).
+    if (!effectiveId) return;
 
     try {
       let parsedActivities = {};
@@ -1107,7 +1110,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
 
       const featureData: any = {
         ...editingFeature,
-        parentId: id,
+        parentId: effectiveId,
         parentType: 'class',
         advancements: normalizeEditorAdvancements(editingFeature.advancements || [], Number(editingFeature.level || 1) || 1),
         identifier: editingFeature.identifier || slugify(editingFeature.name || ''),
@@ -4343,9 +4346,9 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
             component with their own parentType so behavior stays
             in lockstep across owner kinds. */}
         <div className="xl:col-span-1 space-y-6">
-          {id ? (
+          {effectiveId ? (
             <ScalingColumnsPanel
-              parentId={id}
+              parentId={effectiveId}
               parentType="class"
               columns={scalingColumns}
               onColumnsChanged={() => setLoadTick((t) => t + 1)}

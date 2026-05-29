@@ -162,6 +162,11 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
   // to the queue when the live row doesn't exist yet (post-Create
   // navigate without flush) so the form doesn't blank out.
   const subclassDrafts = useProposalEntityDrafts('subclass');
+  // Parent-class drafts: when this subclass's parent class is itself a draft in
+  // the same block (the "class + subclass in one block" flow), the live fetch
+  // finds nothing — so resolve the parent from the block draft first, then fall
+  // back to the DB. Empty outside a <ProposalEditorWrapper>.
+  const classDrafts = useProposalEntityDrafts('class');
   // Block-draft picker overlays (Part C L1). Drafts authored in the active block
   // (this subclass's features, option groups/items, feats, scaling columns) have
   // no live row yet; surface them in the advancement pickers (display-only,
@@ -212,7 +217,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
   // just-added feature is visible in a block (not gone until reload). Unchanged
   // on admin-direct routes. (parentFeatures, the inherited class features, are
   // NOT overlaid — they belong to the parent class.)
-  const displayFeatures = useBlockDraftedList('feature', features, { parentId: id, parentType: 'subclass' });
+  const displayFeatures = useBlockDraftedList('feature', features, { parentId: effectiveId, parentType: 'subclass' });
   const [parentFeatures, setParentFeatures] = useState<any[]>([]);
   const [scalingColumns, setScalingColumns] = useState<any[]>([]);
   const [advancements, setAdvancements] = useState<Advancement[]>([]);
@@ -335,7 +340,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
       if (!id) {
         setLoading(false);
         if (classId) {
-          const classData = await fetchDocument<any>('classes', classId);
+          const classData = classDrafts.byId.get(classId) ?? await fetchDocument<any>('classes', classId);
           if (classData) {
             setParentClass({
               ...classData,
@@ -402,7 +407,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
 
           const actualClassId = remapped.classId || classId;
           if (actualClassId) {
-            const rawClassData = await fetchDocument<any>('classes', actualClassId);
+            const rawClassData = classDrafts.byId.get(actualClassId) ?? await fetchDocument<any>('classes', actualClassId);
             if (rawClassData) {
               const classData = denormalizeCompendiumData(rawClassData);
               setParentClass({
@@ -633,7 +638,9 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
 
   const handleSaveFeature = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!id) {
+    // effectiveId, not id: a subclass created in a block carries its minted id
+    // here even before useParams.id is set, so features author without a reload.
+    if (!effectiveId) {
       toast.error("Save the subclass first before adding features");
       return;
     }
@@ -641,7 +648,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
     try {
       const featureData: any = {
         ...editingFeature,
-        parentId: id,
+        parentId: effectiveId,
         parentType: 'subclass',
         level: Number(editingFeature.level || editingFeature.configuration?.requiredLevel || 1),
         name: String(editingFeature.name || '').trim(),
@@ -1410,9 +1417,9 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
         </div>
 
         <div className="lg:col-span-1 space-y-6">
-          {id && (
+          {effectiveId && (
             <ScalingColumnsPanel
-              parentId={id}
+              parentId={effectiveId}
               parentType="subclass"
               columns={scalingColumns}
               onColumnsChanged={() => setLoadTick(t => t + 1)}
