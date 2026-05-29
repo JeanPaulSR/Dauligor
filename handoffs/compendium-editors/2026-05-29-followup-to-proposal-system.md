@@ -81,6 +81,26 @@ That's your infrastructure — `ProposalEditorWrapper` + `PickOrCreateBlockDialo
 content in standalone mode. Happy to wire the routing side (`App.tsx`) with you if the gate lives partly
 there.
 
+### R4 — block flush isn't atomic + the create→update fold races a stale draft cache
+
+Two related problems in the flush (`postQueuedChanges` + `POST /api/proposals`), surfaced by a 2026-05-29
+deep dive into building a class proposal-by-proposal (full write-up:
+`docs/architecture/compendium-editors/proposal-block-composition.html`):
+
+- **Non-atomic flush.** `POST /api/proposals` inserts revisions in a `for` loop, one `INSERT` per row, no
+  transaction (`functions/api/proposals/[[path]].ts:314`). If a later row throws (e.g. the old
+  CHECK-constraint 404, or any validation error), the rows already inserted **persist as orphaned draft
+  staging rows**, and a retry duplicates them. A block flush should be atomic (one `env.DB.batch()` /
+  transaction) so a failed Submit leaves nothing half-written.
+- **Create→update fold races a stale `drafts` cache.** The cross-flush fold (CREATE flushed in flush A,
+  UPDATE in flush B → PATCH the existing CREATE draft instead of POSTing an UPDATE that 404s) matches
+  against `existingDrafts = drafts.filter(bundle)`. `drafts` is the `useBlock()` React cache, refreshed
+  async via `refreshBlock()` after each flush. If flush B fires before that refresh lands, the partition
+  misses the CREATE draft and POSTs an UPDATE → `404 "Cannot propose update on missing <entity>"`. We
+  blunted the worst case on our side (editors now decide create-vs-update by live-row membership, so a
+  same-block draft re-saves as a CREATE that folds/patches) — but the cache-staleness window is yours to
+  close (await the refresh before the next flush, or read drafts from a ref/source-of-truth).
+
 ---
 
 ## FYI (no action required, or we're handling it)
