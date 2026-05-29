@@ -30,6 +30,12 @@ export interface BlockDraftedListOptions {
   parentId?: string;
   /** Parent discriminator (e.g. 'class' | 'subclass' | 'feat' | 'item'). */
   parentType?: string;
+  /**
+   * Which payload field holds the parent id. Defaults to `parent_id`
+   * (scaling columns, features). Some children use a different FK:
+   * subclasses key on `class_id`, option items on `group_id`.
+   */
+  parentKey?: string;
 }
 
 export function useBlockDraftedList<T extends { id: string }>(
@@ -40,6 +46,7 @@ export function useBlockDraftedList<T extends { id: string }>(
   const drafts = useProposalEntityDrafts(entityType);
   const parentId = options?.parentId;
   const parentType = options?.parentType;
+  const parentKey = options?.parentKey ?? 'parent_id';
   return useMemo(() => {
     if (drafts.byId.size === 0 && drafts.deletedIds.size === 0) return liveItems;
     const merged: any[] = liveItems.map((e) => {
@@ -49,10 +56,10 @@ export function useBlockDraftedList<T extends { id: string }>(
     });
     for (const [id, payload] of drafts.byId.entries()) {
       if (merged.some((e) => String(e.id) === id)) continue;
-      if (parentId !== undefined && String(payload.parent_id ?? '') !== String(parentId)) continue;
+      if (parentId !== undefined && String(payload[parentKey] ?? '') !== String(parentId)) continue;
       if (parentType !== undefined && String(payload.parent_type ?? '') !== String(parentType)) continue;
       merged.push({ ...denormalizeCompendiumData(payload), id, __draft: true });
     }
     return merged as T[];
-  }, [liveItems, drafts, parentId, parentType]);
+  }, [liveItems, drafts, parentId, parentType, parentKey]);
 }

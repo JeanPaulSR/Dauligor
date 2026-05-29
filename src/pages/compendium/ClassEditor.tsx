@@ -638,6 +638,10 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   // queued draft features in so a just-added feature is visible (not gone until
   // a reload). Unchanged on admin-direct routes.
   const displayFeatures = useBlockDraftedList('feature', features, { parentId: effectiveId, parentType: 'class' });
+  // F2 — same for the Subclasses list. Subclasses key on `class_id` (not
+  // parent_id/parent_type), so match on that. A subclass drafted in this block
+  // shows under its class without a reload.
+  const displaySubclasses = useBlockDraftedList('subclass', subclasses, { parentId: effectiveId, parentKey: 'class_id' });
   const [advancements, setAdvancements] = useState<Advancement[]>([]);
 
   const normalizeEditorAdvancements = useCallback((list: any[] = [], defaultLevel = 1, dieOverride?: number) => (
@@ -1958,14 +1962,14 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
 
             </TabsContent>
             {/* Subclasses */}
-            {id && (
+            {effectiveId && (
               <TabsContent value="subclasses" className="space-y-6 mt-0">
                 <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
                   <div className="section-header">
                     <h2 className="label-text text-gold">Subclasses</h2>
                     <Link to={
                       isProposalRoute
-                        ? `/proposals/edit/subclasses/new?classId=${id}`
+                        ? `/proposals/edit/subclasses/new?classId=${effectiveId}`
                         : `/compendium/subclasses/new?classId=${id}`
                     }>
                       <Button
@@ -2010,7 +2014,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                   </div>
 
                   <div className="divide-y divide-gold/10">
-                    {subclasses.map(sub => (
+                    {displaySubclasses.map(sub => (
                       <div key={sub.id} className="py-2 flex items-center justify-between group">
                         <div className="flex items-center gap-3">
                           <span className="text-sm font-bold text-ink">{sub.name}</span>
@@ -2031,7 +2035,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                         </div>
                       </div>
                     ))}
-                    {subclasses.length === 0 && (
+                    {displaySubclasses.length === 0 && (
                       <p className="py-4 text-center muted-text italic text-[10px]">No subclasses added.</p>
                     )}
                   </div>
