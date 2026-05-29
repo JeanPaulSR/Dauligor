@@ -99,7 +99,8 @@ None currently. Add `- [ ] (date) Request <other-branch> to <change> in <file>` 
 ## Handoff log
 
 - 2026-05-27 — [2026-05-27-live-content-bridge-phase1.md](2026-05-27-live-content-bridge-phase1.md) — Phase 1 status + complete pickup context for Phases 1.5 / 2 / 3 / 4 / 5
-- 2026-05-28 — [2026-05-28-reference-authoring.md](2026-05-28-reference-authoring.md) — **CURRENT**: reference-authoring track (grammar + autocomplete done, hover card + summary field next). Read this to resume after the compaction.
+- 2026-05-28 — [2026-05-28-reference-authoring.md](2026-05-28-reference-authoring.md) — reference-authoring track (grammar + autocomplete done, hover card + summary field next). Archival.
+- 2026-05-29 — [2026-05-29-reference-enhancements.md](2026-05-29-reference-enhancements.md) — **CURRENT**: P4 hover card (`ae49935`); prereq resolution + option-group drill-down + class card data (`57607d8`); subclass preview + local migration (`ffacedd`); ClassPreviewCard + self-fetching ClassPreviewPane with class-ref click-to-pane overlay (`a611b2d`). Pane integration shipped + browser-verified. Next: Foundry inline-roll formulas (#7), subclass image-led hover (deferred). Subclass migration still LOCAL-only.
 
 ## When to retire this manifest
 
