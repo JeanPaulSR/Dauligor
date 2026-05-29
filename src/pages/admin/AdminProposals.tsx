@@ -25,7 +25,7 @@ import {
   Dialog, DialogContent, DialogContentLarge, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '../../components/ui/dialog';
 import { Textarea } from '../../components/ui/textarea';
-import { Inbox, Check, X, AlertTriangle, Undo2, ChevronRight, ChevronLeft, Tags as TagsIcon, ListChecks, Sparkles, Layers, BookOpen, Wand2, Shield, Award, Star, Package, Boxes, Repeat } from 'lucide-react';
+import { Inbox, Check, X, AlertTriangle, Undo2, ChevronRight, ChevronLeft, Tags as TagsIcon, ListChecks, Sparkles, Layers, BookOpen, Wand2, Shield, Award, Star, Package, Boxes, Repeat, Columns3, Zap } from 'lucide-react';
 import { formatSqliteLocal } from '../../lib/sqliteTimestamps';
 
 type EntityType =
@@ -39,7 +39,9 @@ type EntityType =
   | 'feat'
   | 'item'
   | 'unique_option_group'
-  | 'unique_option_item';
+  | 'unique_option_item'
+  | 'scaling_column'
+  | 'feature';
 
 type Operation = 'create' | 'update' | 'delete';
 
@@ -89,6 +91,8 @@ const ENTITY_ICON: Record<EntityType, any> = {
   item: Package,
   unique_option_group: Boxes,
   unique_option_item: Repeat,
+  scaling_column: Columns3,
+  feature: Zap,
 };
 
 const ENTITY_LABEL: Record<EntityType, string> = {
@@ -103,6 +107,8 @@ const ENTITY_LABEL: Record<EntityType, string> = {
   item: 'Item',
   unique_option_group: 'Option Group',
   unique_option_item: 'Option Item',
+  scaling_column: 'Scaling Column',
+  feature: 'Feature',
 };
 
 function describePayloadSummary(p: Proposal): string {

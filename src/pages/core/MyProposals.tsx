@@ -60,7 +60,9 @@ type EntityType =
   | 'feat'
   | 'item'
   | 'unique_option_group'
-  | 'unique_option_item';
+  | 'unique_option_item'
+  | 'scaling_column'
+  | 'feature';
 
 type TopTab = 'submissions' | 'block';
 
@@ -100,6 +102,8 @@ const ENTITY_LABEL: Record<EntityType, string> = {
   item: 'Item',
   unique_option_group: 'Option Group',
   unique_option_item: 'Option Item',
+  scaling_column: 'Scaling Column',
+  feature: 'Feature',
 };
 
 function previewName(p: Proposal): string {

@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>01 — Survey (reference) · Compendium Editors</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+
+<nav class="crumbs">
+  <a href="../../../AGENTS.md">AGENTS.md</a>
+  <span class="sep">/</span>
+  <a href="../">architecture</a>
+  <span class="sep">/</span>
+  <a href="index.html">compendium-editors</a>
+  <span class="sep">/</span>
+  <a href="01-survey.html">01 &mdash; Survey</a>
+  <span class="sep">/</span>
+  reference
+</nav>
+
+<header class="hero">
+  <h1>01 &mdash; Survey (reference)</h1>
+  <div class="sub">File-by-file detail behind the human-focused summary at <a href="01-survey.html">01-survey.html</a>. Dense and machine-precise; reach for it to verify a specific claim.</div>
+  <div class="meta">
+    <span class="badge muted">technical reference</span>
+    <span class="badge outline">backs the summary page</span>
+  </div>
+</header>
+
+<div class="toc">
+  <h4>On this page</h4>
+  <ol>
+    <li><a href="#drift">Drift items found against existing docs</a></li>
+    <li><a href="#five-patterns">The five editor patterns &mdash; reconciled</a></li>
+    <li><a href="#editor-map">Editor &harr; pattern &harr; table map</a></li>
+    <li><a href="#routes">Route map (public browser / admin editor / proposal-mode)</a></li>
+    <li><a href="#shared-components">Shared editor-side components (catalog)</a></li>
+    <li><a href="#shared-libs">Shared client libraries used by editors</a></li>
+    <li><a href="#endpoint-families">App-side endpoint families (preview)</a></li>
+    <li><a href="#out-of-scope">Out of scope for this branch</a></li>
+    <li><a href="#open-questions">Open questions for the user</a></li>
+  </ol>
+</div>
+
+<h2 id="drift">Drift items found against existing docs</h2>
+
+<p>
+  Reading the editor source against the existing
+  <code class="path">docs/architecture/compendium-editor-patterns.md</code> surfaced several
+  stale claims. None affect the user-visible behavior &mdash; the editors work as the source code
+  intends &mdash; but the documented patterns no longer match where each editor actually sits.
+  Listed here for transparency; will be folded into the patterns doc in a later iteration.
+</p>
+
+<div class="drift">
+  <h4>D1 &mdash; FeatsEditor is no longer Pattern A</h4>
+  <div class="item">
+    <div class="doc">patterns doc says: "Pattern A &mdash; Generic CRUD shell, used by FeatsEditor.tsx, ItemsEditor.tsx, and the manual-editor side of SpellsEditor.tsx."</div>
+    <div class="truth">
+      Source check: <code class="path">src/pages/compendium/FeatsEditor.tsx:37</code> imports
+      <code>upsertFeat</code>, <code>deleteFeat</code>, <code>fetchFeat</code> from
+      <code class="path">src/lib/compendium.ts</code> and renders the editor body inside
+      <code>CompendiumEditorShell</code> (not <code>DevelopmentCompendiumManager</code>). That's
+      <strong>Pattern E</strong> in this reference's reconciled vocabulary.
+    </div>
+  </div>
+</div>
+
+<div class="drift">
+  <h4>D2 &mdash; ItemsEditor is no longer Pattern A</h4>
+  <div class="item">
+    <div class="doc">patterns doc says: same as D1.</div>
+    <div class="truth">
+      Source check: <code class="path">src/pages/compendium/ItemsEditor.tsx:24</code> imports
+      <code>upsertItem</code>, <code>deleteItem</code>, <code>fetchItem</code> and mounts
+      <code>CompendiumEditorShell</code>. Same Pattern E.
+    </div>
+  </div>
+</div>
+
+<div class="drift">
+  <h4>D3 &mdash; The "unused per-entity helpers" claim is partly stale</h4>
+  <div class="item">
+    <div class="doc">
+      patterns doc says: "<code>upsertItem</code>/<code>fetchItem</code>/<code>deleteItem</code>
+      and <code>upsertFeat</code>/<code>fetchFeat</code>/<code>deleteFeat</code> exist with the
+      same shape but nothing calls them &mdash; <code>DevelopmentCompendiumManager</code> bypasses
+      them and calls <code>upsertDocument</code> directly."
+    </div>
+    <div class="truth">
+      As of the current code, <code>FeatsEditor</code> and <code>ItemsEditor</code> both call the
+      per-entity helpers directly (FeatsEditor.tsx:37, ItemsEditor.tsx:24). The pattern doc's
+      "currently unused" line predates the editors' migration to <code>CompendiumEditorShell</code>.
+    </div>
+  </div>
+</div>
+
+<div class="drift">
+  <h4>D4 &mdash; A fifth pattern shell exists: <code>CompendiumEditorShell</code></h4>
+  <div class="item">
+    <div class="doc">
+      patterns doc Pattern E talks about a master-detail layout but pins it specifically to
+      SpellsEditor and lists the layout idioms (the <code>spell-list-fullscreen</code> body class,
+      <code>FilterBar</code> with <code>trailingActions</code>, etc.) without naming a shell
+      component.
+    </div>
+    <div class="truth">
+      <code class="path">src/components/compendium/CompendiumEditorShell.tsx</code> exists and is
+      the shared shell that <code>FeatsEditor</code>, <code>ItemsEditor</code>, and
+      <code>SpellsEditor</code> all mount. It owns the top toolbar + FilterBar + 3-pane layout +
+      super-tab strip + per-tab fieldset + preview slot. This is the "Pattern E" of reality.
+    </div>
+  </div>
+</div>
+
+<div class="drift">
+  <h4>D5 &mdash; <code>DevelopmentCompendiumManager</code> still has a live consumer: FacilitiesEditor</h4>
+  <div class="item">
+    <div class="doc">
+      The patterns doc lists Pattern A consumers as FeatsEditor / ItemsEditor / SpellsEditor's
+      manual side. With D1+D2 above, you might assume Pattern A is dead.
+    </div>
+    <div class="truth">
+      <code class="path">src/pages/compendium/FacilitiesEditor.tsx:6</code> still imports and renders
+      <code>DevelopmentCompendiumManager</code>. Pattern A is alive but its current footprint is
+      one editor.
+    </div>
+  </div>
+</div>
+
+<div class="drift">
+  <h4>D6 &mdash; RaceEditor and BackgroundEditor are wrappers, not independent editors</h4>
+  <div class="item">
+    <div class="doc">Not explicitly addressed in the patterns doc.</div>
+    <div class="truth">
+      <code class="path">src/pages/compendium/RaceEditor.tsx</code> and
+      <code class="path">src/pages/compendium/BackgroundEditor.tsx</code> are 20-line wrappers around
+      <code>FeatsEditor</code> with <code>scopeFeatType="race"</code> / <code>"background"</code>.
+      Races + backgrounds live in the <code>feats</code> table with a discriminator. Worth noting
+      explicitly so other agents don't go looking for a dedicated <code>races</code> / <code>backgrounds</code>
+      table that doesn't exist yet.
+    </div>
+  </div>
+</div>
+
+<hr class="section">
+
+<h2 id="five-patterns">The five editor patterns &mdash; reconciled</h2>
+
+<p>
+  Five distinct shapes show up across the editor surface. Naming kept compatible with the patterns
+  doc (A&ndash;E) so cross-reference doesn't break, but the assignments are refreshed against the
+  current code.
+</p>
+
+<table>
+  <tr>
+    <th style="width:8%">Pattern</th>
+    <th style="width:30%">Shell / Library</th>
+    <th>Current consumers</th>
+    <th style="width:24%">Use when</th>
+  </tr>
+  <tr>
+    <td><strong>A</strong></td>
+    <td>
+      <code class="path">DevelopmentCompendiumManager.tsx</code> shell &mdash; declarative
+      <code>collectionName</code> + <code>defaultData</code> + <code>renderSpecificFields</code>
+      callback. Loads via <code>fetchCollection</code> and saves via <code>upsertDocument</code>.
+    </td>
+    <td>
+      <a href="#row-facilities">FacilitiesEditor</a>
+    </td>
+    <td>
+      Flat table with a small body of entity-specific fields and no relational children.
+    </td>
+  </tr>
+  <tr>
+    <td><strong>B</strong></td>
+    <td>
+      Bespoke page-level component &mdash; hand-rolled <code>useState</code> + <code>useEffect</code>,
+      direct <code>upsertDocument</code> / <code>fetchDocument</code> / <code>deleteDocument</code>
+      calls.
+    </td>
+    <td>
+      <a href="#row-sources">SourceEditor</a>,
+      <a href="#row-tagmgr">TagManager</a>,
+      <a href="#row-taggroup">TagGroupEditor</a>,
+      <a href="#row-uog">UniqueOptionGroupEditor</a>,
+      <a href="#row-class">ClassEditor</a>,
+      <a href="#row-subclass">SubclassEditor</a>,
+      and the admin-side bespoke editors
+      (<a href="#row-armor">ArmorEditor</a> / <a href="#row-weapons">WeaponsEditor</a> /
+      <a href="#row-statuses">StatusesEditor</a> / <a href="#row-scaling">SpellcastingTypeEditor</a> /
+      <a href="#row-multiclass">StandardMulticlassEditor</a>)
+    </td>
+    <td>
+      Custom UX (multi-step flow, custom field shapes), nontrivial validation, or a layout that
+      doesn't fit the master-detail mold.
+    </td>
+  </tr>
+  <tr>
+    <td><strong>C</strong></td>
+    <td>
+      <code class="path">ProficiencyEntityShell.tsx</code> &mdash; taxonomy / proficiency editor
+      with prop toggles (<code>includeFoundryAlias</code>, <code>includeSource</code>,
+      <code>includeBasicRules</code>, <code>includeOrder</code>, <code>categoryFreeText</code>).
+    </td>
+    <td>
+      <a href="#row-skills">SkillsEditor</a>,
+      <a href="#row-tools">ToolsEditor</a>,
+      and every tab in
+      <a href="#row-profs">AdminProficiencies</a>
+      (<code>toolCategories</code>, <code>weaponCategories</code>, <code>weaponProperties</code>,
+      <code>armorCategories</code>, <code>languageCategories</code>, <code>damageTypes</code>,
+      <code>attributes</code>, <code>languages</code>), plus the <code>conditionCategories</code>
+      tab in <a href="#row-statuses">StatusesEditor</a>.
+    </td>
+    <td>
+      Taxonomy-shape entities: <code>id</code> / <code>name</code> / <code>identifier</code> /
+      <code>order</code> / <code>description</code>, possibly with a free-text category.
+    </td>
+  </tr>
+  <tr>
+    <td><strong>D</strong></td>
+    <td>
+      Relational entity helper in <code class="path">src/lib/lore.ts</code> &mdash; parent + metadata
+      tables + 4 junction tables written atomically via <code>batchQueryD1</code>.
+    </td>
+    <td>
+      <a href="#row-lore">LoreEditor / LoreArticle</a> (owned by the
+      <code>system-applications</code> branch; in this reference for completeness, not deep-dive)
+    </td>
+    <td>
+      Parent-with-children entities where atomic FK + junction writes are mandatory. Future
+      candidates: classes (cascade delete), characters, anything with 2+ child tables.
+    </td>
+  </tr>
+  <tr>
+    <td><strong>E</strong></td>
+    <td>
+      <code class="path">CompendiumEditorShell.tsx</code> master-detail shell &mdash; top toolbar +
+      Foundry/Manual mode tabs + admin actions + FilterBar + 3-pane viewport-locked layout (list /
+      editor / preview) + super-tab strip (Editor / Tags) + per-super-tab fieldset.
+    </td>
+    <td>
+      <a href="#row-feats">FeatsEditor</a>,
+      <a href="#row-items">ItemsEditor</a>,
+      <a href="#row-spells">SpellsEditor</a>
+      (and indirectly <a href="#row-race">RaceEditor</a> /
+      <a href="#row-background">BackgroundEditor</a> via the FeatsEditor wrapper)
+    </td>
+    <td>
+      Catalog-shaped entities where the editor's list of "all rows" is itself an authoring tool
+      (scan dozens of records to find one to tweak), and where browser/editor visual parity is
+      worth the shell investment.
+    </td>
+  </tr>
+</table>
+
+<hr class="section">
+
+<h2 id="editor-map">Editor &harr; pattern &harr; table map</h2>
+
+<p>
+  Every editor that writes compendium-shaped data, the pattern it uses, the D1 table it lands in,
+  and the shared components it mounts. Anchors used by the pattern table above.
+</p>
+
+<table class="compact">
+  <tr>
+    <th>Editor file</th>
+    <th>Pattern</th>
+    <th>D1 table(s)</th>
+    <th>Shared components mounted</th>
+  </tr>
+
+  <tr id="row-class">
+    <td><code class="path">pages/compendium/ClassEditor.tsx</code></td>
+    <td><span class="badge outline">B</span></td>
+    <td><code>classes</code>, <code>features</code> (writes via <code>upsertFeature</code>), <code>scaling_columns</code> (via embedded <code>ScalingColumnsPanel</code>)</td>
+    <td>AdvancementManager (context=class), ActivityEditor, ActiveEffectEditor, FeaturesView, ScalingColumnsPanel, MarkdownEditor, ProficienciesEditor, ModularChoiceView, RequirementsEditor</td>
+  </tr>
+  <tr id="row-subclass">
+    <td><code class="path">pages/compendium/SubclassEditor.tsx</code></td>
+    <td><span class="badge outline">B</span></td>
+    <td><code>subclasses</code>, <code>features</code> (via <code>upsertFeature</code>), <code>scaling_columns</code></td>
+    <td>AdvancementManager (context=subclass), ActivityEditor, ActiveEffectEditor, FeaturesView, ScalingColumnsPanel, MarkdownEditor</td>
+  </tr>
+  <tr id="row-feats">
+    <td><code class="path">pages/compendium/FeatsEditor.tsx</code></td>
+    <td><span class="badge outline">E</span></td>
+    <td><code>feats</code> (via <code>upsertFeat</code>)</td>
+    <td>CompendiumEditorShell, FeatDetailPanel, ActivityEditor, ActiveEffectEditor, AdvancementManager (context=feat / race / background), RequirementsEditor, ScalingColumnsPanel, SectionFilterPanel, TagPicker, MarkdownEditor, FeatImportWorkbench</td>
+  </tr>
+  <tr id="row-items">
+    <td><code class="path">pages/compendium/ItemsEditor.tsx</code></td>
+    <td><span class="badge outline">E</span></td>
+    <td><code>items</code> (via <code>upsertItem</code>)</td>
+    <td>CompendiumEditorShell, ItemDetailPanel, ItemImportWorkbench, ItemUsesField, AdvancementManager (items-as-bump-authors), ActivityEditor, ActiveEffectEditor, ScalingColumnsPanel, SectionFilterPanel, TagPicker, ArmorMechanicsFields, ToolMechanicsFields, WeaponMechanicsFields, WeaponPropertiesPicker, WeaponTypeSelect</td>
+  </tr>
+  <tr id="row-spells">
+    <td><code class="path">pages/compendium/SpellsEditor.tsx</code></td>
+    <td><span class="badge outline">E</span></td>
+    <td><code>spells</code> (via <code>upsertSpell</code> / <code>purgeAllSpells</code>), <code>spell_summaries</code> (via <code>prepareSpellPayloadForWrite</code>)</td>
+    <td>CompendiumEditorShell, SpellDetailPanel, SpellImportWorkbench, SpellFilterShell, ActivityEditor, ActiveEffectEditor, SectionFilterPanel, inline SpellTagPicker (extraction pending), MarkdownEditor, RuleMembershipPanel</td>
+  </tr>
+  <tr id="row-race">
+    <td><code class="path">pages/compendium/RaceEditor.tsx</code></td>
+    <td><span class="badge outline">E (wrapper)</span></td>
+    <td><code>feats</code> with <code>feat_type='race'</code></td>
+    <td>Delegates to FeatsEditor with <code>scopeFeatType='race'</code></td>
+  </tr>
+  <tr id="row-background">
+    <td><code class="path">pages/compendium/BackgroundEditor.tsx</code></td>
+    <td><span class="badge outline">E (wrapper)</span></td>
+    <td><code>feats</code> with <code>feat_type='background'</code></td>
+    <td>Delegates to FeatsEditor with <code>scopeFeatType='background'</code></td>
+  </tr>
+  <tr id="row-facilities">
+    <td><code class="path">pages/compendium/FacilitiesEditor.tsx</code></td>
+    <td><span class="badge outline">A</span></td>
+    <td><code>facilities</code></td>
+    <td>DevelopmentCompendiumManager (Pattern A shell), ActivityEditor, plus inline conditional sub-blocks (Craft / Trade / generic Progress)</td>
+  </tr>
+  <tr id="row-skills">
+    <td><code class="path">pages/compendium/SkillsEditor.tsx</code></td>
+    <td><span class="badge outline">C</span></td>
+    <td><code>skills</code></td>
+    <td>ProficiencyEntityShell (taxonomy mode)</td>
+  </tr>
+  <tr id="row-tools">
+    <td><code class="path">pages/compendium/ToolsEditor.tsx</code></td>
+    <td><span class="badge outline">C</span></td>
+    <td><code>tools</code></td>
+    <td>ProficiencyEntityShell</td>
+  </tr>
+  <tr id="row-profs">
+    <td><code class="path">pages/admin/AdminProficiencies.tsx</code></td>
+    <td><span class="badge outline">C (multi-tab)</span></td>
+    <td><code>tool_categories</code>, <code>weapon_categories</code>, <code>weapon_properties</code>, <code>armor_categories</code>, <code>language_categories</code>, <code>damage_types</code>, <code>attributes</code>, <code>languages</code></td>
+    <td>ProficiencyEntityShell (one instance per tab with different prop toggles)</td>
+  </tr>
+  <tr id="row-uog">
+    <td><code class="path">pages/compendium/UniqueOptionGroupEditor.tsx</code></td>
+    <td><span class="badge outline">B</span></td>
+    <td><code>unique_option_groups</code>, <code>unique_option_items</code></td>
+    <td>RequirementsEditor, ActivityEditor, ActiveEffectEditor, MarkdownEditor; uses <code>denormalizeCompendiumData</code> only</td>
+  </tr>
+  <tr id="row-tagmgr">
+    <td><code class="path">pages/compendium/TagManager.tsx</code></td>
+    <td><span class="badge outline">B</span></td>
+    <td><code>tags</code></td>
+    <td>(none of the shared compendium components &mdash; bespoke list + form)</td>
+  </tr>
+  <tr id="row-taggroup">
+    <td><code class="path">pages/compendium/TagGroupEditor.tsx</code></td>
+    <td><span class="badge outline">B</span></td>
+    <td><code>tag_groups</code></td>
+    <td>(bespoke)</td>
+  </tr>
+  <tr id="row-sources">
+    <td><code class="path">pages/sources/SourceEditor.tsx</code></td>
+    <td><span class="badge outline">B</span></td>
+    <td><code>sources</code></td>
+    <td>(bespoke)</td>
+  </tr>
+  <tr id="row-statuses">
+    <td><code class="path">pages/admin/StatusesEditor.tsx</code></td>
+    <td><span class="badge outline">B + C (multi-tab)</span></td>
+    <td><code>status_conditions</code>, <code>condition_categories</code></td>
+    <td>Tab 1 (Statuses) is bespoke; Tab 2 (Categories) mounts <code>ProficiencyEntityShell</code></td>
+  </tr>
+  <tr id="row-armor">
+    <td><code class="path">pages/admin/ArmorEditor.tsx</code></td>
+    <td><span class="badge outline">B</span></td>
+    <td><code>armor</code></td>
+    <td>ArmorMechanicsFields</td>
+  </tr>
+  <tr id="row-weapons">
+    <td><code class="path">pages/admin/WeaponsEditor.tsx</code></td>
+    <td><span class="badge outline">B</span></td>
+    <td><code>weapons</code></td>
+    <td>WeaponMechanicsFields, WeaponPropertiesPicker, WeaponTypeSelect</td>
+  </tr>
+  <tr id="row-scaling">
+    <td><code class="path">pages/admin/SpellcastingTypeEditor.tsx</code></td>
+    <td><span class="badge outline">B</span></td>
+    <td><code>spellcasting_progressions</code> (or related &mdash; verify)</td>
+    <td>(bespoke; details TBD)</td>
+  </tr>
+  <tr id="row-multiclass">
+    <td><code class="path">pages/admin/StandardMulticlassEditor.tsx</code></td>
+    <td><span class="badge outline">B</span></td>
+    <td><code>multiclass_master_chart</code></td>
+    <td>(bespoke)</td>
+  </tr>
+  <tr id="row-lore">
+    <td><code class="path">pages/wiki/LoreEditor.tsx</code></td>
+    <td><span class="badge outline">D</span></td>
+    <td><code>lore_articles</code> + <code>lore_meta_*</code> + <code>lore_*_eras</code> + <code>lore_*_campaigns</code> + <code>lore_*_tags</code> + <code>lore_links</code> + <code>lore_secrets</code></td>
+    <td>Out of scope for this reference; managed by the <code>system-applications</code> branch</td>
+  </tr>
+</table>
+
+<p style="font-size:13px;color:var(--muted)">
+  Editors marked <em>verify</em> in the table are next on the spot-check list; the source files
+  have been read superficially but the table assignment hasn't been confirmed against the SQL
+  yet. Flag these for me if you spot an issue before I get there.
+</p>
+
+<hr class="section">
+
+<h2 id="routes">Route map</h2>
+
+<p>
+  Compendium content has three URL spaces. Read-only browsers under <code>/compendium/&lt;entity&gt;</code>
+  (open to all signed-in users for the most part), admin authoring under
+  <code>/compendium/&lt;entity&gt;/manage</code> or <code>/edit/:id</code>, and proposal-mode under
+  <code>/proposals/edit/&lt;entity&gt;</code> (which wraps the same editor component inside
+  <code>ProposalEditorWrapper</code>).
+</p>
+
+<table class="compact">
+  <tr>
+    <th>Entity</th>
+    <th>Public browser</th>
+    <th>Admin editor</th>
+    <th>Proposal-mode</th>
+  </tr>
+  <tr>
+    <td>Classes</td>
+    <td><code>/compendium/classes</code> (ClassList)</td>
+    <td><code>/compendium/classes/view/:slug</code> (ClassView), <code>/compendium/classes/new</code>, <code>/compendium/classes/edit/:slug</code> (ClassEditor)</td>
+    <td><code>/proposals/edit/classes/new</code>, <code>/proposals/edit/classes/edit/:id</code></td>
+  </tr>
+  <tr>
+    <td>Subclasses</td>
+    <td>(no public browser; nested inside ClassView)</td>
+    <td><code>/compendium/subclasses/new</code>, <code>/compendium/subclasses/edit/:id</code></td>
+    <td><code>/proposals/edit/subclasses/new</code>, <code>/proposals/edit/subclasses/edit/:id</code></td>
+  </tr>
+  <tr>
+    <td>Spells</td>
+    <td><code>/compendium/spells</code> (SpellList)</td>
+    <td><code>/compendium/spells/manage</code> (SpellsEditor)</td>
+    <td><code>/proposals/edit/spells</code></td>
+  </tr>
+  <tr>
+    <td>Spell lists</td>
+    <td>(none)</td>
+    <td><code>/compendium/spell-lists</code> (SpellListManager, admin only)</td>
+    <td><code>/proposals/edit/spell-lists</code> (wraps as <code>spell_rule</code> entity)</td>
+  </tr>
+  <tr>
+    <td>Spell rules</td>
+    <td>(none)</td>
+    <td><code>/compendium/spell-rules</code> (SpellRulesEditor, admin only)</td>
+    <td><code>/proposals/edit/spell-rules</code></td>
+  </tr>
+  <tr>
+    <td>Feats</td>
+    <td><code>/compendium/feats</code> (FeatList)</td>
+    <td><code>/compendium/feats/manage</code> (FeatsEditor)</td>
+    <td><code>/proposals/edit/feats</code></td>
+  </tr>
+  <tr>
+    <td>Items</td>
+    <td><code>/compendium/items</code> (ItemList)</td>
+    <td><code>/compendium/items/manage</code> (ItemsEditor)</td>
+    <td>(delegates via DevelopmentCompendiumManager &mdash; verify wrapper wiring)</td>
+  </tr>
+  <tr>
+    <td>Facilities</td>
+    <td><code>/compendium/facilities</code> (FacilitiesList)</td>
+    <td><code>/compendium/facilities/manage</code> (FacilitiesEditor)</td>
+    <td>(none)</td>
+  </tr>
+  <tr>
+    <td>Races</td>
+    <td><code>/compendium/races</code> (RacesList)</td>
+    <td><code>/compendium/races/manage</code> (RaceEditor &rarr; FeatsEditor wrapper)</td>
+    <td>(none)</td>
+  </tr>
+  <tr>
+    <td>Backgrounds</td>
+    <td><code>/compendium/backgrounds</code> (BackgroundsList)</td>
+    <td><code>/compendium/backgrounds/manage</code> (BackgroundEditor &rarr; FeatsEditor wrapper)</td>
+    <td>(none)</td>
+  </tr>
+  <tr>
+    <td>Unique option groups</td>
+    <td>(none &mdash; admin browser at the list URL)</td>
+    <td><code>/compendium/unique-options</code> (List), <code>/new</code>, <code>/edit/:id</code> (Editor), <code>/:id</code> (View)</td>
+    <td><code>/proposals/edit/option-groups</code>, <code>/new</code>, <code>/edit/:id</code></td>
+  </tr>
+  <tr>
+    <td>Tags / Classifications</td>
+    <td>(none)</td>
+    <td><code>/compendium/tags</code> (TagsExplorer, admin), <code>/compendium/tags/classifications</code> (TagClassifications)</td>
+    <td><code>/proposals/edit/tags</code>, <code>/:id</code></td>
+  </tr>
+  <tr>
+    <td>Scaling (column / spellcasting / spells-known)</td>
+    <td>(none)</td>
+    <td><code>/compendium/scaling/new</code>, <code>/edit/:id</code>, plus <code>/spellcasting-scaling/*</code> and <code>/spells-known-scaling/*</code></td>
+    <td>(none)</td>
+  </tr>
+</table>
+
+<hr class="section">
+
+<h2 id="shared-components">Shared editor-side components</h2>
+
+<p>
+  The components that get mounted across multiple editors. Catalog only; deep-dive on each in
+  <a href="04-components.html">section 04</a>.
+</p>
+
+<table class="compact">
+  <tr>
+    <th>Component</th>
+    <th>Role</th>
+    <th>Used by</th>
+  </tr>
+  <tr>
+    <td><code class="path">CompendiumEditorShell</code></td>
+    <td>Master-detail shell &mdash; toolbar + filters + 3 panes + super-tabs + form wrapper</td>
+    <td>FeatsEditor, ItemsEditor, SpellsEditor</td>
+  </tr>
+  <tr>
+    <td><code class="path">CompendiumBrowserShell</code></td>
+    <td>Read-only public-browser counterpart of the shell &mdash; same 3-pane layout, no edit</td>
+    <td>FeatList, ItemList, SpellList (verify), FacilitiesList (verify)</td>
+  </tr>
+  <tr>
+    <td><code class="path">DevelopmentCompendiumManager</code></td>
+    <td>Pattern A shell &mdash; declarative <code>renderSpecificFields</code> callback</td>
+    <td>FacilitiesEditor</td>
+  </tr>
+  <tr>
+    <td><code class="path">ProficiencyEntityShell</code></td>
+    <td>Pattern C taxonomy shell &mdash; table+modal UX driven by prop toggles</td>
+    <td>SkillsEditor, ToolsEditor, AdminProficiencies tabs, StatusesEditor's Categories tab</td>
+  </tr>
+  <tr>
+    <td><code class="path">AdvancementManager</code></td>
+    <td>Advancement timeline editor &mdash; HitPoints / ItemChoice / ItemGrant / ASI / Subclass / Trait / ScaleValue / Size / GrantSpells / ExtendSpellList / ItemBumpUses. Context-aware (class / subclass / feat / race / background / item).</td>
+    <td>ClassEditor, SubclassEditor, FeatsEditor, ItemsEditor</td>
+  </tr>
+  <tr>
+    <td><code class="path">ActivityEditor</code></td>
+    <td>Feature/spell/item activity authoring &mdash; per-type forms (attack/save/check/heal/damage/utility/spell/enchant/forward/summon/transform/cast)</td>
+    <td>ClassEditor, SubclassEditor, FeatsEditor, ItemsEditor, SpellsEditor, UniqueOptionGroupEditor, DevelopmentCompendiumManager, FacilitiesEditor</td>
+  </tr>
+  <tr>
+    <td><code class="path">ActiveEffectEditor</code></td>
+    <td>Active Effect list editor &mdash; Details / Duration / Changes tabs, Foundry-native modes</td>
+    <td>ClassEditor, SubclassEditor, FeatsEditor, ItemsEditor, SpellsEditor, UniqueOptionGroupEditor</td>
+  </tr>
+  <tr>
+    <td><code class="path">RequirementsEditor</code></td>
+    <td>Structured prerequisite tree &mdash; And/Or/Xor groups over leaves (level, class, subclass, optionItem, feature, spell, spellRule, abilityScore, proficiency, string)</td>
+    <td>FeatsEditor, UniqueOptionGroupEditor (and verify any others)</td>
+  </tr>
+  <tr>
+    <td><code class="path">TagPicker</code></td>
+    <td>Hierarchical tag selector with subtag-implies-parent invariant</td>
+    <td>FeatsEditor, ItemsEditor (SpellsEditor has an inline SpellTagPicker variant)</td>
+  </tr>
+  <tr>
+    <td><code class="path">FilterBar</code></td>
+    <td>Search input + Filter modal trigger + Reset + result count + trailing actions slot. Provides <code>useFilterBarContext()</code> for chip-search + show/hide-all coordination.</td>
+    <td>ClassList, SpellList, FeatList, ItemList, FacilitiesList, plus the editor manager pages indirectly via the shells</td>
+  </tr>
+  <tr>
+    <td><code class="path">SectionFilterPanel</code></td>
+    <td>Filter modal body &mdash; axis sections with chip toggles; subscribes to FilterBar context</td>
+    <td>FeatsEditor, ItemsEditor (and the browsers)</td>
+  </tr>
+  <tr>
+    <td><code class="path">SpellFilterShell</code></td>
+    <td>Spell-specific filter modal wrapper (sources / levels / schools / tag groups)</td>
+    <td>SpellsEditor, SpellList</td>
+  </tr>
+  <tr>
+    <td><code class="path">EntityListSection</code> / <code>EntityEditModal</code></td>
+    <td>Section header + entity edit modal &mdash; presumed shared between TagsExplorer / TagClassifications and similar (verify)</td>
+    <td>TagsExplorer, TagClassifications, and verify</td>
+  </tr>
+  <tr>
+    <td><code class="path">ScalingColumnsPanel</code></td>
+    <td>Per-class / per-feat / per-item scaling-column manager</td>
+    <td>ClassEditor, SubclassEditor, FeatsEditor, ItemsEditor</td>
+  </tr>
+  <tr>
+    <td><code class="path">FeaturesView</code></td>
+    <td>Feature list panel &mdash; per-level feature rows with inline edit modal</td>
+    <td>ClassEditor, SubclassEditor</td>
+  </tr>
+  <tr>
+    <td><code class="path">ModularChoiceView</code></td>
+    <td>Modular option-group preview (Metamagic / Invocations / Maneuvers, etc.)</td>
+    <td>ClassEditor, UniqueOptionGroupView</td>
+  </tr>
+  <tr>
+    <td><code class="path">ProficienciesEditor</code></td>
+    <td>Saving throws + skills + tools + weapons + armor + languages editor surface</td>
+    <td>ClassEditor</td>
+  </tr>
+  <tr>
+    <td><code class="path">RuleMembershipPanel</code></td>
+    <td>Spell &rarr; spell-rule membership display</td>
+    <td>SpellsEditor</td>
+  </tr>
+  <tr>
+    <td><code class="path">FeatDetailPanel</code> / <code>ItemDetailPanel</code> / <code>SpellDetailPanel</code></td>
+    <td>Read-only preview panes that reuse the public-browser detail UI inside the editor's right pane (visual parity)</td>
+    <td>FeatsEditor, ItemsEditor, SpellsEditor</td>
+  </tr>
+  <tr>
+    <td><code class="path">FeatureModalHero</code></td>
+    <td>Feature-modal header (icon + name + identity row)</td>
+    <td>(consumers of FeaturesView)</td>
+  </tr>
+  <tr>
+    <td><code class="path">FeatImportWorkbench</code> / <code>ItemImportWorkbench</code> / <code>SpellImportWorkbench</code></td>
+    <td>Foundry-import workbenches mounted via the shell's Foundry-Import mode tab</td>
+    <td>FeatsEditor, ItemsEditor, SpellsEditor</td>
+  </tr>
+  <tr>
+    <td><code class="path">ActiveEffectKeyInput</code></td>
+    <td>Autocomplete-backed Active Effect change-key input</td>
+    <td>ActiveEffectEditor</td>
+  </tr>
+  <tr>
+    <td><code class="path">BakeNowButton</code></td>
+    <td>Force-rebake the module-export bundle for the current entity</td>
+    <td>ClassEditor, SubclassEditor (and verify)</td>
+  </tr>
+  <tr>
+    <td><code class="path">ClassImageEditor</code></td>
+    <td>Class-specific image upload UI</td>
+    <td>ClassEditor</td>
+  </tr>
+  <tr>
+    <td><code class="path">ItemUsesField</code></td>
+    <td>Item-level <code>system.uses</code> editor &mdash; max + recovery + spent</td>
+    <td>ItemsEditor</td>
+  </tr>
+  <tr>
+    <td><code class="path">SpellArtPreview</code></td>
+    <td>Compact preview of a spell's icon + tint</td>
+    <td>SpellImportWorkbench / SpellsEditor</td>
+  </tr>
+</table>
+
+<hr class="section">
+
+<h2 id="shared-libs">Shared client libraries used by editors</h2>
+
+<table class="compact">
+  <tr>
+    <th>Library</th>
+    <th>Surface</th>
+  </tr>
+  <tr>
+    <td><code class="path">src/lib/d1.ts</code></td>
+    <td>
+      Generic D1 client: <code>queryD1</code>, <code>batchQueryD1</code>, <code>fetchCollection</code>,
+      <code>fetchDocument</code>, <code>upsertDocument</code>, <code>upsertDocumentBatch</code>,
+      <code>deleteDocument</code>, <code>deleteDocuments</code>, plus in-memory + sessionStorage
+      cache, the JSON column auto-parse list, foundation-update polling, system-metadata helpers.
+    </td>
+  </tr>
+  <tr>
+    <td><code class="path">src/lib/compendium.ts</code></td>
+    <td>
+      Editor &harr; D1 boundary: <code>normalizeCompendiumData</code> (camelCase &rarr; snake_case +
+      decompose <code>automation</code> / <code>uses</code> / <code>components</code> /
+      <code>prerequisites</code> + numeric/bool coercion + null cleanup), <code>denormalizeCompendiumData</code>
+      (D1 row &rarr; form state), plus per-entity helpers
+      <code>upsertSpell</code> / <code>upsertFeat</code> / <code>upsertItem</code> / <code>upsertFeature</code>
+      and their fetch + delete + batch siblings, plus <code>purgeAllSpells</code> /
+      <code>prepareSpellPayloadForWrite</code>.
+    </td>
+  </tr>
+  <tr>
+    <td><code class="path">src/lib/d1Tables.ts</code></td>
+    <td>Table registry &mdash; collection-name &harr; D1-table-name resolution.</td>
+  </tr>
+  <tr>
+    <td><code class="path">src/lib/advancementState.ts</code></td>
+    <td>
+      Canonical advancement-state shape, <code>buildDefaultAdvancementConfiguration</code>,
+      <code>normalizeAdvancementForEditor</code>, <code>resolveAdvancementDefaultHitDie</code>.
+      Owned by AdvancementManager-side consumers.
+    </td>
+  </tr>
+  <tr>
+    <td><code class="path">src/lib/classProgression.ts</code></td>
+    <td>
+      Shared progression builder &mdash; same source the export pipeline (<code>classExport.ts</code>) and
+      character builder consume. Drift-managed sibling at <code>api/_lib/_classProgression.ts</code>.
+    </td>
+  </tr>
+  <tr>
+    <td><code class="path">src/lib/requirements.ts</code></td>
+    <td>
+      Requirement tree types + parse / format / remap helpers. Drift-managed sibling at
+      <code>api/_lib/_requirements.ts</code>.
+    </td>
+  </tr>
+  <tr>
+    <td><code class="path">src/lib/referenceSyntax.ts</code></td>
+    <td>
+      Semantic reference parser (<code>@scale.*</code>, <code>@spell.*</code>, etc.). Drift-managed
+      sibling at <code>api/_lib/_referenceSyntax.ts</code>.
+    </td>
+  </tr>
+  <tr>
+    <td><code class="path">src/lib/spellFilters.ts</code> / <code>featFilters.ts</code> / <code>itemFilters.ts</code> (verify)</td>
+    <td>Per-entity filter axis derivation + match predicates.</td>
+  </tr>
+  <tr>
+    <td><code class="path">src/lib/spellImport.ts</code> / <code>tagHierarchy.ts</code> / <code>moduleExport.ts</code></td>
+    <td>Foundry-import + tag hierarchy + module-rebake utilities consumed by the workbenches and editors.</td>
+  </tr>
+  <tr>
+    <td><code class="path">src/lib/classExport.ts</code></td>
+    <td>
+      Client-side class export &mdash; drift-managed sibling at <code>api/_lib/_classExport.ts</code>
+      (server-side bundler). Per AGENTS.md rule #5, any change to the bundle shape must land in both.
+    </td>
+  </tr>
+</table>
+
+<hr class="section">
+
+<h2 id="endpoint-families">App-side endpoint families</h2>
+
+<p>
+  Pages Functions at <code>functions/api/**</code> serve the client app and the Foundry pairing
+  module. The <code>api/_lib/_*Export.ts</code> server-side libraries compose payloads. Deep dive
+  on each family in <a href="05-endpoints.html">section 05</a>; this is the high-level map.
+</p>
+
+<table class="compact">
+  <tr>
+    <th>Endpoint family</th>
+    <th>Backing handler(s)</th>
+    <th>Composition library</th>
+    <th>Consumer</th>
+  </tr>
+  <tr>
+    <td>Generic D1 proxy</td>
+    <td><code>functions/api/d1/query.ts</code></td>
+    <td><code>api/_lib/d1-internal.ts</code>, <code>d1-proxy.ts</code></td>
+    <td>Every <code>queryD1</code> call from the client</td>
+  </tr>
+  <tr>
+    <td>R2 image proxy</td>
+    <td><code>functions/api/r2/[action].ts</code></td>
+    <td><code>api/_lib/r2-proxy.ts</code></td>
+    <td>ImageUpload + Image Manager</td>
+  </tr>
+  <tr>
+    <td>Foundry module bundle</td>
+    <td><code>functions/api/module/[[path]].ts</code></td>
+    <td>
+      <code>api/_lib/_classExport.ts</code>,
+      <code>_featExport.ts</code>,
+      <code>_itemExport.ts</code>,
+      <code>_spellExport.ts</code>,
+      <code>_sourceSpellList.ts</code>,
+      <code>_sourceFeatList.ts</code>,
+      <code>_classSpellList.ts</code>,
+      <code>_spellListResolver.ts</code>,
+      <code>_spellFilters.ts</code>,
+      <code>_tagCatalog.ts</code>,
+      <code>module-export-pipeline.ts</code>,
+      <code>module-export-queue.ts</code>,
+      <code>module-export-store.ts</code>
+    </td>
+    <td>Foundry pairing module (out of scope for this branch's deep dive)</td>
+  </tr>
+  <tr>
+    <td>Lore CRUD</td>
+    <td><code>functions/api/lore/[[path]].ts</code></td>
+    <td><code>api/_lib/_lore.ts</code>, <code>_bbcode.ts</code></td>
+    <td>Wiki / lore editors (Pattern D)</td>
+  </tr>
+  <tr>
+    <td>Content proposals</td>
+    <td><code>functions/api/proposals/[[path]].ts</code>, <code>admin/proposals/[[path]].ts</code></td>
+    <td><code>api/_lib/proposals.ts</code>, <code>cascadeStrategies.ts</code>, <code>_tagCatalog.ts</code>, <code>_featRequirements.ts</code></td>
+    <td>ProposalEditorWrapper, AdminProposals, MyProposals</td>
+  </tr>
+  <tr>
+    <td>Characters</td>
+    <td><code>functions/api/characters/[id].ts</code>, <code>admin/characters.ts</code></td>
+    <td><code>api/_lib/_characterShared.ts</code>, <code>_classProgression.ts</code></td>
+    <td>CharacterBuilder, character sheet</td>
+  </tr>
+  <tr>
+    <td>Favorites (spells / feats / items)</td>
+    <td><code>functions/api/spell-favorites.ts</code>, <code>feat-favorites.ts</code>, <code>item-favorites.ts</code></td>
+    <td>(inline)</td>
+    <td>Public browsers + character sheet</td>
+  </tr>
+  <tr>
+    <td>Auth / profile</td>
+    <td><code>functions/api/me/[[path]].ts</code>, <code>profiles/[username].ts</code></td>
+    <td><code>api/_lib/firebase-admin.ts</code>, <code>permissions.ts</code></td>
+    <td>App.tsx <code>loadProfile</code>, profile pages</td>
+  </tr>
+  <tr>
+    <td>Admin (users / worlds / eras / campaigns / cache prewarm)</td>
+    <td><code>functions/api/admin/{users,worlds,eras,prewarm-spell-cache,characters}.ts</code>, <code>campaigns/[[path]].ts</code></td>
+    <td><code>api/_lib/permissions.ts</code></td>
+    <td>Admin pages</td>
+  </tr>
+</table>
+
+<hr class="section">
+
+<h2 id="out-of-scope">Out of scope for this branch</h2>
+
+<ul>
+  <li>
+    <strong>Foundry module side.</strong>
+    <code>module/dauligor-pairing/</code> &mdash; how the pairing module consumes the
+    <code>/api/module/*</code> payloads is out of scope. Another agent owns that surface.
+  </li>
+  <li>
+    <strong>Character builder + sheet.</strong>
+    <code>src/pages/characters/**</code> &mdash; consumers, not editors. They surface in this set
+    only when an editor decision (e.g. an advancement type) ripples into builder behavior.
+  </li>
+  <li>
+    <strong>Wiki / lore editors (Pattern D).</strong>
+    Owned by <code>system-applications</code>. Referenced for pattern completeness, not deep-dived.
+  </li>
+  <li>
+    <strong>Proposal cycle internals.</strong>
+    <code>useProposalAccumulator</code>, <code>ProposalEditorWrapper</code>, the cascade-dependent
+    detection &mdash; explained at the editor surface only ("editor reacts to proposal-mode by ..."),
+    not from the proposal-system architectural side. See <code>docs/features/content-proposals.md</code>.
+  </li>
+</ul>
+
+<hr class="section">
+
+<h2 id="open-questions">Open questions for the user</h2>
+
+<p>
+  Things I'm not yet certain about. Each one will affect a downstream section; clarifying before
+  I write them avoids rework.
+</p>
+
+<div class="card priority-now">
+  <h4>Q1 &mdash; ItemsEditor under proposal mode</h4>
+  <p>
+    <code>src/App.tsx:397</code> has a comment saying "Items &mdash; delegates to
+    <code>DevelopmentCompendiumManager</code> which detects proposal mode via the wrapper's
+    context (entityType + focus-mode wiring lives ...)". The current code has
+    ItemsEditor using <code>CompendiumEditorShell</code>, not <code>DevelopmentCompendiumManager</code>.
+    Is the proposal-mode delegate a separate code path I haven't found yet, or is this a stale
+    comment? I'll check the file in detail when writing section 04 / 05.
+  </p>
+</div>
+
+<div class="card priority-next">
+  <h4>Q2 &mdash; Which editors use <code>EntityListSection</code> / <code>EntityEditModal</code>?</h4>
+  <p>
+    These two files exist in <code>src/components/compendium/</code> but my survey grep didn't surface
+    them in the editor imports I scanned. Most likely consumers: TagsExplorer / TagClassifications.
+    I'll verify before writing the components page.
+  </p>
+</div>
+
+<div class="card priority-next">
+  <h4>Q3 &mdash; ClassEditor pattern: pure B, or B-with-shell-fragments?</h4>
+  <p>
+    <code>ClassEditor.tsx</code> is the heaviest editor (advancement timeline, features list,
+    scaling, proficiencies, multiclass) and uses many of the shared components, but the page-level
+    composition is bespoke (no <code>CompendiumEditorShell</code>, no <code>DevelopmentCompendiumManager</code>).
+    Categorizing as Pattern B for now. Worth checking whether to call out a "Pattern B+
+    composite" variant in a later iteration.
+  </p>
+</div>
+
+<div class="card priority-later">
+  <h4>Q4 &mdash; Cascade-delete strategy for classes &mdash; <span class="badge leaf">answered</span></h4>
+  <p>
+    Original question: documented as <em>open</em> in <code>docs/features/compendium-classes.md</code>; should the data-flow
+    page describe it as a follow-up rather than a current behavior?
+  </p>
+  <p>
+    <strong>Answer (2026-05-27):</strong> Yes &mdash; treat as a known follow-up. The rules when it
+    lands: a class delete cascades to its <em>subclasses</em>, its <em>class features</em>, and its
+    <em>advancements</em>. It does <strong>not</strong> cascade to anything those advancements
+    <em>grant</em> (e.g. an advancement that grants Warlock Invocations: the advancement row goes,
+    the Invocation option items stay &mdash; they're independent compendium content). Low priority for
+    now since no classes are being deleted in practice. See
+    <a href="01-survey.html#answers">summary A4</a> for the human-language version.
+  </p>
+</div>
+
+<nav class="page-pager">
+  <a href="01-survey.html">&larr; 01 &mdash; Survey (summary)</a>
+  <a href="02-data-flow.html">Next: 02 &mdash; Data flow &rarr;</a>
+</nav>
+
+</div>
+</body>
+</html>

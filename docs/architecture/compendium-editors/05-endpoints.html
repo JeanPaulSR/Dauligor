@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>05 — Endpoints · Compendium Editors</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+
+<nav class="crumbs">
+  <a href="../../../AGENTS.md">AGENTS.md</a>
+  <span class="sep">/</span>
+  <a href="../">architecture</a>
+  <span class="sep">/</span>
+  <a href="index.html">compendium-editors</a>
+  <span class="sep">/</span>
+  05 &mdash; Endpoints
+</nav>
+
+<header class="hero">
+  <h1>05 &mdash; Endpoints</h1>
+  <div class="sub">Pages Functions and the <code>api/_lib/_*Export.ts</code> server-side composition libraries.</div>
+  <div class="meta">
+    <span class="badge muted">stub</span>
+    <span class="badge outline">Foundry-side consumption explicitly out of scope</span>
+  </div>
+</header>
+
+<div class="callout">
+  <strong>Foundry-module-side consumption is out of scope for this reference.</strong>
+  Another agent owns <code>module/dauligor-pairing/</code>. This section stops at the wire &mdash; what the
+  server emits, why it's shaped that way, what gates it &mdash; and does not document how the Foundry
+  importer / viewer ingests it.
+</div>
+
+<h2 id="planned-outline">Planned outline</h2>
+
+<ol>
+  <li>
+    <strong>The runtime split.</strong>
+    Pages Functions (<code>functions/api/**</code>) run on Cloudflare Pages; the Express server
+    (<code>server.ts</code>) is the local-dev mirror. Some endpoints are Pages-only
+    (<code>/api/module/*</code>); local dev requires <code>npx wrangler pages dev</code> to test them.
+    See <code class="path">docs/platform/runtime.md</code>.
+  </li>
+  <li>
+    <strong>Shared server libraries.</strong>
+    Drift-managed sibling pairs (per AGENTS.md rule #5):
+    <ul>
+      <li><code class="path">src/lib/classExport.ts</code> &harr; <code class="path">api/_lib/_classExport.ts</code></li>
+      <li><code class="path">src/lib/classProgression.ts</code> &harr; <code class="path">api/_lib/_classProgression.ts</code></li>
+      <li><code class="path">src/lib/referenceSyntax.ts</code> &harr; <code class="path">api/_lib/_referenceSyntax.ts</code></li>
+      <li><code class="path">src/lib/requirements.ts</code> &harr; <code class="path">api/_lib/_requirements.ts</code></li>
+    </ul>
+    Why the drift exists (Vercel serverless bundling history) and the contract for keeping them in sync.
+  </li>
+  <li>
+    <strong>Generic D1 proxy.</strong>
+    <code>functions/api/d1/query.ts</code> + <code>api/_lib/d1-internal.ts</code> + <code>d1-proxy.ts</code>.
+    Why every <code>queryD1</code> call goes through this proxy rather than the editors talking to
+    D1 directly. The proxy gate at <code>api/_lib/d1-proxy.ts</code> that refuses non-bump writes to
+    <code>system_metadata</code> (per the deprecation comment on <code>setSystemMetadata</code>).
+  </li>
+  <li>
+    <strong>R2 image proxy.</strong>
+    <code>functions/api/r2/[action].ts</code> &mdash; the four actions (upload / list / signedUrl / delete).
+    How <code>ImageUpload</code> / Image Manager / class+feat+item icon uploads route through here.
+    Why R2 isn't accessed directly from the client.
+  </li>
+  <li>
+    <strong>Foundry module bundle &mdash; the big one.</strong>
+    <code>functions/api/module/[[path]].ts</code> dispatches by path segment. Per-source / per-class /
+    per-spell-list / per-feat / per-item endpoints, plus the queue-backed full-bundle export
+    (<code>api/_lib/module-export-pipeline.ts</code> + <code>module-export-queue.ts</code> +
+    <code>module-export-store.ts</code>). For each route:
+    <ul>
+      <li>URL shape</li>
+      <li>Auth gate</li>
+      <li>Composition library / function</li>
+      <li>Shape of the emitted payload (link to the contract doc in <code>module/dauligor-pairing/docs/</code> &mdash; not duplicated here)</li>
+      <li>Caching behavior (the staleness story)</li>
+    </ul>
+  </li>
+  <li>
+    <strong>Content proposals.</strong>
+    <code>functions/api/proposals/[[path]].ts</code> + <code>functions/api/admin/proposals/[[path]].ts</code>
+    + <code>api/_lib/proposals.ts</code> + <code>cascadeStrategies.ts</code>. From the editor's
+    perspective, not the proposal-system internals.
+  </li>
+  <li>
+    <strong>The auth / profile / favorites / characters / admin endpoints.</strong>
+    Briefly, because they don't directly serve the compendium editors &mdash; the editors call
+    <code>fetch('/api/me')</code> for profile, the favorites endpoints from the read-only browsers,
+    the characters endpoint from the builder/sheet. Mostly out of scope; documented to a depth
+    that lets the reader understand what the editor's surrounding chrome calls.
+  </li>
+  <li>
+    <strong>Auth + permissions throughout.</strong>
+    <code>api/_lib/firebase-admin.ts</code> + <code>api/_lib/permissions.ts</code> &mdash; how every
+    endpoint gates by role (<code>admin</code>, <code>co-dm</code>, <code>lore-writer</code>,
+    <code>trusted-player</code>, <code>user</code>). The <code>requireAdminAccess</code> idiom.
+  </li>
+</ol>
+
+<h2 id="anchor-files">Anchor files</h2>
+
+<ul>
+  <li><code class="path">functions/api/**/*.ts</code> (Pages Functions)</li>
+  <li><code class="path">api/_lib/*.ts</code> (server-side libraries)</li>
+  <li><code class="path">server.ts</code> (Express local-dev mirror)</li>
+  <li><code class="path">docs/platform/runtime.md</code> (request lifecycle)</li>
+  <li><code class="path">module/dauligor-pairing/docs/import-contract-index.md</code> (read-only reference for payload shape)</li>
+</ul>
+
+<nav class="page-pager">
+  <a href="04-components.html">&larr; Prev: 04 &mdash; Shared components</a>
+  <a href="walkthroughs/">Next: Walkthroughs &rarr;</a>
+</nav>
+
+</div>
+</body>
+</html>

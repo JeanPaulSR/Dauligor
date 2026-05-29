@@ -212,7 +212,17 @@ export function useProposalAccumulator(
     }
 
     return {
-      mode: 'proposal' as WriterMode,
+      // Inside a wrapper the queue always flushes into the active
+      // block (the ProposalEditorWrapper block-entry gate guarantees
+      // one exists), so report `'block'` — that makes `actionLabel`
+      // emit "added to block" instead of "submitted for review". The
+      // latter is reserved for genuine standalone single-revision
+      // submits, which only happen OUTSIDE a wrapper (the passthrough
+      // branch above). Fixes the F1 diagnosis-confusion the
+      // compendium-editors follow-up flagged. `isProposalMode` checks
+      // use `=== 'proposal' || === 'block'`, so this is transparent to
+      // every editor.
+      mode: 'block' as WriterMode,
       create: async (payload, opts) => {
         const id = payload.id ?? crypto.randomUUID();
         const { id: _drop, ...rest } = payload;

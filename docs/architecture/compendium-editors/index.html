@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Compendium Editors — Process Reference</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+
+<nav class="crumbs">
+  <a href="../../../AGENTS.md">AGENTS.md</a>
+  <span class="sep">/</span>
+  <a href="../">architecture</a>
+  <span class="sep">/</span>
+  compendium-editors
+</nav>
+
+<header class="hero">
+  <h1>Compendium Editors &mdash; Process Reference</h1>
+  <div class="sub">
+    How the compendium editors actually work today &middot;
+    branch <code>compendium-editors</code> &middot; 2026-05-27
+  </div>
+  <div class="meta">
+    <span class="badge gold">data flow</span>
+    <span class="badge gold">table relations</span>
+    <span class="badge gold">shared components</span>
+    <span class="badge gold">app-side endpoints</span>
+    <span class="badge muted">foundry-side OUT of scope</span>
+  </div>
+</header>
+
+<div class="callout info">
+  <strong>Purpose.</strong>
+  This reference set documents the <em>current</em> behavior of the compendium editors &mdash;
+  not the plan, not the decision tree, not the migration history. The user uses these pages to
+  verify Claude's understanding and correct course where the documented model drifts from the code.
+  Edits welcome; treat any contradiction with the source as a bug in this doc, not in the code.
+</div>
+
+<h2 id="how-to-read">How to read this set</h2>
+
+<p>
+  The reference is split into six sections. Read them in order if you want a top-down briefing;
+  jump straight to a section if you're trying to spot-check a specific concern.
+</p>
+
+<div class="toc">
+  <h4>Contents</h4>
+  <ol>
+    <li><a href="01-survey.html">Survey</a> &mdash; the human-focused summary of my mental model of the system. <strong>Start here for review.</strong> Has a sibling <a href="01-survey-reference.html">reference page</a> with the file-by-file detail.</li>
+    <li><a href="02-data-flow.html">Data flow</a> &mdash; form state &rarr; normalize &rarr; upsert &rarr; D1 &rarr; cache. The round-trip of a save and what each layer does to the payload.</li>
+    <li><a href="03-tables.html">Tables &amp; relations</a> &mdash; how FKs, junction tables, JSON columns, and the <code>parent_id</code> + <code>parent_type</code> pattern fit together.</li>
+    <li><a href="04-components.html">Shared components</a> &mdash; AdvancementManager, ActivityEditor, ActiveEffectEditor, RequirementsEditor, TagPicker, FilterBar, EntityListSection, the two shells. What each does, who uses it, what data it expects.</li>
+    <li><a href="05-endpoints.html">Endpoints</a> &mdash; <code>functions/api/**</code> (Pages Functions) and the <code>api/_lib/_*Export.ts</code> server-side composition libraries that back them. Foundry-module-side consumption is out of scope.</li>
+    <li><a href="walkthroughs/">Per-editor walkthroughs</a> &mdash; deep dives on individual editors (ClassEditor, SpellsEditor, FeatsEditor, etc.). Populated iteratively after the user signs off on the survey.</li>
+  </ol>
+</div>
+
+<div class="callout">
+  <strong>Cross-cutting audit:</strong>
+  <a href="proposal-cross-reference-audit.html">Proposal Cross-Reference Audit</a> &mdash; every editor
+  surface the proposal system could touch and every entity-to-entity reference, mapped for
+  <code>proposal-system</code> so their reference-integrity walk + picker overlays can be made complete.
+</div>
+
+<h2 id="scope">Scope &amp; non-goals</h2>
+
+<h3>In scope</h3>
+<ul>
+  <li>Every editor page under <code>src/pages/compendium/**</code> plus the admin-side editors under <code>src/pages/admin/**</code> that author compendium-shaped data (proficiencies, statuses, weapons, armor, etc.).</li>
+  <li>The shared editor components under <code>src/components/compendium/**</code> &mdash; what they render, who they're mounted by, and what shape of data they expect.</li>
+  <li>The D1 tables those editors write to, the FK and junction relations between them, and the JSON columns auto-parsed by <code>src/lib/d1.ts</code>.</li>
+  <li>The Pages Functions and the <code>api/_lib/_*Export.ts</code> server-side libraries that compose payloads exposed at <code>/api/module/*</code> for the Foundry pairing module.</li>
+</ul>
+
+<h3>Out of scope</h3>
+<ul>
+  <li><strong>Foundry-module-side consumption.</strong> What happens inside <code>module/dauligor-pairing/</code> when the module fetches a payload is owned by another agent; this reference stops at the wire (what the server emits) and does not document the importer / viewer / actor-bundle ingestion logic on the Foundry side.</li>
+  <li><strong>Character builder + character sheet.</strong> Those consume compendium data but aren't editors; documented separately under <code>docs/features/character-*.md</code>.</li>
+  <li><strong>Proposal-mode workflow internals.</strong> The proposal-aware behavior is layered <em>on top of</em> the editors via <code>ProposalEditorWrapper</code> + accumulator hooks. We describe how editors react to proposal mode but don't recap the proposal-cycle internals &mdash; see <code>docs/features/content-proposals.md</code>.</li>
+  <li><strong>Wiki / lore editors.</strong> They follow Pattern D (relational helpers in <code>src/lib/lore.ts</code>) which is owned by the <code>system-applications</code> branch. We reference it as one of the five patterns but don't deep-dive.</li>
+</ul>
+
+<h2 id="status">Current status</h2>
+
+<table>
+  <tr>
+    <th style="width:25%">Section</th>
+    <th>Status</th>
+    <th>Next</th>
+  </tr>
+  <tr>
+    <td><a href="01-survey.html">01 &mdash; Survey</a> (summary)</td>
+    <td><span class="badge leaf">reviewed</span> &mdash; reviewed 2026-05-27; questions answered; roadmap captured</td>
+    <td>Proceed to section 02; correct survey if drift surfaces during later work</td>
+  </tr>
+  <tr>
+    <td><a href="01-survey-reference.html">01 &mdash; Survey (reference)</a></td>
+    <td><span class="badge muted">drafted</span> &mdash; dense file-by-file detail; backs the summary page</td>
+    <td>Updated as the summary changes (drift items, pattern assignments, route changes)</td>
+  </tr>
+  <tr>
+    <td><a href="02-data-flow.html">02 &mdash; Data flow</a></td>
+    <td><span class="badge leaf">reviewed</span> &mdash; reviewed 2026-05-27; Foundry-convention investigation folded into A1</td>
+    <td>Proceed to section 03</td>
+  </tr>
+  <tr>
+    <td><a href="03-tables.html">03 &mdash; Tables &amp; relations</a></td>
+    <td><span class="badge leaf">reviewed</span> &mdash; reviewed 2026-05-27; identifier convention corrected to <code>firebolt_phb</code> form</td>
+    <td>Proceed to section 04</td>
+  </tr>
+  <tr>
+    <td><a href="04-components.html">04 &mdash; Shared components</a></td>
+    <td><span class="badge gold">walkthrough</span> &mdash; collaborative: document each shared widget + flag/fix UI issues as we go</td>
+    <td>Pick starting component + walkthrough mode (visual vs conceptual)</td>
+  </tr>
+  <tr>
+    <td><a href="05-endpoints.html">05 &mdash; Endpoints</a></td>
+    <td><span class="badge muted">stub</span></td>
+    <td>Write after components; covers Pages Functions + <code>api/_lib/_*Export.ts</code></td>
+  </tr>
+  <tr>
+    <td><a href="walkthroughs/">Walkthroughs/</a></td>
+    <td><span class="badge muted">empty</span></td>
+    <td>Per-editor pages added as questions surface</td>
+  </tr>
+</table>
+
+<h2 id="conventions">Conventions used in this reference</h2>
+
+<ul>
+  <li><strong>File paths</strong> are relative to repo root: <code class="path">src/pages/compendium/ClassEditor.tsx</code>.</li>
+  <li><strong>Line citations</strong> appear when a claim depends on a specific block, formatted <code class="path">src/lib/compendium.ts:153</code>.</li>
+  <li><strong>Drift callouts</strong> (red left border) mark places where an existing doc (the patterns doc, a feature doc) says something different from what the code currently does. Each drift item names the doc, what it says, and what the code does.</li>
+  <li><strong>Stub cards</strong> (dashed border) mark sections that are intentionally not yet written &mdash; placeholder for upcoming content, not gaps in the survey itself.</li>
+  <li><strong>Badges</strong>: <span class="badge gold">topic tag</span>, <span class="badge blood">drafted</span>, <span class="badge muted">stub</span>, <span class="badge leaf">verified</span>, <span class="badge outline">to verify</span>.</li>
+</ul>
+
+<h2 id="how-to-correct">How to correct me</h2>
+
+<p>
+  If a claim on a page is wrong, the fastest correction loop is:
+</p>
+
+<ol>
+  <li>Tell me which page and which section heading (e.g. <em>"01-survey, section 'Pattern E editors'"</em>).</li>
+  <li>Tell me what's wrong &mdash; either the correct claim, or a pointer to the source file that contradicts mine.</li>
+  <li>I'll re-read the source, fix the page, and update any related docs in <code>docs/architecture/</code> or <code>docs/features/</code> that propagate the same mistake.</li>
+</ol>
+
+<p>
+  I expect to be wrong about specific things &mdash; especially component prop contracts and edge-case
+  save behavior &mdash; and reading the source against the doc is the whole point of this artifact.
+</p>
+
+<nav class="page-pager">
+  <span class="empty">&nbsp;</span>
+  <a href="01-survey.html">Next: 01 &mdash; Survey &rarr;</a>
+</nav>
+
+</div>
+</body>
+</html>

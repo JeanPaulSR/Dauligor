@@ -52,7 +52,7 @@ import {
   type ReactNode,
 } from 'react';
 import { toast } from 'sonner';
-import { Send, FilePen, Library } from 'lucide-react';
+import { Send, FilePen, Library, Package } from 'lucide-react';
 import { auth } from '../../lib/firebase';
 import {
   ProposalAccumulatorContext,
@@ -83,6 +83,8 @@ const ENTITY_LABELS: Record<ProposalEntityType, string> = {
   item: 'Items',
   unique_option_group: 'Option Groups',
   unique_option_item: 'Option Items',
+  scaling_column: 'Scaling Columns',
+  feature: 'Features',
 };
 
 export type ProposalEditorWrapperProps = {
@@ -519,8 +521,12 @@ export function ProposalEditorWrapper({
       setActiveBlock(bundleId);
       try {
         const { submitted } = await flushToBundle(bundleId);
+        // submitted === 0 is the block-entry-gate case (no queued work
+        // yet — the user is just choosing a block to author into).
         toast.success(
-          `Saved ${submitted} change${submitted === 1 ? '' : 's'} to the block.`,
+          submitted > 0
+            ? `Saved ${submitted} change${submitted === 1 ? '' : 's'} to the block.`
+            : 'Now authoring in this block.',
         );
       } catch (err: any) {
         toast.error(err?.message || 'Failed to save progress.');
@@ -535,7 +541,9 @@ export function ProposalEditorWrapper({
         const id = await startBlock(name, description);
         const { submitted } = await flushToBundle(id);
         toast.success(
-          `Created "${name}" and added ${submitted} change${submitted === 1 ? '' : 's'}.`,
+          submitted > 0
+            ? `Created "${name}" and added ${submitted} change${submitted === 1 ? '' : 's'}.`
+            : `Created "${name}" — now authoring in this block.`,
         );
       } catch (err: any) {
         toast.error(err?.message || 'Failed to create block.');
@@ -563,6 +571,22 @@ export function ProposalEditorWrapper({
   // false-negative the tag_group proposals on the tags route).
   const reviewMode = useProposalReview();
   const isReadOnlyReview = !!reviewMode && reviewMode.isReadOnly;
+  // Block-entry gate (user directive, 2026-05-29): you must have an
+  // active block before authoring in a proposal editor. Without this,
+  // a content-creator can land in standalone single-revision mode
+  // where composite authoring silently can't work (you can propose an
+  // option-group shell but can't add options to it; a freshly-proposed
+  // entity can't be re-opened). When there's no active block — and
+  // we're not in review mode (reviewing a past proposal needs no
+  // block) — the editor body is replaced by a "pick or create a block"
+  // gate and the picker auto-opens. The gate is the real enforcement
+  // (the editor never renders without a block); the dialog is just the
+  // action, so we don't need to fight Radix dismissal — dismissing
+  // returns to the gate, which re-prompts.
+  const needsBlockGate = !reviewMode && !activeBundleId;
+  useEffect(() => {
+    if (needsBlockGate) setPickerOpen(true);
+  }, [needsBlockGate]);
   // Submit Changes is enabled when:
   //   - submitting is off AND
   //   - there's something queued, OR an editor has registered a
@@ -625,7 +649,37 @@ export function ProposalEditorWrapper({
             onFocusModeChange={setFocusMode}
           />
         )}
-        {isReadOnlyReview ? (
+        {needsBlockGate ? (
+          // Block-entry gate — editor body replaced until a block is
+          // active. See the `needsBlockGate` comment above.
+          <div
+            className={cn(
+              'flex items-center justify-center text-center p-8',
+              fullscreen ? 'flex-1 min-h-0' : 'min-h-[40vh]',
+            )}
+          >
+            <div className="max-w-md space-y-3">
+              <Package className="w-10 h-10 text-blood/60 mx-auto" />
+              <h2 className="font-serif text-xl font-bold text-ink">
+                Pick or create a block to start
+              </h2>
+              <p className="text-sm text-ink/65 leading-relaxed">
+                Proposal editing happens inside a{' '}
+                <span className="font-semibold">block</span> — a bundle of
+                related changes you submit for review together. Choose an open
+                block or create a new one to begin. This keeps multi-part work
+                (a class and its features, columns, and option groups) together
+                so it's reviewed and approved as one unit.
+              </p>
+              <Button
+                onClick={() => setPickerOpen(true)}
+                className="gap-2 bg-gold text-white"
+              >
+                <Package className="w-4 h-4" /> Choose a block
+              </Button>
+            </div>
+          </div>
+        ) : isReadOnlyReview ? (
           // Disable all form controls inside the editor when read-only.
           // <fieldset disabled> cascades to every nested input/select/
           // textarea/button — no per-input wiring required.
@@ -654,6 +708,13 @@ export function ProposalEditorWrapper({
         openBlocks={openBlocks}
         onPick={handlePickerPick}
         onCreate={handlePickerCreate}
+        required={needsBlockGate}
+        title={needsBlockGate ? 'Create or choose a block to start' : undefined}
+        description={
+          needsBlockGate
+            ? 'Proposal edits live inside a block. Pick an open block or create a new one to begin authoring — your changes will be bundled and reviewed together.'
+            : undefined
+        }
       />
     </ProposalAccumulatorContext.Provider>
   );

@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>01 — Survey · Compendium Editors</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+
+<nav class="crumbs">
+  <a href="../../../AGENTS.md">AGENTS.md</a>
+  <span class="sep">/</span>
+  <a href="../">architecture</a>
+  <span class="sep">/</span>
+  <a href="index.html">compendium-editors</a>
+  <span class="sep">/</span>
+  01 &mdash; Survey
+</nav>
+
+<header class="hero">
+  <h1>01 &mdash; Survey</h1>
+  <div class="sub">My mental model of how the compendium editors fit together. The big picture I'd like you to validate or correct.</div>
+  <div class="meta">
+    <span class="badge leaf">reviewed</span>
+    <span class="badge outline">answers + roadmap captured</span>
+  </div>
+</header>
+
+<div class="callout success">
+  <strong>Review pass 1 complete.</strong>
+  You read this page on 2026-05-27, answered the five questions (now captured below as
+  <a href="#answers">Your clarifications</a>), and gave the current priority order
+  (<a href="#roadmap">Where we're going next</a>). Findings F1 and F4 below were refined with what
+  you said. The dense file-by-file mapping is still at
+  <a href="01-survey-reference.html">01-survey-reference.html</a> &mdash; reach for it when you want
+  to verify a specific claim.
+</div>
+
+<div class="toc">
+  <h4>On this page</h4>
+  <ol>
+    <li><a href="#the-system">The system in one paragraph</a></li>
+    <li><a href="#three-roles">Three roles, three URL families</a></li>
+    <li><a href="#four-shapes">Four shapes of compendium content</a></li>
+    <li><a href="#five-patterns">Five editor patterns, in plain language</a></li>
+    <li><a href="#blocks">The shared building blocks</a></li>
+    <li><a href="#data-flow">Data flow at a glance</a></li>
+    <li><a href="#server">Server side at a glance</a></li>
+    <li><a href="#findings">Findings &mdash; what surprised me</a></li>
+    <li><a href="#answers">Your clarifications</a></li>
+    <li><a href="#roadmap">Where we're going next</a></li>
+  </ol>
+</div>
+
+<h2 id="the-system">The system in one paragraph</h2>
+
+<p>
+  The Archive is, at its heart, a <strong>structured database of D&amp;D&nbsp;5e content</strong> &mdash; spells, feats, items, classes, subclasses, features, races, backgrounds, facilities, plus the supporting vocabulary (tags, sources, proficiencies, scaling) and the wiki/lore on top. Admins author it through web forms; players read it through public list pages; trusted players propose changes through a review queue. The same data is then exported via <code>/api/module/*</code> for the Foundry pairing module to consume at game time. The compendium editors are the authoring half of that loop &mdash; the part where the data goes <em>in</em>.
+</p>
+
+<h2 id="three-roles">Three roles, three URL families</h2>
+
+<p>Everything I see in the routing falls into one of three buckets:</p>
+
+<div class="card priority-info">
+  <h3>Read &mdash; the public browsers</h3>
+  <div class="path">/compendium/&lt;entity&gt;</div>
+  <p>
+    Every signed-in user can browse spells, feats, items, classes, races, backgrounds, facilities, etc.
+    These pages share a master-detail browser shell (compact list on the left, detail pane on the
+    right, filter bar on top). They're read-only and don't know anything about editing.
+  </p>
+</div>
+
+<div class="card priority-info">
+  <h3>Edit &mdash; the admin manager pages</h3>
+  <div class="path">/compendium/&lt;entity&gt;/manage  or  /edit/:slug</div>
+  <p>
+    Admins author the same content via manager pages. For the catalog entities (spells, feats,
+    items) the manager looks intentionally like the public browser &mdash; same list rhythm, same filter
+    bar &mdash; with an editor pane and admin actions on top. For classes and a few special editors
+    (sources, tag manager, weapons/armor admin tools) the layout is bespoke.
+  </p>
+</div>
+
+<div class="card priority-info">
+  <h3>Propose &mdash; the same editors, wrapped</h3>
+  <div class="path">/proposals/edit/&lt;entity&gt;</div>
+  <p>
+    Trusted players (and roles below admin) suggest changes through "proposal mode" &mdash; the exact
+    same editor components, wrapped by <code>ProposalEditorWrapper</code>. The wrapper queues
+    writes locally, the proposer reviews their bundle, and the bundle goes to admins for accept /
+    reject / cascade decisions. From the editor's point of view, the only difference is that the
+    save handler is swapped &mdash; it doesn't know it's in proposal mode.
+  </p>
+</div>
+
+<h2 id="four-shapes">Four shapes of compendium content</h2>
+
+<p>Looking at what gets authored, I see four families of thing &mdash; each shaped slightly differently:</p>
+
+<table>
+  <tr>
+    <th style="width:18%">Family</th>
+    <th style="width:36%">What it is</th>
+    <th>Examples</th>
+  </tr>
+  <tr>
+    <td><strong>Catalog entities</strong></td>
+    <td>The big enumerated content. Each has identity (name, identifier, source), a description, mechanical fields, and Foundry-shaped automation (activities + effects).</td>
+    <td>spells, feats, items, classes, subclasses, features, facilities, races, backgrounds</td>
+  </tr>
+  <tr>
+    <td><strong>Taxonomies</strong></td>
+    <td>Small "what's allowed in the game" lists. Typically <code>name / identifier / order / description</code>, sometimes a free-text category.</td>
+    <td>skills, tools, weapons, armor, damage types, languages, attributes, condition categories, tool categories, weapon categories, armor categories, weapon properties</td>
+  </tr>
+  <tr>
+    <td><strong>Special structures</strong></td>
+    <td>Things that don't fit the catalog mold &mdash; usually because they have a stronger shape or relate other entities.</td>
+    <td>unique option groups (Metamagic, Invocations), scaling columns (cantrip dice, sneak attack), tags + tag groups, sources, spell lists, spell rules</td>
+  </tr>
+  <tr>
+    <td><strong>Wiki / lore</strong></td>
+    <td>Hierarchical narrative content &mdash; campaign lore with DM-secret blocks, metadata (characters, locations, organizations, deities), and a separate set of junction tables.</td>
+    <td>lore articles, secrets, character/location/organization/deity meta (currently owned by the <code>system-applications</code> branch)</td>
+  </tr>
+</table>
+
+<h2 id="five-patterns">Five editor patterns, in plain language</h2>
+
+<p>
+  Instead of one generic CRUD form, the codebase has converged on <strong>five recognizable patterns</strong>,
+  each tuned to a kind of authoring problem. I've kept the naming compatible with the existing patterns doc
+  (A&ndash;E) but the assignments are reconciled against what the editor files actually do today.
+</p>
+
+<table>
+  <tr>
+    <th style="width:8%">#</th>
+    <th style="width:25%">What it is, in human terms</th>
+    <th style="width:30%">When to reach for it</th>
+    <th>Who uses it today</th>
+  </tr>
+  <tr>
+    <td><strong>A &mdash; Quick form</strong></td>
+    <td>Name + identifier + source + description + a few entity-specific fields. Renders via a generic shell that takes a callback for "the unique fields go here."</td>
+    <td>Flat table, no children to track, no relational complexity.</td>
+    <td>Facilities</td>
+  </tr>
+  <tr>
+    <td><strong>B &mdash; Bespoke editor</strong></td>
+    <td>Whatever shape the entity needs &mdash; full custom page, hand-rolled state, custom layout. Says nothing in common beyond "doesn't fit the shells."</td>
+    <td>Entity has structure that doesn't reduce to a flat form (e.g. classes), unusual UX needs (multi-step, multi-tab with non-uniform contents), or it predates the shells and hasn't been migrated.</td>
+    <td>Classes, subclasses, sources, tag manager, tag group editor, unique option groups, the admin mechanic editors (weapons, armor, statuses, spellcasting types, multiclass chart)</td>
+  </tr>
+  <tr>
+    <td><strong>C &mdash; Taxonomy</strong></td>
+    <td>Inline-edit list-of-rows. Looks like a styled spreadsheet with an "add row" button and a modal for the long fields.</td>
+    <td>Small reference lists. Editor shape is identical across instances; only the table changes.</td>
+    <td>Skills, tools, all the admin proficiencies tabs (tool categories, weapon categories, weapon properties, armor categories, language categories, damage types, attributes, languages), status condition categories</td>
+  </tr>
+  <tr>
+    <td><strong>D &mdash; Relational entity</strong></td>
+    <td>Parent row plus multiple child tables (metadata, junctions) written atomically as one batched D1 transaction.</td>
+    <td>Anything where partial writes would leave the database inconsistent &mdash; usually parent-with-children that need to be created/updated/deleted in lockstep.</td>
+    <td>Lore articles + the seven supporting tables. Owned by the <code>system-applications</code> branch; referenced here for completeness, not deep-dived.</td>
+  </tr>
+  <tr>
+    <td><strong>E &mdash; Catalog manager</strong></td>
+    <td>Three-pane master-detail: compact list on the left (hundreds of rows, virtualised), tabbed editor in the middle, read-only detail preview on the right. Filter bar on top, super-tabs for Editor vs Tags.</td>
+    <td>Catalog-shaped entities where the list of "all rows" is itself an authoring tool &mdash; you scroll dozens of records to find the one to tweak.</td>
+    <td>Spells, feats, items (Races + Backgrounds wrap the feats editor with a discriminator)</td>
+  </tr>
+</table>
+
+<p>
+  My read on the trajectory: <strong>the codebase has gravity toward Pattern E</strong> for catalog
+  entities. The legacy Pattern A shell is literally named <code>DevelopmentCompendiumManager</code>
+  on purpose &mdash; you confirmed it's the compendium manager used during development, and Facilities
+  (its only remaining consumer) will be replaced with its own thing once everything else is
+  cleaned up. At that point the legacy shell has no consumers and can be removed. The new Pattern E
+  shell (<code>CompendiumEditorShell</code>) is where spells, feats, and items live now &mdash; the
+  patterns doc still describes spells/feats/items as Pattern A, but that's drift.
+</p>
+
+<h2 id="blocks">The shared building blocks</h2>
+
+<p>
+  The thing I take away from reading the editor files: <strong>most editors are thin assemblies
+  of a small set of shared widgets</strong>. Once you know the widgets, you know most of what's
+  going on inside any one editor &mdash; the bespoke code is mostly wiring (which widgets in which
+  tabs, with which lookup pools) plus a small core of entity-specific fields.
+</p>
+
+<p>The widgets I see used most often:</p>
+
+<table>
+  <tr>
+    <th style="width:24%">Widget</th>
+    <th style="width:36%">What it does, conceptually</th>
+    <th>Mounted by</th>
+  </tr>
+  <tr>
+    <td><strong>Advancement editor</strong></td>
+    <td>Authors compose a level-by-level progression timeline &mdash; hit points, ability score improvements, item grants, item choices, subclass markers, scale values, size, spell grants, and "bump uses" hooks. Same component, different per-editor behaviour selected via a <code>context</code> prop.</td>
+    <td>Classes, subclasses, feats, items, races, backgrounds (via the feats wrapper)</td>
+  </tr>
+  <tr>
+    <td><strong>Activity editor</strong></td>
+    <td>Authors define the automation behavior the Foundry side will execute &mdash; per-type forms (attack, save, check, heal, damage, utility, spell, enchant, forward, summon, transform, cast). Vocabulary kept aligned with Foundry's so the export round-trips.</td>
+    <td>Classes (via features), subclasses (via features), feats, items, spells, unique option items, facilities</td>
+  </tr>
+  <tr>
+    <td><strong>Active Effect editor</strong></td>
+    <td>Authors define the persistent modifications the entity applies when on the actor sheet &mdash; mirrors Foundry's <code>ActiveEffectConfig</code> with the same modes, priorities, and change keys.</td>
+    <td>Same as the activity editor.</td>
+  </tr>
+  <tr>
+    <td><strong>Requirements editor</strong></td>
+    <td>Structured prerequisite tree (And / Or / Xor over level / class / ability / proficiency / feature / spell / etc.) with a free-text fallback for narrative gates that don't fit the tree.</td>
+    <td>Feats, unique option items</td>
+  </tr>
+  <tr>
+    <td><strong>Tag picker</strong></td>
+    <td>Hierarchical chip selector with a "subtag implies parent" invariant. Used for categorising entities; the same vocabulary drives the public-browser filters.</td>
+    <td>Spells (inline variant), feats, items</td>
+  </tr>
+  <tr>
+    <td><strong>Scaling columns panel</strong></td>
+    <td>The per-class / per-feat / per-item table of values that scale with level (cantrip dice, sneak attack, etc.). Both authoring and referencing flow through this.</td>
+    <td>Classes, subclasses, feats, items</td>
+  </tr>
+  <tr>
+    <td><strong>Filter bar</strong></td>
+    <td>Search input + multi-axis filter modal + reset + result count + trailing actions slot. Same component on public browsers and admin managers.</td>
+    <td>Every Pattern E manager, every public browser, plus some bespoke editors</td>
+  </tr>
+  <tr>
+    <td><strong>Detail panel</strong></td>
+    <td>Read-only preview of the entity (icon + name + mechanical summary + description). The Pattern E managers mount the public-browser's detail panel inside their right pane so admins see what end-users see.</td>
+    <td>Spells, feats, items (one panel per entity, reused by both the browser and the manager)</td>
+  </tr>
+</table>
+
+<h2 id="data-flow">Data flow at a glance</h2>
+
+<p>Every save goes through the same pipeline:</p>
+
+<div class="pipeline">
+  <span class="stage">form state<br><small>(camelCase)</small></span>
+  <span class="arrow">&rarr;</span>
+  <span class="stage">normalize<br><small>camel&rarr;snake</small></span>
+  <span class="arrow">&rarr;</span>
+  <span class="stage">upsert helper<br><small>per-entity</small></span>
+  <span class="arrow">&rarr;</span>
+  <span class="stage">D1 row<br><small>snake_case</small></span>
+  <span class="arrow">&rarr;</span>
+  <span class="stage">cache invalidation</span>
+  <span class="arrow">&rarr;</span>
+  <span class="stage">foundation bump</span>
+</div>
+
+<p>And the reverse on read:</p>
+
+<div class="pipeline">
+  <span class="stage">D1 row</span>
+  <span class="arrow">&rarr;</span>
+  <span class="stage">queryD1<br><small>auto-parses JSON cols</small></span>
+  <span class="arrow">&rarr;</span>
+  <span class="stage">denormalize<br><small>snake&rarr;camel</small></span>
+  <span class="arrow">&rarr;</span>
+  <span class="stage">form state</span>
+</div>
+
+<p>Sharp edges worth flagging at the conceptual level:</p>
+
+<ul>
+  <li>
+    <strong>Two-way camel/snake dance.</strong> Form state is camelCase by convention; D1 rows are
+    snake_case. A normalise / denormalise pair handles the swap at the boundary. The patterns doc
+    flags this as a future cleanup (pick one and stop dancing), but for now it's the model.
+  </li>
+  <li>
+    <strong>Cache is two-tier.</strong> In-memory cache for the session, plus sessionStorage for
+    tables tagged "persistent" (sources, skills, weapons, armor, spells, etc.). A global
+    "foundation update" timestamp gets bumped on writes and clients poll it every 30 seconds &mdash;
+    when it changes, everyone wipes their caches.
+  </li>
+  <li>
+    <strong><code>INSERT OR REPLACE</code> is forbidden.</strong> D1 enforces foreign keys, and
+    <code>INSERT OR REPLACE</code> deletes the row before reinserting &mdash; which cascades to children.
+    Editors use <code>ON CONFLICT(id) DO UPDATE</code> instead. There's a documented data-loss incident
+    from before this rule was added.
+  </li>
+  <li>
+    <strong>JSON columns auto-parse on read, but editors have to handle "already parsed."</strong>
+    The <code>queryD1</code> helper auto-parses an allowlist of JSON columns; remap code in editors
+    has to use <code>typeof X === 'string' ? JSON.parse(X) : (X ?? default)</code> so an
+    already-parsed value passes through. Forgetting the passthrough silently empties the field.
+  </li>
+</ul>
+
+<h2 id="server">Server side at a glance</h2>
+
+<p>Two surfaces of server code:</p>
+
+<div class="card priority-info">
+  <h3>Pages Functions &mdash; the production runtime</h3>
+  <p>
+    <code>functions/api/**</code>. Each file under there is a Cloudflare Pages Function. Some serve
+    the client app (<code>/api/d1/query</code>, <code>/api/r2/*</code>, <code>/api/lore/*</code>,
+    <code>/api/proposals/*</code>, etc.); one in particular serves the Foundry pairing module
+    (<code>/api/module/*</code>).
+  </p>
+</div>
+
+<div class="card priority-info">
+  <h3>Express &mdash; the local-dev mirror</h3>
+  <p>
+    <code>server.ts</code>. Runs alongside Vite in dev (<code>npm run dev</code>), proxies to a
+    local Cloudflare worker (<code>wrangler dev</code> in <code>worker/</code>) for D1 + R2
+    simulation. Mirrors most Pages Functions for local-dev parity, but not all &mdash; the
+    <code>/api/module/*</code> family is Pages-only, so to test it locally you need
+    <code>npx wrangler pages dev</code> instead.
+  </p>
+</div>
+
+<p>
+  A handful of shared libraries live in <em>both</em> <code>src/lib/</code> (client) and
+  <code>api/_lib/</code> (server) as <strong>drift-managed sibling pairs</strong> &mdash;
+  <code>classExport</code>, <code>classProgression</code>, <code>referenceSyntax</code>,
+  <code>requirements</code>. The original reason was a Vercel bundler limitation; the pattern is
+  preserved on Pages because the contract is clean and the sibling-pair scoping keeps the server
+  bundle small. Any change to one has to land in both.
+</p>
+
+<p>
+  The biggest server-side surface for our purposes is <strong><code>/api/module/*</code></strong>.
+  That's the wire to the Foundry pairing module. The composition libraries
+  (<code>_classExport</code>, <code>_featExport</code>, <code>_itemExport</code>,
+  <code>_spellExport</code>, plus the per-source spell/feat lists, the spell-list resolver, the
+  filter helpers, the tag catalog, the queue-backed full-bundle pipeline) turn D1 rows into the
+  JSON shape the Foundry side expects. <strong>What happens past the wire &mdash; how the module
+  consumes the payload &mdash; is someone else's job</strong>, and this reference set explicitly does
+  not document it.
+</p>
+
+<h2 id="findings">Findings &mdash; what surprised me</h2>
+
+<p>Things that stood out as I read the code against the existing docs:</p>
+
+<div class="card priority-now">
+  <h3>F1 &mdash; The patterns doc is mid-migration</h3>
+  <p>
+    <code>docs/architecture/compendium-editor-patterns.md</code> documents an earlier state where
+    spells, feats, and items used a generic CRUD shell (Pattern A). They've migrated to a dedicated
+    shared shell (Pattern E in this reference). The doc still names them as Pattern A. The migration
+    happened; the doc didn't follow. I've called out six concrete drift items in
+    <a href="01-survey-reference.html#drift">the reference page</a> &mdash; if you sign off on the
+    pattern map here, I'll reconcile the existing patterns doc as part of task #5.
+  </p>
+</div>
+
+<div class="card priority-next">
+  <h3>F2 &mdash; The advancement editor is the heaviest piece of shared authoring</h3>
+  <p>
+    <code>AdvancementManager</code> is mounted by classes, subclasses, feats, and items. It varies
+    its behaviour by a <code>context</code> prop ("class" / "subclass" / "feat" / "race" /
+    "background" / item-as-bump-author). Changes to it ripple across the editor surface. If
+    there's one component to be careful with when touching the editor side, it's this one.
+  </p>
+</div>
+
+<div class="card priority-next">
+  <h3>F3 &mdash; Pattern B is "everything that didn't fit elsewhere"</h3>
+  <p>
+    Sources, tag manager, classes, subclasses, the admin mechanic editors &mdash; they share nothing
+    structurally beyond "they're bespoke." Calling something Pattern B tells you very little.
+    ClassEditor in particular is its own beast: advancements, features, scaling, proficiencies,
+    spellcasting, multiclass requirements all on one page.
+  </p>
+</div>
+
+<div class="card priority-later">
+  <h3>F4 &mdash; Races and backgrounds aren't yet first-class</h3>
+  <p>
+    They live in the <code>feats</code> table with a <code>feat_type</code> discriminator. The
+    "race editor" and "background editor" are 20-line wrappers around the feats editor that pass
+    a <code>scopeFeatType</code> prop. The doc inside those wrappers explicitly anticipates a
+    future migration to dedicated tables.
+  </p>
+  <p>
+    <strong>Confirmed:</strong> this is intentional placeholder behavior, and Races + Backgrounds
+    <em>will</em> be promoted to their own tables as part of the current cleanup pass (see
+    <a href="#roadmap">roadmap step 1</a>). The wrappers are the seam where that swap happens &mdash;
+    swap their bodies, leave the routes intact.
+  </p>
+</div>
+
+<div class="card priority-later">
+  <h3>F5 &mdash; Proposal mode is layered on, not baked in</h3>
+  <p>
+    The proposal-edit URLs wrap the same editor components with <code>ProposalEditorWrapper</code>.
+    The editor mostly doesn't know it's in proposal mode &mdash; the save handler is swapped via
+    context. Almost every editor file imports a handful of proposal-aware hooks
+    (<code>useProposalAccumulator</code>, <code>useDraftedEntityIds</code>, ...), but they're
+    conditional pass-throughs. Clean separation; not a special-case spaghetti.
+  </p>
+</div>
+
+<div class="card priority-info">
+  <h3>F6 &mdash; The browsers and the managers share components on purpose</h3>
+  <p>
+    The Pattern E manager's right-pane preview is literally the same React component the public
+    browser uses for its detail panel. The filter bar is the same. The list-row layout is intentionally
+    aligned. Visual parity isn't a happy accident &mdash; the editors are designed so admins navigate them
+    the same way end-users navigate the browsers.
+  </p>
+</div>
+
+<h2 id="answers">Your clarifications</h2>
+
+<p>
+  Captured here for posterity; the relevant findings above are updated to reflect what's now confirmed.
+  Each answer also informs how the rest of the reference set gets written.
+</p>
+
+<div class="card priority-info">
+  <h3>A1 &mdash; "New table" vs "discriminator": <em>new table for new functionality</em></h3>
+  <p>
+    Principle: <strong>prefer a new table when the functionality is genuinely new</strong>. Extracting
+    later is harder than starting separated &mdash; one table touched, not one table excavated. The
+    cases that look like discriminator use are deliberate:
+  </p>
+  <ul>
+    <li>
+      <strong>Races / Backgrounds</strong> living in <code>feats</code> &mdash; placeholders. They
+      will get their own tables once prioritized (see <a href="#roadmap">roadmap step 1</a>).
+    </li>
+    <li>
+      <strong>Statuses + Condition Categories</strong> &mdash; already separated. Categories type the
+      statuses ("what type of condition is this status?"). Two tables; intentional.
+    </li>
+  </ul>
+</div>
+
+<div class="card priority-info">
+  <h3>A2 &mdash; <code>DevelopmentCompendiumManager</code> is on a glide path to retirement</h3>
+  <p>
+    The name is literal &mdash; "compendium manager used during development." Facilities (its only
+    remaining consumer) will be replaced with its own thing once everything else is finished
+    (see <a href="#roadmap">roadmap step 4</a>). At that point the legacy shell has no consumers
+    and can be removed.
+  </p>
+</div>
+
+<div class="card priority-info">
+  <h3>A3 &mdash; <code>/api/module/*</code> contract is stable</h3>
+  <p>
+    May gain new endpoints over time, but existing endpoints should rarely change unless there's a
+    real problem or convention issue. Designed for "get every source then get every one of their
+    resources" as the optimized happy path. Treat as a stable wire for the purposes of this
+    reference; the new endpoints landing on <code>system-applications</code> (articles, system
+    pages) are additions, not revisions.
+  </p>
+</div>
+
+<div class="card priority-info">
+  <h3>A4 &mdash; Class cascade-delete: yes, but bounded</h3>
+  <p>A class delete should remove:</p>
+  <ul>
+    <li>Its subclasses</li>
+    <li>Its class features (the rows in <code>features</code> with <code>parent_id</code> &harr; this class)</li>
+    <li>Its advancements (the advancement rows authored on the class, including those on its subclasses)</li>
+  </ul>
+  <p>
+    It should <strong>not</strong> remove anything those advancements <em>grant</em>. Worked
+    example: a class &rarr; subclass &rarr; advancement that grants Warlock Invocations. Deleting the
+    class deletes the subclass, the features, and the advancement row itself. It does
+    <strong>not</strong> delete the Invocation option items &mdash; those are independent compendium
+    content and might be referenced by other things.
+  </p>
+  <p>
+    Low priority for now &mdash; no classes are being deleted in practice. The rules above are
+    documented now so they're clear when someone gets to it.
+  </p>
+</div>
+
+<div class="card priority-info">
+  <h3>A5 &mdash; Proposal mode is not done</h3>
+  <p>
+    The editor surface still needs work for proposal mode to be considered complete. Not super
+    high priority right now &mdash; not blocking other work, but worth surfacing as a real backlog item
+    when the editor cleanup pass reaches each editor.
+  </p>
+</div>
+
+<h2 id="roadmap">Where we're going next (per your direction)</h2>
+
+<p>
+  The current priority order. Documentation in this reference set is written with this priority in
+  mind &mdash; the Pattern E editors get the deepest walkthroughs first.
+</p>
+
+<table>
+  <tr>
+    <th style="width:8%">Step</th>
+    <th style="width:42%">What it covers</th>
+    <th>Notes</th>
+  </tr>
+  <tr>
+    <td><strong>1</strong></td>
+    <td>
+      Finish the main D&amp;D character editors using <strong>Pattern E</strong>:
+      <ul style="margin:6px 0 0 22px">
+        <li><strong>Backgrounds</strong> &mdash; clean up view + editor; promote to its own table</li>
+        <li><strong>Races</strong> &mdash; clean up view + editor; promote to its own table</li>
+        <li><strong>Items</strong> &mdash; clean up view + editor (already in Pattern E)</li>
+      </ul>
+    </td>
+    <td>
+      Per A1, Backgrounds and Races likely get their own tables in this step. The
+      <code>RaceEditor</code> / <code>BackgroundEditor</code> wrappers are the seam where the swap
+      happens &mdash; routes and sidebar entries stay put.
+    </td>
+  </tr>
+  <tr>
+    <td><strong>2</strong></td>
+    <td>
+      Clean up <strong>Class</strong> and <strong>Subclass</strong> view + editor.
+    </td>
+    <td>
+      These stay bespoke (Pattern B). They're innately complex (advancements + features + scaling +
+      proficiencies + spellcasting + multiclass on one page) and Pattern E would be the wrong fit.
+      Cascade-delete (A4) is a known follow-up here but low priority.
+    </td>
+  </tr>
+  <tr>
+    <td><strong>3</strong></td>
+    <td>
+      Clean up the <strong>shared widgets</strong> the editors mount.
+    </td>
+    <td>
+      Advancement editor, activity editor, active effect editor, requirements editor, tag picker,
+      scaling columns panel, filter bar, and the rest of <a href="#blocks">the building blocks</a>.
+      Touched here once, propagates across every consuming editor.
+    </td>
+  </tr>
+  <tr>
+    <td><strong>4</strong></td>
+    <td>
+      UI polish + specific features for edge cases.
+    </td>
+    <td>
+      Includes Facilities' replacement (per A2) and retirement of the legacy
+      <code>DevelopmentCompendiumManager</code> shell. Also where proposal-mode completeness (A5)
+      and class cascade-delete (A4) land if they haven't been picked up sooner.
+    </td>
+  </tr>
+</table>
+
+<p style="font-size:13px;color:var(--muted)">
+  Not a commitment to ship steps in strict sequence &mdash; just the framing for prioritisation. Items
+  out of this list (lore / characters / admin pages / wiki) sit outside this priority chain and
+  evolve on their own cadence.
+</p>
+
+<h2 id="where-the-detail-lives">Where the detail lives</h2>
+
+<p>
+  Once you've validated (or corrected) the model on this page, the technical reference at
+  <a href="01-survey-reference.html">01-survey-reference.html</a> has the file-by-file detail:
+  every editor mapped to its pattern + the D1 tables it writes to + the shared components it
+  mounts, the full route map (public / admin / proposal-mode), the shared-component catalog with
+  file paths, the shared client libraries, the endpoint families with their composition libraries,
+  and a separate drift section with file&nbsp;+&nbsp;line citations.
+</p>
+
+<p>
+  That page is dense and machine-precise. This page is the human-focused summary. If you spot
+  something on this page that's wrong, the fix usually lives in the reference page; tell me what's
+  wrong and I'll update both.
+</p>
+
+<nav class="page-pager">
+  <a href="index.html">&larr; Back to index</a>
+  <a href="01-survey-reference.html">Reference: file-by-file detail &rarr;</a>
+</nav>
+
+</div>
+</body>
+</html>

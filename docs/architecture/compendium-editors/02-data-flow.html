@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>02 — Data flow · Compendium Editors</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+
+<nav class="crumbs">
+  <a href="../../../AGENTS.md">AGENTS.md</a>
+  <span class="sep">/</span>
+  <a href="../">architecture</a>
+  <span class="sep">/</span>
+  <a href="index.html">compendium-editors</a>
+  <span class="sep">/</span>
+  02 &mdash; Data flow
+</nav>
+
+<header class="hero">
+  <h1>02 &mdash; Data flow</h1>
+  <div class="sub">What happens between clicking Save and the row landing in D1 &mdash; and on the way back out.</div>
+  <div class="meta">
+    <span class="badge leaf">reviewed</span>
+    <span class="badge outline">answers captured 2026-05-27</span>
+  </div>
+</header>
+
+<div class="callout success">
+  <strong>Review pass 1 complete.</strong>
+  Your answers to the four open questions are captured below as
+  <a href="#answers">Your clarifications</a>. The Foundry-convention investigation triggered by
+  A1 came back &mdash; the rest of the page is otherwise unchanged from the draft you read.
+</div>
+
+<div class="toc">
+  <h4>On this page</h4>
+  <ol>
+    <li><a href="#tldr">The save and the read &mdash; at a glance</a></li>
+    <li><a href="#save">The save leg, step by step</a></li>
+    <li><a href="#read">The read leg, step by step</a></li>
+    <li><a href="#camel-snake">The camel/snake dance &mdash; and why it's there</a></li>
+    <li><a href="#cache">The cache layers</a></li>
+    <li><a href="#foundation">The foundation update bump</a></li>
+    <li><a href="#atomic">Multi-table writes &mdash; the atomic-write idiom</a></li>
+    <li><a href="#proposal">Proposal mode &mdash; the save handler swap</a></li>
+    <li><a href="#post-save">Post-save UI &mdash; the "preserve selection" idiom</a></li>
+    <li><a href="#rules">The four non-negotiable rules</a></li>
+    <li><a href="#findings">Findings &mdash; what stood out</a></li>
+    <li><a href="#answers">Your clarifications</a></li>
+  </ol>
+</div>
+
+<h2 id="tldr">The save and the read &mdash; at a glance</h2>
+
+<p>
+  Every save round-trips through a five-stage pipeline. Every read does the reverse. The whole
+  thing is held together by a three-tier cache, a global "something changed" timestamp, and one
+  shared file (<code>src/lib/compendium.ts</code>) that handles the translation between the form's
+  preferred shape and the database's preferred shape.
+</p>
+
+<div class="pipeline">
+  <span class="stage">form state<br><small>camelCase</small></span>
+  <span class="arrow">&rarr;</span>
+  <span class="stage">normalize<br><small>camel&rarr;snake +<br>JSON encode +<br>strip junk</small></span>
+  <span class="arrow">&rarr;</span>
+  <span class="stage">upsert helper<br><small>per-entity</small></span>
+  <span class="arrow">&rarr;</span>
+  <span class="stage">D1 row<br><small>snake_case</small></span>
+  <span class="arrow">&rarr;</span>
+  <span class="stage">cache invalidation</span>
+  <span class="arrow">&rarr;</span>
+  <span class="stage">foundation bump<br><small>(if persistent)</small></span>
+</div>
+
+<div class="pipeline">
+  <span class="stage">D1 row</span>
+  <span class="arrow">&rarr;</span>
+  <span class="stage">queryD1<br><small>auto-parses<br>~50 JSON cols</small></span>
+  <span class="arrow">&rarr;</span>
+  <span class="stage">denormalize<br><small>snake&rarr;camel +<br>rebuild wrapper<br>objects</small></span>
+  <span class="arrow">&rarr;</span>
+  <span class="stage">form state</span>
+</div>
+
+<h2 id="save">The save leg, step by step</h2>
+
+<p>What actually happens when you click Save in a compendium editor:</p>
+
+<ol>
+  <li>
+    <strong>Editor builds a payload.</strong> Every editor maintains its working state in a
+    <code>formData</code> object (camelCase keys). On Save, it builds the payload &mdash; usually a
+    shallow merge of <code>formData</code> with any computed fields (identifier auto-gen from name,
+    Foundry-side bookkeeping, etc.).
+  </li>
+  <li>
+    <strong><code>normalizeCompendiumData</code> swaps the shape.</strong> Walks the payload and
+    does eight separate things:
+    <ul>
+      <li>Renames camelCase fields to snake_case (<code>imageUrl</code> &rarr; <code>image_url</code>,
+        <code>sourceId</code> &rarr; <code>source_id</code>, etc. &mdash; one mapping table, ~50 entries).</li>
+      <li>Unwraps the <code>automation</code> wrapper (<code>{ activities, effects }</code>) into
+        flat <code>activities</code> + <code>effects</code> fields.</li>
+      <li>Decomposes the <code>uses</code> object (<code>{ max, spent, period, recovery }</code>) into
+        the flat columns the schema has &mdash; <em>except</em> for items, which keep <code>uses</code>
+        as a single JSON column. The discriminator is the presence of <code>item_type</code>.</li>
+      <li>Decomposes the <code>components</code> object for spells (V / S / M each into its own column).</li>
+      <li>Decomposes the <code>prerequisites</code> object for features.</li>
+      <li>Coerces numeric fields (<code>level</code>, <code>quantity</code>, <code>armor_value</code>, etc.).</li>
+      <li>Coerces booleans to integers (SQLite has no native boolean &mdash; <code>true</code> becomes
+        <code>1</code>). The coercion only fires on actual booleans, leaving string-enum columns
+        like <code>attunement: 'required'</code> alone.</li>
+      <li>Strips a hardcoded list of UI-only / legacy fields (the "forbidden" list &mdash;
+        <code>id</code>, <code>automation</code>, <code>effectsStr</code>, <code>status</code>,
+        <code>usage</code>, the legacy Firestore <code>source</code> object, etc.) so the upsert
+        doesn't try to write them.</li>
+    </ul>
+  </li>
+  <li>
+    <strong>The per-entity helper does the upsert.</strong> Most editors call a helper from
+    <code>compendium.ts</code> &mdash; <code>upsertSpell</code> / <code>upsertFeat</code> /
+    <code>upsertItem</code> / <code>upsertFeature</code>. These layer on top of
+    <code>upsertDocument</code> in <code>d1.ts</code>, which compiles to
+    <code>INSERT ... ON CONFLICT(id) DO UPDATE SET ...</code> &mdash; explicitly <em>not</em>
+    <code>INSERT OR REPLACE</code> (that would cascade-delete children; see <a href="#rules">the
+    four rules</a>).
+  </li>
+  <li>
+    <strong>D1 stores the row.</strong> Snake-case columns; JSON columns are written as JSON
+    strings; integers and floats as numbers; booleans as 0/1.
+  </li>
+  <li>
+    <strong><code>queryD1</code> invalidates the cache.</strong> It looks at the SQL for an
+    <code>INTO</code> / <code>UPDATE</code> / <code>DELETE FROM</code> / <code>REPLACE INTO</code>
+    clause, extracts the table name, and runs <code>clearCache(tableName)</code> &mdash; wiping
+    both the in-memory cache and any sessionStorage entries for that table.
+  </li>
+  <li>
+    <strong>If the table is "persistent," it bumps the foundation timestamp.</strong> Any write to
+    a persistent table (sources, spells, classes, feats, items, skills, weapons, etc. &mdash; the
+    full list lives in <code>PERSISTENT_TABLES</code> in <code>d1.ts</code>) triggers
+    <code>bumpFoundationUpdate</code>, which updates a single row in <code>system_metadata</code>
+    keyed <code>last_foundation_update</code>. Every signed-in client polls that timestamp every
+    30 seconds. When it changes, everyone wipes their caches and refreshes.
+  </li>
+</ol>
+
+<h2 id="read">The read leg, step by step</h2>
+
+<p>Going the other way:</p>
+
+<ol>
+  <li>
+    <strong>Editor calls <code>fetchCollection</code> or <code>fetchDocument</code>.</strong> Or
+    sometimes a per-entity helper (<code>fetchSpell</code>, <code>fetchFeat</code>). All of them
+    route through <code>queryD1</code>.
+  </li>
+  <li>
+    <strong><code>queryD1</code> checks three caches before hitting the network.</strong>
+    First the in-memory cache (5-minute TTL). Then sessionStorage (1-hour TTL, but only for tables
+    in the <code>PERSISTENT_TABLES</code> allowlist). Then the in-flight request map (so two
+    components asking for the same SQL at the same time share one network call). Only if all three
+    miss does it fetch.
+  </li>
+  <li>
+    <strong>The Pages Function returns the raw rows.</strong> Snake-case columns, JSON columns
+    still serialised as JSON strings.
+  </li>
+  <li>
+    <strong><code>queryD1</code> auto-parses an allowlisted set of JSON columns.</strong> A
+    hardcoded list of ~50 column names gets <code>JSON.parse</code>'d on the way back, in a
+    try/catch &mdash; if the value is already an object (e.g. because it came from another consumer
+    that already parsed it), the catch swallows the error and leaves it as-is. The list includes
+    both snake_case names and a few camelCase aliases (<code>tag_ids</code> AND <code>tagIds</code>)
+    so consumers don't have to care which arrived.
+  </li>
+  <li>
+    <strong>If the editor uses <code>denormalizeCompendiumData</code>, the shape gets translated.</strong>
+    Reverse of normalize: snake_case columns become camelCase fields; flat <code>uses_*</code>
+    columns get re-wrapped into a <code>uses</code> object; flat <code>components_*</code> columns
+    become a <code>components</code> object; flat <code>prerequisites_*</code> columns become a
+    <code>prerequisites</code> object; activities + effects get parsed (with already-parsed
+    passthrough) and re-wrapped into an <code>automation</code> wrapper. Plus a small
+    <code>_id</code> &rarr; <code>id</code> mapping on activities/effects so editor-side code can
+    use one consistent key.
+  </li>
+  <li>
+    <strong>The editor populates <code>formData</code>.</strong> User starts editing.
+  </li>
+</ol>
+
+<h2 id="camel-snake">The camel/snake dance &mdash; and why it's there</h2>
+
+<p>
+  Form state is camelCase by convention; D1 columns are snake_case by SQL convention. The mapping
+  lives in two functions in <code>src/lib/compendium.ts</code> &mdash; <code>normalizeCompendiumData</code>
+  for write, <code>denormalizeCompendiumData</code> for read &mdash; and the two are mirror images of
+  each other.
+</p>
+
+<p>
+  Why this exists: it's a Firestore-era convention. The original Firestore documents used camelCase;
+  D1 wanted snake_case for SQL convention reasons. Rather than rip out the camelCase form code, the
+  migration added a translation layer at the boundary. The patterns doc flags this as a future
+  cleanup &mdash; "pick one and stop dancing" &mdash; under Priority&nbsp;4. Until that lands, every save
+  and every read crosses the boundary twice.
+</p>
+
+<p>
+  Three things make this trickier than a flat key rename:
+</p>
+
+<table>
+  <tr>
+    <th style="width:30%">Concept</th>
+    <th>What it does on write</th>
+    <th>What it does on read</th>
+  </tr>
+  <tr>
+    <td><strong>The <code>automation</code> wrapper</strong></td>
+    <td>Strips it; promotes <code>automation.activities</code> &rarr; <code>activities</code> and <code>automation.effects</code> &rarr; <code>effects</code></td>
+    <td>Rebuilds it from flat <code>activities</code> + <code>effects</code> for editor convenience</td>
+  </tr>
+  <tr>
+    <td><strong>The <code>uses</code> object</strong></td>
+    <td>Decomposes into <code>uses_max</code> / <code>uses_spent</code> / <code>uses_period</code> / <code>uses_recovery</code> &mdash; <em>except</em> for items (where <code>uses</code> stays as a single JSON column on the row)</td>
+    <td>Reconstructs the object from those flat columns when they're present</td>
+  </tr>
+  <tr>
+    <td><strong>The <code>components</code> object (spells only)</strong></td>
+    <td>Decomposes into <code>components_vocal</code> / <code>_somatic</code> / <code>_material</code> / <code>_material_text</code> / <code>_consumed</code> / <code>_cost</code></td>
+    <td>Reconstructs from those flat columns</td>
+  </tr>
+</table>
+
+<p>
+  The discriminator on uses-decomposition is worth flagging: items keep <code>uses</code> as a
+  whole JSON column (per a 2026-05-26 migration that promoted it to a structured sub-object), so
+  the decompose step skips when <code>item_type</code> is present. Without that skip, item saves
+  would silently strand the data.
+</p>
+
+<p>
+  There's also a "forbidden" list inside <code>normalize</code> &mdash; a hardcoded set of fields the
+  payload might carry that should never reach the SQL: <code>id</code> (handled separately by
+  upsert), <code>automation</code> (already unwrapped), <code>effectsStr</code> (UI-only intermediate
+  state), the legacy Firestore <code>source</code> object (only <code>source_id</code> survived the
+  migration), and a handful of others that callers might pass for legacy reasons. Adding a new
+  always-rejected field is the way the forbidden list grows.
+</p>
+
+<h2 id="cache">The cache layers</h2>
+
+<p>
+  Three caches, sitting in front of <code>/api/d1/query</code>:
+</p>
+
+<div class="card priority-info">
+  <h3>1. In-memory <code>QUERY_CACHE</code></h3>
+  <p>
+    Keyed by SQL + params. Holds the parsed result and a timestamp. <strong>5-minute TTL.</strong>
+    Lives for the lifetime of the tab; cleared on cache-invalidation events. The fast path for any
+    repeat read.
+  </p>
+</div>
+
+<div class="card priority-info">
+  <h3>2. sessionStorage (persistent tables only)</h3>
+  <p>
+    A subset of tables (<code>sources</code>, <code>spells</code>, <code>feats</code>,
+    <code>items</code>, <code>tags</code>, <code>tag_groups</code>, <code>weapons</code>,
+    <code>armor</code>, <code>languages</code>, <code>damage_types</code>, the lore tables, etc.)
+    get an extra layer in sessionStorage. <strong>1-hour TTL.</strong> Survives page reloads.
+    Tables in this list are read-heavy and change rarely; caching them across reloads avoids
+    refetching the catalogue on every navigation.
+  </p>
+  <p style="font-size:13px;color:var(--muted)">
+    There's a ~3.5MB cap per entry and a "drop other entries, then retry" eviction path when the
+    quota gets hit &mdash; <code>spells</code> can grow large enough to trip it on its own as the
+    catalogue expands. If even that fails, the write is silently dropped and only the in-memory
+    cache holds it.
+  </p>
+</div>
+
+<div class="card priority-info">
+  <h3>3. <code>INFLIGHT_REQUESTS</code> deduplication</h3>
+  <p>
+    Per-SQL map of in-flight promises. If two components ask for the same SQL at the same time,
+    only one network call goes out and both await the same promise. Cleaned up after the promise
+    resolves.
+  </p>
+</div>
+
+<p>
+  Invalidation is the other half. On any non-SELECT call, <code>queryD1</code> extracts the table
+  name from the SQL (matching <code>INTO</code> / <code>UPDATE</code> / <code>DELETE FROM</code> /
+  <code>REPLACE INTO</code>) and calls <code>clearCache(tableName)</code> &mdash; which wipes both the
+  in-memory entries and the sessionStorage entries that match. If the SQL is something weird the
+  matcher can't classify, it falls back to wiping <em>all</em> caches (the "nuclear option" comment
+  in the source).
+</p>
+
+<p>
+  <code>batchQueryD1</code> applies the same logic per query in the batch &mdash; one invalidation
+  per affected table, plus one foundation bump if any of them were persistent.
+</p>
+
+<h2 id="foundation">The foundation update bump</h2>
+
+<p>
+  This is the cross-client invalidation primitive. One row in <code>system_metadata</code> keyed
+  <code>last_foundation_update</code> holds a timestamp. Any write to a persistent table calls
+  <code>bumpFoundationUpdate</code>, which updates that row to <code>CURRENT_TIMESTAMP</code>.
+</p>
+
+<p>
+  Every signed-in client polls the timestamp via <code>GET /api/me/foundation-update</code> every
+  30 seconds. When the value differs from the last seen one, the client calls <code>clearCache()</code>
+  on its in-memory cache, drops the sessionStorage entries for our prefix, and refetches the user
+  profile (in case the change touched it).
+</p>
+
+<p>
+  Why a poll? It's the simplest cross-tab + cross-client invalidation surface that doesn't require
+  a websocket. The endpoint sends <code>Cache-Control: no-store</code> so the polling read always
+  hits live data. The cost is one tiny HTTP round-trip every 30 seconds per tab.
+</p>
+
+<p>
+  <code>system_metadata</code> itself is excluded from the bump list (writes to it don't bump
+  itself) so the bump doesn't recursively trigger another bump.
+</p>
+
+<h2 id="atomic">Multi-table writes &mdash; the atomic-write idiom</h2>
+
+<p>
+  Most editor saves are single-table (write one row, done). But some entities have child rows that
+  must stay consistent with the parent &mdash; lore articles are the canonical example: one parent row
+  in <code>lore_articles</code>, four metadata variants (characters / locations / organizations /
+  deities), four era-and-campaign junction tables (<code>lore_article_eras</code>,
+  <code>lore_article_campaigns</code>, etc.), one tag-junction table, and so on.
+</p>
+
+<p>
+  For those, the editor uses <code>batchQueryD1</code> &mdash; which sends every query as one batch
+  to <code>/api/d1/query</code>. The handler runs them in a single D1 transaction. Either every
+  query succeeds or none of them do; no half-written state.
+</p>
+
+<p>
+  This is the pattern that the future class cascade-delete (per
+  <a href="01-survey.html#answers">summary A4</a>) will use when it lands: one batch deletes the
+  class, its subclasses, the features under both, and the advancements on each &mdash; all in one
+  transaction, so a partial failure can't leave orphans.
+</p>
+
+<h2 id="proposal">Proposal mode &mdash; the save handler swap</h2>
+
+<p>
+  Proposal mode is a remarkably small change to the editor data flow. The proposal-edit URLs wrap
+  the same editor component inside a <code>ProposalEditorWrapper</code>. The wrapper provides a
+  React context with two things: the entity-type identifier, and a save handler that queues writes
+  into a local accumulator instead of calling D1.
+</p>
+
+<p>The editor reads the context with <code>useProposalContextOptional</code> on render:</p>
+
+<ul>
+  <li>Outside the wrapper (admin direct route): no proposal context &mdash; the editor's normal Save
+    handler runs (the <code>upsertX</code> path described above).</li>
+  <li>Inside the wrapper (proposal-edit route): the proposal context's <code>applyProposalWrite</code>
+    is invoked instead. It queues the normalized payload into the accumulator. The user keeps
+    editing; the queue grows.</li>
+</ul>
+
+<p>
+  When the user clicks <strong>Submit Changes</strong>, the accumulator flushes its queue as a
+  proposal bundle to the proposals API. Admin reviews accept / reject / cascade.
+</p>
+
+<p>
+  Almost every editor file imports a handful of proposal-aware hooks
+  (<code>useProposalAccumulator</code>, <code>useProposalEntityDrafts</code>,
+  <code>useDraftedEntityIds</code>, <code>useEditBaseUnlocks</code>, <code>useCascadeDependent</code>,
+  ...) and a few proposal-aware components (<code>CascadeDependentBanner</code>,
+  <code>TagReplacementPicker</code>). Most of them are conditional pass-throughs &mdash; they noop when
+  no proposal context is present. The pattern is clean: the editor file looks busy at the top of
+  the imports, but the save handler logic in the body is short.
+</p>
+
+<p>
+  Per <a href="01-survey.html#answers">summary A5</a>, the proposal-mode editor surface is not
+  considered done. Some editors are more wired than others. None of this affects the underlying
+  data flow above &mdash; only the destination of the save changes.
+</p>
+
+<h2 id="post-save">Post-save UI &mdash; the "preserve selection" idiom</h2>
+
+<p>
+  In any Pattern E editor (the master-detail manager), there's a real risk: a user clicks Save,
+  the network goes, the user impatiently clicks a different row in the list, and when the save
+  resolves the editor would have repointed to the just-saved row &mdash; wiping whatever the user
+  typed into the new selection.
+</p>
+
+<p>
+  The SpellsEditor pattern (now codified in <code>CompendiumEditorShell</code> consumers) handles
+  this by capturing <code>editingIdAtStart</code> and <code>savedId</code> <em>before</em> the
+  await, and using a ref (<code>editingIdRef</code>) to track the user's <em>current</em>
+  selection. After the save resolves:
+</p>
+
+<ul>
+  <li><strong>Refresh the list</strong> so the left column reflects the new name / state.</li>
+  <li><strong>Refresh the saved row's cache</strong> so re-selecting it shows current data.</li>
+  <li><strong>Only adopt <code>savedId</code> as the new <code>editingId</code> if the user is
+    still on the row they were saving</strong> (i.e. <code>editingIdRef.current === editingIdAtStart</code>).
+    If they've moved, leave their current selection alone.</li>
+</ul>
+
+<p>
+  This is the kind of subtle thing that's invisible when it works and obviously broken when it
+  doesn't. It's worth knowing about when touching any Pattern E editor.
+</p>
+
+<h2 id="rules">The four non-negotiable rules</h2>
+
+<p>From <code>AGENTS.md</code>, expressed at the data-flow level:</p>
+
+<div class="card priority-now">
+  <h3>Rule 2 &mdash; <strong>Never</strong> <code>INSERT OR REPLACE</code></h3>
+  <p>
+    D1 has <code>PRAGMA foreign_keys = ON</code> by default. <code>INSERT OR REPLACE</code> resolves
+    a PK conflict by <em>deleting</em> the existing row and reinserting &mdash; which fires
+    <code>ON DELETE CASCADE</code> on every FK child. There's a documented data-loss incident from
+    before this rule was added. Always use
+    <code>INSERT ... ON CONFLICT(&lt;pk&gt;) DO UPDATE SET ...</code> for single-PK upserts, or
+    <code>INSERT OR IGNORE</code> for junction tables.
+  </p>
+</div>
+
+<div class="card priority-now">
+  <h3>Rule 4 &mdash; JSON column passthrough on remap</h3>
+  <p>
+    <code>queryD1</code> auto-parses ~50 JSON columns on the way out. If your editor does its own
+    remap on a JSON column (read-time), the check must be:
+  </p>
+  <pre><code>typeof X === 'string' ? JSON.parse(X) : (X ?? &lt;default&gt;)</code></pre>
+  <p>
+    Forgetting the passthrough means: when the value arrives already parsed (the common case), the
+    <code>typeof X === 'string'</code> branch is skipped, the else branch returns the default, and
+    the field silently empties. The auto-parse list in <code>queryD1</code> is the source of truth
+    for which columns get this treatment.
+  </p>
+</div>
+
+<div class="card priority-next">
+  <h3>Rule 5 &mdash; Drift-managed sibling files</h3>
+  <p>
+    A handful of libraries live in both <code>src/lib/X.ts</code> (client) and
+    <code>api/_lib/_X.ts</code> (server). <code>classExport</code>, <code>classProgression</code>,
+    <code>referenceSyntax</code>, <code>requirements</code>. Touch one, touch both. The drift
+    contract is documented in headers on the server-side files.
+  </p>
+</div>
+
+<div class="card priority-next">
+  <h3>Rule 7 &mdash; Local-first D1 migrations, remote only with explicit permission</h3>
+  <p>
+    Migrations land on local D1 first
+    (<code>npx wrangler d1 execute dauligor-db --local --file=...</code>), and only get applied to
+    remote D1 with explicit per-migration permission. Treat <code>--remote</code> as a one-way door.
+    Affects this page only insofar as: when an editor depends on a new column, that column may
+    exist locally but not on remote until the migration is approved.
+  </p>
+</div>
+
+<h2 id="findings">Findings &mdash; what stood out</h2>
+
+<div class="card priority-now">
+  <h3>F1 &mdash; The cache invalidation is granular but powerful</h3>
+  <p>
+    A single mutation wipes that table's cached SELECTs from both in-memory and sessionStorage, AND
+    if the table is "persistent" bumps a global timestamp that every other client picks up within
+    30 seconds. Three layers (in-memory, sessionStorage, foundation poll), one consistent
+    invalidation surface. I expected this to be hand-managed per editor; it's centralised.
+  </p>
+</div>
+
+<div class="card priority-now">
+  <h3>F2 &mdash; The forbidden list is the migration's exhaust pipe</h3>
+  <p>
+    Almost every entry in the normalize forbidden list (<code>automation</code>,
+    <code>effectsStr</code>, the legacy Firestore <code>source</code> object,
+    <code>uniqueOptionGroupIds</code>, etc.) is something a caller might send for legacy reasons
+    that the schema can't accept. The list isn't pretty; it's an honest record of the migration's
+    rough edges. Adding to it is the right call when a "no such column" error surfaces in the wild.
+  </p>
+</div>
+
+<div class="card priority-next">
+  <h3>F3 &mdash; The items-payload skip on <code>uses</code> decomposition is a real footgun</h3>
+  <p>
+    A migration shifted items' <code>uses</code> from flat columns to a JSON object. The normalize
+    function has to detect items (via <code>item_type</code> presence) and skip the decomposition,
+    else item saves silently lose the field. This is exactly the kind of cross-cutting concern the
+    "single naming convention" cleanup (Priority 4 in the patterns doc) would simplify &mdash; if
+    everything is JSON-on-D1, the decompose step disappears.
+  </p>
+</div>
+
+<div class="card priority-next">
+  <h3>F4 &mdash; The <code>automation</code> wrapper exists only for editor convenience</h3>
+  <p>
+    On disk, <code>activities</code> and <code>effects</code> are separate JSON columns. The
+    wrapper object (<code>{ automation: { activities, effects } }</code>) is rebuilt on read for
+    editor consumption and stripped on write. It's not load-bearing &mdash; an editor could be
+    refactored to read flat <code>activities</code> + <code>effects</code> directly &mdash; but the
+    wrapper makes the activity / effect editor mounting points cleaner. I'd file this under "easy
+    to keep until someone has a reason to remove it."
+  </p>
+</div>
+
+<div class="card priority-later">
+  <h3>F6 &mdash; Foundry uses camelCase &mdash; the cleanup direction is now decidable</h3>
+  <p>
+    Confirmed from the spell-import contract and the spell-export library: Foundry's payloads are
+    camelCase end-to-end. That means a future <a href="#answers">camel/snake cleanup</a> can target
+    either side (camelCase-everywhere or snake_case-everywhere) and align <em>at least one</em>
+    boundary in the process. Captured for posterity; see A1 for the trade-off.
+  </p>
+</div>
+
+<div class="card priority-later">
+  <h3>F5 &mdash; Proposal mode wires through the existing flow, not around it</h3>
+  <p>
+    The save handler swap is small: the editor calls a context-provided save function instead of
+    the per-entity upsert helper. <code>normalizeCompendiumData</code> still runs, the same
+    payload still gets built, only the destination changes. That keeps the proposal-mode bundle
+    compatible with admin-side direct writes &mdash; admin accepts a proposal by routing its bundle
+    through the same per-entity upsert helpers the direct flow uses. No two save paths to keep in
+    sync; one path, one extra branch.
+  </p>
+</div>
+
+<h2 id="answers">Your clarifications</h2>
+
+<p>
+  Your answers to the four questions, captured for posterity. A1's Foundry-convention investigation
+  is folded in.
+</p>
+
+<div class="card priority-info">
+  <h3>A1 &mdash; Camel/snake dance: cleanup pending, decision now informed by Foundry convention</h3>
+  <p>
+    <strong>You said:</strong> the dance should be cleaned up. Whether it's worth it depends on what
+    Foundry uses &mdash; if D1 and Foundry can use the same convention, the future is a mono decision.
+  </p>
+  <p>
+    <strong>Foundry's convention, confirmed:</strong> camelCase end-to-end. From the spell import
+    contract: <code>flags.dauligor-pairing.sourceId</code>, <code>system.activations</code>,
+    <code>system.activation.type</code>, <code>system.materials</code>, <code>dbId</code> &mdash; all
+    camelCase. Foundry's dnd5e system schema is camelCase throughout
+    (<code>system.&lt;area&gt;.&lt;subarea&gt;</code>), and the existing export libraries already
+    emit that shape.
+  </p>
+  <p>
+    <strong>What that means for the cleanup direction:</strong> we have two plausible end states.
+  </p>
+  <ul>
+    <li>
+      <strong>camelCase end-to-end on the app side.</strong> Form state stays camelCase; D1
+      columns become camelCase too. The editor &harr; D1 dance disappears. The Foundry export
+      becomes mostly a pass-through (still has to wrap things in the <code>system</code> envelope,
+      but no key renaming). <em>Cost:</em> a big D1 column-rename migration, plus every SQL string
+      in the codebase has to learn the new column names.
+    </li>
+    <li>
+      <strong>snake_case end-to-end on the app side.</strong> Form state moves to snake_case; D1
+      columns stay snake_case. The editor &harr; D1 dance disappears. The Foundry export does the
+      snake&rarr;camel translation it already does today (one boundary, not two). <em>Cost:</em>
+      every editor's form-state shape changes; UI code that reads <code>formData.imageUrl</code>
+      becomes <code>formData.image_url</code>.
+    </li>
+  </ul>
+  <p>
+    Both options are sizeable but bounded. The first option is nicer for new developers (camelCase
+    is the React idiom) and aligns the entire pipeline. The second option is closer to SQL
+    convention and leaves more files touched. <strong>You decide which side to pick.</strong>
+  </p>
+  <p style="font-size:13px;color:var(--muted)">
+    Patterns doc Priority 4 estimate is 1&ndash;2 days; that probably assumes the snake-everywhere
+    option since the migration footprint is smaller. The camelCase-everywhere option is bigger
+    but cleaner; closer to a week.
+  </p>
+</div>
+
+<div class="card priority-info">
+  <h3>A2 &mdash; Foundation poll behavior matches your original design</h3>
+  <p>
+    <strong>You said:</strong> the original design was to query D1 every 30 seconds to check if
+    anything changed. You suspected the implementation may have drifted to "manual wipe every 30
+    seconds."
+  </p>
+  <p>
+    <strong>Verified against the code:</strong> the implementation matches your original design.
+    Every 30 seconds, the client fetches <code>GET /api/me/foundation-update</code>, which returns
+    the <code>last_foundation_update</code> timestamp. The client compares it to the last seen
+    value. <strong>If &mdash; and only if &mdash; the timestamp differs</strong>, the cache wipe fires
+    (<code>clearCache()</code> on in-memory + sessionStorage, plus a profile refresh). When nothing
+    has changed, the comparison short-circuits and nothing happens.
+  </p>
+  <p>
+    Net effect: 30-second polling cost (one tiny HTTP round-trip per tab) + a cache wipe only when
+    a write actually landed somewhere. Cheap when idle, correct when busy.
+  </p>
+  <p style="font-size:13px;color:var(--muted)">
+    Code references: <code>App.tsx:128&ndash;147</code> drives the polling loop and the conditional
+    wipe; <code>d1.ts:158&ndash;171</code> is the fetch helper; <code>d1.ts:143&ndash;145</code> is
+    the <code>bumpFoundationUpdate</code> writer.
+  </p>
+</div>
+
+<div class="card priority-info">
+  <h3>A3 &mdash; What "persistent table" actually means</h3>
+  <p>
+    <strong>You said:</strong> not sure what the distinction is. Fair &mdash; the term reads more
+    important than it is. Plain explanation:
+  </p>
+  <p>
+    "Persistent" here just means <em>"this table's reads are cached in sessionStorage in addition
+    to the in-memory cache, so they survive a page reload."</em>
+  </p>
+  <p>
+    Concretely:
+  </p>
+  <table>
+    <tr>
+      <th>Table type</th>
+      <th>In-memory cache</th>
+      <th>sessionStorage cache</th>
+      <th>Survives reload?</th>
+    </tr>
+    <tr>
+      <td>Not in <code>PERSISTENT_TABLES</code></td>
+      <td>Yes, 5-min TTL</td>
+      <td>No</td>
+      <td>No &mdash; refetched on every reload</td>
+    </tr>
+    <tr>
+      <td>In <code>PERSISTENT_TABLES</code></td>
+      <td>Yes, 5-min TTL</td>
+      <td>Yes, 1-hour TTL</td>
+      <td>Yes &mdash; first visit on a fresh load reads from sessionStorage instead of the network</td>
+    </tr>
+  </table>
+  <p>
+    The criterion the list seems to use: <em>read-heavy + changes rarely</em>. Sources, weapons,
+    armor, skills, damage types, languages &mdash; the reference vocabulary that every page touches
+    but admins almost never change &mdash; are in the list. Items, feats, spells, tag groups,
+    campaigns, the lore tables are also in it. Tables NOT in the list: classes, subclasses,
+    features, characters, system_metadata, and anything proposal-related.
+  </p>
+  <p>
+    <strong>Recommendation for new tables:</strong> when Backgrounds and Races get promoted to
+    their own tables (per <a href="01-survey.html#roadmap">roadmap step 1</a>), they belong in
+    <code>PERSISTENT_TABLES</code> for the same reason items / feats / spells are &mdash; read every
+    time a character is built, changed only by admin authoring.
+  </p>
+</div>
+
+<div class="card priority-info">
+  <h3>A4 &mdash; "Preserve selection" idiom is a Pattern E requirement</h3>
+  <p>
+    <strong>You said:</strong> it should be in every Pattern E editor.
+  </p>
+  <p>
+    Treating that as a <strong>design requirement</strong> going forward: when adding a new
+    Pattern E editor, the post-save logic must capture <code>editingIdAtStart</code> +
+    <code>editingIdRef</code> before the await and only adopt <code>savedId</code> as the new
+    selection if the user is still on the row they were saving. The
+    <code>CompendiumEditorShell</code> already bakes this in &mdash; consumers get it for free as long
+    as they don't override the save path with a custom handler that skips the ref check.
+  </p>
+  <p>
+    Bespoke (Pattern B) editors should adopt the same pattern if their layout permits a
+    "click-another-row-mid-save" interaction. <code>ClassEditor</code> in particular opens features
+    through a modal that has the same shape; worth checking when its cleanup pass comes around
+    (roadmap step 2).
+  </p>
+</div>
+
+<h2 id="next">Where the detail lives</h2>
+
+<p>
+  The dense file-by-file detail behind this page is in the reference set at
+  <a href="01-survey-reference.html">01-survey-reference.html</a> (route map, shared libraries,
+  endpoint families). For the canonical mapping tables and JSON auto-parse list, see
+  <code>src/lib/compendium.ts</code> and <code>src/lib/d1.ts</code> directly &mdash; those files are
+  short enough to read end-to-end.
+</p>
+
+<nav class="page-pager">
+  <a href="01-survey.html">&larr; Prev: 01 &mdash; Survey</a>
+  <a href="03-tables.html">Next: 03 &mdash; Tables &amp; relations &rarr;</a>
+</nav>
+
+</div>
+</body>
+</html>
