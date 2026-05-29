@@ -41,7 +41,7 @@ import { ImageUpload } from '../../components/ui/ImageUpload';
 import { ClassImageEditor, ImageDisplay, DEFAULT_DISPLAY } from '../../components/compendium/ClassImageEditor';
 import { slugify } from '../../lib/utils';
 import { fetchCollection, fetchDocument, queryD1, upsertDocument, deleteDocument } from '../../lib/d1';
-import { upsertFeature, denormalizeCompendiumData } from '../../lib/compendium';
+import { normalizeFeatureData, denormalizeCompendiumData } from '../../lib/compendium';
 import { queueRebake } from '../../lib/moduleExport';
 import { BakeNowButton } from '../../components/compendium/BakeNowButton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
@@ -144,6 +144,11 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
   const isProposalRoute = location.pathname.startsWith('/proposals/edit/');
   const basePath = isProposalRoute ? '/proposals/edit/subclasses' : '/compendium/subclasses';
   const subclassWriter = useProposalAccumulator('subclass', userProfile);
+  // Subclass features route through the accumulator too, so a content-creator
+  // can author them inside the subclass's proposal block instead of 403-ing
+  // on the direct `features` write. Admin-direct / standalone / readonly
+  // otherwise (same dispatch as every writer).
+  const featureWriter = useProposalAccumulator('feature', userProfile);
   // Review mode — when URL has `?review=<proposal_id>` AND that
   // proposal targets a subclass, load the form from the proposal's
   // payload (or snapshot, for delete reviews) instead of the live row.
@@ -656,13 +661,21 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
       delete featureData.effects;
       delete featureData.activities;
 
+      const isCreate = !editingFeature.id;
       const saveId = editingFeature.id || crypto.randomUUID();
-      await upsertFeature(saveId, {
+      const featurePayload = normalizeFeatureData({
         ...featureData,
         createdAt: editingFeature.createdAt || new Date().toISOString(),
       });
-      queueRebake('feature', saveId);
-      toast.success(editingFeature.id ? "Feature updated" : "Feature added");
+      if (isCreate) {
+        await featureWriter.create({ ...featurePayload, id: saveId });
+      } else {
+        await featureWriter.update(saveId, featurePayload);
+      }
+      // Rebake only on a real (admin-direct) write — proposal/block changes
+      // don't touch live data until approval, which fires the rebake itself.
+      if (featureWriter.mode === 'direct') queueRebake('feature', saveId);
+      toast.success(actionLabel(featureWriter.mode, isCreate ? 'created' : 'updated'));
       setIsFeatureModalOpen(false);
       setLoadTick(t => t + 1);
     } catch (error) {
@@ -674,8 +687,8 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
   const handleDeleteFeature = async (featureId: string) => {
     if (confirm("Delete this feature?")) {
       try {
-        await deleteDocument('features', featureId);
-        toast.success("Feature deleted");
+        await featureWriter.remove(featureId);
+        toast.success(actionLabel(featureWriter.mode, 'deleted'));
         setLoadTick(t => t + 1);
       } catch (error) {
         toast.error("Failed to delete feature");

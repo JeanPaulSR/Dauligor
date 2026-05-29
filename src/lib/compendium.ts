@@ -744,7 +744,17 @@ export async function upsertSpellBatch(entries: { id: string | null, data: Recor
 /**
  * Features specialized helpers
  */
-export async function upsertFeature(id: string, data: Record<string, any>) {
+/**
+ * Editor (camelCase) → DB (snake_case) shape for a single feature row,
+ * WITHOUT writing it. Extracted from `upsertFeature` so proposal-aware
+ * editors can queue the *same* normalized payload through
+ * `useProposalAccumulator('feature')`. The generic writer (and the
+ * proposal queue) do NOT normalize — they pass the payload straight to
+ * `upsertDocument` / `pending_revisions` — so routing the raw camelCase
+ * editor shape would write/queue unrecognized columns. Normalizing here
+ * keeps the direct-write and proposal paths byte-identical.
+ */
+export function normalizeFeatureData(data: Record<string, any>): Record<string, any> {
   const normalized = normalizeCompendiumData(data);
   // The features table column is `tags` (not `tag_ids` like classes /
   // subclasses). Editors carry the loaded list as `tagIds` for
@@ -754,7 +764,11 @@ export async function upsertFeature(id: string, data: Record<string, any>) {
     normalized.tags = normalized.tagIds;
     delete normalized.tagIds;
   }
-  return upsertDocument('features', id, normalized);
+  return normalized;
+}
+
+export async function upsertFeature(id: string, data: Record<string, any>) {
+  return upsertDocument('features', id, normalizeFeatureData(data));
 }
 
 export async function fetchFeature(id: string) {

@@ -30,7 +30,7 @@ import { buildSpellFormulaShortcutRows, normalizeSpellFormulaShortcuts } from '.
 import { normalizeAdvancementListForEditor, resolveAdvancementDefaultHitDie } from '../../lib/advancementState';
 import { buildCanonicalBaseClassAdvancements } from '../../lib/classProgression';
 import { fetchCollection, fetchDocument, queryD1, upsertDocument, deleteDocument } from '../../lib/d1';
-import { upsertFeature, denormalizeCompendiumData } from '../../lib/compendium';
+import { normalizeFeatureData, denormalizeCompendiumData } from '../../lib/compendium';
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
 import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
 import { useProposalDraftOptions } from '../../hooks/useProposalDraftOptions';
@@ -459,6 +459,12 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   const isProposalRoute = location.pathname.startsWith('/proposals/edit/');
   const basePath = isProposalRoute ? '/proposals/edit/classes' : '/compendium/classes';
   const classWriter = useProposalAccumulator('class', userProfile);
+  // Features (Wild Shape, Rage, …) are interior nodes of a class. Routing
+  // their saves through the accumulator lets a content-creator author them
+  // inside the class's proposal block instead of 403-ing on the direct
+  // `features` write. Outside a wrapper this is admin-direct (upsert) /
+  // content-creator standalone / readonly, same as every other writer.
+  const featureWriter = useProposalAccumulator('feature', userProfile);
   const proposalContext = useProposalContextOptional();
   const isProposalMode = classWriter.mode === 'proposal' || classWriter.mode === 'block';
   // In-progress class state (queued + active-block drafts). Used to
@@ -1146,20 +1152,21 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
       delete featureData.activities;
       delete featureData.__usesRecoveryDraft;
 
-      if (editingFeature.id) {
-        await upsertFeature(editingFeature.id, {
-          ...featureData,
-          createdAt: editingFeature.createdAt || new Date().toISOString()
-        });
-        queueRebake('feature', editingFeature.id);
+      const isCreate = !editingFeature.id;
+      const saveId = editingFeature.id || crypto.randomUUID();
+      const featurePayload = normalizeFeatureData({
+        ...featureData,
+        createdAt: editingFeature.createdAt || new Date().toISOString(),
+      });
+      if (isCreate) {
+        await featureWriter.create({ ...featurePayload, id: saveId });
       } else {
-        const newId = crypto.randomUUID();
-        await upsertFeature(newId, {
-          ...featureData,
-          createdAt: new Date().toISOString()
-        });
-        queueRebake('feature', newId);
+        await featureWriter.update(saveId, featurePayload);
       }
+      // Rebake only on a real (admin-direct) write — proposal/block changes
+      // don't touch live data until approval, which fires the rebake itself.
+      if (featureWriter.mode === 'direct') queueRebake('feature', saveId);
+      toast.success(actionLabel(featureWriter.mode, isCreate ? 'created' : 'updated'));
       setIsFeatureModalOpen(false);
       setEditingFeature(null);
       // Re-fetch features to show changes
@@ -1172,8 +1179,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
 
   const handleDeleteFeature = async (featureId: string) => {
     try {
-      await deleteDocument('features', featureId);
-      toast.success('Feature deleted');
+      await featureWriter.remove(featureId);
+      toast.success(actionLabel(featureWriter.mode, 'deleted'));
       setLoadTick(t => t + 1);
     } catch (error) {
       console.error("Error deleting feature:", error);
