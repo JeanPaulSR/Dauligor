@@ -13,6 +13,30 @@ Full plan + reference material:
 - [docs/roadmap.md § "Live-content bridge — Phase 2+ work"](../../docs/roadmap.md)
 - [docs/_drafts/foundry-enricher-deep-dive-2026-05-26.html](../../docs/_drafts/foundry-enricher-deep-dive-2026-05-26.html) (working spec)
 
+## Local dev — branch-specific ports
+
+This branch runs its dev stack on its own ports so it coexists with other
+agents using the default 3000/8787 (those ports are machine-global; two
+stacks collide). One command from the repo root:
+
+```
+node scripts/dev-sysapp.mjs
+```
+
+| Service | This branch | Default |
+|---|---|---|
+| App (Express + Vite) | **http://localhost:3001** | 3000 |
+| Worker (`wrangler dev`, D1 + R2) | **http://localhost:8788** | 8787 |
+| Wrangler inspector | 9230 | 9229 |
+
+- `server.ts` reads `PORT` from env now (defaults to 3000); the launcher sets
+  `PORT=3001` and points Express at the branch worker via
+  `R2_WORKER_URL=http://localhost:8788`.
+- **DB is already isolated** — this is the *main checkout*, so its local D1
+  lives in `worker/.wrangler/` separate from the worktree agents'. No copy
+  needed. (Override ports if needed: `APP_PORT` / `WORKER_PORT` /
+  `WORKER_INSPECTOR_PORT`.)
+
 ## Primary files (exclusive)
 
 Files this branch claims for non-trivial structural changes. Other branches should request edits via the shared-files protocol rather than editing directly.
