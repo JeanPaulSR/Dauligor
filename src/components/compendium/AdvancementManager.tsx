@@ -269,7 +269,7 @@ function PreviewPanel({
   );
 }
 
-export default function AdvancementManager({
+function AdvancementManager({
   advancements,
   onChange,
   availableFeatures = [],
@@ -3264,3 +3264,10 @@ export default function AdvancementManager({
     </div>
   );
 }
+
+// Memoized: this is a heavy component (20-level grids, advancement rows,
+// pickers) re-rendered by large parent editors (ClassEditor etc.) on every
+// keystroke. With stable props (parents memoize the available* arrays + use
+// stable callbacks) the shallow-prop compare lets it skip unrelated re-renders,
+// which is the main fix for the editor's input lag.
+export default React.memo(AdvancementManager);

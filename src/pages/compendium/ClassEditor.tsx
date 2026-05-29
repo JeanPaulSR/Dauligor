@@ -629,11 +629,18 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   // "(in this block)" suffix) so they're selectable in the advancement pickers.
   // Empty outside a <ProposalEditorWrapper>; NEVER merged into a save payload.
   const scalingColumnDraftOptions = useBlockDraftPickerOptions('scaling_column');
-  const scalingColumnPickerOptions = [...scalingColumns, ...scalingColumnDraftOptions];
   const featureDraftOptions = useBlockDraftPickerOptions('feature');
   const optionGroupDraftOptions = useBlockDraftPickerOptions('unique_option_group');
   const optionItemDraftOptions = useBlockDraftPickerOptions('unique_option_item');
   const featDraftOptions = useBlockDraftPickerOptions('feat');
+  // Memoized merged picker arrays (live + block-draft). Stable refs across
+  // unrelated re-renders (e.g. typing in a basics field) so the now-memoized
+  // AdvancementManager can skip re-rendering — the fix for the editor's input lag.
+  const scalingColumnPickerOptions = useMemo(() => [...scalingColumns, ...scalingColumnDraftOptions], [scalingColumns, scalingColumnDraftOptions]);
+  const featurePickerOptions = useMemo(() => [...features, ...featureDraftOptions], [features, featureDraftOptions]);
+  const optionGroupPickerOptions = useMemo(() => [...allOptionGroups, ...optionGroupDraftOptions], [allOptionGroups, optionGroupDraftOptions]);
+  const optionItemPickerOptions = useMemo(() => [...allOptionItems, ...optionItemDraftOptions], [allOptionItems, optionItemDraftOptions]);
+  const featPickerOptions = useMemo(() => [...allFeats, ...featDraftOptions], [allFeats, featDraftOptions]);
   // F2 — the Features list shows live rows; in a block, merge this class's
   // queued draft features in so a just-added feature is visible (not gone until
   // a reload). Unchanged on admin-direct routes.
@@ -1473,7 +1480,9 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
     return acc;
   }, {} as Record<string, any[]>);
   const selectedSpellcastingType = spellcastingTypes.find((type) => type.id === spellcasting.progressionId);
-  const classReferenceContext = {
+  // Memoized so AdvancementManager's `referenceContext` prop is a stable ref —
+  // recomputes only when the bits it derives from change, not on every keystroke.
+  const classReferenceContext = useMemo(() => ({
     classIdentifier: getClassReferenceIdentifier(sourceId, name),
     classLabel: name || 'Class',
     spellcastingAbility: spellcasting.ability,
@@ -1483,8 +1492,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
       sourceId: column.sourceId,
       parentType: 'class',
     })),
-  };
-  const spellFormulaShortcuts = buildSpellFormulaShortcutRows(classReferenceContext);
+  }), [sourceId, name, spellcasting.ability, scalingColumns]);
+  const spellFormulaShortcuts = useMemo(() => buildSpellFormulaShortcutRows(classReferenceContext), [classReferenceContext]);
 
   const toggleGroup = (items: any[], type: 'armor' | 'weapons' | 'tools' | 'languages', target: 'fixedIds' | 'optionIds', categoryId?: string) => {
     setProficiencies(buildNextGroupedProficiencyCollection(proficiencies, items, type, target, categoryId));
@@ -4310,11 +4319,11 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                   <AdvancementManager
                     advancements={advancements}
                     onChange={setAdvancements}
-                    availableFeatures={[...features, ...featureDraftOptions]}
+                    availableFeatures={featurePickerOptions}
                     availableScalingColumns={scalingColumnPickerOptions}
-                    availableOptionGroups={[...allOptionGroups, ...optionGroupDraftOptions]}
-                    availableOptionItems={[...allOptionItems, ...optionItemDraftOptions]}
-                    availableFeats={[...allFeats, ...featDraftOptions]}
+                    availableOptionGroups={optionGroupPickerOptions}
+                    availableOptionItems={optionItemPickerOptions}
+                    availableFeats={featPickerOptions}
                     classId={id}
                     defaultHitDie={hitDie}
                     referenceContext={classReferenceContext}
@@ -4735,10 +4744,10 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                     <AdvancementManager
                       advancements={[]} // Not used for management here
                       onChange={() => { }} // Not used for management here
-                      availableFeatures={[...features, ...featureDraftOptions]}
+                      availableFeatures={featurePickerOptions}
                       availableScalingColumns={scalingColumnPickerOptions}
-                      availableOptionGroups={[...allOptionGroups, ...optionGroupDraftOptions]}
-                      availableFeats={[...allFeats, ...featDraftOptions]}
+                      availableOptionGroups={optionGroupPickerOptions}
+                      availableFeats={featPickerOptions}
                       classId={id}
                       isInsideFeature={true}
                       featureId={editingFeature.id}
