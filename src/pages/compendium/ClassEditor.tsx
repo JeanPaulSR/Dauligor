@@ -1167,7 +1167,13 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
       delete featureData.activities;
       delete featureData.__usesRecoveryDraft;
 
-      const isCreate = !editingFeature.id;
+      // A new feature is pre-minted an id at modal-open ("Add Feature"), so
+      // `!editingFeature.id` is never true. Decide create-vs-update by whether
+      // the feature is a LIVE row: anything not live (brand-new, or a same-block
+      // draft) is a CREATE — the accumulator folds repeat creates / patches the
+      // existing draft. Queuing an UPDATE for a feature with no live row 404s
+      // ("Cannot propose update on missing feature") at flush time.
+      const isCreate = !features.some((f: any) => String(f.id) === String(editingFeature.id));
       const saveId = editingFeature.id || crypto.randomUUID();
       const featurePayload = normalizeFeatureData({
         ...featureData,
@@ -3175,8 +3181,9 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
             </TabsContent>
 
             <TabsContent value="features" className="space-y-6 mt-0">
-              {/* Features */}
-              {id && (
+              {/* Features — gate on effectiveId (not id) so the section is usable
+                  on a class created in-block before useParams.id is set. */}
+              {effectiveId && (
                 <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
                   <div className="section-header">
                     <h2 className="label-text text-gold">Class Features</h2>

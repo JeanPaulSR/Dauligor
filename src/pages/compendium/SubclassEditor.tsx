@@ -677,7 +677,11 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
       delete featureData.effects;
       delete featureData.activities;
 
-      const isCreate = !editingFeature.id;
+      // A new feature is pre-minted an id at modal-open, so `!editingFeature.id`
+      // is never true. Decide create-vs-update by LIVE-row membership: not-live
+      // (new or same-block draft) → CREATE (the accumulator folds/patches);
+      // queuing an UPDATE for a feature with no live row 404s at flush time.
+      const isCreate = !features.some((f: any) => String(f.id) === String(editingFeature.id));
       const saveId = editingFeature.id || crypto.randomUUID();
       const featurePayload = normalizeFeatureData({
         ...featureData,
