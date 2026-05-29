@@ -12,6 +12,7 @@ import { normalizeTagRow } from '../../lib/tagHierarchy';
 import MarkdownEditor from '../../components/MarkdownEditor';
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
 import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
+import { useProposalDraftOptions } from '../../hooks/useProposalDraftOptions';
 import { useProposalPreFlushSave } from '../../hooks/useProposalPreFlushSave';
 import { useDraftedEntityIds } from '../../hooks/useDraftedEntityIds';
 import { useEditBaseUnlocks } from '../../hooks/useEditBaseUnlocks';
@@ -352,6 +353,12 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
   const itemWriter = useProposalAccumulator('item', userProfile);
   const proposalContext = useProposalContextOptional();
   const isProposalMode = itemWriter.mode === 'proposal' || itemWriter.mode === 'block';
+  // Scaling columns created in the active proposal block aren't in the live
+  // fetch yet. Surface them in the advancement picker (display-only) with an
+  // "(in this block)" marker. Empty outside a <ProposalEditorWrapper>.
+  const scalingColumnDraftOptions = useProposalDraftOptions('scaling_column').map(
+    (d) => ({ ...d, name: `${d.name} (in this block)` }),
+  );
   const focusMode = proposalContext?.focusMode ?? 'drafts';
   const focusModeEnabled = proposalContext?.focusModeEnabled ?? false;
   const reviewMode = useProposalReview();
@@ -1133,7 +1140,7 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
             advancements={formData.advancements}
             onChange={(advancements) => setFormData((prev) => ({ ...prev, advancements }))}
             parentContext="feat"
-            availableScalingColumns={scalingColumns}
+            availableScalingColumns={[...scalingColumns, ...scalingColumnDraftOptions]}
             availableFeats={availableFeats}
             availableFeatures={availableFeatures}
             availableOptionGroups={[]}

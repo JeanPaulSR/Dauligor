@@ -3,6 +3,7 @@ import { useLocation, useSearchParams } from 'react-router-dom';
 import FeatImportWorkbench from '../../components/compendium/FeatImportWorkbench';
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
 import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
+import { useProposalDraftOptions } from '../../hooks/useProposalDraftOptions';
 import { actionLabel, applyProposalWrite } from '../../lib/proposalAware';
 import { useProposalReview, resolveReviewPayload, ReviewFieldHighlight } from '../../lib/proposalReview';
 import { CascadeDependentBanner } from '../../components/proposals/CascadeDependentBanner';
@@ -262,6 +263,12 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
   const featWriter = useProposalAccumulator('feat', userProfile);
   const proposalContext = useProposalContextOptional();
   const isProposalMode = featWriter.mode === 'proposal' || featWriter.mode === 'block';
+  // Scaling columns created in the active proposal block aren't in the live
+  // fetch yet. Surface them in the advancement picker (display-only) with an
+  // "(in this block)" marker. Empty outside a <ProposalEditorWrapper>.
+  const scalingColumnDraftOptions = useProposalDraftOptions('scaling_column').map(
+    (d) => ({ ...d, name: `${d.name} (in this block)` }),
+  );
   const focusMode = proposalContext?.focusMode ?? 'drafts';
   const focusModeEnabled = proposalContext?.focusModeEnabled ?? false;
   const reviewMode = useProposalReview();
@@ -1419,7 +1426,7 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
                 // scales channel-divinity uses based on character
                 // level). Class features omit this — they inherit
                 // from the parent class instead.
-                availableScalingColumns={scalingAllowed ? scalingColumns : undefined}
+                availableScalingColumns={scalingAllowed ? [...scalingColumns, ...scalingColumnDraftOptions] : undefined}
                 // Tasha's-style feats can grant OTHER feats via ItemGrant
                 // (e.g. "Skilled" with sub-feats). The feats list is the
                 // already-loaded catalog (`entries`) — we filter out the

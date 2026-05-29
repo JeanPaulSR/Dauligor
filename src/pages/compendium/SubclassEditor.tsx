@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useParams, useNavigate, Link, useSearchParams, useLocation } from 'react-router-dom';
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
 import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
+import { useProposalDraftOptions } from '../../hooks/useProposalDraftOptions';
 import { actionLabel, applyProposalWrite } from '../../lib/proposalAware';
 import { useProposalReview, resolveReviewPayload, ReviewFieldHighlight } from '../../lib/proposalReview';
 import { DeletedEntityBanner } from '../../components/proposals/TombstoneRow';
@@ -155,6 +156,12 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
   // to the queue when the live row doesn't exist yet (post-Create
   // navigate without flush) so the form doesn't blank out.
   const subclassDrafts = useProposalEntityDrafts('subclass');
+  // Scaling columns created in the active proposal block aren't in the live
+  // fetch yet. Surface them in the advancement pickers (display-only) with an
+  // "(in this block)" marker. Empty outside a <ProposalEditorWrapper>.
+  const scalingColumnDraftOptions = useProposalDraftOptions('scaling_column').map(
+    (d) => ({ ...d, name: `${d.name} (in this block)` }),
+  );
   // Tombstone banner state (queued / drafted DELETE in active block).
   const { isPendingDelete: isSubclassPendingDelete, undoDelete: undoSubclassDelete } =
     useTombstoneBanner('subclass', id);
@@ -1120,7 +1127,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                 advancements={advancements}
                 onChange={setAdvancements}
                 availableFeatures={features}
-                availableScalingColumns={[...scalingColumns, ...parentScalingColumns]}
+                availableScalingColumns={[...scalingColumns, ...parentScalingColumns, ...scalingColumnDraftOptions]}
                 availableOptionGroups={allOptionGroups}
                 availableOptionItems={allOptionItems}
                 availableFeats={allFeats}
@@ -1635,7 +1642,8 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                          availableFeatures={features}
                          availableScalingColumns={[
                            ...scalingColumns.map((c: any) => ({ ...c, name: `${c.name} (Subclass)` })),
-                           ...parentScalingColumns.map((c: any) => ({ ...c, name: `${c.name} (Class)` }))
+                           ...parentScalingColumns.map((c: any) => ({ ...c, name: `${c.name} (Class)` })),
+                           ...scalingColumnDraftOptions
                          ]}
                          availableOptionGroups={allOptionGroups}
                          availableFeats={allFeats}
