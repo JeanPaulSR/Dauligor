@@ -3,7 +3,7 @@ import { useLocation, useSearchParams } from 'react-router-dom';
 import FeatImportWorkbench from '../../components/compendium/FeatImportWorkbench';
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
 import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
-import { useProposalDraftOptions } from '../../hooks/useProposalDraftOptions';
+import { useBlockDraftPickerOptions } from '../../hooks/useBlockDraftPickerOptions';
 import { actionLabel, applyProposalWrite } from '../../lib/proposalAware';
 import { useProposalReview, resolveReviewPayload, ReviewFieldHighlight } from '../../lib/proposalReview';
 import { CascadeDependentBanner } from '../../components/proposals/CascadeDependentBanner';
@@ -263,12 +263,13 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
   const featWriter = useProposalAccumulator('feat', userProfile);
   const proposalContext = useProposalContextOptional();
   const isProposalMode = featWriter.mode === 'proposal' || featWriter.mode === 'block';
-  // Scaling columns created in the active proposal block aren't in the live
-  // fetch yet. Surface them in the advancement picker (display-only) with an
-  // "(in this block)" marker. Empty outside a <ProposalEditorWrapper>.
-  const scalingColumnDraftOptions = useProposalDraftOptions('scaling_column').map(
-    (d) => ({ ...d, name: `${d.name} (in this block)` }),
-  );
+  // Block-draft picker overlays (Part C L1). Drafts authored in the active block
+  // (scaling columns, option groups, feats this feat's advancements reference)
+  // have no live row yet; surface them in the advancement picker (display-only,
+  // "(in this block)" suffix). Empty outside a <ProposalEditorWrapper>.
+  const scalingColumnDraftOptions = useBlockDraftPickerOptions('scaling_column');
+  const optionGroupDraftOptions = useBlockDraftPickerOptions('unique_option_group');
+  const featDraftOptions = useBlockDraftPickerOptions('feat');
   const focusMode = proposalContext?.focusMode ?? 'drafts';
   const focusModeEnabled = proposalContext?.focusModeEnabled ?? false;
   const reviewMode = useProposalReview();
@@ -1413,7 +1414,7 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
                 // a class-side concept). `availableFeatures` left at the
                 // default `[]` hides the picker; `parentContext="feat"`
                 // ALSO hides it explicitly.
-                availableOptionGroups={allOptionGroups}
+                availableOptionGroups={[...allOptionGroups, ...optionGroupDraftOptions]}
                 // Option items aren't needed in the feat add menu today —
                 // ItemGrant / ItemChoice pools resolve against option
                 // GROUPS, not raw items. Leaving the prop empty mirrors the
@@ -1432,7 +1433,7 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
                 // already-loaded catalog (`entries`) — we filter out the
                 // feat currently being edited so an author can't accidentally
                 // make a feat grant itself.
-                availableFeats={entries.filter((e: any) => e.id !== editingId)}
+                availableFeats={[...entries.filter((e: any) => e.id !== editingId), ...featDraftOptions.filter((d: any) => d.id !== editingId)]}
                 // No classId — the option-group filter (which restricts
                 // groups to classIds.includes(classId)) no-ops when classId
                 // is undefined, falling through to all groups. That's the

@@ -33,7 +33,7 @@ import { fetchCollection, fetchDocument, queryD1, upsertDocument, deleteDocument
 import { normalizeFeatureData, denormalizeCompendiumData } from '../../lib/compendium';
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
 import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
-import { useProposalDraftOptions } from '../../hooks/useProposalDraftOptions';
+import { useBlockDraftPickerOptions } from '../../hooks/useBlockDraftPickerOptions';
 import { actionLabel, applyProposalWrite } from '../../lib/proposalAware';
 import { useProposalReview, ReviewFieldHighlight } from '../../lib/proposalReview';
 import { ReviewBanner } from '../../components/proposals/ReviewBanner';
@@ -621,15 +621,18 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   const [tagGroups, setTagGroups] = useState<any[]>([]);
   const [allTags, setAllTags] = useState<any[]>([]);
   const [scalingColumns, setScalingColumns] = useState<any[]>([]);
-  // Scaling columns created in the active proposal block aren't in the live
-  // fetch yet. Surface them in the advancement/column pickers (display-only,
-  // never merged into the classColumns save payload) with an "(in this block)"
-  // marker. Empty outside a <ProposalEditorWrapper>, so admin-direct pickers
-  // are unchanged.
-  const scalingColumnDraftOptions = useProposalDraftOptions('scaling_column').map(
-    (d) => ({ ...d, name: `${d.name} (in this block)` }),
-  );
+  // Block-draft picker overlays (Part C L1). A content-creator building this
+  // class in a proposal block also drafts the entities its advancements
+  // reference — scaling columns, features, option groups/items, feats — in the
+  // SAME block, with no live row yet. These surface those drafts (display-only,
+  // "(in this block)" suffix) so they're selectable in the advancement pickers.
+  // Empty outside a <ProposalEditorWrapper>; NEVER merged into a save payload.
+  const scalingColumnDraftOptions = useBlockDraftPickerOptions('scaling_column');
   const scalingColumnPickerOptions = [...scalingColumns, ...scalingColumnDraftOptions];
+  const featureDraftOptions = useBlockDraftPickerOptions('feature');
+  const optionGroupDraftOptions = useBlockDraftPickerOptions('unique_option_group');
+  const optionItemDraftOptions = useBlockDraftPickerOptions('unique_option_item');
+  const featDraftOptions = useBlockDraftPickerOptions('feat');
   const [advancements, setAdvancements] = useState<Advancement[]>([]);
 
   const normalizeEditorAdvancements = useCallback((list: any[] = [], defaultLevel = 1, dieOverride?: number) => (
@@ -4288,11 +4291,11 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                   <AdvancementManager
                     advancements={advancements}
                     onChange={setAdvancements}
-                    availableFeatures={features}
+                    availableFeatures={[...features, ...featureDraftOptions]}
                     availableScalingColumns={scalingColumnPickerOptions}
-                    availableOptionGroups={allOptionGroups}
-                    availableOptionItems={allOptionItems}
-                    availableFeats={allFeats}
+                    availableOptionGroups={[...allOptionGroups, ...optionGroupDraftOptions]}
+                    availableOptionItems={[...allOptionItems, ...optionItemDraftOptions]}
+                    availableFeats={[...allFeats, ...featDraftOptions]}
                     classId={id}
                     defaultHitDie={hitDie}
                     referenceContext={classReferenceContext}
@@ -4713,10 +4716,10 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                     <AdvancementManager
                       advancements={[]} // Not used for management here
                       onChange={() => { }} // Not used for management here
-                      availableFeatures={features}
+                      availableFeatures={[...features, ...featureDraftOptions]}
                       availableScalingColumns={scalingColumnPickerOptions}
-                      availableOptionGroups={allOptionGroups}
-                      availableFeats={allFeats}
+                      availableOptionGroups={[...allOptionGroups, ...optionGroupDraftOptions]}
+                      availableFeats={[...allFeats, ...featDraftOptions]}
                       classId={id}
                       isInsideFeature={true}
                       featureId={editingFeature.id}
