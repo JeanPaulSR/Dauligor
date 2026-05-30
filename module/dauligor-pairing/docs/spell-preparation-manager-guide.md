@@ -224,7 +224,7 @@ normalises via `getSemanticSourceId()` in `_classExport.ts`.
 | `module/dauligor-pairing/scripts/dauligor-character-sheet.js` | Alt actor sheet — `casterKind` resolution, class section per-class scope. |
 | `module/dauligor-pairing/templates/dauligor-spells-tab.hbs` | Alt sheet's Spells PART (uses `casterKind` / `casterLabel`). |
 | `module/dauligor-pairing/scripts/class-import-service.js` | Importer — stamps `spellcasting.type`, `spellsKnownLevels`, synthetic `{Class} Spellcasting` feat. |
-| `module/dauligor-pairing/styles/dauligor-importer.css` | All `.dauligor-spell-manager__*` and `.dauligor-character-sheet__*` styling. |
+| `module/dauligor-pairing/styles/spell-manager.css` | All `.dauligor-spell-manager__*` / `.dauligor-spell-picker__*` styling. (`.dauligor-character-sheet__*` is in `character-sheet.css`.) Was one file before the 2026-05-30 split — see [styles-guide.md](styles-guide.md). |
 | `api/_lib/_bbcode.ts` | BBCode → HTML converter (drift mirror of `src/lib/bbcode.ts`). |
 | `api/_lib/_classSpellList.ts` | Per-class spell list — resolves `spellSourceId` to semantic. |
 | `api/_lib/_spellExport.ts` | Per-spell full payload — BBCode-renders description, semantic source id. |

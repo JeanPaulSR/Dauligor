@@ -186,7 +186,7 @@ needed.
 |---|---|
 | `scripts/dauligor-character-sheet.js` | Subclass build + lazy registration. All helpers (`readCustomSections`, `createCustomFolder`, etc.), context menu wiring, drag/drop handlers, item-context-options hook. |
 | `templates/dauligor-spells-tab.hbs` | Spells tab template. Iterates `context.dauligor.classGroups` (the rebucketed sections + folders). |
-| `styles/dauligor-importer.css` | All `.dauligor-character-sheet__*` styling — header gradient, grid layout, drag indicators, ContextMenu modifiers. |
+| `styles/character-sheet.css` | All `.dauligor-character-sheet__*` styling — header gradient, grid layout, drag indicators, ContextMenu modifiers. (Was `dauligor-importer.css` before the 2026-05-30 split — see [styles-guide.md](styles-guide.md).) |
 | `scripts/main.js` | Calls `registerDauligorCharacterSheet()` in the `init` hook. Also DOM-injects the per-class Prepare button + the global toolbar book icon onto stock dnd5e sheets. |
 
 ## See also

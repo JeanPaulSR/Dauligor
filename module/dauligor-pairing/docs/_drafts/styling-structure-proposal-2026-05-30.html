@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Styling Structure Proposal (2026-05-30)</title>
+<style>
+  :root{--parchment:#f5f2e8;--parchment-soft:#faf7ed;--ink:#1a1a1a;--ink-soft:#3a3a3a;--muted:#6b6457;--gold:#c5a059;--gold-deep:#8a6d2f;--blood:#7a1f1f;--leaf:#355c3a;--card:#fbf8ee;--rule:#d8cfb8;--code-bg:#2b2620;--code-ink:#f0e9d2;--shadow:0 1px 3px rgba(0,0,0,.08),0 4px 10px rgba(0,0,0,.04);}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--parchment);color:var(--ink);font-family:"Inter",-apple-system,"Segoe UI",Roboto,sans-serif;font-size:15px;line-height:1.55;}
+  .wrap{max-width:1080px;margin:0 auto;padding:40px 32px 80px;}
+  header.hero{border-bottom:1px solid var(--rule);padding-bottom:20px;margin-bottom:26px;}
+  header.hero h1{font-family:"Cormorant Garamond","Georgia",serif;font-weight:600;font-size:36px;line-height:1.1;margin:0 0 6px;}
+  header.hero .sub{color:var(--muted);font-size:14px;}
+  h2{font-family:"Cormorant Garamond","Georgia",serif;font-size:25px;font-weight:600;margin:36px 0 12px;padding-bottom:6px;border-bottom:2px solid var(--gold);}
+  h3{font-family:"Cormorant Garamond","Georgia",serif;font-size:19px;margin:20px 0 8px;}
+  p{margin:8px 0;} ul,ol{margin:8px 0 8px 22px;padding:0;} li{margin:5px 0;}
+  code{font-family:"JetBrains Mono","Consolas",monospace;font-size:12.5px;background:rgba(138,109,47,.12);padding:1px 5px;border-radius:3px;}
+  table{border-collapse:collapse;width:100%;margin:14px 0;background:var(--parchment-soft);box-shadow:var(--shadow);border-radius:4px;overflow:hidden;}
+  th,td{text-align:left;padding:8px 11px;border-bottom:1px solid var(--rule);font-size:13.5px;vertical-align:top;} tr:last-child td{border-bottom:none;}
+  th{background:rgba(138,109,47,.10);font-weight:600;color:var(--gold-deep);text-transform:uppercase;font-size:11px;letter-spacing:.6px;}
+  .callout{background:rgba(122,31,31,.06);border:1px solid rgba(122,31,31,.25);border-radius:4px;padding:12px 16px;margin:14px 0;font-size:14px;}
+  .callout strong{color:var(--blood);}
+  .callout.leaf{background:rgba(53,92,58,.07);border-color:rgba(53,92,58,.3);} .callout.leaf strong{color:var(--leaf);}
+  .rec{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:1px 7px;border-radius:3px;background:var(--gold);color:#fff;}
+  .path{font-family:"JetBrains Mono","Consolas",monospace;font-size:12.5px;color:var(--gold-deep);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>Styling Structure &mdash; Proposal</h1>
+  <div class="sub">branch <code>foundry-module</code> &middot; 2026-05-30 &middot; splitting <code>styles/dauligor-importer.css</code> (7,228 lines) + a component finder</div>
+</header>
+
+<p>You want the one giant stylesheet split into per-area files plus a doc to find components fast. Here's the lay of the land and two ways to do it — I need your pick before I reorganize a 7k-line file I can't visually test myself.</p>
+
+<h2>The complication</h2>
+<p>The file isn't authored in clean per-component order — it <strong>interleaves</strong>:</p>
+<ul>
+  <li><code>spell-manager</code> rules appear in <strong>3 separate regions</strong> (~1942, ~3770, ~5432); <code>feature-manager</code> in 2; <code>class-*</code> scattered from line 564 to 5122.</li>
+  <li>There are ~10&ndash;15 <strong>cross-block bridge selectors</strong> — e.g. <code>.dauligor-importer-app--sequence-prompt .dauligor-class-options__region</code>, <code>.dauligor-asi__toolbar .dauligor-class-browser__subtitle</code>, <code>.dauligor-feature-manager__spells-host &gt; .dauligor-spell-manager</code> (the embedded prep manager).</li>
+</ul>
+<p>So a tidy per-component split means <em>reordering</em> rules, not just cutting the file at line marks. That's the crux of the choice below.</p>
+
+<h2>Two approaches</h2>
+
+<h3>Approach A &mdash; safe ordered slice</h3>
+<p>Cut the file into ~10 contiguous chunks <em>in their existing order</em> and load them in that order. Because ordered concatenation === the original file, the cascade is <strong>byte-identical</strong> — zero visual risk. Downside: files stay partly mixed (you'd get <code>spell-core.css</code>, <code>spell-main.css</code>, <code>spell-extra.css</code> rather than one <code>spell-manager.css</code>), so the finder doc does the heavy lifting for "where's component X".</p>
+
+<h3>Approach B &mdash; clean per-component reorg <span class="rec">recommended</span></h3>
+<p>Gather each window/app's rules into its own file (one <code>spell-manager.css</code>, one <code>feature-manager.css</code>, …). This is the real "ease of use" win. It requires reordering, so there's a <strong>small regression risk</strong> on the ~10&ndash;15 bridge selectors — mitigated by: load a <code>tokens.css</code> + <code>base.css</code> first; keep each window's full block contiguous; place each bridge selector in the <em>containing</em> window's file; and <strong>you reload Foundry to eyeball it after</strong> (the junction points here now, so that's quick). BEM naming means cross-block collisions are rare, so risk is low but non-zero.</p>
+
+<h2>Proposed file set (Approach B)</h2>
+<p>Order matters only for the first two (tokens/base before the rest). Listed in <code>module.json</code> <code>styles[]</code> in this order:</p>
+<table>
+  <tr><th>File</th><th>Contains</th></tr>
+  <tr><td><code>tokens.css</code></td><td>The token blocks (themed roots + vars-only availability) + box-sizing resets. <strong>First.</strong></td></tr>
+  <tr><td><code>base.css</code></td><td>Cross-cutting primitives: the canonical <code>__button</code> rule, shared <code>.application</code> chrome, chat (<code>dauligor-chat-spell-change</code>).</td></tr>
+  <tr><td><code>importer-wizard.css</code></td><td><code>importer</code>, <code>importer-app</code> window chrome + state modifiers, <code>wizard</code>, <code>sequence</code>, <code>class-options</code> (these are tightly bridged, so they live together).</td></tr>
+  <tr><td><code>class-browser.css</code></td><td><code>class-browser</code>, <code>subclass-preview</code>.</td></tr>
+  <tr><td><code>option-picker.css</code></td><td><code>option-picker</code>.</td></tr>
+  <tr><td><code>asi.css</code></td><td><code>asi</code> (ability-score-improvement app).</td></tr>
+  <tr><td><code>overview.css</code></td><td><code>overview</code>.</td></tr>
+  <tr><td><code>spell-manager.css</code></td><td><code>spell-manager</code> (all 3 regions gathered) + <code>spell-picker</code>.</td></tr>
+  <tr><td><code>feature-manager.css</code></td><td><code>feature-manager</code> (incl. the <code>spells-host &gt; spell-manager</code> embed bridge).</td></tr>
+  <tr><td><code>section-filter.css</code></td><td><code>section-filter</code> (the shared tri-state filter panel).</td></tr>
+  <tr><td><code>feat-browser.css</code></td><td><code>feat-browser</code>.</td></tr>
+  <tr><td><code>character-sheet.css</code></td><td><code>character-sheet</code>, <code>class-prepare-button</code>, <code>pairing</code> bits.</td></tr>
+  <tr><td><code>directory-tools.css</code></td><td><code>directory-tools</code> + <code>spell-tab-tools</code> (the injected sidebar / sheet-tab buttons).</td></tr>
+  <tr><td><code>gm-console.css</code></td><td><code>gm-console</code>.</td></tr>
+</table>
+<p>~14 files. (Approach A would be a similar count but with the spell/feature ones split by region instead of by component.)</p>
+
+<h2>The component finder</h2>
+<p>Either way, I'll add <span class="path">docs/styles-guide.md</span> (detailed, for agents) — a table mapping every component block &rarr; its file &rarr; key classes &amp; variants, plus the token reference (the 21 palette tokens + the two accent-tint channels) and the "canonical button / how to add a new window" conventions. An HTML overview can follow if you want one for reading.</p>
+
+<div class="callout">
+  <strong>Two things from you:</strong>
+  <ol style="margin-top:6px;">
+    <li><strong>Approach A or B?</strong> (I recommend B + a Foundry eyeball afterward.) And any changes to the file list above.</li>
+    <li><strong>Your last message cut off</strong> &mdash; "…and then start with finding a ___". What was the rest? I'll fold it into the plan.</li>
+  </ol>
+</div>
+
+<p style="margin-top:18px;"><small style="color:var(--muted);">This proposal: <span class="path">module/dauligor-pairing/docs/_drafts/styling-structure-proposal-2026-05-30.html</span>. Nothing changed yet.</small></p>
+
+</div>
+</body>
+</html>

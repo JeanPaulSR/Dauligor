@@ -135,7 +135,13 @@ interpreter**. Build the runtime resolver:
 
 ## UI consistency
 
-- **[done 2026-05-30] First unification pass** (audit: `docs/_drafts/ui-consistency-audit-2026-05-30.html`).
+- **[done 2026-05-30] Stylesheet split + finder doc.** The monolithic
+  `styles/dauligor-importer.css` (7,228 lines) was split into 15 per-area files
+  (`tokens` / `base` / one per window + `responsive`), wired into `module.json` in load order.
+  Content-identical (byte count + brace balance verified). Finder doc: `docs/styles-guide.md`.
+  **Needs a live-Foundry eyeball** at narrow widths (responsive.css loads last) + the cross-block
+  bridge spots (embedded spell manager, sequence/subclass-preview importer states).
+- **First unification pass [done 2026-05-30]** (audit: `docs/_drafts/ui-consistency-audit-2026-05-30.html`).
   Unified the three near-identical flat-button rules (wizard / class-browser / spell-tab-tools /
   spell-manager) into one canonical `.dauligor-…__button` rule (per-block layout deltas kept;
   `directory-tools` left to inherit Foundry's sidebar styling). Defined the previously-phantom

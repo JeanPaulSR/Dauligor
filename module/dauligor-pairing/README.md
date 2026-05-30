@@ -39,6 +39,8 @@ Canonical contracts & guides:
   `docs/actor-import-contract.md`
 - `docs/reference-syntax-guide.md`, `docs/source-library-contract.md`, `docs/property-mapping.md`,
   `docs/dae-midi-character-support.md`, `docs/dauligor-character-sheet.md`
+- `docs/styles-guide.md` — **CSS organization**: which stylesheet holds which component, the design
+  tokens, and the button/BEM conventions. Read before touching `styles/`.
 
 Doc convention: **Markdown contracts are the detailed source of truth for agents**; HTML files
 under `docs/_drafts/` are developer overviews. Several contract docs carry a status banner noting
