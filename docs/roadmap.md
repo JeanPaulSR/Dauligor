@@ -15,6 +15,29 @@ Conventions:
 
 ---
 
+## Foundry inline-roll formulas → readable chips
+
+**Status**: open (carried from the system-pages handoff Open items — task #7). **Size**: small.
+
+Pasted Foundry / dnd5e content embeds inline-roll enrichers — `[[/r 1d20+5]]`,
+`[[/damage 2d6 fire]]`, and the related `[[/check …]]` / `[[/save …]]` forms. Today these
+render verbatim as raw `[[/…]]` text in the app reader, which is noise to a human reader.
+
+Turn them into readable, **non-interactive** chips in the **client** renderer only:
+- Parse the `[[/…]]` forms in [src/lib/bbcode.ts](../src/lib/bbcode.ts) (`bbcodeToHtml`,
+  **view mode only** — leave them as plain text in editor mode, mirroring the existing `@`/`&`
+  reference handling).
+- Render each as a styled `.inline-roll` chip (small die glyph + the formula / flavor), with the
+  selector added to [src/index.css](../src/index.css) under `@layer components` (append-only).
+- **Do NOT mirror to `api/_lib/_bbcode.ts`.** The server intentionally leaves these as text for
+  Foundry's own enrichers — same drift-pair rule as the `&`/`@` reference rendering. See
+  [architecture/cross-references.md](architecture/cross-references.md).
+- Display sugar only — no dice execution, no rolling. Just make the formula legible in-app.
+
+Created 2026-05-29.
+
+---
+
 ## Live-content bridge — Phase 2+ work
 
 **Status**: Phase 1 foundation patches shipped 2026-05-27 on `claude/phase1-foundation`. Phase 2 (read-only live viewer) gated on article revamp — see "Article system unification" below. **Working spec**: [docs/_drafts/foundry-enricher-deep-dive-2026-05-26.html](_drafts/foundry-enricher-deep-dive-2026-05-26.html).
