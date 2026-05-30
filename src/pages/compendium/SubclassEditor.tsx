@@ -831,12 +831,12 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
             <TabsList className="w-full h-auto flex flex-col gap-1 bg-transparent border-none p-0 mb-6">
               <div className="w-full grid grid-cols-2 xl:grid-cols-6 gap-1 bg-card/50 border border-gold/10 p-1 rounded-md">
                 <TabsTrigger value="basic">Basic Info</TabsTrigger>
-                <TabsTrigger value="features" disabled={!id}>Features</TabsTrigger>
+                <TabsTrigger value="features" disabled={!effectiveId}>Features</TabsTrigger>
                 <TabsTrigger value="spellcasting">Spellcasting</TabsTrigger>
                 <TabsTrigger value="progression">Progression</TabsTrigger>
                 <TabsTrigger value="tags">Tags</TabsTrigger>
                 {!isProposalMode && (
-                  <TabsTrigger value="danger" disabled={!id}>Danger Zone</TabsTrigger>
+                  <TabsTrigger value="danger" disabled={!effectiveId}>Danger Zone</TabsTrigger>
                 )}
               </div>
             </TabsList>
