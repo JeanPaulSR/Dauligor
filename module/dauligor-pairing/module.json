@@ -38,6 +38,20 @@
     "scripts/main.js"
   ],
   "styles": [
-    "styles/dauligor-importer.css"
+    "styles/tokens.css",
+    "styles/base.css",
+    "styles/importer-wizard.css",
+    "styles/class-browser.css",
+    "styles/option-picker.css",
+    "styles/asi.css",
+    "styles/overview.css",
+    "styles/spell-manager.css",
+    "styles/feature-manager.css",
+    "styles/section-filter.css",
+    "styles/feat-browser.css",
+    "styles/character-sheet.css",
+    "styles/directory-tools.css",
+    "styles/gm-console.css",
+    "styles/responsive.css"
   ]
 }

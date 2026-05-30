@@ -1,0 +1,1141 @@
+/* ============================================================================
+ * dauligor-pairing — importer-wizard
+ * Split from the former monolithic dauligor-importer.css (2026-05-30).
+ * See docs/styles-guide.md for the component → file map. Do not reorder
+ * across files casually; load order is fixed in module.json.
+ * ========================================================================== */
+.application.dauligor-importer-app .window-content,
+.dauligor-importer-window {
+  padding: 0;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.application.dauligor-importer-app .window-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.dauligor-importer {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.dauligor-importer__body {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.72fr) minmax(220px, 0.88fr) minmax(300px, 1fr);
+  /* Plutonium's ChooseImporter.hbs sandwiches `<div class="imp-wiz__spc-panels
+   * ve-mx-2">` (≈16px total) between each panel. Mirror that breathing room
+   * here via a grid `column-gap` so step 1 / step 2 / step 3 aren't kissing.
+   * Vertical gap stays 0 because the body is a single row. */
+  column-gap: 14px;
+  min-height: 0;
+  /* The gap above lives in the body's background; pad the body so the
+   * outermost panels don't kiss the window-content border either. */
+  padding: 0 4px;
+}
+
+.dauligor-importer__panel {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  /* Panels no longer share a `border-right` separator — the grid gap
+   * already gives them breathing room, and the visible border was
+   * doubling up against the surrounding window chrome on dark themes. */
+  background: var(--dauligor-panel-alt);
+}
+
+.dauligor-importer__divider {
+  /* Layout-only spacer in the .hbs template; styling is handled by the
+   * parent grid's `column-gap`. Hidden node either way. */
+  display: none;
+}
+
+.dauligor-wizard__section,
+.dauligor-class-browser {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.dauligor-wizard__section-head,
+.dauligor-class-browser__toolbar {
+  padding: 9px 10px 8px;
+  border-bottom: 1px solid var(--dauligor-border);
+  background: #222;
+}
+
+.dauligor-wizard__heading {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.dauligor-wizard__step,
+.dauligor-class-browser__step {
+  display: inline;
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--dauligor-text);
+}
+
+.dauligor-wizard__title,
+.dauligor-class-browser__title {
+  display: inline;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.2;
+  font-weight: 700;
+  color: var(--dauligor-text);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.dauligor-wizard__subtitle,
+.dauligor-class-browser__subtitle,
+.dauligor-wizard__hint,
+.dauligor-class-browser__hint,
+.dauligor-class-browser__empty {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-wizard__section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  padding: 8px;
+}
+
+.dauligor-wizard__section-body--empty {
+  flex: 1 1 auto;
+}
+
+.dauligor-wizard__section-body--scroll {
+  overflow: auto;
+}
+
+.dauligor-wizard__choice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dauligor-wizard__choice-list--compact {
+  gap: 4px;
+}
+
+.dauligor-wizard__choice-list--scroll {
+  min-height: 0;
+  overflow: auto;
+}
+
+.dauligor-wizard__choice {
+  width: 100%;
+  margin: 0;
+  min-height: 28px;
+  padding: 5px 8px;
+  border: 1px solid var(--dauligor-btn-border);
+  border-radius: 0;
+  background: var(--dauligor-btn-bg);
+  color: var(--dauligor-text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.dauligor-wizard__choice:hover,
+.dauligor-wizard__choice:focus {
+  border-color: var(--dauligor-btn-border-hover);
+  background: var(--dauligor-btn-hover-bg);
+}
+
+.dauligor-wizard__choice--active {
+  border-color: #9b988f;
+  background: linear-gradient(180deg, #4d4d4d, #3a3a3a);
+}
+
+.dauligor-wizard__choice--disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
+}
+
+.dauligor-wizard__choice[disabled] {
+  pointer-events: none;
+}
+
+.dauligor-wizard__choice-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dauligor-wizard__choice-label {
+  min-width: 0;
+}
+
+.dauligor-wizard__choice-label-secondary {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-wizard__choice-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.dauligor-wizard__choice-submeta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-wizard__choice-arrow {
+  color: var(--dauligor-text, #c9c7c0);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.dauligor-wizard__toolbar {
+  /* Search owns the flexible 1fr column; Reload + Reset are content-
+   * sized auto columns on the right. Pre-cleanup the grid was
+   * `auto 1fr auto` to fit a Filter button + search + single trailing
+   * button, but after the dead Filter button was removed the search
+   * slid into the auto column and Reload ate the 1fr. Restored the
+   * intended "search takes leftover width, buttons sized to text"
+   * layout. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 4px;
+}
+
+.dauligor-wizard__toolbar-button {
+  height: 28px;
+  border: 1px solid var(--dauligor-btn-border);
+  border-radius: 0;
+  background: var(--dauligor-btn-bg);
+  color: var(--dauligor-text);
+  padding: 0 10px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.dauligor-wizard__toolbar-button:hover,
+.dauligor-wizard__toolbar-button:focus {
+  border-color: var(--dauligor-btn-border-hover);
+  background: var(--dauligor-btn-hover-bg);
+}
+
+.dauligor-wizard__toolbar-search {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  border: 1px solid var(--dauligor-border);
+  border-radius: 0;
+  background: var(--dauligor-panel, #1f1f1f);
+  color: var(--dauligor-text);
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.dauligor-wizard__empty {
+  padding: 8px;
+  border: 1px solid var(--dauligor-border);
+  color: var(--dauligor-text-muted);
+  font-size: 12px;
+  background: #242424;
+}
+
+.dauligor-wizard__source-table {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--dauligor-border);
+  /* All importer panels/columns share `var(--dauligor-panel-alt)`
+   * (#252525) — the same color the wizard's "Choose Importer"
+   * column uses. Earlier we tried `rgba(0, 0, 0, 0.18)` for
+   * inset depth; the user pushed back: the translucent overlay
+   * darkened columns relative to the surrounding window content
+   * which made the importer feel inconsistent against the
+   * wizard. Uniform panel-alt across every surface. */
+  border-radius: 8px;
+  background: var(--dauligor-panel-alt);
+  overflow: hidden;
+}
+
+.dauligor-wizard__source-header,
+.dauligor-wizard__source-row {
+  display: grid;
+  /* Three columns: checkbox / Name / Short. Rules + Classes were
+   * dropped — neither was load-bearing and they pushed the Name
+   * column to ellipsis-truncate even on the new wider wizard.
+   * The fractional fr split is 80% / 20% of the remaining row
+   * (minus the 34px checkbox + gaps). */
+  grid-template-columns: 34px minmax(0, 4fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  min-height: 28px;
+  padding: 0 8px;
+}
+
+.dauligor-wizard__source-header {
+  /* Grey "table header" recipe — shared with the class-browser list
+   * header. We tried a gold-gradient pass on these table chromes and
+   * the user pushed back: they liked the cooler grey, just wanted
+   * the structural consistency (rounded panel + matching hover) we
+   * landed in round 4. Gold lives on the *content* (section labels,
+   * accent bars on selected rows) not the chrome. */
+  border-bottom: 1px solid var(--dauligor-border);
+  background: #2b2b2b;
+  font-size: 12px;
+  font-weight: 600;
+  color: #c5c3bb;
+}
+
+.dauligor-wizard__source-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.dauligor-wizard__source-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  background: transparent;
+  color: var(--dauligor-text);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.dauligor-wizard__source-row:first-child {
+  border-top: 0;
+}
+
+.dauligor-wizard__source-row:hover,
+.dauligor-wizard__source-row:focus-within {
+  /* Grey hover — shared rhythm with class-browser rows, option-picker
+   * rows, subclass-preview rows, and level-selector rows. We keep
+   * a thin gold inset accent bar on `--selected` as a structural
+   * marker (matches the gold border highlight on "Divine Domain"
+   * in the Class Import Overview screenshot) without flooding the
+   * row background. */
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.dauligor-wizard__source-row--selected {
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 3px 0 0 var(--dauligor-accent);
+}
+
+.dauligor-wizard__source-row--disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.dauligor-wizard__source-cell {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dauligor-wizard__source-cell--select {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Rules + Classes (count) columns are gone; their cell-class
+ * styles went with them. Only the Short column's muted color
+ * remains. */
+.dauligor-wizard__source-cell--short {
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-wizard__source-cell--name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dauligor-wizard__source-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+
+.dauligor-wizard__source-checkbox {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+}
+
+/* Ready / Soon wizard status badges are gone — the wizard no longer
+ * advertises an importer's readiness in the chrome (disabled rows speak
+ * for themselves and the Open Importer button enforces the gate). Keep
+ * this comment as a breadcrumb so re-introducing the badges later picks
+ * up the BEM naming and slot layout that already worked. */
+
+.dauligor-wizard__card,
+.dauligor-class-browser__summary,
+.dauligor-class-browser__controls {
+  border: 1px solid var(--dauligor-border);
+  border-radius: 0;
+  background: #262626;
+  padding: 10px 12px;
+}
+
+.dauligor-wizard__detail-grid,
+.dauligor-class-browser__summary-grid {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 10px;
+  font-size: 12px;
+}
+
+.dauligor-wizard__detail-label,
+.dauligor-class-browser__summary-label {
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-wizard__detail-value,
+.dauligor-class-browser__summary-value {
+  min-width: 0;
+}
+
+.dauligor-wizard__field-label,
+.dauligor-class-browser__field-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-wizard__input,
+.dauligor-class-browser__input {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--dauligor-border);
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--dauligor-text);
+  padding: 7px 10px;
+}
+
+.dauligor-wizard__status,
+.dauligor-class-browser__status {
+  min-height: 18px;
+  font-size: 12px;
+}
+
+/* Selection counter — "2 / 3 chosen". Rendered inside the status
+   area when a prompt has `counter` configured. Uppercase + bold +
+   accent-tinted so it stands out from the static footerNote text
+   without screaming. Wraps to its own line if the status row gets
+   too narrow. */
+.dauligor-sequence__counter {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: rgba(180, 140, 80, 0.18);
+  color: var(--dauligor-text, #cbb98f);
+  font-weight: 600;
+  font-size: 0.92em;
+  letter-spacing: 0.04em;
+  vertical-align: middle;
+}
+
+.dauligor-wizard__status--success,
+.dauligor-class-browser__status--success {
+  color: var(--dauligor-success);
+}
+
+.dauligor-wizard__status--danger,
+.dauligor-class-browser__status--danger {
+  color: var(--dauligor-danger);
+}
+
+.dauligor-wizard__actions,
+.dauligor-class-browser__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.dauligor-importer__footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 46px;
+  padding: 7px 10px;
+  border-top: 1px solid var(--dauligor-border);
+  background: #141414;
+}
+
+.dauligor-importer__footer-status {
+  min-width: 0;
+  margin-right: auto;
+  font-size: 12px;
+}
+
+.dauligor-importer__footer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* Primary variant — pre-highlighted with the gold accent border at
+ * rest. Matches dnd5e v5's "you'll want to click this" emphasis. */
+.dauligor-wizard__button--primary,
+.dauligor-class-browser__button--primary {
+  background: var(--dauligor-btn-hover-bg);
+  border-color: var(--dauligor-btn-border-hover);
+}
+
+/* The filter overlay relies on `.window-content` being the nearest
+ * positioned ancestor. Foundry's AppV2 `.window-content` is already
+ * `position: relative` by default — no override needed. (Earlier
+ * iteration of this CSS made the toolbar `position: relative`, which
+ * shrank the modal's anchoring box to the 34px-tall toolbar height
+ * and visually clipped the chip grid.) */
+
+/* The per-class Preview pill was removed by user request. The class
+ * browser no longer renders this control; the subclass preview /
+ * selector is opened later in the import flow via the Choose
+ * Subclass step. CSS removed; the `.dauligor-class-browser__row-preview`
+ * selector no longer matches anything in the rendered HTML. */
+
+/* ─── Subclass preview window ────────────────────────────────────────────
+ * Three-column read-only browser. Inherits the option-picker's neutral
+ * border/background palette so the picker and preview feel like sibling
+ * surfaces. Layout (mirrors the toolbar/body/footer shell):
+ *
+ *   [data-region="toolbar"] ─ class name + subclass count
+ *   [data-region="body"]    ─ .dauligor-subclass-preview (3-col grid)
+ *   [data-region="footer"]  ─ Close button
+ */
+
+.dauligor-class-options__region--body:has(.dauligor-subclass-preview) {
+  /* Same trick as the option-picker — let the inner columns own
+   * scrolling instead of the body region. See the comment block
+   * above `.dauligor-option-picker` for the full reasoning. */
+  overflow: hidden;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  /* Match the columns' background (`--dauligor-panel-alt` = #252525)
+   * so the gaps between the columns blend with the column surfaces —
+   * the whole window reads as one continuous panel, same color as
+   * the wizard's "Choose Importer" column. */
+  background: var(--dauligor-panel-alt);
+}
+
+/* Apply the same panel-alt background to the toolbar / footer
+ * regions of the subclass-preview app so the entire window is
+ * uniform. The shared class-options shell doesn't set a background
+ * on its regions, so it picks up Foundry's default which read as
+ * darker. */
+.dauligor-importer-app--subclass-preview .dauligor-class-options__region--toolbar,
+.dauligor-importer-app--subclass-preview .dauligor-class-options__region--footer {
+  background: var(--dauligor-panel-alt);
+}
+
+/* Scoped toolbar padding for the subclass-preview app — the shared
+ * `.dauligor-class-options__region--toolbar` has no inherent style,
+ * so we add some breathing room + a subtle bottom border to match
+ * the wizard's section-heads visually. Background is set by the
+ * uniform `--dauligor-panel-alt` rule above. */
+.dauligor-importer-app--subclass-preview .dauligor-class-options__region--toolbar {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--dauligor-border);
+}
+
+.dauligor-class-options {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.dauligor-class-options__region--body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+}
+
+.dauligor-importer-app--sequence-prompt .dauligor-class-options__region--body {
+  padding: 10px 12px;
+}
+
+.dauligor-class-options__region--footer {
+  border-top: 1px solid var(--dauligor-border);
+  padding: 14px 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent), rgba(0, 0, 0, 0.14);
+}
+
+.dauligor-importer-app--sequence-prompt .dauligor-class-options__region--footer {
+  padding: 10px 12px;
+}
+
+.dauligor-class-options__toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--dauligor-border);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent), rgba(0, 0, 0, 0.16);
+}
+
+.dauligor-class-options__toolbar-meta {
+  display: grid;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.dauligor-class-options__toolbar-meta > div {
+  display: grid;
+  gap: 2px;
+}
+
+.dauligor-class-options__body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.dauligor-class-options__section {
+  border: 1px solid var(--dauligor-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 14px;
+}
+
+.dauligor-class-options__section-head h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.dauligor-class-options__section-head p,
+.dauligor-class-options__group-meta {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-class-options__choice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.dauligor-class-options__radio,
+.dauligor-class-options__checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--dauligor-border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.dauligor-class-options__checkbox--disabled {
+  opacity: 0.6;
+}
+
+.dauligor-class-options__radio--disabled {
+  opacity: 0.6;
+}
+
+.dauligor-class-options__checkbox-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dauligor-class-options__checkbox-title {
+  font-size: 13px;
+}
+
+.dauligor-class-options__checkbox-meta {
+  font-size: 11px;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-class-options__levels {
+  display: flex;
+  flex-direction: column;
+  margin-top: 8px;
+  border: 1px solid var(--dauligor-border);
+  /* Rounded panel-alt — unified with every other column/panel in
+   * the importer. */
+  border-radius: 8px;
+  background: var(--dauligor-panel-alt);
+  overflow: hidden;
+}
+
+.dauligor-class-options__levels-header,
+.dauligor-class-options__levels-row {
+  display: grid;
+  grid-template-columns: 36px 56px minmax(0, 1fr);
+  gap: 0;
+  align-items: center;
+}
+
+.dauligor-class-options__levels-header {
+  /* Grey table-header chrome — matches the wizard source-table
+   * + class-browser table headers. The gold/uppercase recipe is
+   * reserved for *labels* (section titles, badges), not chrome. */
+  background: #2b2b2b;
+  border-bottom: 1px solid var(--dauligor-border);
+  font-size: 12px;
+  font-weight: 600;
+  color: #c5c3bb;
+}
+
+.dauligor-class-options__levels-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.015);
+  cursor: pointer;
+  min-height: 28px;
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.dauligor-class-options__levels-row:hover {
+  /* Grey hover, same as the rest of the module's clickable rows. */
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.dauligor-class-options__levels-row.is-selected {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.dauligor-class-options__levels-row.is-current {
+  /* Actively-picked target level. Grey background + the gold inset
+   * accent bar as a structural marker — the only place gold still
+   * shows up on the row, matching the gold outline on selected
+   * features in the Class Import Overview. */
+  background: rgba(255, 255, 255, 0.10);
+  box-shadow: inset 3px 0 0 var(--dauligor-accent);
+}
+
+.dauligor-class-options__levels-row.is-locked {
+  color: var(--dauligor-text-muted);
+  cursor: default;
+  opacity: 0.65;
+}
+
+.dauligor-class-options__levels-cell {
+  padding: 5px 8px;
+  min-width: 0;
+}
+
+.dauligor-class-options__levels-cell--check,
+.dauligor-class-options__levels-cell--level {
+  text-align: center;
+}
+
+.dauligor-class-options__levels-cell--check input {
+  margin: 0;
+}
+
+.dauligor-class-options__levels--compact {
+  margin-top: 4px;
+}
+
+.dauligor-class-options__levels--compact .dauligor-class-options__levels-header,
+.dauligor-class-options__levels--compact .dauligor-class-options__levels-row {
+  grid-template-columns: 28px 48px minmax(0, 1fr);
+}
+
+.dauligor-class-options__levels--compact .dauligor-class-options__levels-header {
+  font-size: 11px;
+}
+
+.dauligor-class-options__levels--compact .dauligor-class-options__levels-row {
+  min-height: 22px;
+}
+
+.dauligor-class-options__levels--compact .dauligor-class-options__levels-cell {
+  padding: 3px 6px;
+  font-size: 12px;
+  line-height: 1.15;
+}
+
+.dauligor-class-options__levels--compact .dauligor-class-options__levels-cell--check input {
+  transform: scale(0.9);
+}
+
+.dauligor-class-options__spells-table {
+  display: flex;
+  flex-direction: column;
+  margin-top: 12px;
+  border: 1px solid var(--dauligor-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.dauligor-class-options__spells-header,
+.dauligor-class-options__spells-row {
+  display: grid;
+  grid-template-columns: 60px 88px 112px minmax(0, 1fr);
+  gap: 0;
+  align-items: center;
+}
+
+.dauligor-class-options__spells-header {
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-class-options__spells-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.dauligor-class-options__spells-row.is-current {
+  background: rgba(174, 31, 61, 0.18);
+}
+
+.dauligor-class-options__spells-header > span,
+.dauligor-class-options__spells-row > span {
+  padding: 8px 10px;
+}
+
+.dauligor-class-options__equipment-note {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px dashed var(--dauligor-border);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--dauligor-text-muted);
+  line-height: 1.5;
+}
+
+.dauligor-class-options__footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: end;
+}
+
+.dauligor-class-options__footer-fields {
+  min-width: 260px;
+}
+
+.dauligor-class-options__footer-fields:empty {
+  display: none;
+}
+
+.dauligor-class-options__footer-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 300px;
+}
+
+.dauligor-sequence__toolbar,
+.dauligor-sequence__body,
+.dauligor-sequence__footer {
+  display: flex;
+  flex-direction: column;
+}
+
+.dauligor-sequence__toolbar {
+  gap: 6px;
+}
+
+.dauligor-sequence__body {
+  gap: 12px;
+}
+
+.dauligor-importer-app--sequence-prompt .dauligor-sequence__body {
+  gap: 8px;
+}
+
+.dauligor-importer-app--sequence-prompt .dauligor-class-browser__subtitle {
+  margin-top: 2px;
+  font-size: 10px;
+  line-height: 1.25;
+}
+
+.dauligor-sequence__footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.dauligor-sequence__progress-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dauligor-sequence__progress-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dauligor-sequence__progress-step {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 8px 10px;
+  border: 1px solid var(--dauligor-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.dauligor-sequence__progress-marker {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: var(--dauligor-border, #5c5c5c);
+}
+
+.dauligor-sequence__progress-step--active .dauligor-sequence__progress-marker {
+  background: #d0a050;
+}
+
+.dauligor-sequence__progress-step--complete .dauligor-sequence__progress-marker {
+  background: #4f8a58;
+}
+
+.dauligor-sequence__progress-step--skipped .dauligor-sequence__progress-marker {
+  background: #7b7b7b;
+}
+
+.dauligor-sequence__progress-step--error .dauligor-sequence__progress-marker,
+.dauligor-sequence__progress-step--cancelled .dauligor-sequence__progress-marker {
+  background: #a74a4a;
+}
+
+.dauligor-sequence__progress-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dauligor-sequence__progress-detail,
+.dauligor-sequence__progress-current,
+.dauligor-sequence__choice-meta {
+  font-size: 12px;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-sequence__progress-current {
+  padding-top: 2px;
+}
+
+.dauligor-sequence__choice-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.dauligor-sequence__select-field,
+.dauligor-sequence__select {
+  display: block;
+  width: 100%;
+}
+
+.dauligor-sequence__hp-mode {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dauligor-sequence__text-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dauligor-sequence__field-label {
+  font-size: 12px;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-sequence__code-input {
+  font-family: "Courier New", Consolas, monospace;
+}
+
+.dauligor-sequence__select {
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid #4a4238;
+  border-radius: 0;
+  background: var(--dauligor-panel-alt, #252525);
+  color: #d9d7cf;
+  font: inherit;
+  box-sizing: border-box;
+  appearance: auto;
+  color-scheme: dark;
+}
+
+.dauligor-sequence__select:focus {
+  outline: 1px solid rgba(211, 177, 110, 0.7);
+  outline-offset: 0;
+  border-color: #6a5d47;
+}
+
+.dauligor-sequence__option-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--dauligor-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.dauligor-sequence__option-row {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 96px;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.dauligor-sequence__option-row:first-child {
+  border-top: 0;
+}
+
+.dauligor-sequence__option-name,
+.dauligor-sequence__option-source {
+  min-width: 0;
+}
+
+.dauligor-sequence__option-source {
+  text-align: right;
+  font-size: 12px;
+  color: #88a8d8;
+}
+
+.dauligor-sequence__spells-placeholder {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.96fr);
+  gap: 14px;
+  min-height: 0;
+}
+
+.dauligor-sequence__spells-column {
+  min-height: 0;
+}
+
+.dauligor-sequence__spells-column--table {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dauligor-sequence__panel-title {
+  margin: 0;
+  font-size: 18px;
+}
+
+.dauligor-sequence__equipment-placeholder {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dauligor-sequence__equipment-note {
+  font-size: 13px;
+  color: var(--dauligor-text-muted);
+}
+
+/* ─── Option-group picker (redesigned with detail panel + level groups) ─── */
+
+/* The actual chain that owns scrolling, top to bottom, when our picker
+ * is in the body:
+ *
+ *   .dauligor-class-options__region--body  ← was `overflow: auto` (BAD —
+ *                                            this stole the scroll
+ *                                            from our inner columns)
+ *     .dauligor-sequence__body             ← inner wrapper
+ *       .dauligor-option-picker            ← grid
+ *         .dauligor-option-picker__list    ← scrollable ✓
+ *         .dauligor-option-picker__detail-pane ← scrollable ✓
+ *
+ * Override the body-region's `overflow: auto` ONLY when our picker is
+ * inside. Other prompts (skills, tools, traits) keep the existing
+ * "body region scrolls when content overflows" behavior. The
+ * `:has()` selector cleanly scopes this to the picker case. */
+.dauligor-class-options__region--body:has(.dauligor-option-picker) {
+  overflow: hidden;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  /* Body bg = panel-alt so the inter-column gap blends with the
+   * columns and the whole window reads as one continuous panel,
+   * matching the wizard's "Choose Importer" column color and the
+   * subclass-preview window. Without this the gap shows Foundry's
+   * default near-black `.window-content` color and the importer
+   * feels disconnected from the wizard. */
+  background: var(--dauligor-panel-alt);
+}
+
+/* Same panel-alt fill for every region of any class-options-shell-based
+ * importer window — toolbar, body, footer — so the entire window is
+ * uniformly the wizard's column color. Scoped to importer-app windows
+ * so it doesn't bleed onto other Foundry apps that happen to use the
+ * same shell. */
+.dauligor-importer-app .dauligor-class-options__region--toolbar,
+.dauligor-importer-app .dauligor-class-options__region--body,
+.dauligor-importer-app .dauligor-class-options__region--footer {
+  background: var(--dauligor-panel-alt);
+}
+
+.dauligor-sequence__body:has(.dauligor-option-picker) {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+/* The window-content needs to be position: relative so the absolutely-
+ * positioned filter modal-host stays bounded inside the app frame. */
+.dauligor-importer-app .window-content {
+  position: relative;
+}

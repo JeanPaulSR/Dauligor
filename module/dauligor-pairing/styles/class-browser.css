@@ -1,0 +1,597 @@
+/* ============================================================================
+ * dauligor-pairing — class-browser
+ * Split from the former monolithic dauligor-importer.css (2026-05-30).
+ * See docs/styles-guide.md for the component → file map. Do not reorder
+ * across files casually; load order is fixed in module.json.
+ * ========================================================================== */
+
+.dauligor-class-browser__status:has(.dauligor-sequence__counter) {
+  /* When the counter is present, allow the status row to stack the
+     footerNote (if any) above the counter pill. */
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.dauligor-class-browser {
+  min-height: 0;
+}
+
+.dauligor-class-browser__region--list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 4px 0 4px;
+}
+
+.dauligor-class-browser__region--footer {
+  border-top: 1px solid var(--dauligor-border);
+  padding: 10px 8px;
+  background: #1c1c1c;
+}
+
+.dauligor-class-browser__toolbar {
+  display: block;
+}
+
+.dauligor-class-browser__toolbar-controls {
+  display: grid;
+  grid-template-columns: auto 32px minmax(0, 1fr) auto;
+  gap: 4px;
+}
+
+.dauligor-class-browser__controls {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.dauligor-class-browser__button--icon {
+  padding: 0;
+  width: 32px;
+  min-width: 32px;
+}
+
+/* Filter button "active" state — used when the filter modal is open.
+ * Mirrors the React FilterBar's `variant={isFilterOpen ? "default" :
+ * "outline"}` distinction. The count chip rides inline next to the
+ * label so the user sees how many filters are active without opening
+ * the modal. */
+.dauligor-class-browser__button--active {
+  border-color: var(--dauligor-btn-border-hover);
+  background: var(--dauligor-btn-hover-bg);
+  color: var(--dauligor-text);
+}
+
+.dauligor-class-browser__filter-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 16px;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.85);
+  color: #1c1c1c;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Filter modal — vanilla-JS port of `src/components/compendium/
+ * FilterBar.tsx`'s `<Card>` overlay. Lives inside the toolbar region
+ * (so it's absolutely-positioned within the class-browser window,
+ * not a global portal — Foundry AppV2 doesn't give us a clean root
+ * to mount into). Click-outside / X / Apply all close it. */
+.dauligor-class-browser__filter-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 32px 20px;
+  pointer-events: none;
+}
+
+.dauligor-class-browser__filter-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 10, 10, 0.55);
+  backdrop-filter: blur(2px);
+  pointer-events: auto;
+}
+
+.dauligor-class-browser__filter-card {
+  position: relative;
+  pointer-events: auto;
+  width: min(680px, 100%);
+  max-height: calc(100% - 16px);
+  display: flex;
+  flex-direction: column;
+  background: #1e1e1e;
+  border: 1px solid var(--dauligor-border);
+  border-radius: 6px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+/* Section-filter variant: wider modal so the per-axis controls (All /
+ * Clear / None / OR-AND-XOR / Subtags / Hide) all fit on one row at
+ * typical pill counts, and a taller max-height to match the public
+ * `/compendium/*` filter modals.
+ *
+ * The overlay container `__filter-overlay` is absolutely-positioned and
+ * sized to the toolbar region, so widths here are relative to the
+ * containing rect rather than the viewport — `min(940px, 96%)` gives
+ * us breathing room without overflowing on narrow window widths.  */
+.dauligor-class-browser__filter-card--section-filter {
+  width: min(940px, 96%);
+  max-height: 92%;
+  overflow: hidden;
+}
+
+.dauligor-class-browser__filter-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--dauligor-border);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.dauligor-class-browser__filter-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dauligor-accent-strong);
+}
+
+.dauligor-class-browser__filter-subtitle {
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--dauligor-text-muted, var(--dauligor-text-muted, #9a978f));
+  line-height: 1.4;
+}
+
+.dauligor-class-browser__filter-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 14px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dauligor-class-browser__filter-empty {
+  flex: 1 1 100%;
+  font-size: 11px;
+  color: var(--dauligor-text-muted, var(--dauligor-text-muted, #9a978f));
+  text-align: center;
+  padding: 28px 8px;
+  font-style: italic;
+}
+
+.dauligor-class-browser__filter-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--dauligor-border);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* Tri-state chip: inactive / include / exclude.
+ *
+ *   inactive → neutral outline
+ *   include  → gold solid
+ *   exclude  → blood outlined
+ *
+ * Cycles in that order on click. Matches the React FilterBar's chip
+ * state colors so users get the same affordance in both UIs. */
+.dauligor-class-browser__chip {
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--dauligor-accent-strong);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  transition: filter 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+
+.dauligor-class-browser__chip:hover {
+  filter: brightness(1.15);
+}
+
+.dauligor-class-browser__chip--include {
+  border-color: var(--dauligor-accent);
+  background: rgba(255, 255, 255, 0.85);
+  color: #1c1c1c;
+}
+
+.dauligor-class-browser__chip--exclude {
+  border-color: #a85050;
+  background: rgba(168, 80, 80, 0.18);
+  color: #f4b8b8;
+  text-decoration: line-through;
+}
+
+.dauligor-subclass-preview__toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dauligor-subclass-preview__toolbar-title {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: #f0e8d8;
+}
+
+.dauligor-subclass-preview__toolbar-subtitle {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-subclass-preview {
+  display: grid;
+  /* Left: subclass list. Middle: feature list. Right: description.
+   * Mins bumped from 220/260/360 → 300/340/420 (with proportional
+   * fr weights) so subclass + feature names no longer ellipsis
+   * after one word. The description column stays the widest since
+   * prose is what the right pane carries. */
+  grid-template-columns: minmax(300px, 1fr) minmax(340px, 1.1fr) minmax(420px, 1.5fr);
+  gap: 12px;
+  min-height: 0;
+  height: 100%;
+  flex: 1 1 auto;
+}
+
+.dauligor-subclass-preview__col {
+  border: 1px solid var(--dauligor-border);
+  border-radius: 8px;
+  overflow-y: auto;
+  /* Clip horizontal overflow — the rows now inherit the option-
+   * picker's padding (8px 12px) on top of the grid template
+   * columns; long subclass names would otherwise bleed beyond the
+   * column's rounded edge. `overflow-y: auto + overflow-x: hidden`
+   * is the safe combo. */
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  /* Match the wizard's "Choose Importer" panel background. */
+  background: var(--dauligor-panel-alt);
+  min-height: 0;
+}
+
+.dauligor-subclass-preview__col--detail {
+  padding: 16px 18px;
+}
+
+.dauligor-subclass-preview__empty,
+.dauligor-subclass-preview__detail-empty {
+  color: var(--dauligor-text-muted);
+  font-style: italic;
+  padding: 24px 16px;
+  text-align: center;
+}
+
+/* Level divider — flat "Level N" label + bottom rule, matching the
+ * lightweight style of the Class Selector's level column. The
+ * earlier sticky/banded recipe felt like another row of chrome
+ * stacked on top of the column header; this version reads as a
+ * section break inside the list, not a header.
+ *
+ * No sticky positioning — when the user scrolls past a level the
+ * label scrolls out with its group. Acceptable here since each
+ * level rarely has many features. */
+.dauligor-subclass-preview__level-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 16px 12px 6px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--dauligor-border);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--dauligor-text);
+}
+
+.dauligor-subclass-preview__col > .dauligor-subclass-preview__level-header:first-child {
+  padding-top: 10px;
+}
+
+.dauligor-subclass-preview__level-count {
+  font-size: 11px;
+  color: var(--dauligor-text-muted);
+}
+
+/* The checkbox in a subclass row is purely a visual affordance —
+ * clicks anywhere on the row focus the subclass; we don't want the
+ * browser toggling the checkbox state independently and getting
+ * visually out-of-sync with the focused row. `pointer-events: none`
+ * lets clicks fall through to the row's handler. */
+.dauligor-subclass-preview__row--subclass .dauligor-option-picker__row-check {
+  pointer-events: none;
+}
+
+.dauligor-subclass-preview__detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dauligor-subclass-preview__detail-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--dauligor-border);
+}
+
+.dauligor-subclass-preview__detail-name {
+  margin: 0;
+  font-size: 22px;
+  color: #f0e8d8;
+}
+
+.dauligor-subclass-preview__detail-meta {
+  font-size: 11px;
+  color: var(--dauligor-text-muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Section block + uppercase label inside the detail pane — mirrors
+ * `.dauligor-option-picker__detail-section{,-title}` so the two
+ * panes share their information hierarchy (name + meta header, then
+ * a labeled DESCRIPTION section below). */
+.dauligor-subclass-preview__detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dauligor-subclass-preview__detail-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dauligor-accent-strong);
+}
+
+.dauligor-subclass-preview__detail-body {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--dauligor-text);
+}
+
+.dauligor-subclass-preview__detail-body p {
+  margin: 0 0 12px;
+}
+
+.dauligor-subclass-preview__detail-body p:last-child {
+  margin-bottom: 0;
+}
+
+/* Headings inside imported descriptions — clamp them down to a
+ * reasonable size so things like `## Spell Slots` don't render at
+ * 32px+ inside a 13px description body. */
+.dauligor-subclass-preview__detail-body h1,
+.dauligor-subclass-preview__detail-body h2,
+.dauligor-subclass-preview__detail-body h3,
+.dauligor-subclass-preview__detail-body h4 {
+  margin: 12px 0 6px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--dauligor-accent-strong);
+  border: 0;
+}
+
+.dauligor-subclass-preview__detail-body strong {
+  color: var(--dauligor-accent-strong);
+}
+
+.dauligor-class-browser__toolbar .dauligor-class-browser__input,
+.dauligor-class-browser__field--compact .dauligor-class-browser__input {
+  height: 30px;
+  border-radius: 0;
+  border-color: var(--dauligor-border);
+  background: #1e1e1e;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.dauligor-class-browser__table {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.dauligor-class-browser__header {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 110px;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--dauligor-border);
+  border-bottom: 0;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+  /* Grey header chrome — same recipe as the wizard source-table
+   * header. See that block's comment for the gold-vs-grey rationale. */
+  background: #2b2b2b;
+  font-size: 12px;
+  font-weight: 600;
+  color: #c5c3bb;
+}
+
+.dauligor-class-browser__header-cell--source {
+  text-align: right;
+}
+
+.dauligor-class-browser__sort-indicator {
+  font-size: 10px;
+  opacity: 0.8;
+}
+
+.dauligor-class-browser__list {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--dauligor-border);
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+  /* Uniform panel-alt background — see the wizard's source-table
+   * comment for rationale. */
+  background: var(--dauligor-panel-alt);
+  overflow: hidden;
+}
+
+.dauligor-class-browser__group + .dauligor-class-browser__group {
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.dauligor-class-browser__row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 110px;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--dauligor-text);
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  line-height: 1.2;
+  appearance: none;
+}
+
+.dauligor-class-browser__row:hover,
+.dauligor-class-browser__row:focus {
+  /* Grey hover (same as wizard source-row, option-picker row,
+   * subclass-preview row, level-selector row). See the
+   * `.dauligor-wizard__source-row:hover` block for the
+   * gold-vs-grey rationale. */
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.dauligor-class-browser__row--selected {
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 3px 0 0 var(--dauligor-accent);
+}
+
+.dauligor-class-browser__row--class {
+  font-weight: 700;
+}
+
+.dauligor-class-browser__row--subclass {
+  font-weight: 500;
+}
+
+.dauligor-class-browser__row-select {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+
+.dauligor-class-browser__row-input {
+  position: absolute;
+  inset: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.dauligor-class-browser__radio {
+  display: inline-block;
+  width: 15px;
+  height: 15px;
+  border: 2px solid #777;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
+.dauligor-class-browser__radio--selected {
+  border-color: #d2d0c8;
+  box-shadow: inset 0 0 0 3px #d2d0c8;
+}
+
+.dauligor-class-browser__row-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 13px;
+}
+
+.dauligor-class-browser__row-name--subclass {
+  padding-left: 12px;
+  color: #c2c0b8;
+  font-weight: 500;
+}
+
+.dauligor-class-browser__row-name-text {
+  vertical-align: middle;
+}
+
+.dauligor-class-browser__row-source {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  justify-self: end;
+  text-align: right;
+  font-size: 12px;
+  color: #88a8d8;
+}
+
+.dauligor-class-browser__footer-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dauligor-class-browser__footer-bar .dauligor-class-browser__status {
+  margin-right: auto;
+}
+
+.dauligor-class-browser__field--compact {
+  min-width: 120px;
+}
+
+.dauligor-class-browser__field--compact .dauligor-class-browser__field-label {
+  margin-bottom: 4px;
+  font-size: 11px;
+}
+
+.dauligor-class-browser__field--compact .dauligor-class-browser__input {
+  height: 30px;
+}
+
+.dauligor-class-browser__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}

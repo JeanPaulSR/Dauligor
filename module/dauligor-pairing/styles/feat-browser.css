@@ -1,0 +1,71 @@
+/* ============================================================================
+ * dauligor-pairing — feat-browser
+ * Split from the former monolithic dauligor-importer.css (2026-05-30).
+ * See docs/styles-guide.md for the component → file map. Do not reorder
+ * across files casually; load order is fixed in module.json.
+ * ========================================================================== */
+
+/* ──────────────────────────────────────────────────────────────────
+ * Feat Browser — picker-specific tweaks
+ *
+ * Reuses the spell-prep shell wholesale (regions, grid, panel chrome).
+ * The few additions below cover what's unique to feats:
+ *   - The inline level-prereq chip in pool rows
+ *   - A small inline thumb next to the detail title (feats have no
+ *     info-grid hero strip, so the icon rides in the header bar)
+ *
+ * Keep this block tight — the cardinal sin would be re-declaring
+ * spell-manager classes here. Anything tweakable across both pickers
+ * should live with the spell-manager rules above.
+ * ────────────────────────────────────────────────────────────────── */
+
+.dauligor-feat-browser__level-chip {
+  display: inline-block;
+  padding: 1px 6px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dauligor-accent-strong, #d2b350);
+  border: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.4);
+  background: rgba(170, 130, 80, 0.10);
+  border-radius: 2px;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+.dauligor-feat-browser__detail-thumb {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--dauligor-border);
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.dauligor-feat-browser__detail-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* "Prerequisites: …" line under the title. Mirrors the spell
+ * subtitle but stays multi-line — requirements text can run long
+ * (chained @feat references, ability stipulations, etc.) and
+ * `white-space: nowrap` would chop them. */
+.dauligor-feat-browser__detail-prereqs {
+  margin: 6px 0 0 0;
+  font-family: var(--font-serif, "Crimson Text", serif);
+  font-size: 12px;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-feat-browser__detail-prereqs-label {
+  font-style: italic;
+  font-weight: 700;
+  margin-right: 4px;
+}

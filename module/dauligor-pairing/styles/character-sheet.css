@@ -1,0 +1,366 @@
+/* ============================================================================
+ * dauligor-pairing — character-sheet
+ * Split from the former monolithic dauligor-importer.css (2026-05-30).
+ * See docs/styles-guide.md for the component → file map. Do not reorder
+ * across files casually; load order is fixed in module.json.
+ * ========================================================================== */
+
+/* Small Dauligor "open Prepare Spells" button reused in three slots:
+ *   - dnd5e v5 character sheet's `.spellcasting.card .header` (top
+ *     of the Spells tab — pre-selects that class).
+ *   - The new class-group headers in the Dauligor Sheet (pre-selects
+ *     that class).
+ *   - The Spells tab's `.middle` toolbar (no pre-selection).
+ *
+ * Visual is intentionally neutral (no Dauligor gold) so it adopts
+ * the host sheet's color scheme — light-on-dark on the dnd5e dark
+ * theme, dark-on-light on light themes. */
+.dauligor-class-prepare-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  position: relative;
+  z-index: 2;
+  width: 26px;
+  height: 26px;
+  margin: 0 6px 0 8px;
+  padding: 0;
+  border: 1px solid var(--color-border-light-2, rgba(255, 255, 255, 0.2));
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  flex: 0 0 auto;
+  box-shadow: none;
+  font-size: 12px;
+  line-height: 1;
+  transition: border-color 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+
+.dauligor-class-prepare-button:hover,
+.dauligor-class-prepare-button:focus {
+  border-color: var(--color-border-light-1, rgba(255, 255, 255, 0.45));
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  outline: none;
+}
+
+.dauligor-class-prepare-button > i {
+  pointer-events: none;
+}
+
+/* Toolbar variant of the per-class prepare button — sits at the
+ * trailing edge of the Spells tab's `.middle` row next to dnd5e's
+ * filter/sort icons. Just a small left-margin tweak to keep it from
+ * butting against `<item-list-controls>`. */
+.dauligor-class-prepare-button--toolbar {
+  margin-left: 6px;
+}
+
+/* ─── Dauligor Character Sheet — Spells tab ─────────────────────────
+ * Opt-in alt sheet (DauligorCharacterSheet) overrides only the
+ * `spells` PART template. Our template REUSES dnd5e's row markup
+ * (`.items-section`, `.items-header`, `.item`, `dnd5e-itemContext`,
+ * columns, description expansion, activities) — the only structural
+ * change is grouping spells by Class → Level instead of Level only.
+ *
+ * Most styling therefore comes from dnd5e itself. We add ONLY:
+ *   - inner layout container for the Spells tab body
+ *   - class-group wrapper that holds dnd5e-styled `.items-section`s
+ *   - class-group header (the "Bard" / "Wizard" divider label)
+ *
+ * The per-class Prepare button (`.dauligor-class-prepare-button`) is
+ * defined further up in this file and is reused inside dnd5e's
+ * `.spellcasting.card > .header`.
+ *
+ * Tab visibility is left to dnd5e's stock `.tab:not(.active)` rule —
+ * we DO NOT set `display` on the outer `.tab` element, only on the
+ * inner wrapper below.
+ */
+
+.dauligor-character-sheet__spells-tab-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+}
+
+.dauligor-character-sheet__class-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Header is a 5-column CSS grid so columns line up identically
+ * across every class section regardless of value widths. Order:
+ *   1. Name (toggle button)            — flex 1
+ *   2. Attack                          — fixed
+ *   3. Spell DC                        — fixed
+ *   4. Prepared                        — fixed
+ *   5. Prepare-book button             — auto
+ *
+ * Background uses dnd5e's spellcasting-card gradient vars so each
+ * header reads the same as the legacy top-of-tab cards. */
+.dauligor-character-sheet__class-group-header {
+  display: grid;
+  grid-template-columns:
+    minmax(160px, 1fr)   /* Name */
+    72px                 /* Attack */
+    72px                 /* Spell DC */
+    88px                 /* Prepared */
+    auto;                /* Prepare-book button */
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+  background: linear-gradient(to right,
+    var(--dnd5e-color-sc-1, #433754),
+    var(--dnd5e-color-sc-2, #776493));
+  color: #fff;
+  border: 1px solid var(--dnd5e-color-gold, #9f9275);
+  border-radius: 3px;
+  box-shadow: 0 0 6px var(--dnd5e-shadow-45, rgba(0, 0, 0, 0.45));
+  overflow: hidden;
+}
+
+.dauligor-character-sheet__class-group-header.is-dragging {
+  opacity: 0.55;
+}
+
+/* Drop indicators sit on the SECTION (parent of the header), not on
+ * the header itself, so the drop zone covers the whole class block
+ * (header + spell rows) and dropping anywhere over Wizard reorders
+ * relative to Wizard. The pseudo-element is a gold rule above or
+ * below the section. */
+.dauligor-character-sheet__class-group {
+  position: relative;
+}
+
+.dauligor-character-sheet__class-group.is-drop-above::before,
+.dauligor-character-sheet__class-group.is-drop-below::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--dnd5e-color-gold, #9f9275);
+  box-shadow: 0 0 6px var(--dnd5e-color-gold, #9f9275);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.dauligor-character-sheet__class-group.is-drop-above::before {
+  top: -2px;
+}
+
+.dauligor-character-sheet__class-group.is-drop-below::after {
+  bottom: -2px;
+}
+
+/* Spell-drop drop-target indicators. Distinct from the class-reorder
+ * indicators (gold lines above/below) — a spell drop highlights the
+ * whole target region with a dashed outline so the user clearly sees
+ * "this is where the spell will land". */
+.dauligor-character-sheet__class-group.is-spell-drop-target {
+  outline: 2px dashed var(--dnd5e-color-gold, #9f9275);
+  outline-offset: -2px;
+}
+
+/* When the section is open, square-bottom the header so it merges
+ * visually with the spell list below; the radius rounds the corners
+ * of the whole card-like wrapper. */
+.dauligor-character-sheet__class-group:not(.is-collapsed) .dauligor-character-sheet__class-group-header {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+/* Toggle button: caret + class name. Width hugs its content so the
+ * stats grid + actions can sit beside it. The header itself absorbs
+ * any extra width via the stats `flex: 1`. */
+.dauligor-character-sheet__class-group-toggle {
+  flex: 0 0 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.dauligor-character-sheet__class-group-toggle:hover,
+.dauligor-character-sheet__class-group-toggle:focus {
+  background: rgba(255, 255, 255, 0.08);
+  outline: none;
+}
+
+.dauligor-character-sheet__class-group-caret {
+  width: 12px;
+  text-align: center;
+  font-size: 12px;
+  transition: transform 0.15s ease;
+  flex: 0 0 auto;
+  opacity: 0.7;
+}
+
+/* Open (default) — caret points down. Collapsed — caret points right. */
+.dauligor-character-sheet__class-group:not(.is-collapsed) .dauligor-character-sheet__class-group-caret {
+  transform: rotate(90deg);
+}
+
+.dauligor-character-sheet__class-group-name {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  /* Inherit the sheet's normal text color — no Dauligor gold. */
+  color: inherit;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+/* Each stat is a single grid cell — label on top, value on bottom,
+ * thin left rule separating from the previous cell. The grid
+ * dimensions are set on `.class-group-header` so each row's stat
+ * cells align across class sections (no shifting). */
+.dauligor-character-sheet__class-group-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px 10px;
+  border-left: 1px solid rgba(255, 255, 255, 0.18);
+  min-width: 0;
+}
+
+.dauligor-character-sheet__class-group-stat--prepared {
+  border-left: 2px solid rgba(255, 255, 255, 0.28);
+}
+
+.dauligor-character-sheet__class-group-stat-label {
+  font-family: var(--dnd5e-font-roboto-condensed, var(--font-sans, system-ui, sans-serif));
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1;
+}
+
+.dauligor-character-sheet__class-group-stat-value {
+  font-family: var(--dnd5e-font-roboto-slab, var(--font-mono, ui-monospace, monospace));
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: #fff;
+  text-align: center;
+}
+
+.dauligor-character-sheet__class-group-stat-cap {
+  font-weight: 400;
+  opacity: 0.65;
+  font-size: 12px;
+}
+
+/* Placeholder cell used when a non-spellcasting class group (e.g.
+ * "Other Spells") doesn't render a Prepare button — keeps the
+ * trailing grid column populated so neighboring sections still
+ * align. */
+.dauligor-character-sheet__class-group-prepare-placeholder {
+  display: block;
+}
+
+/* The Prepare-book button sits in the trailing grid column. Give it
+ * a bit of padding so it doesn't butt against the right edge. */
+.dauligor-character-sheet__class-group-header .dauligor-class-prepare-button {
+  margin: 0 8px;
+  align-self: center;
+}
+
+/* "+ Section" button on the Spells tab toolbar. Adds a new custom
+ * top-level section (persisted as `flags.dauligor-pairing.customSections`).
+ * Visual is the same icon-button family used by the per-class Prepare
+ * book — neutral colors, no Dauligor gold. */
+.dauligor-character-sheet__create-section-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  width: 26px;
+  height: 26px;
+  margin: 0 0 0 6px;
+  padding: 0;
+  border: 1px solid var(--color-border-light-2, rgba(255, 255, 255, 0.2));
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  flex: 0 0 auto;
+  box-shadow: none;
+  font-size: 12px;
+  line-height: 1;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.dauligor-character-sheet__create-section-button:hover,
+.dauligor-character-sheet__create-section-button:focus {
+  border-color: var(--color-border-light-1, rgba(255, 255, 255, 0.45));
+  background: rgba(255, 255, 255, 0.08);
+  outline: none;
+}
+
+/* Per-level collapse toggle inside dnd5e's `.items-header`. Small
+ * caret button at the start of the row; rotates -90° when its
+ * parent `.items-section` is collapsed via `.is-section-collapsed`.
+ * The actual hiding is `display: none` on the sibling `.item-list`. */
+.dauligor-character-sheet__section-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin: 0 6px 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  flex: 0 0 auto;
+  font-size: 11px;
+  line-height: 1;
+  opacity: 0.75;
+}
+
+.dauligor-character-sheet__section-toggle:hover,
+.dauligor-character-sheet__section-toggle:focus {
+  opacity: 1;
+  outline: none;
+}
+
+.dauligor-character-sheet__section-toggle-caret {
+  transition: transform 0.15s ease;
+}
+
+.items-section.card.is-section-collapsed .dauligor-character-sheet__section-toggle-caret {
+  transform: rotate(-90deg);
+}
+
+/* Body — hidden when section is collapsed. The class-group above is
+ * a `<section>` with `is-collapsed` set by the template based on the
+ * `flags.dauligor-pairing.collapsedClasses` actor flag. */
+.dauligor-character-sheet__class-group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dauligor-character-sheet__class-group.is-collapsed .dauligor-character-sheet__class-group-body {
+  display: none;
+}

@@ -1,0 +1,2578 @@
+/* ============================================================================
+ * dauligor-pairing — spell-manager
+ * Split from the former monolithic dauligor-importer.css (2026-05-30).
+ * See docs/styles-guide.md for the component → file map. Do not reorder
+ * across files casually; load order is fixed in module.json.
+ * ========================================================================== */
+
+.dauligor-spell-manager {
+  /* `position: relative` makes this the positioned ancestor for the
+   * filter modal-host (`position: absolute; inset: 0;`). Without it
+   * the host would walk further up the DOM looking for the nearest
+   * positioned element — possibly Foundry's app frame, which depends
+   * on appId-scoped CSS that doesn't cover every app variant
+   * (`.dauligor-importer-app` matches the importer, but not the
+   * standalone spell browser). Anchoring here keeps modal placement
+   * consistent across every spell-manager instance. */
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.dauligor-spell-manager__layout {
+  display: grid;
+  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr) minmax(260px, 300px);
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 10px;
+  background: var(--dauligor-panel);
+}
+
+.dauligor-spell-manager__rail,
+.dauligor-spell-manager__main {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+.dauligor-spell-manager__main {
+  min-width: 0;
+}
+
+.dauligor-spell-manager__content {
+  display: grid;
+  grid-template-columns: minmax(250px, 0.42fr) minmax(0, 1fr);
+  gap: 10px;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.dauligor-spell-manager__panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 12px;
+  border: 1px solid var(--dauligor-border);
+  background: var(--dauligor-panel-alt);
+}
+
+.dauligor-spell-manager__panel--summary {
+  background: #222;
+}
+
+.dauligor-spell-manager__section-title {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--dauligor-accent-strong);
+}
+
+.dauligor-spell-manager__empty,
+.dauligor-spell-manager__action-hint,
+.dauligor-spell-manager__summary-note {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-spell-manager__class-list,
+.dauligor-spell-manager__action-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+
+.dauligor-spell-manager__class-list {
+  overflow: auto;
+}
+
+/* Class-selector buttons share the canonical flat-button visual base
+ * but keep their own grid layout + active gradient. (The plain
+ * `.dauligor-spell-manager__button` visual identity now lives in the
+ * canonical button rule near the top of this file.) */
+.dauligor-spell-manager__class-button {
+  min-height: 30px;
+  margin: 0;
+  border: 1px solid var(--dauligor-btn-border);
+  border-radius: 0;
+  background: var(--dauligor-btn-bg);
+  color: var(--dauligor-text);
+  box-shadow: none;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  text-align: left;
+}
+
+.dauligor-spell-manager__class-button:hover,
+.dauligor-spell-manager__class-button:focus {
+  border-color: var(--dauligor-btn-border-hover);
+  background: var(--dauligor-btn-hover-bg);
+}
+
+.dauligor-spell-manager__class-button--active {
+  border-color: #9b988f;
+  background: linear-gradient(180deg, #4d4d4d, #3a3a3a);
+}
+
+.dauligor-spell-manager__class-label {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dauligor-spell-manager__class-meta {
+  flex: none;
+  font-size: 11px;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-spell-manager__button--wide {
+  width: 100%;
+}
+
+.dauligor-spell-manager__class-button[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.dauligor-spell-manager__toolbar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.dauligor-spell-manager__toolbar-leading {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.dauligor-spell-manager__toolbar-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--dauligor-accent-strong);
+}
+
+.dauligor-spell-manager__input {
+  width: 100%;
+  min-width: 0;
+  min-height: 30px;
+  padding: 6px 10px;
+  border: 1px solid var(--dauligor-border);
+  border-radius: 0;
+  background: #202020;
+  color: var(--dauligor-text);
+}
+
+.dauligor-spell-manager__list-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.dauligor-spell-manager__spell-group {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.dauligor-spell-manager__spell-group-title {
+  padding: 7px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-spell-manager__spell-group-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.dauligor-spell-manager__spell-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 8px 10px;
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 0;
+  background: transparent;
+  color: var(--dauligor-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.dauligor-spell-manager__spell-row:first-child {
+  border-top: 0;
+}
+
+.dauligor-spell-manager__spell-row:hover,
+.dauligor-spell-manager__spell-row:focus {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.dauligor-spell-manager__spell-row--active {
+  background: rgba(201, 199, 192, 0.12);
+}
+
+.dauligor-spell-manager__spell-name {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dauligor-spell-manager__spell-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  flex: none;
+}
+
+.dauligor-spell-manager__badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 0 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 10px;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-spell-manager__detail-card,
+.dauligor-spell-manager__summary-block {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.dauligor-spell-manager__detail-heading,
+.dauligor-spell-manager__summary-heading {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--dauligor-accent-strong);
+}
+
+.dauligor-spell-manager__detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  font-size: 11px;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-spell-manager__detail-grid,
+.dauligor-spell-manager__summary-grid {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px 10px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.dauligor-spell-manager__detail-grid dt,
+.dauligor-spell-manager__summary-grid dt {
+  margin: 0;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-spell-manager__detail-grid dd,
+.dauligor-spell-manager__summary-grid dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.dauligor-spell-manager__detail-body {
+  min-height: 0;
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.dauligor-spell-manager__detail-body > :first-child {
+  margin-top: 0;
+}
+
+.dauligor-spell-manager__detail-body > :last-child {
+  margin-bottom: 0;
+}
+
+/* ─── Spell picker (importer's spell-selection step) ──────────────────
+ *
+ * 3-column layout ported from the character builder's `AddSpellsModal`
+ * (src/pages/characters/CharacterBuilder.tsx). Lives inside a
+ * DauligorSequencePromptApp body region — so the outer chrome (header,
+ * actions footer) comes from the prompt app and we only style the body.
+ *
+ * Variables fall back to dnd5e / Foundry tokens so the picker reads as
+ * native on both the dnd5e theme and any sheet skin that retypes the
+ * --dauligor-* family. */
+.dauligor-spell-picker {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  gap: 8px;
+}
+
+.dauligor-spell-picker__summary {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--dauligor-border, rgba(170, 130, 80, 0.4));
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.06);
+  flex-shrink: 0;
+}
+
+.dauligor-spell-picker__summary-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 64px;
+}
+
+.dauligor-spell-picker__summary-label {
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+
+.dauligor-spell-picker__summary-value {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 15px;
+  font-weight: 900;
+  color: var(--dauligor-accent, #b58838);
+  line-height: 1;
+}
+
+.dauligor-spell-picker__summary-value.is-complete {
+  color: var(--dauligor-success, #4ea96b);
+}
+
+.dauligor-spell-picker__body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr) 360px;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.dauligor-spell-picker__col {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--dauligor-border, rgba(170, 130, 80, 0.4));
+  overflow: hidden;
+  min-height: 0;
+}
+
+.dauligor-spell-picker__col--right {
+  border-right: none;
+  padding: 12px 14px;
+  overflow-y: auto;
+}
+
+.dauligor-spell-picker__col--left {
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.04);
+}
+
+.dauligor-spell-picker__col-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.2);
+  flex-shrink: 0;
+}
+
+.dauligor-spell-picker__col-title {
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.65;
+}
+
+.dauligor-spell-picker__col-count {
+  margin-left: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 9px;
+  font-weight: 700;
+  opacity: 0.45;
+}
+
+.dauligor-spell-picker__col-body {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* Search + filter toggle row */
+.dauligor-spell-picker__searchbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.2);
+  flex-shrink: 0;
+}
+
+.dauligor-spell-picker__search {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  font-size: 12px;
+  border: 1px solid var(--dauligor-border, rgba(170, 130, 80, 0.4));
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.04);
+  border-radius: 2px;
+}
+
+.dauligor-spell-picker__search:focus {
+  outline: none;
+  border-color: var(--dauligor-accent, #b58838);
+}
+
+.dauligor-spell-picker__filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border: 1px solid var(--dauligor-border, rgba(170, 130, 80, 0.4));
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dauligor-spell-picker__filter-toggle:hover {
+  border-color: var(--dauligor-accent, #b58838);
+}
+
+.dauligor-spell-picker__filter-toggle.is-active {
+  border-color: var(--dauligor-accent, #b58838);
+  background: rgba(var(--dauligor-accent-gold, 181, 136, 56), 0.15);
+  color: var(--dauligor-accent, #b58838);
+}
+
+.dauligor-spell-picker__filter-badge {
+  display: inline-block;
+  min-width: 14px;
+  padding: 0 3px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 8px;
+  font-weight: 900;
+  text-align: center;
+  background: var(--dauligor-accent, #b58838);
+  color: #fff;
+  border-radius: 2px;
+}
+
+.dauligor-spell-picker__filter-reset {
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dauligor-danger, #a94e4e);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.dauligor-spell-picker__filter-reset:hover {
+  text-decoration: underline;
+}
+
+/* Inline filter chip panel — shown when filter toggle is active */
+.dauligor-spell-picker__filter-panel {
+  padding: 10px 10px 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  border-bottom: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.2);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.dauligor-spell-picker__chip-section {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.dauligor-spell-picker__chip-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dauligor-spell-picker__chip-section-title {
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+
+.dauligor-spell-picker__chip-section-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dauligor-spell-picker__chip-action {
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  opacity: 0.45;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.dauligor-spell-picker__chip-action:hover { opacity: 0.75; }
+
+.dauligor-spell-picker__chip-section-sep {
+  opacity: 0.3;
+  color: var(--dauligor-accent, #b58838);
+}
+
+.dauligor-spell-picker__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.dauligor-spell-picker__chip {
+  padding: 3px 7px;
+  font-size: 9px;
+  font-weight: 700;
+  border: 1px solid var(--dauligor-border, rgba(170, 130, 80, 0.4));
+  background: transparent;
+  color: inherit;
+  border-radius: 2px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dauligor-spell-picker__chip:hover {
+  border-color: var(--dauligor-accent, #b58838);
+}
+
+.dauligor-spell-picker__chip.is-active {
+  background: var(--dauligor-accent, #b58838);
+  border-color: var(--dauligor-accent, #b58838);
+  color: #fff;
+}
+
+/* Level grouping inside the pool */
+.dauligor-spell-picker__level {
+  display: flex;
+  flex-direction: column;
+}
+
+.dauligor-spell-picker__level-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.05);
+  border-bottom: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.15);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.dauligor-spell-picker__level-name {
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+
+.dauligor-spell-picker__level-spacer { flex: 1; }
+
+.dauligor-spell-picker__level-count {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 9px;
+  font-weight: 700;
+  opacity: 0.4;
+}
+
+/* Pool row */
+.dauligor-spell-picker__row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 36px 40px auto;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-bottom: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.08);
+  border-left: 3px solid transparent;
+  cursor: pointer;
+  transition: background-color 0.1s;
+}
+
+.dauligor-spell-picker__row:hover {
+  background: rgba(var(--dauligor-accent-gold, 181, 136, 56), 0.05);
+}
+
+.dauligor-spell-picker__row.is-selected {
+  background: rgba(var(--dauligor-accent-gold, 181, 136, 56), 0.12);
+  border-left-color: var(--dauligor-accent, #b58838);
+}
+
+.dauligor-spell-picker__row.is-picked .dauligor-spell-picker__indicator {
+  color: var(--dauligor-accent, #b58838);
+  font-weight: 900;
+}
+
+.dauligor-spell-picker__row.is-already {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.dauligor-spell-picker__row.is-already .dauligor-spell-picker__indicator {
+  color: var(--dauligor-success, #4ea96b);
+  font-weight: 900;
+}
+
+.dauligor-spell-picker__indicator {
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0.5;
+  text-align: center;
+}
+
+.dauligor-spell-picker__name {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dauligor-spell-picker__row.is-picked .dauligor-spell-picker__name,
+.dauligor-spell-picker__row.is-already .dauligor-spell-picker__name {
+  font-weight: 700;
+}
+
+.dauligor-spell-picker__school {
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.55;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dauligor-spell-picker__source {
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dauligor-spell-picker__badges {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.dauligor-spell-picker__badge {
+  display: inline-block;
+  min-width: 14px;
+  padding: 1px 4px;
+  font-size: 8px;
+  font-weight: 900;
+  text-align: center;
+  border-radius: 2px;
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.12);
+  border: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.25);
+}
+
+.dauligor-spell-picker__badge--ritual {
+  color: var(--dauligor-success, #4ea96b);
+  border-color: var(--dauligor-success, #4ea96b);
+}
+
+.dauligor-spell-picker__badge--conc {
+  color: var(--dauligor-accent, #b58838);
+  border-color: var(--dauligor-accent, #b58838);
+}
+
+/* Detail column */
+.dauligor-spell-picker__detail-title {
+  font-family: var(--font-serif, "Crimson Text", serif);
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+
+.dauligor-spell-picker__detail-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  opacity: 0.7;
+  margin-bottom: 10px;
+}
+
+.dauligor-spell-picker__detail-desc {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.dauligor-spell-picker__detail-desc p { margin: 0 0 8px; }
+
+/* Empty-state hints (left column when nothing on sheet, pool when
+ * filters produce no matches, detail when nothing selected). */
+.dauligor-spell-picker__empty {
+  padding: 30px 16px;
+  text-align: center;
+}
+
+.dauligor-spell-picker__empty-icon {
+  font-size: 26px;
+  opacity: 0.25;
+  margin-bottom: 4px;
+}
+
+.dauligor-spell-picker__empty-text {
+  font-family: var(--font-serif, "Crimson Text", serif);
+  font-style: italic;
+  font-size: 11px;
+  line-height: 1.4;
+  opacity: 0.5;
+}
+
+/* ─── Spell Preparation manager — picker variant (3-col body) ───────
+ * Latest layout (May 2026 refactor):
+ *   sidebar (classes on top, favourites below) · pool · detail
+ *   + bottom footer row with add/close buttons
+ *   + filter modal overlay (shared between pool and favourites)
+ *
+ * The detail column absorbs leftover horizontal space when the window
+ * is resized (vs. the older layout where the pool grew). Mirrors the
+ * /compendium/spells page's reading priority — the spell description
+ * is the most-resized content.
+ */
+
+.dauligor-spell-manager--picker {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.dauligor-spell-manager--picker .dauligor-spell-manager__layout-grid {
+  display: grid;
+  grid-template-columns:
+    minmax(180px, 280px)   /* sidebar (classes + favourites) — shrinks
+                              to 180px so narrow FM windows don't push
+                              the 3-col layout into horizontal overflow */
+    minmax(320px, 480px)   /* pool — still gets the breathing room from
+                              the May 2026 widening, but can compress to
+                              320px when the window is tight */
+    minmax(280px, 1fr);    /* detail — absorbs window resize; min lowered
+                              to 280px so the grid fits in ~800px of
+                              available width before scrollbars appear */
+  gap: 10px;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  padding: 10px 10px 0 10px;
+  background: var(--dauligor-panel);
+}
+
+/* Pillar wrappers share a panel-like chrome. Sidebar is its own flex
+ * column so classes (top, fixed) and favourites (bottom, fill) can
+ * share the height. */
+.dauligor-spell-manager--picker .dauligor-spell-manager__sidebar,
+.dauligor-spell-manager--picker .dauligor-spell-manager__pool-column,
+.dauligor-spell-manager--picker .dauligor-spell-manager__detail {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--dauligor-border);
+  background: var(--dauligor-panel-alt);
+}
+
+.dauligor-spell-manager--picker .dauligor-spell-manager__sidebar {
+  padding: 0;
+  gap: 0;
+}
+
+.dauligor-spell-manager--picker .dauligor-spell-manager__detail {
+  padding: 0;
+  gap: 0;
+}
+
+.dauligor-spell-manager--picker .dauligor-spell-manager__pool-column {
+  padding: 0;
+  gap: 0;
+}
+
+/* === Sidebar: Classes (top, compact) === */
+.dauligor-spell-manager__sidebar-classes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--dauligor-border);
+}
+
+.dauligor-spell-manager__sidebar-title {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--dauligor-text-muted);
+  margin-bottom: 4px;
+}
+
+.dauligor-spell-manager__class-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.dauligor-spell-manager__class-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 4px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.12);
+  color: var(--dauligor-text, #cbb98f);
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.dauligor-spell-manager__class-row:last-child {
+  border-bottom: none;
+}
+
+.dauligor-spell-manager__class-row:hover,
+.dauligor-spell-manager__class-row:focus {
+  background: rgba(170, 130, 80, 0.08);
+  color: #f1e6c8;
+  outline: none;
+}
+
+.dauligor-spell-manager__class-row--active {
+  background: rgba(170, 130, 80, 0.18);
+  color: #f8e7b5;
+  font-weight: 700;
+}
+
+.dauligor-spell-manager__class-row-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dauligor-spell-manager__class-row-count {
+  flex-shrink: 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--dauligor-text-muted);
+}
+
+/* === Sidebar: Favourites (bottom, fills remaining height) === */
+.dauligor-spell-manager__sidebar-favorites {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: 10px 12px;
+  gap: 6px;
+}
+
+/* === Favourites toolbar (inline search + filter button) === */
+.dauligor-spell-manager__favorites-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+/* Search "field" = a flex wrap that contains the text input + an
+ * optional X clear button + an optional result-count badge. All three
+ * live inside one bordered box so they visually read as a single
+ * search field, matching the spec the user asked for (X and count
+ * "inside" the search bar). */
+.dauligor-spell-manager__inline-search-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 6px 0 0;
+  border: 1px solid var(--dauligor-border);
+  background: rgba(0, 0, 0, 0.25);
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.dauligor-spell-manager__inline-search-wrap:focus-within {
+  border-color: var(--dauligor-accent, #b89a6b);
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.dauligor-spell-manager__inline-search {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 2px 8px;
+  border: none;
+  background: transparent;
+  color: var(--dauligor-text, #cbb98f);
+  font-family: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+/* Hide the native browser search-clear (×) — we render our own so
+ * its appearance + always-visible-when-text-present behaviour stays
+ * consistent across browsers. */
+.dauligor-spell-manager__inline-search::-webkit-search-cancel-button,
+.dauligor-spell-manager__inline-search::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.dauligor-spell-manager__inline-search-clear {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--dauligor-text-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dauligor-spell-manager__inline-search-clear:hover {
+  color: var(--dauligor-text, #cbb98f);
+}
+
+.dauligor-spell-manager__inline-search-count {
+  flex-shrink: 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--dauligor-accent, #b89a6b);
+  white-space: nowrap;
+  padding-left: 4px;
+  border-left: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.18);
+}
+
+.dauligor-spell-manager__inline-search-count-total {
+  color: var(--dauligor-text-muted);
+  font-weight: 400;
+}
+
+/* === Favourites header (count + label) === */
+.dauligor-spell-manager__favorites-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 0 8px;
+  border-bottom: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.15);
+}
+
+.dauligor-spell-manager__favorites-icon {
+  color: #d2b350;
+  font-size: 13px;
+}
+
+.dauligor-spell-manager__favorites-title {
+  flex: 1;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-spell-manager__favorites-count {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-spell-manager__favorites-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.dauligor-spell-manager__favorites-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 10px;
+  text-align: center;
+  gap: 6px;
+}
+
+.dauligor-spell-manager__favorites-empty-icon {
+  font-size: 24px;
+  color: #c2b87a;
+  opacity: 0.25;
+}
+
+.dauligor-spell-manager__favorites-empty-hint {
+  font-family: var(--font-serif, "Crimson Text", serif);
+  font-style: italic;
+  font-size: 11px;
+  line-height: 1.4;
+  opacity: 0.45;
+}
+
+/* === Pool column — meta strip === */
+.dauligor-spell-manager__meta {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.15);
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.dauligor-spell-manager__meta-left {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dauligor-spell-manager__meta-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dauligor-spell-manager__meta-class {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--dauligor-accent-strong);
+}
+
+.dauligor-spell-manager__meta-chip {
+  display: inline-block;
+  padding: 2px 6px;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dauligor-accent-strong);
+  border: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.4);
+  background: rgba(170, 130, 80, 0.08);
+}
+
+.dauligor-spell-manager__meta-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  color: var(--dauligor-text-muted);
+}
+
+/* Meta-right stacks two ROWS of counters:
+ *   Row 1 (always):  On Sheet      ·  Prepared / Known
+ *   Row 2 (opt):     Cantrips      ·  In Spellbook
+ *
+ * Each row uses a 2-column grid with equal slots so:
+ *   - "Cantrips" lines up under "On Sheet"
+ *   - "In Spellbook" lines up under "Prepared"
+ * When only one of (Cantrips, In Spellbook) is applicable, the other
+ * slot renders as a transparent placeholder so the visible counter
+ * stays in its proper column instead of drifting to the side.
+ *
+ * Top row uses the same grid so col1/col2 widths match across both
+ * rows — alignment is column-stable, not content-relative.
+ */
+.dauligor-spell-manager__meta-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.dauligor-spell-manager__meta-counter-row {
+  display: grid;
+  grid-template-columns: minmax(96px, max-content) minmax(96px, max-content);
+  gap: 16px;
+  justify-content: end;
+}
+
+.dauligor-spell-manager__meta-counter {
+  text-align: right;
+}
+
+/* Empty placeholder counter — keeps row-2 alignment when one of
+ * (Cantrips, In Spellbook) doesn't apply. Reserves layout space
+ * without rendering visible text. */
+.dauligor-spell-manager__meta-counter--placeholder {
+  visibility: hidden;
+}
+
+.dauligor-spell-manager__meta-counter-label {
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--dauligor-text-muted);
+  opacity: 0.7;
+}
+
+.dauligor-spell-manager__meta-counter-value {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--dauligor-accent-strong);
+}
+
+.dauligor-spell-manager__meta-counter-cap {
+  font-size: 11px;
+  color: var(--dauligor-text-muted);
+  font-weight: 400;
+}
+
+/* === Pool column — toolbar (search + filters + reset) === */
+.dauligor-spell-manager__pool-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.1);
+}
+
+.dauligor-spell-manager__pool-toolbar-title {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--dauligor-text-muted);
+  white-space: nowrap;
+}
+
+.dauligor-spell-manager__pool-search {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--dauligor-border);
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--dauligor-text);
+  font-size: 12px;
+  border-radius: 2px;
+}
+
+.dauligor-spell-manager__pool-search:focus {
+  outline: none;
+  border-color: #9b988f;
+}
+
+.dauligor-spell-manager__filter-button,
+.dauligor-spell-manager__reset-button {
+  height: 28px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--dauligor-btn-border);
+  background: var(--dauligor-btn-bg);
+  color: var(--dauligor-text);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.dauligor-spell-manager__filter-button:hover,
+.dauligor-spell-manager__reset-button:hover {
+  border-color: var(--dauligor-btn-border-hover);
+  background: var(--dauligor-btn-hover-bg);
+}
+
+.dauligor-spell-manager__filter-button--active {
+  border-color: #c2b87a;
+  background: rgba(194, 184, 122, 0.12);
+  color: #d2b350;
+}
+
+.dauligor-spell-manager__filter-count-badge {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 9px;
+  padding: 1px 4px;
+  background: #c2b87a;
+  color: #000;
+  border-radius: 2px;
+  min-width: 14px;
+  text-align: center;
+}
+
+.dauligor-spell-manager__reset-button {
+  color: #d4856d;
+  border-color: rgba(212, 133, 109, 0.35);
+}
+
+.dauligor-spell-manager__pool-count {
+  margin-left: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  opacity: 0.7;
+  white-space: nowrap;
+}
+
+.dauligor-spell-manager__pool-count-total {
+  opacity: 0.5;
+}
+
+/* === Pool column — filter drawer === */
+.dauligor-spell-manager__drawer {
+  display: none;
+}
+
+.dauligor-spell-manager__drawer.dauligor-spell-manager__drawer--open {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.1);
+  background: rgba(0, 0, 0, 0.1);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.dauligor-spell-manager__filter-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dauligor-spell-manager__filter-section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dauligor-spell-manager__filter-section-title {
+  flex: 1;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-spell-manager__filter-shortcuts {
+  display: flex;
+  gap: 4px;
+}
+
+.dauligor-spell-manager__filter-shortcut {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dauligor-text-muted);
+  background: transparent;
+  border: 0;
+  padding: 0 4px;
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+.dauligor-spell-manager__filter-shortcut:hover {
+  opacity: 1;
+  color: var(--dauligor-accent-strong);
+}
+
+.dauligor-spell-manager__filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.dauligor-spell-manager__filter-chip {
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--dauligor-border);
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--dauligor-text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  border-radius: 11px;
+  letter-spacing: 0.02em;
+}
+
+.dauligor-spell-manager__filter-chip:hover {
+  border-color: var(--dauligor-btn-border-hover);
+  color: var(--dauligor-text);
+}
+
+.dauligor-spell-manager__filter-chip--selected {
+  background: rgba(194, 184, 122, 0.18);
+  border-color: #c2b87a;
+  color: #d2b350;
+}
+
+/* === Pool column — scroll area + level bands === */
+.dauligor-spell-manager__pool-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.dauligor-spell-manager__pool-band {
+  margin: 0;
+}
+
+.dauligor-spell-manager__pool-band-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.06);
+  border-bottom: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.15);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.dauligor-spell-manager__pool-band-name {
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+.dauligor-spell-manager__pool-band-count {
+  margin-left: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 9px;
+  opacity: 0.4;
+}
+
+.dauligor-spell-manager__pool-band-list {
+  display: flex;
+  flex-direction: column;
+}
+
+/* === Pool row (new shape) ===
+ * grid: indicator · name · badges · school · source · star
+ * Favorites column reuses the same row but trims the trailing star
+ * (see the `.dauligor-spell-manager__favorites-list` override below). */
+.dauligor-spell-manager__pool-row {
+  display: grid;
+  grid-template-columns:
+    20px           /* indicator */
+    minmax(0, 1fr) /* name */
+    auto           /* badges */
+    32px           /* school */
+    36px           /* source */
+    20px;          /* star */
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-left: 3px solid transparent;
+  border-bottom: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.08);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.1s ease, border-color 0.1s ease;
+}
+
+.dauligor-spell-manager__pool-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.dauligor-spell-manager__pool-row--selected {
+  background: rgba(201, 199, 192, 0.1);
+  border-left-color: #c2b87a;
+}
+
+.dauligor-spell-manager__pool-row--owned .dauligor-spell-manager__row-indicator {
+  color: var(--dauligor-success, #4ea96b);
+  font-weight: 900;
+}
+
+.dauligor-spell-manager__pool-row--owned .dauligor-spell-manager__row-name {
+  font-weight: 600;
+}
+
+.dauligor-spell-manager__pool-row:not(.dauligor-spell-manager__pool-row--owned) .dauligor-spell-manager__row-indicator {
+  opacity: 0.4;
+}
+
+.dauligor-spell-manager__pool-row:not(.dauligor-spell-manager__pool-row--owned) .dauligor-spell-manager__row-name {
+  opacity: 0.65;
+}
+
+.dauligor-spell-manager__pool-row--locked {
+  cursor: default;
+}
+
+.dauligor-spell-manager__pool-row--locked .dauligor-spell-manager__row-indicator {
+  color: #c2b87a;
+}
+
+/* Pending change (FM-embedded mount): the row's effective sheetMode
+   reflects a queued change that hasn't committed yet. Visual: a
+   warm dashed left-edge stripe so it reads as "in-progress" without
+   overpowering the active-selected gold stripe. */
+.dauligor-spell-manager__pool-row--pending {
+  border-left: 2px dashed var(--dauligor-warning, #d6a55b);
+  background: rgba(214, 165, 91, 0.06);
+}
+
+.dauligor-spell-manager__pool-row--pending .dauligor-spell-manager__row-indicator {
+  color: var(--dauligor-warning, #d6a55b);
+  font-style: italic;
+}
+
+.dauligor-spell-manager__pool-row--pending.dauligor-spell-manager__pool-row--selected {
+  /* Selected + pending: keep the selected gold stripe but tint the
+     row background a touch warmer to keep the pending state legible. */
+  background: rgba(214, 165, 91, 0.12);
+}
+
+.dauligor-spell-manager__row-indicator {
+  text-align: center;
+  font-size: 13px;
+}
+
+.dauligor-spell-manager__row-name {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--dauligor-text);
+}
+
+.dauligor-spell-manager__row-badges {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.dauligor-spell-manager__row-badge {
+  display: inline-block;
+  min-width: 14px;
+  padding: 1px 4px;
+  font-size: 8px;
+  font-weight: 900;
+  text-align: center;
+  border-radius: 2px;
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.12);
+  border: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.25);
+  opacity: 0.7;
+}
+
+.dauligor-spell-manager__row-school {
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.55;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.dauligor-spell-manager__row-source {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.35;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.dauligor-spell-manager__row-star {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.18);
+  font-size: 14px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.dauligor-spell-manager__row-star:hover {
+  color: #d2b350;
+}
+
+.dauligor-spell-manager__row-star--active {
+  color: #d2b350;
+}
+
+/* Favourites column rows skip the trailing star → grid template */
+.dauligor-spell-manager__favorites-list .dauligor-spell-manager__pool-row {
+  grid-template-columns:
+    20px           /* indicator */
+    minmax(0, 1fr) /* name */
+    auto           /* badges */
+    32px           /* school */
+    36px;          /* source */
+}
+
+/* === Detail column === */
+.dauligor-spell-manager--picker .dauligor-spell-manager__detail {
+  overflow-y: auto;
+}
+
+.dauligor-spell-manager__detail-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+}
+
+.dauligor-spell-manager__detail-empty-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--dauligor-accent-strong);
+}
+
+.dauligor-spell-manager__detail-empty-hint {
+  font-family: var(--font-serif, "Crimson Text", serif);
+  font-style: italic;
+  font-size: 12px;
+  line-height: 1.5;
+  opacity: 0.55;
+  max-width: 280px;
+}
+
+/* Detail-pane action buttons (Add / Remove from class). Row click in
+ * the pool now only updates the detail selection — these are the
+ * sole add/remove entry points. Locked variants render as disabled
+ * buttons that explain why the spell can't be removed here. */
+.dauligor-spell-manager__detail-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.dauligor-spell-manager__detail-action {
+  flex: 1;
+  min-height: 32px;
+  padding: 6px 12px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: none;
+  transition: filter 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+
+.dauligor-spell-manager__detail-action--add {
+  background: rgba(78, 169, 107, 0.18);
+  border: 1px solid #4ea96b;
+  color: #6bd494;
+}
+
+.dauligor-spell-manager__detail-action--remove {
+  background: rgba(212, 133, 109, 0.18);
+  border: 1px solid #d4856d;
+  color: #e8a18a;
+}
+
+.dauligor-spell-manager__detail-action--add:hover,
+.dauligor-spell-manager__detail-action--remove:hover {
+  filter: brightness(1.2);
+}
+
+.dauligor-spell-manager__detail-action--locked {
+  background: rgba(170, 130, 80, 0.08);
+  border: 1px solid var(--dauligor-border);
+  color: var(--dauligor-text-muted);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* ============================================================
+ * Prepare Spells manager — May 2026 refactor additions
+ * ============================================================
+ *
+ * Indicator + row highlight states (sheetMode-aware), redesigned
+ * detail pane, footer button row, and filter modal overlay.
+ *
+ * Selector specificity is kept tight on individual elements so the
+ * new rules can override the earlier layout/row CSS without needing
+ * `!important`. Anything that overlaps the legacy styles above is
+ * intentionally re-declared.
+ */
+
+/* === Meta strip — prep-type-aware counters === */
+.dauligor-spell-manager__meta-empty {
+  padding: 14px 16px;
+  font-family: var(--font-serif, "Crimson Text", serif);
+  font-style: italic;
+  font-size: 12px;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-spell-manager__meta-progression {
+  margin-top: 2px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--dauligor-text-muted);
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.dauligor-spell-manager__meta-counter--muted .dauligor-spell-manager__meta-counter-value {
+  color: var(--dauligor-text-muted);
+}
+
+/* === Pool toolbar additions: On Sheet button + filter button label === */
+.dauligor-spell-manager__on-sheet-button {
+  flex-shrink: 0;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--dauligor-border);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--dauligor-text-muted);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.dauligor-spell-manager__on-sheet-button:hover {
+  background: rgba(170, 130, 80, 0.12);
+  color: var(--dauligor-text, #cbb98f);
+}
+
+.dauligor-spell-manager__on-sheet-button--active {
+  background: rgba(170, 130, 80, 0.22);
+  border-color: var(--dauligor-accent, #b89a6b);
+  color: #f8e7b5;
+}
+
+.dauligor-spell-manager__filter-button-label {
+  display: inline-block;
+}
+
+/* Importer-mode Select All Displayed chip in the pool toolbar.
+ * Mirrors `.dauligor-spell-manager__on-sheet-button` sizing so the
+ * toolbar row stays a single height, with a Plutonium-style 3-state
+ * checkmark on the left. */
+.dauligor-spell-manager__select-all {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--dauligor-border);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--dauligor-text-muted);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.dauligor-spell-manager__select-all:hover {
+  background: rgba(170, 130, 80, 0.12);
+  color: var(--dauligor-text, #cbb98f);
+}
+
+.dauligor-spell-manager__select-all--some,
+.dauligor-spell-manager__select-all--all {
+  border-color: rgba(110, 168, 100, 0.55);
+  color: #cce5c4;
+  background: rgba(110, 168, 100, 0.10);
+}
+
+.dauligor-spell-manager__select-all--all {
+  background: rgba(110, 168, 100, 0.20);
+  color: #e6f3e0;
+}
+
+.dauligor-spell-manager__select-all-check {
+  font-size: 13px;
+  line-height: 1;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.dauligor-spell-manager__select-all-label {
+  white-space: nowrap;
+}
+
+/* === Pool rows: indicator states + prepared highlight === */
+.dauligor-spell-manager__row-indicator {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  font-size: 14px;
+  line-height: 1;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.dauligor-spell-manager__row-indicator--empty {
+  color: var(--dauligor-text-muted);
+  opacity: 0.55;
+}
+
+.dauligor-spell-manager__row-indicator--filled {
+  color: #d2b350;
+}
+
+.dauligor-spell-manager__row-indicator--book {
+  font-size: 13px;
+}
+
+/* Importer-mode checkbox + "already on sheet" badge. Sits in the
+ * same lead-cell slot as the indicator, so we mirror its size to
+ * keep row geometry stable when the lead element swaps between
+ * indicator / checkbox / on-sheet badge. */
+.dauligor-spell-manager__row-checkbox {
+  flex-shrink: 0;
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  margin: 0 2px;
+  /* Sit centered in the same 20px column as the indicator. */
+  vertical-align: middle;
+  cursor: pointer;
+  accent-color: #d2b350;
+}
+
+.dauligor-spell-manager__row-on-sheet {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  font-size: 13px;
+  line-height: 1;
+  color: #6fa86a;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  opacity: 0.85;
+}
+
+/* Highlight rows selected for import (multi-select checkbox ticked).
+ * Keeps the prepared-state highlight winning when both apply — sheet
+ * mode never marks rows for import so this only shows in importer. */
+.dauligor-spell-manager__pool-row--marked {
+  background: rgba(110, 168, 100, 0.10);
+  border-left: 3px solid rgba(110, 168, 100, 0.55);
+  padding-left: 5px;
+}
+
+.dauligor-spell-manager__pool-row--marked.dauligor-spell-manager__pool-row--selected {
+  background: rgba(110, 168, 100, 0.18);
+}
+
+/* Highlight rows whose sheetMode is "prepared" — the "pops a little"
+ * treatment the user asked for. */
+.dauligor-spell-manager__pool-row--prepared {
+  background: linear-gradient(90deg,
+    rgba(210, 179, 80, 0.18),
+    rgba(210, 179, 80, 0.04) 70%,
+    transparent);
+  border-left: 3px solid #d2b350;
+  padding-left: 5px;
+}
+
+.dauligor-spell-manager__pool-row--prepared .dauligor-spell-manager__row-name {
+  color: #f8e7b5;
+  font-weight: 600;
+}
+
+.dauligor-spell-manager__pool-row--prepared.dauligor-spell-manager__pool-row--selected {
+  background: linear-gradient(90deg,
+    rgba(210, 179, 80, 0.32),
+    rgba(210, 179, 80, 0.10) 70%,
+    rgba(170, 130, 80, 0.08));
+}
+
+/* === Detail pane — SpellDetailPanel parity === */
+/*
+ * `__detail-scroll` is a flex column with `overflow-y: auto`. The
+ * footer uses `margin-top: auto` to pin to the bottom when content
+ * is shorter than the container — same trick the website's
+ * <SpellDetailPanel> uses (Tailwind `mt-auto` on the bottom group).
+ *
+ * Earlier attempts hit a flex-shrink interaction: children default
+ * to `flex-shrink: 1`, so when total content exceeded the container
+ * height, flex SQUEEZED `__detail-body`'s computed height while its
+ * content kept rendering at natural height — description painted
+ * straight onto the footer below. Two changes fix this:
+ *
+ *   1. `flex-shrink: 0` on every direct child of `__detail-scroll`
+ *      (header / hero / body / footer). Children keep their natural
+ *      heights regardless of container.
+ *   2. `overflow-y: auto` then engages cleanly when content > container.
+ *
+ * With shrink prevented, `margin-top: auto` on the footer gives the
+ * desired "pin to bottom when short, flow naturally when long"
+ * behaviour — bottom-of-panel for short spells, scroll-naturally
+ * for long ones. Description and footer always share one scroll.
+ */
+.dauligor-spell-manager__detail-scroll {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.dauligor-spell-manager__detail-scroll > .dauligor-spell-manager__detail-header,
+.dauligor-spell-manager__detail-scroll > .dauligor-spell-manager__detail-hero,
+.dauligor-spell-manager__detail-scroll > .dauligor-spell-manager__detail-body,
+.dauligor-spell-manager__detail-scroll > .dauligor-spell-manager__detail-footer {
+  flex-shrink: 0;
+}
+
+.dauligor-spell-manager__detail-header {
+  padding: 14px 18px 12px;
+  border-bottom: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.18);
+}
+
+.dauligor-spell-manager__detail-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dauligor-spell-manager__detail-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-family: var(--font-serif, "Crimson Text", serif);
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #f8e7b5;
+}
+
+.dauligor-spell-manager__detail-source-chip {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border: 1px solid var(--dauligor-accent, #b89a6b);
+  background: rgba(170, 130, 80, 0.12);
+  color: #f1d999;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  cursor: help;
+}
+
+/* Page suffix inside the source chip ("PHB p218") — same family,
+ * lighter colour + weight to clearly read as a secondary annotation. */
+.dauligor-spell-manager__detail-source-chip-page {
+  margin-left: 2px;
+  padding-left: 4px;
+  border-left: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.18);
+  color: var(--dauligor-text-muted);
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+}
+
+.dauligor-spell-manager__detail-star {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--dauligor-border);
+  background: transparent;
+  color: var(--dauligor-text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+
+.dauligor-spell-manager__detail-star:hover {
+  color: #f1d999;
+  border-color: var(--dauligor-accent, #b89a6b);
+}
+
+.dauligor-spell-manager__detail-star--active {
+  color: #f1d999;
+  border-color: var(--dauligor-accent, #b89a6b);
+  background: rgba(170, 130, 80, 0.15);
+}
+
+.dauligor-spell-manager__detail-subtitle {
+  margin: 6px 0 0 0;
+  font-family: var(--font-serif, "Crimson Text", serif);
+  font-style: italic;
+  font-size: 13px;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-spell-manager__detail-subtitle-sep {
+  margin: 0 6px;
+  opacity: 0.5;
+}
+
+.dauligor-spell-manager__detail-hero {
+  display: flex;
+  gap: 16px;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.18);
+  align-items: flex-start;
+}
+
+.dauligor-spell-manager__detail-image {
+  flex-shrink: 0;
+  width: 96px;
+  height: 96px;
+  border: 1px solid var(--dauligor-border);
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.dauligor-spell-manager__detail-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.dauligor-spell-manager__detail-image--placeholder {
+  background: linear-gradient(135deg, rgba(170, 130, 80, 0.08), rgba(0, 0, 0, 0.4));
+}
+
+.dauligor-spell-manager__detail-info-grid {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 16px;
+}
+
+.dauligor-spell-manager__detail-info-row {
+  min-width: 0;
+}
+
+.dauligor-spell-manager__detail-info-label {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-spell-manager__detail-info-value {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--dauligor-text, #cbb98f);
+}
+
+/* Description body. Crucial: NO overflow/border/background here.
+ *
+ * An earlier (now-retired) detail panel set `overflow: auto;
+ * border + dark bg` on `__detail-body` — that rule lives further up
+ * in this file from the legacy 3-col layout era. Without these
+ * explicit overrides, the legacy values leak in: the description
+ * gets its OWN scrollbar inside the detail pane, so expanding the
+ * Show Tags section below visibly shrinks the description's
+ * scrollable window. The fix is to let `__detail-scroll` own the
+ * single outer scroll and have `__detail-body` flow naturally
+ * (overflow: visible; height: auto). */
+.dauligor-spell-manager__detail-body {
+  padding: 14px 18px 4px;
+  overflow: visible;
+  height: auto;
+  min-height: 0;
+  border: none;
+  background: transparent;
+}
+
+.dauligor-spell-manager__detail-description {
+  /* Match Foundry's body text — sans-serif (Signika under dnd5e v5,
+   * with the system's `--font-primary` / `--font-sans` chain as a
+   * fallback). Slightly larger than the 13px we had so it reads at
+   * the same comfort level as the CASTING TIME / RANGE / etc. info
+   * rows above. */
+  font-family: var(--font-primary, var(--font-sans, "Signika", system-ui, sans-serif));
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--dauligor-text, #cbb98f);
+}
+
+.dauligor-spell-manager__detail-description > :first-child { margin-top: 0; }
+.dauligor-spell-manager__detail-description > :last-child  { margin-bottom: 0; }
+.dauligor-spell-manager__detail-description p { margin: 0 0 10px; }
+.dauligor-spell-manager__detail-description strong,
+.dauligor-spell-manager__detail-description b {
+  font-weight: 700;
+  color: #e0c98a;
+}
+/* Italic via `em` only — NOT `i`. Font Awesome icons (used by Foundry's
+ * enrichHTML to render `[[/r ...]]` and `[[/damage ...]]` as inline
+ * roll widgets with `<i class="fa-…">` glyphs) were inheriting italic
+ * from a broader `i` selector, giving the dice icon a tilted look. */
+.dauligor-spell-manager__detail-description em {
+  font-style: italic;
+  color: var(--dauligor-text, #cbb98f);
+}
+/* Foundry's icon font lives on bare `<i class="fa-*">` elements
+ * inside enriched HTML. Force-upright them in case some other
+ * stylesheet (legacy `.dauligor-spell-manager__detail-body em`?)
+ * tries to italicise. */
+.dauligor-spell-manager__detail-description i[class*="fa-"],
+.dauligor-spell-manager__detail-description i.fas,
+.dauligor-spell-manager__detail-description i.far,
+.dauligor-spell-manager__detail-description i.fab,
+.dauligor-spell-manager__detail-description i.fa-solid,
+.dauligor-spell-manager__detail-description i.fa-regular,
+.dauligor-spell-manager__detail-description i.fa-brands {
+  font-style: normal;
+}
+.dauligor-spell-manager__detail-description u { text-decoration: underline; }
+.dauligor-spell-manager__detail-description ul,
+.dauligor-spell-manager__detail-description ol {
+  margin: 0 0 10px 1.4em;
+  padding: 0;
+}
+.dauligor-spell-manager__detail-description li { margin: 0 0 4px; }
+.dauligor-spell-manager__detail-description h1,
+.dauligor-spell-manager__detail-description h2,
+.dauligor-spell-manager__detail-description h3,
+.dauligor-spell-manager__detail-description h4 {
+  margin: 10px 0 6px;
+  font-family: var(--font-serif, "Crimson Text", serif);
+  font-weight: 700;
+  color: #f1d999;
+}
+.dauligor-spell-manager__detail-description h1 { font-size: 16px; }
+.dauligor-spell-manager__detail-description h2 { font-size: 15px; }
+.dauligor-spell-manager__detail-description h3 { font-size: 14px; }
+.dauligor-spell-manager__detail-description h4 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; }
+.dauligor-spell-manager__detail-description blockquote {
+  margin: 8px 0;
+  padding: 6px 12px;
+  border-left: 3px solid var(--dauligor-accent, #b89a6b);
+  background: rgba(170, 130, 80, 0.06);
+  font-style: italic;
+}
+.dauligor-spell-manager__detail-description code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  padding: 1px 4px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 2px;
+}
+
+/* Footer pins to the bottom of `__detail-scroll` via `margin-top:
+ * auto`. When the description is short, the auto-margin grows to
+ * fill the remaining height and the footer sits at the bottom of
+ * the panel. When the description is long, the auto-margin collapses
+ * to 0 and the footer flows directly after the body — both cases
+ * scroll inside the same `__detail-scroll` container.
+ *
+ * Children of `__detail-scroll` have `flex-shrink: 0` so this
+ * interaction doesn't squeeze the body / footer (see the comment
+ * on `__detail-scroll` above for the history). */
+.dauligor-spell-manager__detail-footer {
+  padding: 12px 18px 16px;
+  margin-top: auto;
+  border-top: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dauligor-spell-manager__detail-source-line {
+  font-size: 12px;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-spell-manager__detail-source-label {
+  font-weight: 700;
+  margin-right: 4px;
+  color: var(--dauligor-text, #cbb98f);
+}
+
+.dauligor-spell-manager__detail-status {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--dauligor-text-muted);
+  letter-spacing: 0.04em;
+}
+
+.dauligor-spell-manager__detail-tags-toggle {
+  margin-top: 4px;
+  padding: 6px 10px;
+  border: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.20);
+  background: rgba(170, 130, 80, 0.05);
+  color: var(--dauligor-text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4px;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.dauligor-spell-manager__detail-tags-toggle:hover {
+  background: rgba(170, 130, 80, 0.10);
+  color: var(--dauligor-text, #cbb98f);
+}
+
+.dauligor-spell-manager__detail-tags-count {
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  opacity: 0.7;
+}
+
+.dauligor-spell-manager__detail-tags {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dauligor-spell-manager__detail-tags-empty {
+  font-style: italic;
+  font-size: 11px;
+  color: var(--dauligor-text-muted);
+}
+
+/* Per-tag-group section inside the Show Tags disclosure. Matches the
+ * app's <SpellDetailPanel> visual: group name as an uppercase label,
+ * chip-row of tags below. Tags are also resolved per-group rather
+ * than flat-listed because the same chip name can mean different
+ * things across groups (e.g. "Other" in school vs in role tags).
+ */
+.dauligor-spell-manager__detail-tags-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dauligor-spell-manager__detail-tags-group-name {
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--dauligor-text-muted);
+  opacity: 0.85;
+}
+
+.dauligor-spell-manager__detail-tags-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.dauligor-spell-manager__detail-tag {
+  padding: 2px 7px;
+  border: 1px solid var(--dauligor-border);
+  background: rgba(170, 130, 80, 0.06);
+  color: var(--dauligor-text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* === Footer (bottom action button row) === */
+.dauligor-spell-manager__footer {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--dauligor-border);
+  background: var(--dauligor-panel);
+}
+
+.dauligor-spell-manager__footer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.dauligor-spell-manager__footer-note {
+  font-family: var(--font-serif, "Crimson Text", serif);
+  font-style: italic;
+  font-size: 12px;
+  color: var(--dauligor-text-muted);
+  opacity: 0.75;
+  text-align: center;
+  padding: 2px 4px 0;
+}
+
+.dauligor-spell-manager__footer-left {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.dauligor-spell-manager__footer-right {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.dauligor-spell-manager__footer-hint {
+  font-family: var(--font-serif, "Crimson Text", serif);
+  font-style: italic;
+  font-size: 12px;
+  color: var(--dauligor-text-muted);
+  opacity: 0.7;
+}
+
+.dauligor-spell-manager__footer-button {
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--dauligor-accent, #b89a6b);
+  background: rgba(170, 130, 80, 0.08);
+  color: var(--dauligor-text, #cbb98f);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.dauligor-spell-manager__footer-button:hover {
+  background: rgba(170, 130, 80, 0.18);
+  color: #f8e7b5;
+}
+
+.dauligor-spell-manager__footer-button--active {
+  background: rgba(210, 179, 80, 0.24);
+  border-color: #d2b350;
+  color: #f8e7b5;
+}
+
+.dauligor-spell-manager__footer-button--active:hover {
+  background: rgba(210, 179, 80, 0.38);
+}
+
+.dauligor-spell-manager__footer-button--ghost {
+  border-color: var(--dauligor-border);
+  background: transparent;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-spell-manager__footer-button--ghost:hover {
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--dauligor-text, #cbb98f);
+}
+
+.dauligor-spell-manager__footer-button--locked,
+.dauligor-spell-manager__footer-button[disabled] {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.dauligor-spell-manager__footer-button--locked:hover,
+.dauligor-spell-manager__footer-button[disabled]:hover {
+  background: rgba(170, 130, 80, 0.08);
+  color: var(--dauligor-text, #cbb98f);
+}
+
+/* === Filter modal overlay === */
+.dauligor-spell-manager__filter-modal-host[hidden] {
+  display: none;
+}
+
+.dauligor-spell-manager__filter-modal-host {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dauligor-spell-manager__modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.dauligor-spell-manager__modal-card {
+  position: relative;
+  width: min(640px, 90%);
+  max-height: 86%;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--dauligor-accent, #b89a6b);
+  background: var(--dauligor-panel-alt, #1f1a14);
+  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.55);
+}
+
+/* Section-filter variant: wider modal so the per-axis controls (All /
+ * Clear / None / OR-AND-XOR / Subtags / Hide) all fit on one row at
+ * typical pill counts, and a full-height pane that matches the public
+ * `/compendium/*` filter modals.
+ *
+ * Width / height cover essentially the whole `.window-content` —
+ * 96%/96% leaves a thin frame so the user can still see where the
+ * dialog edge is (and click outside to dismiss). The old 960×90vh
+ * cap left the favourites sidebar peeking out on the left side of a
+ * wide spell-browser window, which read as "the modal is stuck
+ * inside the spell pane". Letting the card stretch fixes that
+ * without sacrificing the React panel's spacing — `min(1280px, 96%)`
+ * still keeps it from running absurdly wide on a 4K monitor. */
+.dauligor-spell-manager__modal-card--section-filter {
+  width: min(1280px, 96%);
+  height: 96%;
+  max-height: none;
+}
+
+/* Darker backdrop for the section-filter variant — the panel inside
+ * is wide enough that the dimmed-but-visible columns underneath used
+ * to read as "still part of the layout". Bumping to 0.78 makes the
+ * overlay feel like a true modal at the spell-browser window size. */
+.dauligor-spell-manager__filter-modal-host:has(.dauligor-spell-manager__modal-card--section-filter)
+  .dauligor-spell-manager__modal-backdrop {
+  background: rgba(0, 0, 0, 0.78);
+}
+
+.dauligor-spell-manager__modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--dauligor-border);
+  background: rgba(170, 130, 80, 0.08);
+}
+
+.dauligor-spell-manager__modal-title {
+  margin: 0;
+  font-family: var(--font-serif, "Crimson Text", serif);
+  font-size: 16px;
+  font-weight: 800;
+  color: #f8e7b5;
+  letter-spacing: 0.04em;
+}
+
+.dauligor-spell-manager__modal-close {
+  background: transparent;
+  border: 1px solid var(--dauligor-border);
+  color: var(--dauligor-text-muted);
+  width: 28px;
+  height: 28px;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.dauligor-spell-manager__modal-close:hover {
+  background: rgba(170, 130, 80, 0.12);
+  color: #f8e7b5;
+}
+
+.dauligor-spell-manager__modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.dauligor-spell-manager__modal-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dauligor-spell-manager__modal-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dauligor-spell-manager__modal-section-title {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-spell-manager__modal-section-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.dauligor-spell-manager__modal-shortcut {
+  background: transparent;
+  border: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.22);
+  color: var(--dauligor-text-muted);
+  padding: 1px 8px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.dauligor-spell-manager__modal-shortcut:hover {
+  background: rgba(170, 130, 80, 0.10);
+  color: var(--dauligor-text, #cbb98f);
+}
+
+.dauligor-spell-manager__modal-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dauligor-spell-manager__modal-chip {
+  padding: 4px 10px;
+  border: 1px solid var(--dauligor-border);
+  background: rgba(0, 0, 0, 0.20);
+  color: var(--dauligor-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.dauligor-spell-manager__modal-chip:hover {
+  background: rgba(170, 130, 80, 0.10);
+  color: var(--dauligor-text, #cbb98f);
+}
+
+.dauligor-spell-manager__modal-chip--selected {
+  background: rgba(210, 179, 80, 0.18);
+  border-color: #d2b350;
+  color: #f8e7b5;
+}
+
+.dauligor-spell-manager__modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--dauligor-border);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.dauligor-spell-manager__modal-button {
+  padding: 6px 14px;
+  border: 1px solid var(--dauligor-accent, #b89a6b);
+  background: rgba(170, 130, 80, 0.14);
+  color: #f8e7b5;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.dauligor-spell-manager__modal-button:hover {
+  background: rgba(170, 130, 80, 0.28);
+}
+
+.dauligor-spell-manager__modal-button--ghost {
+  background: transparent;
+  border-color: var(--dauligor-border);
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-spell-manager__modal-button--ghost:hover {
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--dauligor-text, #cbb98f);
+}

@@ -1,0 +1,51 @@
+/* ============================================================================
+ * dauligor-pairing — directory-tools
+ * Split from the former monolithic dauligor-importer.css (2026-05-30).
+ * See docs/styles-guide.md for the component → file map. Do not reorder
+ * across files casually; load order is fixed in module.json.
+ * ========================================================================== */
+
+.dauligor-directory-tools {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(3, 32px);
+  gap: 4px;
+  width: 100%;
+  padding: 0 4px;
+  margin-top: 4px;
+}
+
+/* Sidebar Import buttons — same wrapper class (`header-actions
+ * action-buttons`) Foundry uses for its native sidebar buttons
+ * (Create Actor / Create Folder, etc.). We intentionally do NOT
+ * style the base button here — Foundry's own
+ * `.directory .directory-header .action-buttons button` rule + the
+ * global `button` rule give us the matching native look (the same
+ * look Plutonium's Import button gets for free by also not
+ * overriding it). We only set icon + text layout. */
+.dauligor-directory-tools__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.dauligor-directory-tools__button--icon {
+  /* Square icon-only variant — width matches Foundry's sidebar
+   * action-buttons height so the trio reads as a balanced group. */
+  width: 32px;
+  padding: 0;
+}
+
+.dauligor-spell-tab-tools {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 0 10px;
+}
+
+/* Layout delta only — visual identity + hover come from the canonical
+ * `.dauligor-…__button` rules. This variant lays out an icon + label. */
+.dauligor-spell-tab-tools__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}

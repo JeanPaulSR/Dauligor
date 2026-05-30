@@ -1,0 +1,123 @@
+/* ============================================================================
+ * dauligor-pairing — responsive
+ * Split from the former monolithic dauligor-importer.css (2026-05-30).
+ * See docs/styles-guide.md for the component → file map. Do not reorder
+ * across files casually; load order is fixed in module.json.
+ * ========================================================================== */
+
+@media (max-width: 1120px) {
+  .dauligor-importer__body {
+    grid-template-columns: minmax(160px, 0.72fr) minmax(190px, 0.88fr) minmax(260px, 1fr);
+  }
+
+  .dauligor-class-browser__toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .dauligor-class-browser__toolbar-controls {
+    grid-template-columns: minmax(0, 1fr) minmax(180px, 0.8fr) auto;
+  }
+
+  .dauligor-class-browser__footer-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dauligor-class-options__toolbar,
+  .dauligor-class-options__footer {
+    grid-template-columns: 1fr;
+  }
+
+  .dauligor-class-options__footer-actions {
+    min-width: 0;
+  }
+
+  .dauligor-spell-manager__layout {
+    grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
+  }
+
+  .dauligor-spell-manager__panel--summary {
+    grid-column: 1 / -1;
+  }
+
+  .dauligor-asi__content-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dauligor-spell-manager__content {
+    grid-template-columns: minmax(220px, 0.42fr) minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 920px) {
+  .dauligor-importer__body {
+    grid-template-columns: 1fr;
+  }
+
+  .dauligor-importer__panel {
+    border-right: 0;
+    border-bottom: 1px solid var(--dauligor-border);
+  }
+
+  .dauligor-importer__panel:last-child {
+    border-bottom: 0;
+  }
+
+  .dauligor-importer__footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .dauligor-importer__footer-status,
+  .dauligor-importer__footer-actions {
+    margin: 0;
+  }
+
+  .dauligor-wizard__toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .dauligor-asi__mode-grid,
+  .dauligor-asi__ability-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dauligor-class-browser__toolbar-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .dauligor-directory-tools {
+    grid-template-columns: minmax(0, 1fr) repeat(3, 30px);
+  }
+
+  .dauligor-spell-manager__layout,
+  .dauligor-spell-manager__content,
+  .dauligor-spell-manager__toolbar {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Narrow-window stacking — when the FM body is squeezed below
+   ~900px wide, drop to 2 cols (groups + picks share one row, detail
+   sits below). The subclass-preview's grid already handles this in
+   the importer; the FM version's parent (the FM body) is narrower so
+   we use viewport-based fallbacks since container queries are still
+   gated by Chromium/Firefox release flags in some Foundry hosts. */
+@media (max-width: 1100px) {
+  .dauligor-feature-manager__option-three-col {
+    grid-template-columns: minmax(200px, 1fr) minmax(240px, 1.2fr);
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .dauligor-feature-manager__option-col--detail {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 720px) {
+  .dauligor-feature-manager__option-three-col {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+  .dauligor-feature-manager__option-col--detail {
+    grid-column: auto;
+  }
+}

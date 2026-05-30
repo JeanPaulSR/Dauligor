@@ -1,0 +1,115 @@
+/* ============================================================================
+ * dauligor-pairing — tokens
+ * Split from the former monolithic dauligor-importer.css (2026-05-30).
+ * See docs/styles-guide.md for the component → file map. Do not reorder
+ * across files casually; load order is fixed in module.json.
+ * ========================================================================== */
+
+.dauligor-importer,
+.dauligor-class-browser,
+.dauligor-class-options,
+.dauligor-spell-manager,
+.dauligor-feature-manager {
+  --dauligor-border: #5c5c5c;
+  --dauligor-panel: #1f1f1f;
+  --dauligor-panel-alt: #252525;
+  --dauligor-panel-soft: #313131;
+  --dauligor-text: #c9c7c0;
+  --dauligor-text-muted: #9a978f;
+  --dauligor-accent: #8f8a79;
+  --dauligor-accent-strong: #c9c7c0;
+  --dauligor-success: #7ea86f;
+  --dauligor-warning: #9e7f49;
+  --dauligor-danger: #a5645a;
+  /* Foundry-native button tokens. Pulled into our scope so our buttons
+   * read as dnd5e v5 buttons (gold hover accent, subtle dark bg) even
+   * though our windows aren't tagged `.dnd5e2.application`. Each value
+   * falls back to a hardcoded equivalent when the variable isn't
+   * defined (e.g. world has no dnd5e v5 theme, or button is rendered
+   * outside a sheet context). Reference: dnd5e v5
+   *   --button-border-color       = var(--color-border-light-2)  = #999
+   *   --button-hover-border-color = var(--dnd5e-color-gold)      = #9f9275
+   *   .dnd5e button background    = rgba(0, 0, 0, 0.10) */
+  --dauligor-btn-bg: rgba(0, 0, 0, 0.10);
+  --dauligor-btn-hover-bg: rgba(159, 146, 117, 0.14);
+  --dauligor-btn-border: var(--button-border-color, var(--dauligor-border));
+  --dauligor-btn-border-hover: var(--button-hover-border-color, var(--dnd5e-color-gold, #9f9275));
+  /* Accent-tint RGB channels — used as rgba(var(--dauligor-accent-tint), α)
+   * so a single tint drives the many soft borders / fills at per-use alpha.
+   * Replaces the old undefined `--dauligor-{border-soft,surface-muted,
+   * accent-soft,surface-hover}` names that only ever resolved to inline
+   * fallbacks. `-tint` is the warm tan; `-gold` the stronger gold. */
+  --dauligor-accent-tint: 170, 130, 80;
+  --dauligor-accent-gold: 181, 136, 56;
+  color: var(--dauligor-text);
+  background: var(--dauligor-panel);
+  font-family: var(--font-primary);
+}
+
+/* Token availability for every Dauligor window root — VARIABLES ONLY (no
+ * color/background/font), so standalone windows that aren't nested under
+ * the themed roots above still resolve the palette instead of relying on
+ * inline fallbacks. Inert where a token isn't referenced. The character
+ * sheet is intentionally excluded — it adopts the host dnd5e theme. */
+.dauligor-importer,
+.dauligor-importer-app,
+.dauligor-class-browser,
+.dauligor-class-options,
+.dauligor-spell-manager,
+.dauligor-feature-manager,
+.dauligor-wizard,
+.dauligor-sequence,
+.dauligor-option-picker,
+.dauligor-spell-picker,
+.dauligor-section-filter,
+.dauligor-subclass-preview,
+.dauligor-asi,
+.dauligor-overview,
+.dauligor-gm-console,
+.dauligor-feat-browser {
+  --dauligor-border: #5c5c5c;
+  --dauligor-panel: #1f1f1f;
+  --dauligor-panel-alt: #252525;
+  --dauligor-panel-soft: #313131;
+  --dauligor-text: #c9c7c0;
+  --dauligor-text-muted: #9a978f;
+  --dauligor-accent: #8f8a79;
+  --dauligor-accent-strong: #c9c7c0;
+  --dauligor-success: #7ea86f;
+  --dauligor-warning: #9e7f49;
+  --dauligor-danger: #a5645a;
+  --dauligor-accent-tint: 170, 130, 80;
+  --dauligor-accent-gold: 181, 136, 56;
+}
+
+/* ===========================================================================
+ * Section Filter Panel
+ *
+ * Shared filter UI used by the Prepare Spells manager, the Importer's spell
+ * browser, and the class-browser tag filter. Mirrors the dauligor.com
+ * `SectionFilterPanel` design: tri-state pills (off / include / exclude),
+ * per-axis controls (all / clear / none / OR-AND-XOR combine + exclude /
+ * subtags-expand / abbr-toggle / hide), modal-wide chip-search + show/hide-all,
+ * and a chevron-drawer hierarchy for tag groups carrying subtags.
+ *
+ * Color tokens:
+ *   include  →  --dauligor-include  (sky-blue, defined below; not in the
+ *                                    base palette because no other surface
+ *                                    needed an "include" semantic)
+ *   exclude  →  --dauligor-danger   (existing blood-ish red)
+ *   neutral  →  --dauligor-text /
+ *               --dauligor-border   (existing gold-leaning gray pair)
+ * =========================================================================== */
+.dauligor-section-filter {
+  --dauligor-include: #5fa9d6;
+  --dauligor-include-soft: rgba(95, 169, 214, 0.18);
+  --dauligor-include-border: rgba(95, 169, 214, 0.55);
+  --dauligor-exclude: var(--dauligor-danger);
+  --dauligor-exclude-soft: rgba(165, 100, 90, 0.18);
+  --dauligor-exclude-border: rgba(165, 100, 90, 0.55);
+
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+}

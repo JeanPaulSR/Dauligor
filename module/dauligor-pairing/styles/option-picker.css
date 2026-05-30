@@ -1,0 +1,450 @@
+/* ============================================================================
+ * dauligor-pairing — option-picker
+ * Split from the former monolithic dauligor-importer.css (2026-05-30).
+ * See docs/styles-guide.md for the component → file map. Do not reorder
+ * across files casually; load order is fixed in module.json.
+ * ========================================================================== */
+
+/* Subclass rows reuse `.dauligor-option-picker__row` + friends
+ * directly — see those rules for the canonical visual treatment
+ * (24px checkbox / 36px icon / name+badge text grid, hover,
+ * focused). The modifier classes below adjust the grid for the
+ * two niches the option-picker doesn't cover:
+ *
+ *   --no-check   — preview mode hides the indicator entirely
+ *                  (read-only browse, no selection commit).
+ *   --feature    — feature rows have no checkbox AND no image,
+ *                  just the name; collapse to a single column.
+ *
+ * Both modifiers are paired with `.dauligor-option-picker__row` in
+ * the selector so they win the cascade against the bare
+ * `.dauligor-option-picker__row { grid-template-columns: 24px 36px
+ * minmax(0, 1fr); }` rule that lives later in this file. Without the
+ * paired selector, the feature row would inherit the 3-column grid
+ * and the lone text child would land in the 24px checkbox slot —
+ * causing feature names to clip to a single letter ("A...", "M..."). */
+.dauligor-option-picker__row.dauligor-subclass-preview__row--no-check {
+  grid-template-columns: 36px minmax(0, 1fr);
+}
+
+.dauligor-option-picker__row.dauligor-subclass-preview__row--feature {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.dauligor-option-picker {
+  display: grid;
+  grid-template-columns: minmax(360px, 1fr) minmax(420px, 1.2fr);
+  gap: 12px;
+  min-height: 0;
+  height: 100%;
+  position: relative;
+  /* Establishes the grid as a flex item that fills its column-flex
+   * parent. Combined with `min-height: 0` it lets the inner columns
+   * own scrolling rather than the dialog body. */
+  flex: 1 1 auto;
+  align-self: stretch;
+}
+
+.dauligor-option-picker__list {
+  border: 1px solid var(--dauligor-border);
+  border-radius: 8px;
+  overflow-y: auto;
+  /* `overscroll-behavior: contain` keeps a scroll gesture inside the
+   * list from leaking through to a parent scroller — relevant when
+   * the list's last row is reached and the user keeps scrolling. */
+  overscroll-behavior: contain;
+  /* Uniform panel-alt — same color as the wizard's "Choose
+   * Importer" column. The whole importer reads as one surface. */
+  background: var(--dauligor-panel-alt);
+  min-height: 0;
+}
+
+.dauligor-option-picker__detail-pane {
+  /* See list above. Independent scroll containers. */
+  overscroll-behavior: contain;
+}
+
+.dauligor-option-picker__level-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  /* Grey level-divider chrome with gold label text. The level
+   * header IS a label (it tells you which section of the list
+   * you're in), so the text gets the gold/uppercase treatment;
+   * the band itself stays grey to match the other table headers
+   * in the module. */
+  background: #2b2b2b;
+  border-top: 1px solid var(--dauligor-border);
+  border-bottom: 1px solid var(--dauligor-border);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--dauligor-accent-strong);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.dauligor-option-picker__list > .dauligor-option-picker__level-header:first-child {
+  border-top: 0;
+}
+
+.dauligor-option-picker__level-count {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.dauligor-option-picker__row {
+  display: grid;
+  /* Checkbox + icon + name/badge. The right-side status-icon column
+   * was removed — the row badge already conveys status as text
+   * ("Owned" / "Selected" / "Requires: …" / "Level N+") and the
+   * extra glyph was redundant. */
+  grid-template-columns: 24px 36px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 8px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.015);
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.dauligor-option-picker__row:hover {
+  /* Grey hover; matches the rest of the module's clickable rows. */
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.dauligor-option-picker__row--focused {
+  /* Grey background + gold inset accent bar — the gold lives on
+   * the accent strip only, not flooding the row. Same pattern as
+   * `.dauligor-class-options__levels-row.is-current` and the rest
+   * of the unified `--selected` rows. */
+  background: rgba(255, 255, 255, 0.10);
+  box-shadow: inset 3px 0 0 var(--dauligor-accent);
+}
+
+.dauligor-option-picker__row--highlighted {
+  /* Jump-to-prereq one-shot pulse. Same grey-with-accent palette
+   * the rest of the rows use — fades into the resting `--focused`
+   * background so the bar doesn't pop. */
+  animation: dauligor-option-picker-pulse 1500ms ease-out 1;
+}
+
+.dauligor-option-picker__row--owned {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.dauligor-option-picker__row--selected {
+  background: rgba(60, 140, 90, 0.10);
+}
+
+.dauligor-option-picker__row--blocked {
+  opacity: 0.72;
+}
+
+.dauligor-option-picker__row--blocked .dauligor-option-picker__row-name {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.dauligor-option-picker__row-check {
+  margin: 0;
+}
+
+.dauligor-option-picker__row-img {
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  object-fit: cover;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.dauligor-option-picker__row-text {
+  min-width: 0;
+}
+
+.dauligor-option-picker__row-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #f0e8d8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dauligor-option-picker__row-badge {
+  margin-top: 2px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.7);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dauligor-option-picker__row--blocked .dauligor-option-picker__row-badge {
+  color: rgba(217, 117, 88, 0.85);
+}
+
+.dauligor-option-picker__row-status {
+  font-size: 14px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Detail pane */
+
+.dauligor-option-picker__detail-pane {
+  border: 1px solid var(--dauligor-border);
+  border-radius: 8px;
+  /* Uniform panel-alt — see `.dauligor-option-picker__list`. */
+  background: var(--dauligor-panel-alt);
+  padding: 16px 18px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.dauligor-option-picker__detail-empty {
+  color: var(--dauligor-text-muted);
+  font-style: italic;
+  padding: 20px;
+  text-align: center;
+}
+
+.dauligor-option-picker__detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dauligor-option-picker__back {
+  align-self: flex-start;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dauligor-accent-strong);
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.dauligor-option-picker__back:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.dauligor-option-picker__detail-header {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.dauligor-option-picker__detail-img {
+  width: 64px;
+  height: 64px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  object-fit: cover;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.dauligor-option-picker__detail-name {
+  margin: 0;
+  font-size: 22px;
+  color: #f0e8d8;
+}
+
+.dauligor-option-picker__detail-meta {
+  font-size: 11px;
+  color: var(--dauligor-text-muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.dauligor-option-picker__banner {
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  border: 1px solid transparent;
+}
+
+.dauligor-option-picker__banner--ok {
+  background: rgba(60, 140, 90, 0.10);
+  border-color: rgba(60, 140, 90, 0.30);
+  color: #92d4a8;
+}
+
+.dauligor-option-picker__banner--block {
+  background: rgba(190, 76, 60, 0.10);
+  border-color: rgba(190, 76, 60, 0.30);
+  color: #e09686;
+}
+
+.dauligor-option-picker__banner--muted {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.10);
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-option-picker__detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dauligor-option-picker__detail-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dauligor-accent-strong);
+}
+
+.dauligor-option-picker__detail-body {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #d8d4c8;
+}
+
+.dauligor-option-picker__detail-body p {
+  margin: 0 0 0.5em 0;
+}
+
+.dauligor-option-picker__detail-body p:last-child {
+  margin-bottom: 0;
+}
+
+/* Clamp imported `## Heading`-style headings inside option
+ * descriptions to a sane size — Foundry's default `<h2>` styles
+ * are giant page-headers, which look absurd inside a 13px body. */
+.dauligor-option-picker__detail-body h1,
+.dauligor-option-picker__detail-body h2,
+.dauligor-option-picker__detail-body h3,
+.dauligor-option-picker__detail-body h4 {
+  margin: 12px 0 6px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--dauligor-accent-strong);
+  border: 0;
+}
+
+.dauligor-option-picker__detail-body strong {
+  color: var(--dauligor-accent-strong);
+}
+
+.dauligor-option-picker__detail-summary {
+  font-size: 11px;
+  font-style: italic;
+  color: var(--dauligor-text-muted);
+}
+
+/* Prereq pills */
+
+.dauligor-option-picker__pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Single neutral pill style. Earlier iterations colored pills by
+ * met/unmet/manual state, but the row badge + status banner already
+ * communicate "is this pickable" — adding green/red/gold to every
+ * prereq pill made the detail panel look like a stoplight. Plain
+ * gold-on-dark reads cleanly and treats every requirement as
+ * informational. <button> pills (clickable for jump/overlay) and
+ * <span> pills (static) share the same look; the cursor change on
+ * hover signals which ones are interactive. */
+.dauligor-option-picker__pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: var(--dauligor-accent-strong);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+button.dauligor-option-picker__pill {
+  cursor: pointer;
+}
+
+button.dauligor-option-picker__pill:hover {
+  filter: brightness(1.18);
+}
+
+/* Out-of-group overlay */
+
+.dauligor-option-picker__overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  border-radius: 6px;
+}
+
+.dauligor-option-picker__overlay-card {
+  background: #1c1814;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 8px;
+  padding: 20px 22px;
+  max-width: 80%;
+  max-height: 80%;
+  overflow-y: auto;
+  position: relative;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+}
+
+.dauligor-option-picker__overlay-title {
+  margin: 0 0 8px 0;
+  color: #f0e8d8;
+  font-size: 18px;
+}
+
+.dauligor-option-picker__overlay-meta {
+  font-size: 11px;
+  color: var(--dauligor-text-muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.dauligor-option-picker__overlay-body {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #d8d4c8;
+}
+
+.dauligor-option-picker__overlay-body p {
+  margin: 0 0 0.5em 0;
+}
+
+.dauligor-option-picker__overlay-close {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  background: transparent;
+  border: 0;
+  font-size: 20px;
+  color: var(--dauligor-text-muted);
+  cursor: pointer;
+  line-height: 1;
+  padding: 4px 8px;
+}
+
+.dauligor-option-picker__overlay-close:hover {
+  color: #f0e8d8;
+}

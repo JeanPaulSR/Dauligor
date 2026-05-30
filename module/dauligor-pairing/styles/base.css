@@ -1,0 +1,95 @@
+/* ============================================================================
+ * dauligor-pairing — base
+ * Split from the former monolithic dauligor-importer.css (2026-05-30).
+ * See docs/styles-guide.md for the component → file map. Do not reorder
+ * across files casually; load order is fixed in module.json.
+ * ========================================================================== */
+
+.dauligor-importer *,
+.dauligor-importer *::before,
+.dauligor-importer *::after,
+.dauligor-class-browser *,
+.dauligor-class-browser *::before,
+.dauligor-class-browser *::after,
+.dauligor-class-options *,
+.dauligor-class-options *::before,
+.dauligor-class-options *::after,
+.dauligor-spell-manager *,
+.dauligor-spell-manager *::before,
+.dauligor-spell-manager *::after,
+.dauligor-feature-manager *,
+.dauligor-feature-manager *::before,
+.dauligor-feature-manager *::after {
+  box-sizing: border-box;
+}
+
+/* Canonical Dauligor flat button. One visual identity (Foundry-token
+ * bg/border, square corners, gold hover) shared by every window's
+ * action buttons. Layout deltas (icon+label flex, full-width, grid
+ * class-buttons) live in the per-block rules; only the *appearance*
+ * is unified here. `.dauligor-directory-tools__button` is intentionally
+ * NOT included — it inherits Foundry's native sidebar button styling. */
+.dauligor-wizard__button,
+.dauligor-class-browser__button,
+.dauligor-spell-tab-tools__button,
+.dauligor-spell-manager__button {
+  min-height: 32px;
+  margin: 0;
+  padding: 0 12px;
+  border: 1px solid var(--dauligor-btn-border);
+  border-radius: 0;
+  background: var(--dauligor-btn-bg);
+  color: var(--dauligor-text);
+  box-shadow: none;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dauligor-wizard__button:hover,
+.dauligor-wizard__button:focus,
+.dauligor-class-browser__button:hover,
+.dauligor-class-browser__button:focus,
+.dauligor-spell-tab-tools__button:hover,
+.dauligor-spell-tab-tools__button:focus,
+.dauligor-spell-manager__button:hover,
+.dauligor-spell-manager__button:focus {
+  border-color: var(--dauligor-btn-border-hover);
+  background: var(--dauligor-btn-hover-bg);
+}
+
+.dauligor-wizard__button[disabled],
+.dauligor-class-browser__button[disabled],
+.dauligor-spell-tab-tools__button[disabled],
+.dauligor-spell-manager__button[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.dauligor-importer-app--sequence-prompt .dauligor-class-options__region--toolbar .dauligor-sequence__toolbar {
+  padding: 10px 12px 8px;
+}
+
+@keyframes dauligor-option-picker-pulse {
+  0% { background: rgba(255, 255, 255, 0.28); }
+  100% { background: rgba(255, 255, 255, 0.10); }
+}
+
+.items-section.card.is-spell-drop-target {
+  outline: 2px dashed var(--dnd5e-color-gold, #9f9275);
+  outline-offset: -2px;
+  background: rgba(159, 146, 117, 0.06);
+}
+
+.items-section.card.is-section-collapsed > .item-list {
+  display: none;
+}
+
+/* ─── Chat audit (spell change messages) ────────────────────────────── */
+
+.dauligor-chat-spell-change {
+  margin: 0;
+  line-height: 1.4;
+}
