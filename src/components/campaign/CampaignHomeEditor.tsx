@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   Sparkles, LayoutGrid, Star, BookMarked, Type, ImageIcon, Minus, Square, Columns3,
-  ChevronUp, ChevronDown, Trash2, Copy, Plus, Save, X, GripVertical, Search,
+  ChevronUp, ChevronDown, Trash2, Copy, Plus, Save, X, GripVertical, Search, RotateCcw,
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -159,6 +159,18 @@ export default function CampaignHomeEditor({ campaignId, campaignName = '' }: Pr
     }
   };
 
+  // Restore the seeded default layout. Destructive (replaces the current blocks),
+  // so confirm first. Leaves the result DIRTY + flagged as seeded so the GM can
+  // Save it (or navigate away to keep their existing saved layout untouched).
+  const handleRestoreDefault = () => {
+    if (!window.confirm('Replace the current homepage layout with the default? This discards your unsaved changes to the layout — you can still Save or leave without saving.')) return;
+    setBlocks(defaultHomeBlocks());
+    setSelectedId(null);
+    setSeededFromDefault(true);
+    setDirty(true);
+    toast('Default layout restored — Save to apply');
+  };
+
   // Ctrl/Cmd+S
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -182,9 +194,14 @@ export default function CampaignHomeEditor({ campaignId, campaignName = '' }: Pr
           <h2 className="h2-title flex items-center gap-2"><LayoutGrid className="w-5 h-5 text-gold shrink-0" /> Homepage Layout</h2>
           <p className="field-hint mt-1">Build what players see on this campaign's home page — drag to reorder &amp; nest, fill each block, then save. Delete every block and save to fall back to the default site home.</p>
         </div>
-        <Button onClick={handleSave} disabled={saving || !canSave} className="btn-gold-solid gap-2 shrink-0">
-          <Save className="w-4 h-4" /> {saving ? 'Saving…' : canSave ? 'Save Layout' : 'Saved'}
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button onClick={handleRestoreDefault} disabled={saving} variant="outline" className="gap-2 border-gold/20 text-ink/70 hover:text-gold">
+            <RotateCcw className="w-4 h-4" /> Restore Default
+          </Button>
+          <Button onClick={handleSave} disabled={saving || !canSave} className="btn-gold-solid gap-2">
+            <Save className="w-4 h-4" /> {saving ? 'Saving…' : canSave ? 'Save Layout' : 'Saved'}
+          </Button>
+        </div>
       </div>
 
       {seededFromDefault && !dirty && (

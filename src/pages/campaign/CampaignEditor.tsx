@@ -382,10 +382,12 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
                 <CardContent className="space-y-4">
                   <div className="flex items-center gap-3">
                     <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className="h-9 border-gold/20 text-gold hover:bg-gold/5 flex items-center gap-2 rounded">
-                          <Users className="w-4 h-4" /> Add Player
-                        </Button>
+                      {/* Base UI's PopoverTrigger composes via `render`, NOT
+                          Radix's `asChild`. With asChild the trigger renders its
+                          own <button> around the child <Button> → nested buttons
+                          (hydration error). render={<Button/>} makes them one. */}
+                      <PopoverTrigger render={<Button variant="outline" className="h-9 border-gold/20 text-gold hover:bg-gold/5 flex items-center gap-2 rounded" />}>
+                        <Users className="w-4 h-4" /> Add Player
                       </PopoverTrigger>
                       <PopoverContent className="w-72 p-0" align="start">
                         <Command>
