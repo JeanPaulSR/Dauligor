@@ -105,7 +105,7 @@ interface KindConfig {
 const KIND_CONFIG: Record<string, KindConfig> = {
   spell:     { table: 'spells',            idCol: 'identifier', nameCol: 'name',  summaryExpr: 'description' },
   class:     { table: 'classes',           idCol: 'identifier', nameCol: 'name',  summaryExpr: "COALESCE(NULLIF(preview, ''), description)", imageExpr: "COALESCE(NULLIF(card_image_url, ''), image_url)", sourceExpr: "(SELECT abbreviation FROM sources WHERE sources.id = classes.source_id)" },
-  subclass:  { table: 'subclasses',        idCol: 'identifier', nameCol: 'name',  summaryExpr: "COALESCE(NULLIF(preview, ''), description)" },
+  subclass:  { table: 'subclasses',        idCol: 'identifier', nameCol: 'name',  summaryExpr: "COALESCE(NULLIF(preview, ''), description)", imageExpr: "COALESCE(NULLIF(card_image_url, ''), image_url)", sourceExpr: "(SELECT abbreviation FROM sources WHERE sources.id = subclasses.source_id)" },
   feat:      { table: 'feats',             idCol: 'identifier', nameCol: 'name',  summaryExpr: 'description', shortTextCol: 'requirements_short_text', freeTextCol: 'requirements', treeCol: 'requirements_tree' },
   item:      { table: 'items',             idCol: 'identifier', nameCol: 'name',  summaryExpr: 'description' },
   condition: { table: 'status_conditions', idCol: 'identifier', nameCol: 'name',  summaryExpr: 'description' },
