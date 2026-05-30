@@ -44,12 +44,19 @@ import { executeD1QueryInternal } from "../../../../api/_lib/d1-internal.js";
 import {
   applyApprovedOperation,
   applyRevertOperation,
+  buildApprovedStatements,
+  collectReferences,
   detectConflict,
   detectRevertDrift,
+  getEntityConfig,
   invertOperation,
   isProposableEntityType,
   loadCurrentEntity,
+  orderBlockRevisions,
   safeParseJson,
+  type BlockRevisionLite,
+  type D1Statement,
+  type EntityReference,
   type EntityType,
   type Operation,
   type Status,
@@ -478,6 +485,279 @@ async function handleReject(
 }
 
 /* -------------------------------------------------------------------------- */
+/* Block-atomic approve / reject (Part D)                                      */
+/*                                                                              */
+/* A cross-referential cluster (a class + its features, scaling columns, option */
+/* groups, subclasses) only resolves if the whole block lands together. These   */
+/* approve/reject the bundle as one unit:                                       */
+/*   approve → guard #1 (reference integrity) → guard #2 (per-revision drift)   */
+/*           → dependency order → apply every revision as ONE env.DB.batch()    */
+/*             (atomic: all-or-nothing, no half-built cluster).                 */
+/*   reject  → reject every pending revision in the block together, so an admin */
+/*             can't approve a class but orphan its columns/features.           */
+/* The per-row approve/reject above stays for lone, non-cluster proposals.      */
+/* -------------------------------------------------------------------------- */
+
+async function handleApproveBundle(
+  bundleId: string,
+  reviewerUid: string,
+): Promise<Response> {
+  // 1. Bundle must exist and be 'submitted' (the edit-locked state).
+  const bundleRes = await executeD1QueryInternal({
+    sql: `SELECT id, status FROM proposal_bundles WHERE id = ? LIMIT 1`,
+    params: [bundleId],
+  });
+  const bundle = (Array.isArray(bundleRes?.results) ? bundleRes.results[0] : null) as any;
+  if (!bundle) throw new HttpError(404, "Block not found.");
+  if (bundle.status !== "submitted") {
+    throw new HttpError(
+      409,
+      `Cannot approve a ${bundle.status} block — only a submitted block can be approved.`,
+    );
+  }
+
+  // 2. Load every pending revision in the block.
+  const revRes = await executeD1QueryInternal({
+    sql: `SELECT * FROM pending_revisions
+            WHERE bundle_id = ? AND status = 'pending'
+            ORDER BY proposed_at ASC`,
+    params: [bundleId],
+  });
+  const rows = (Array.isArray(revRes?.results) ? revRes.results : []) as any[];
+  if (rows.length === 0) {
+    throw new HttpError(409, "Block has no pending revisions to approve.");
+  }
+  for (const row of rows) {
+    if (!isProposableEntityType(row.entity_type)) {
+      throw new HttpError(
+        400,
+        `Revision ${row.id} carries unknown entity_type ${row.entity_type}.`,
+      );
+    }
+  }
+
+  // A create's id lives in its payload (client-minted UUID) when the
+  // revision row's entity_id is null — resolve it so references + the
+  // status stamp can use it.
+  const rawById = new Map<string, any>();
+  const revs: BlockRevisionLite[] = rows.map((row) => {
+    const payload = safeParseJson(row.proposed_payload);
+    const entityId =
+      row.entity_id ??
+      (payload && typeof payload.id === "string" ? payload.id : null);
+    rawById.set(String(row.id), row);
+    return {
+      id: String(row.id),
+      entityType: row.entity_type as EntityType,
+      operation: row.operation as Operation,
+      entityId,
+      payload,
+    };
+  });
+
+  // 3. GUARD #1 — reference integrity. Every draftable id reference must
+  //    resolve to a same-block draft OR an existing live row.
+  const blockIdToType = new Map<string, EntityType>();
+  for (const r of revs) {
+    if (r.operation !== "delete" && r.entityId) {
+      blockIdToType.set(r.entityId, r.entityType);
+    }
+  }
+  const unresolved: Array<{ rev: BlockRevisionLite; ref: EntityReference }> = [];
+  const liveToCheck = new Map<EntityType, Set<string>>();
+  for (const r of revs) {
+    if (r.operation === "delete") continue;
+    for (const ref of collectReferences(r.entityType, r.payload)) {
+      const inBlockType = blockIdToType.get(ref.id);
+      if (inBlockType && ref.candidateTypes.includes(inBlockType)) continue;
+      unresolved.push({ rev: r, ref });
+      for (const t of ref.candidateTypes) {
+        if (!liveToCheck.has(t)) liveToCheck.set(t, new Set());
+        liveToCheck.get(t)!.add(ref.id);
+      }
+    }
+  }
+  // Batched live-existence lookups (one query per candidate type).
+  const liveExists = new Set<string>();
+  for (const [t, idSet] of liveToCheck) {
+    const ids = [...idSet];
+    if (ids.length === 0) continue;
+    const config = getEntityConfig(t);
+    const placeholders = ids.map(() => "?").join(", ");
+    const res = await executeD1QueryInternal({
+      sql: `SELECT ${config.pkColumn} AS id FROM ${config.tableName} WHERE ${config.pkColumn} IN (${placeholders})`,
+      params: ids,
+    });
+    for (const row of Array.isArray(res?.results) ? res.results : []) {
+      liveExists.add(`${t}:${(row as any).id}`);
+    }
+  }
+  const refFailures = unresolved
+    .filter(({ ref }) => !ref.candidateTypes.some((t) => liveExists.has(`${t}:${ref.id}`)))
+    .map(({ rev, ref }) => ({
+      revision_id: rev.id,
+      entity_type: rev.entityType,
+      field: ref.field,
+      missing_id: ref.id,
+      candidate_types: ref.candidateTypes,
+    }));
+  if (refFailures.length) {
+    return Response.json(
+      { ok: false, stage: "refs", failures: refFailures },
+      { status: 409 },
+    );
+  }
+
+  // 4. GUARD #2 — per-revision drift (snapshot vs live). Any drift blocks the
+  //    whole block (coarser than per-row, but correct for a cluster).
+  const driftFailures: any[] = [];
+  for (const r of revs) {
+    const raw = rawById.get(r.id);
+    const snapshot = safeParseJson(raw.snapshot_at_proposal);
+    const current = r.entityId
+      ? await loadCurrentEntity(r.entityType, r.entityId)
+      : null;
+    const conflict = detectConflict({
+      entityType: r.entityType,
+      operation: r.operation,
+      snapshot,
+      current,
+    });
+    if (conflict.conflicted) {
+      driftFailures.push({
+        revision_id: r.id,
+        entity_type: r.entityType,
+        reason: conflict.reason,
+      });
+    }
+  }
+  if (driftFailures.length) {
+    return Response.json(
+      { ok: false, stage: "drift", failures: driftFailures },
+      { status: 409 },
+    );
+  }
+
+  // 5. Dependency order: FK parents before children (class → subclass,
+  //    group → option-item, parent → feature/column).
+  const { ordered, cycle } = orderBlockRevisions(revs);
+  if (cycle) {
+    return Response.json(
+      {
+        ok: false,
+        stage: "order",
+        failures: [{ reason: "dependency_cycle", revision_ids: cycle }],
+      },
+      { status: 409 },
+    );
+  }
+
+  // 6. Assemble the batch: each revision's entity write + its status flip, in
+  //    order. The bundle row stays 'submitted' on purpose — its CHECK has no
+  //    'approved' value, and the admin UI derives "resolved" from
+  //    pending_count → 0.
+  const statements: D1Statement[] = [];
+  const applied: Array<{ revision_id: string; entity_id: string }> = [];
+  for (const r of ordered) {
+    const raw = rawById.get(r.id);
+    const { entityId, statements: stmts } = buildApprovedStatements({
+      entityType: r.entityType,
+      operation: r.operation,
+      entityId: r.entityId,
+      proposedPayload: raw.proposed_payload,
+    });
+    statements.push(...stmts);
+    statements.push({
+      sql: `UPDATE pending_revisions
+              SET status = 'approved',
+                  reviewed_by_user_id = ?,
+                  reviewed_at = CURRENT_TIMESTAMP,
+                  entity_id = COALESCE(entity_id, ?)
+            WHERE id = ?`,
+      params: [reviewerUid, entityId, r.id],
+    });
+    applied.push({ revision_id: r.id, entity_id: entityId });
+  }
+
+  // 7. Apply atomically. An array body makes the worker run env.DB.batch()
+  //    — one transaction; any failure rolls the whole block back so nothing
+  //    is half-applied (the half-built-cluster failure mode is eliminated).
+  try {
+    const result = await executeD1QueryInternal(statements);
+    if (result && result.success === false) {
+      return Response.json(
+        { ok: false, stage: "apply", failures: [{ reason: result.error ?? "batch failed" }] },
+        { status: 500 },
+      );
+    }
+  } catch (err) {
+    return Response.json(
+      {
+        ok: false,
+        stage: "apply",
+        failures: [{ reason: err instanceof Error ? err.message : String(err) }],
+      },
+      { status: 500 },
+    );
+  }
+
+  return Response.json({ ok: true, bundle_id: bundleId, applied });
+}
+
+async function handleRejectBundle(
+  request: Request,
+  bundleId: string,
+  reviewerUid: string,
+): Promise<Response> {
+  const bundleRes = await executeD1QueryInternal({
+    sql: `SELECT id, status FROM proposal_bundles WHERE id = ? LIMIT 1`,
+    params: [bundleId],
+  });
+  const bundle = (Array.isArray(bundleRes?.results) ? bundleRes.results[0] : null) as any;
+  if (!bundle) throw new HttpError(404, "Block not found.");
+  if (bundle.status !== "submitted") {
+    throw new HttpError(
+      409,
+      `Cannot reject a ${bundle.status} block — only a submitted block can be rejected.`,
+    );
+  }
+  const body = (await request.json().catch(() => ({}))) as any;
+  const reason =
+    typeof body?.rejection_reason === "string" && body.rejection_reason.trim()
+      ? body.rejection_reason.trim()
+      : null;
+
+  const pendingRes = await executeD1QueryInternal({
+    sql: `SELECT id FROM pending_revisions WHERE bundle_id = ? AND status = 'pending'`,
+    params: [bundleId],
+  });
+  const ids = (Array.isArray(pendingRes?.results) ? pendingRes.results : []).map(
+    (r: any) => String(r.id),
+  );
+  if (ids.length === 0) {
+    throw new HttpError(409, "Block has no pending revisions to reject.");
+  }
+
+  // Block-level reject: every pending revision falls together. Single UPDATE,
+  // so no batch needed.
+  await executeD1QueryInternal({
+    sql: `UPDATE pending_revisions
+            SET status = 'rejected',
+                rejection_reason = ?,
+                reviewed_by_user_id = ?,
+                reviewed_at = CURRENT_TIMESTAMP
+          WHERE bundle_id = ? AND status = 'pending'`,
+    params: [reason, reviewerUid, bundleId],
+  });
+
+  return Response.json({
+    ok: true,
+    bundle_id: bundleId,
+    rejected_revision_ids: ids,
+  });
+}
+
+/* -------------------------------------------------------------------------- */
 /* Pin / unpin (admin-only exempt-from-retention marker)                       */
 /*                                                                              */
 /* Resolved revisions (approved / rejected / withdrawn) get pruned by a daily   */
@@ -674,6 +954,24 @@ export const onRequest = async (context: any): Promise<Response> => {
 
     if (path.length === 1 && request.method === "GET") {
       return await handleGetOne(path[0]);
+    }
+
+    // Block-atomic actions: POST /api/admin/proposals/bundle/:bundleId/:action
+    if (
+      path.length === 3 &&
+      path[0] === "bundle" &&
+      request.method === "POST"
+    ) {
+      const bundleId = path[1];
+      const action = path[2];
+      if (action === "approve")
+        return await handleApproveBundle(bundleId, reviewerUid);
+      if (action === "reject")
+        return await handleRejectBundle(request, bundleId, reviewerUid);
+      return Response.json(
+        { error: `Unknown block action: ${action}` },
+        { status: 404 },
+      );
     }
 
     if (path.length === 2 && request.method === "POST") {
