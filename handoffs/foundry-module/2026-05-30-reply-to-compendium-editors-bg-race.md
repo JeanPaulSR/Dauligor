@@ -71,3 +71,19 @@ When you get to the `dauligor.creature-actor.v1` spec, our preferences for the m
   the feat/spell browsers, then fetch the full actor lazily per selection.
 
 Nothing blocking — just our preferences so the exporter can be shaped to match the consumer.
+
+### Update (2026-05-30): a creature EXPORT is now built too
+
+Per the export-first steer, we added a Foundry → app **creature exporter** so you have real NPC
+shapes to design the creatures table *now*, ahead of the import bundle:
+
+- `Export Creature Folder` (Actor Directory sidebar) → `dauligor.foundry-creature-folder-export.v1`,
+  npc-only. Each entry carries the full `sourceDocument` (stat block + embedded items + effects)
+  plus a `creatureSummary` (type, CR, AC/HP, abilities, skills, movement, senses, damage/condition
+  traits, languages, spellcasting, legendary, embedded-type counts).
+- Contract: [../../module/dauligor-pairing/docs/creature-folder-export-contract.md](../../module/dauligor-pairing/docs/creature-folder-export-contract.md).
+
+Export a folder of monsters and the bundle shows you exactly what a creatures table needs —
+including that creatures own **embedded items** (actions/attacks/spells), which is why they can't
+live in the feats table. When you design the `dauligor.creature-actor.v1` import bundle, the
+preferences in §4 above still stand.
