@@ -3,7 +3,7 @@ import { Plus, Trash2, Edit, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Dialog, DialogContent } from '../ui/dialog';
+import { Dialog, DialogContentLarge } from '../ui/dialog';
 import { queueRebake } from '../../lib/moduleExport';
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
 import { actionLabel } from '../../lib/proposalAware';
@@ -272,7 +272,7 @@ export default function ScalingColumnsPanel({
     </div>
 
     <Dialog open={editingColumnId !== undefined} onOpenChange={(open) => { if (!open) closeEditor(); }}>
-      <DialogContent className="dialog-content max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContentLarge className="dialog-content">
         {editingColumnId !== undefined && (
           <ScalingMatrixEditor
             columnId={editingColumnId}
@@ -283,7 +283,7 @@ export default function ScalingColumnsPanel({
             onDeleted={() => { closeEditor(); onColumnsChanged(); }}
           />
         )}
-      </DialogContent>
+      </DialogContentLarge>
     </Dialog>
     </>
   );
