@@ -79,11 +79,16 @@
   <li><span class="done">Expanded</span> <code>TODO.md</code> with the bg/race importer (next task) + every deferred item surfaced by the audit.</li>
 </ul>
 
-<div class="callout gold">
-  <strong>One doctrine judgment call (Q4):</strong> for &ldquo;split/modularize long markdowns,&rdquo; I added <em>in-doc Contents indexes</em> rather than physically
-  splitting the four giant contracts into many files. Your phrasing &mdash; &ldquo;indexes to help find information in the current doc&rdquo; &mdash; reads as satisfied
-  by a ToC, and shredding a 2,400-line contract mid-pass risks silently dropping correct content. If you'd rather I physically split them into
-  modular files (e.g. one file per activity family), say so and I'll do that as its own focused, careful pass.
+<div class="callout">
+  <strong>Modularization &mdash; done (your call).</strong> The four longest contracts were physically split. Each keeps its original filename as a
+  <em>slim index</em> (so every inbound link still resolves), with the body moved <strong>verbatim</strong> into a sibling folder:
+  <ul style="margin-top:8px;">
+    <li><code>class-feature-activity-contract.md</code> &rarr; <code>class-feature-activity/</code> &mdash; 15 parts, <strong>one file per activity family</strong> (attack, cast, check, damage, enchant, forward, heal, save, summon, transform, utility) + shell, envelope, damage-parts, sample-evidence (2,412L &rarr; 154L index)</li>
+    <li><code>advancement-construction-guide.md</code> &rarr; <code>advancement-construction/</code> &mdash; 5 parts (1,209L &rarr; 122L)</li>
+    <li><code>class-import-and-advancement-guide.md</code> &rarr; <code>class-import-and-advancement/</code> &mdash; 4 parts (1,117L &rarr; 144L)</li>
+    <li><code>class-import-contract.md</code> &rarr; <code>class-import-contract/</code> &mdash; 4 parts (852L &rarr; 131L)</li>
+  </ul>
+  Verified: zero content dropped, all UTF-8 normalized (no BOM), no broken section anchors. The doc set is now 66 markdown files.
 </div>
 
 <h2>4 &middot; Verification corrections (vs the original audit)</h2>
