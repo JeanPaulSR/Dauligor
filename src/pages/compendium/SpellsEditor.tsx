@@ -905,15 +905,12 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
   // ── Save ──────────────────────────────────────────────────────
   const handleSave = async (e?: React.FormEvent, opts: { silent?: boolean } = {}) => {
     if (e) e.preventDefault();
-    // Build the save from the LATEST committed form state, not this
-    // closure's `formData`. On the edit-existing-spell path the handleSave
-    // that fires can be from an earlier render whose closed-over `formData`
-    // predates a just-picked icon, so the payload serialized an empty
-    // image_url even though the new icon was live in state and shown in the
-    // icon slot (the "image won't save on update" bug). `formDataRef` is
-    // kept in sync with `formData` via an effect and is the same source the
-    // dirty-check below already trusts — read it here so the two stay
-    // consistent and a last-moment edit can't be dropped on save.
+    // Build the save from the latest committed form state. (The actual
+    // "image won't save on update" bug was a camelCase/snake_case key
+    // collision in normalizeCompendiumData — fixed there — NOT a stale
+    // closure.) Reading formDataRef.current here is just a harmless defensive
+    // choice: it's the same source the dirty-check below already uses, so the
+    // two stay consistent and a last-moment edit can't be dropped on save.
     const fd = formDataRef.current ?? formData;
     if (!fd.name.trim()) {
       if (!opts.silent) toast.error('Spell name is required');
