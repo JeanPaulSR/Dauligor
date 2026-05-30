@@ -3,7 +3,7 @@
 Started: `2026-05-28`
 Owner: `Claude`
 Goal: `Own and evolve the content-proposals subsystem — queue/drafts/blocks, cascade engine, review mode, and proposal-mode editor wiring. Specific task per session.`
-Status: `Part D shipped` — block-atomic approve + guard #1 reference-integrity walk landed on `main` (`b35705f`), incl. the AdminProposals Approve-/Reject-block UI. Pure logic unit-tested green; the live atomic-batch run is the **joint e2e** with compendium-editors (handed over in [../compendium-editors/2026-05-29-partD-shipped.md](../compendium-editors/2026-05-29-partD-shipped.md)). Remaining on this branch: **R4** (atomic submit flush) + **F2-leftover** (wrap option-groups route), both tracked. Remote entity_type migrations still gated.
+Status: `Part D shipped` — block-atomic approve + guard #1 reference-integrity walk landed on `main` (`b35705f`), incl. the AdminProposals Approve-/Reject-block UI. Pure logic unit-tested green; the live atomic-batch run is the **e2e** (mine to drive — needs the running app to author a real block). **R4** (atomic submit flush + fold-race closure) shipped `700f23a`; **F2-leftover** verified already-satisfied in the merged tree. Only the live e2e + the gated remote entity_type migrations remain.
 
 > Lives in the `loving-banach-d76c40` worktree directory (the dir
 > couldn't be renamed to match the branch — Windows locks the active
@@ -61,6 +61,16 @@ Proposal-mode logic lives *inside* these files, but the files themselves are own
 
 Newest at the top. Each entry: date + link to the handoff doc in this same folder.
 
+- `2026-05-29` — **R4 shipped + F2-leftover verified done** (`700f23a` on `main`).
+  R4(a): submit-side flush is now one atomic `env.DB.batch()` (no orphaned
+  staging rows / dup-on-retry). R4(b): `BlockProvider.refresh()` returns the
+  fresh drafts and `ProposalEditorWrapper` serializes flushes + adopts that
+  return into a ref, closing the create→update fold cache-staleness race (which
+  could otherwise double-POST a CREATE and break Part D's atomic approve on a PK
+  clash). F2-leftover: verified the `/proposals/edit/option-groups` list route
+  is already wrapped (`App.tsx:375`) and `UniqueOptionGroupList` already overlays
+  block drafts via `useBlockDraftedList` — the merge resolved it, no change
+  needed. Remaining: the Part D joint e2e (live atomic-batch run; mine to drive).
 - `2026-05-29` — **Part D shipped** (`b35705f` on `main`). Block-atomic approve
   (`POST /api/admin/proposals/bundle/:id/approve` + `/reject`): guard #1
   reference-integrity walk → guard #2 per-revision drift → topological order →
