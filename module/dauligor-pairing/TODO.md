@@ -133,6 +133,26 @@ interpreter**. Build the runtime resolver:
   custom ones if absent so they render with proper names.
 - Pass Foundry-side homebrew slugs through unchanged but display their label if registered.
 
+## UI consistency
+
+- **[done 2026-05-30] First unification pass** (audit: `docs/_drafts/ui-consistency-audit-2026-05-30.html`).
+  Unified the three near-identical flat-button rules (wizard / class-browser / spell-tab-tools /
+  spell-manager) into one canonical `.dauligor-…__button` rule (per-block layout deltas kept;
+  `directory-tools` left to inherit Foundry's sidebar styling). Defined the previously-phantom
+  tokens as real `--dauligor-accent-tint` / `--dauligor-accent-gold` RGB channels (used as
+  `rgba(var(--token, fallback), α)`, preserving every per-use alpha); fixed `--dauligor-muted` →
+  `--dauligor-text-muted`. Added a vars-only token block so standalone windows resolve the palette.
+  Tokenized 6 exact-match hardcoded hexes. All appearance-preserving (fallbacks retained); not yet
+  eyeballed in a live Foundry world.
+- **Deferred polish (need a visual check in Foundry):**
+  - The two accent tints (`-tint` #aa8250 vs `-gold` #b58838) are near-identical warm golds — likely
+    mergeable to one, but kept separate to preserve exact appearance. Merge after eyeballing.
+  - `__badge` naming is loose (spell-manager label chip vs feature-manager uppercase *tag* vs
+    spell-picker micro-indicator) — three different jobs; consider renaming the tag one.
+  - `__empty` states could share the muted-text/serif treatment (kept distinct sizes for now).
+  - Non-token hardcoded shades remain (`#242424`, `#141414`, `#9b988f`, gradients) — intentional
+    one-offs; tokenize only if they should follow the theme.
+
 ## Documentation hygiene (Q4 doctrine)
 
 - Markdown contract docs are for agents — keep them as detailed as necessary; split long ones

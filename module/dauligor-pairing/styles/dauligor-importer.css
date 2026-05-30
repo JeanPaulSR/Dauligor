@@ -39,9 +39,52 @@
   --dauligor-btn-hover-bg: rgba(159, 146, 117, 0.14);
   --dauligor-btn-border: var(--button-border-color, var(--dauligor-border));
   --dauligor-btn-border-hover: var(--button-hover-border-color, var(--dnd5e-color-gold, #9f9275));
+  /* Accent-tint RGB channels — used as rgba(var(--dauligor-accent-tint), α)
+   * so a single tint drives the many soft borders / fills at per-use alpha.
+   * Replaces the old undefined `--dauligor-{border-soft,surface-muted,
+   * accent-soft,surface-hover}` names that only ever resolved to inline
+   * fallbacks. `-tint` is the warm tan; `-gold` the stronger gold. */
+  --dauligor-accent-tint: 170, 130, 80;
+  --dauligor-accent-gold: 181, 136, 56;
   color: var(--dauligor-text);
   background: var(--dauligor-panel);
   font-family: var(--font-primary);
+}
+
+/* Token availability for every Dauligor window root — VARIABLES ONLY (no
+ * color/background/font), so standalone windows that aren't nested under
+ * the themed roots above still resolve the palette instead of relying on
+ * inline fallbacks. Inert where a token isn't referenced. The character
+ * sheet is intentionally excluded — it adopts the host dnd5e theme. */
+.dauligor-importer,
+.dauligor-importer-app,
+.dauligor-class-browser,
+.dauligor-class-options,
+.dauligor-spell-manager,
+.dauligor-feature-manager,
+.dauligor-wizard,
+.dauligor-sequence,
+.dauligor-option-picker,
+.dauligor-spell-picker,
+.dauligor-section-filter,
+.dauligor-subclass-preview,
+.dauligor-asi,
+.dauligor-overview,
+.dauligor-gm-console,
+.dauligor-feat-browser {
+  --dauligor-border: #5c5c5c;
+  --dauligor-panel: #1f1f1f;
+  --dauligor-panel-alt: #252525;
+  --dauligor-panel-soft: #313131;
+  --dauligor-text: #c9c7c0;
+  --dauligor-text-muted: #9a978f;
+  --dauligor-accent: #8f8a79;
+  --dauligor-accent-strong: #c9c7c0;
+  --dauligor-success: #7ea86f;
+  --dauligor-warning: #9e7f49;
+  --dauligor-danger: #a5645a;
+  --dauligor-accent-tint: 170, 130, 80;
+  --dauligor-accent-gold: 181, 136, 56;
 }
 
 .dauligor-importer *,
@@ -259,7 +302,7 @@
 }
 
 .dauligor-wizard__choice-arrow {
-  color: #c9c7c0;
+  color: var(--dauligor-text, #c9c7c0);
   font-size: 12px;
   line-height: 1;
 }
@@ -301,7 +344,7 @@
   height: 28px;
   border: 1px solid var(--dauligor-border);
   border-radius: 0;
-  background: #1f1f1f;
+  background: var(--dauligor-panel, #1f1f1f);
   color: var(--dauligor-text);
   padding: 0 8px;
   font-size: 12px;
@@ -568,14 +611,24 @@
   margin-left: auto;
 }
 
+/* Canonical Dauligor flat button. One visual identity (Foundry-token
+ * bg/border, square corners, gold hover) shared by every window's
+ * action buttons. Layout deltas (icon+label flex, full-width, grid
+ * class-buttons) live in the per-block rules; only the *appearance*
+ * is unified here. `.dauligor-directory-tools__button` is intentionally
+ * NOT included — it inherits Foundry's native sidebar button styling. */
 .dauligor-wizard__button,
-.dauligor-class-browser__button {
-  height: 34px;
-  border-radius: 0;
+.dauligor-class-browser__button,
+.dauligor-spell-tab-tools__button,
+.dauligor-spell-manager__button {
+  min-height: 32px;
+  margin: 0;
+  padding: 0 12px;
   border: 1px solid var(--dauligor-btn-border);
+  border-radius: 0;
   background: var(--dauligor-btn-bg);
   color: var(--dauligor-text);
-  padding: 0 14px;
+  box-shadow: none;
   cursor: pointer;
   transition: border-color 0.12s ease, background 0.12s ease;
   font-size: 12px;
@@ -585,7 +638,11 @@
 .dauligor-wizard__button:hover,
 .dauligor-wizard__button:focus,
 .dauligor-class-browser__button:hover,
-.dauligor-class-browser__button:focus {
+.dauligor-class-browser__button:focus,
+.dauligor-spell-tab-tools__button:hover,
+.dauligor-spell-tab-tools__button:focus,
+.dauligor-spell-manager__button:hover,
+.dauligor-spell-manager__button:focus {
   border-color: var(--dauligor-btn-border-hover);
   background: var(--dauligor-btn-hover-bg);
 }
@@ -599,9 +656,12 @@
 }
 
 .dauligor-wizard__button[disabled],
-.dauligor-class-browser__button[disabled] {
-  opacity: 0.45;
+.dauligor-class-browser__button[disabled],
+.dauligor-spell-tab-tools__button[disabled],
+.dauligor-spell-manager__button[disabled] {
+  opacity: 0.5;
   cursor: not-allowed;
+  pointer-events: none;
 }
 
 .dauligor-class-browser {
@@ -745,7 +805,7 @@
 .dauligor-class-browser__filter-subtitle {
   margin-top: 3px;
   font-size: 11px;
-  color: var(--dauligor-muted);
+  color: var(--dauligor-text-muted, var(--dauligor-text-muted, #9a978f));
   line-height: 1.4;
 }
 
@@ -761,7 +821,7 @@
 .dauligor-class-browser__filter-empty {
   flex: 1 1 100%;
   font-size: 11px;
-  color: var(--dauligor-muted);
+  color: var(--dauligor-text-muted, var(--dauligor-text-muted, #9a978f));
   text-align: center;
   padding: 28px 8px;
   font-style: italic;
@@ -1625,7 +1685,7 @@
   height: 10px;
   margin-top: 4px;
   border-radius: 50%;
-  background: #5c5c5c;
+  background: var(--dauligor-border, #5c5c5c);
 }
 
 .dauligor-sequence__progress-step--active .dauligor-sequence__progress-marker {
@@ -1700,7 +1760,7 @@
   padding: 6px 10px;
   border: 1px solid #4a4238;
   border-radius: 0;
-  background: #252525;
+  background: var(--dauligor-panel-alt, #252525);
   color: #d9d7cf;
   font: inherit;
   box-sizing: border-box;
@@ -1818,26 +1878,12 @@
   padding: 0 0 10px;
 }
 
+/* Layout delta only — visual identity + hover come from the canonical
+ * `.dauligor-…__button` rules. This variant lays out an icon + label. */
 .dauligor-spell-tab-tools__button {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 32px;
-  margin: 0;
-  padding: 0 12px;
-  border: 1px solid var(--dauligor-btn-border);
-  border-radius: 0;
-  background: var(--dauligor-btn-bg);
-  color: var(--dauligor-text);
-  box-shadow: none;
-  cursor: pointer;
-  transition: border-color 0.12s ease, background 0.12s ease;
-}
-
-.dauligor-spell-tab-tools__button:hover,
-.dauligor-spell-tab-tools__button:focus {
-  border-color: var(--dauligor-btn-border-hover);
-  background: var(--dauligor-btn-hover-bg);
 }
 
 /* Small Dauligor "open Prepare Spells" button reused in three slots:
@@ -1982,8 +2028,11 @@
   overflow: auto;
 }
 
-.dauligor-spell-manager__class-button,
-.dauligor-spell-manager__button {
+/* Class-selector buttons share the canonical flat-button visual base
+ * but keep their own grid layout + active gradient. (The plain
+ * `.dauligor-spell-manager__button` visual identity now lives in the
+ * canonical button rule near the top of this file.) */
+.dauligor-spell-manager__class-button {
   min-height: 30px;
   margin: 0;
   border: 1px solid var(--dauligor-btn-border);
@@ -1993,23 +2042,18 @@
   box-shadow: none;
   cursor: pointer;
   transition: border-color 0.12s ease, background 0.12s ease;
-}
-
-.dauligor-spell-manager__class-button:hover,
-.dauligor-spell-manager__class-button:focus,
-.dauligor-spell-manager__button:hover,
-.dauligor-spell-manager__button:focus {
-  border-color: var(--dauligor-btn-border-hover);
-  background: var(--dauligor-btn-hover-bg);
-}
-
-.dauligor-spell-manager__class-button {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   padding: 7px 10px;
   text-align: left;
+}
+
+.dauligor-spell-manager__class-button:hover,
+.dauligor-spell-manager__class-button:focus {
+  border-color: var(--dauligor-btn-border-hover);
+  background: var(--dauligor-btn-hover-bg);
 }
 
 .dauligor-spell-manager__class-button--active {
@@ -2029,16 +2073,10 @@
   color: var(--dauligor-text-muted);
 }
 
-.dauligor-spell-manager__button {
-  padding: 0 12px;
-  font-size: 12px;
-}
-
 .dauligor-spell-manager__button--wide {
   width: 100%;
 }
 
-.dauligor-spell-manager__button[disabled],
 .dauligor-spell-manager__class-button[disabled] {
   opacity: 0.6;
   cursor: not-allowed;
@@ -3743,7 +3781,7 @@ button.dauligor-option-picker__pill:hover {
   gap: 18px;
   padding: 8px 14px;
   border-bottom: 1px solid var(--dauligor-border, rgba(170, 130, 80, 0.4));
-  background: var(--dauligor-surface-muted, rgba(170, 130, 80, 0.06));
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.06);
   flex-shrink: 0;
 }
 
@@ -3797,7 +3835,7 @@ button.dauligor-option-picker__pill:hover {
 }
 
 .dauligor-spell-picker__col--left {
-  background: var(--dauligor-surface-muted, rgba(170, 130, 80, 0.04));
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.04);
 }
 
 .dauligor-spell-picker__col-header {
@@ -3805,7 +3843,7 @@ button.dauligor-option-picker__pill:hover {
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
-  border-bottom: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.2));
+  border-bottom: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.2);
   flex-shrink: 0;
 }
 
@@ -3837,7 +3875,7 @@ button.dauligor-option-picker__pill:hover {
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
-  border-bottom: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.2));
+  border-bottom: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.2);
   flex-shrink: 0;
 }
 
@@ -3847,7 +3885,7 @@ button.dauligor-option-picker__pill:hover {
   padding: 4px 8px;
   font-size: 12px;
   border: 1px solid var(--dauligor-border, rgba(170, 130, 80, 0.4));
-  background: var(--dauligor-surface-muted, rgba(170, 130, 80, 0.04));
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.04);
   border-radius: 2px;
 }
 
@@ -3877,7 +3915,7 @@ button.dauligor-option-picker__pill:hover {
 
 .dauligor-spell-picker__filter-toggle.is-active {
   border-color: var(--dauligor-accent, #b58838);
-  background: var(--dauligor-accent-soft, rgba(181, 136, 56, 0.15));
+  background: rgba(var(--dauligor-accent-gold, 181, 136, 56), 0.15);
   color: var(--dauligor-accent, #b58838);
 }
 
@@ -3914,8 +3952,8 @@ button.dauligor-option-picker__pill:hover {
   padding: 10px 10px 8px;
   max-height: 220px;
   overflow-y: auto;
-  border-bottom: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.2));
-  background: var(--dauligor-surface-muted, rgba(170, 130, 80, 0.03));
+  border-bottom: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.2);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.03);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -4006,8 +4044,8 @@ button.dauligor-option-picker__pill:hover {
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  background: var(--dauligor-surface-muted, rgba(170, 130, 80, 0.05));
-  border-bottom: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.15));
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.05);
+  border-bottom: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.15);
   position: sticky;
   top: 0;
   z-index: 1;
@@ -4037,18 +4075,18 @@ button.dauligor-option-picker__pill:hover {
   align-items: center;
   gap: 8px;
   padding: 5px 10px;
-  border-bottom: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.08));
+  border-bottom: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.08);
   border-left: 3px solid transparent;
   cursor: pointer;
   transition: background-color 0.1s;
 }
 
 .dauligor-spell-picker__row:hover {
-  background: var(--dauligor-surface-hover, rgba(181, 136, 56, 0.05));
+  background: rgba(var(--dauligor-accent-gold, 181, 136, 56), 0.05);
 }
 
 .dauligor-spell-picker__row.is-selected {
-  background: var(--dauligor-accent-soft, rgba(181, 136, 56, 0.12));
+  background: rgba(var(--dauligor-accent-gold, 181, 136, 56), 0.12);
   border-left-color: var(--dauligor-accent, #b58838);
 }
 
@@ -4122,8 +4160,8 @@ button.dauligor-option-picker__pill:hover {
   font-weight: 900;
   text-align: center;
   border-radius: 2px;
-  background: var(--dauligor-surface-muted, rgba(170, 130, 80, 0.12));
-  border: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.25));
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.12);
+  border: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.25);
 }
 
 .dauligor-spell-picker__badge--ritual {
@@ -4281,7 +4319,7 @@ button.dauligor-option-picker__pill:hover {
   padding: 6px 4px;
   background: transparent;
   border: none;
-  border-bottom: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.12));
+  border-bottom: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.12);
   color: var(--dauligor-text, #cbb98f);
   font-family: inherit;
   font-size: 13px;
@@ -4413,7 +4451,7 @@ button.dauligor-option-picker__pill:hover {
   color: var(--dauligor-accent, #b89a6b);
   white-space: nowrap;
   padding-left: 4px;
-  border-left: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.18));
+  border-left: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.18);
 }
 
 .dauligor-spell-manager__inline-search-count-total {
@@ -4427,7 +4465,7 @@ button.dauligor-option-picker__pill:hover {
   align-items: center;
   gap: 6px;
   padding: 0 0 8px;
-  border-bottom: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.15));
+  border-bottom: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.15);
 }
 
 .dauligor-spell-manager__favorites-icon {
@@ -4487,7 +4525,7 @@ button.dauligor-option-picker__pill:hover {
   align-items: flex-start;
   gap: 12px;
   padding: 10px 12px;
-  border-bottom: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.15));
+  border-bottom: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.15);
   background: rgba(0, 0, 0, 0.12);
 }
 
@@ -4520,7 +4558,7 @@ button.dauligor-option-picker__pill:hover {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--dauligor-accent-strong);
-  border: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.4));
+  border: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.4);
   background: rgba(170, 130, 80, 0.08);
 }
 
@@ -4601,7 +4639,7 @@ button.dauligor-option-picker__pill:hover {
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  border-bottom: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.1));
+  border-bottom: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.1);
 }
 
 .dauligor-spell-manager__pool-toolbar-title {
@@ -4700,7 +4738,7 @@ button.dauligor-option-picker__pill:hover {
   flex-direction: column;
   gap: 10px;
   padding: 10px 12px;
-  border-bottom: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.1));
+  border-bottom: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.1);
   background: rgba(0, 0, 0, 0.1);
   max-height: 220px;
   overflow-y: auto;
@@ -4796,8 +4834,8 @@ button.dauligor-option-picker__pill:hover {
   align-items: center;
   gap: 6px;
   padding: 4px 12px;
-  background: var(--dauligor-surface-muted, rgba(170, 130, 80, 0.06));
-  border-bottom: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.15));
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.06);
+  border-bottom: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.15);
   position: sticky;
   top: 0;
   z-index: 1;
@@ -4840,7 +4878,7 @@ button.dauligor-option-picker__pill:hover {
   gap: 6px;
   padding: 5px 12px;
   border-left: 3px solid transparent;
-  border-bottom: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.08));
+  border-bottom: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.08);
   font-size: 12px;
   cursor: pointer;
   transition: background 0.1s ease, border-color 0.1s ease;
@@ -4926,8 +4964,8 @@ button.dauligor-option-picker__pill:hover {
   font-weight: 900;
   text-align: center;
   border-radius: 2px;
-  background: var(--dauligor-surface-muted, rgba(170, 130, 80, 0.12));
-  border: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.25));
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.12);
+  border: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.25);
   opacity: 0.7;
 }
 
@@ -5625,7 +5663,7 @@ button.dauligor-option-picker__pill:hover {
 
 .dauligor-spell-manager__detail-header {
   padding: 14px 18px 12px;
-  border-bottom: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.18));
+  border-bottom: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.18);
 }
 
 .dauligor-spell-manager__detail-title-row {
@@ -5665,7 +5703,7 @@ button.dauligor-option-picker__pill:hover {
 .dauligor-spell-manager__detail-source-chip-page {
   margin-left: 2px;
   padding-left: 4px;
-  border-left: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.18));
+  border-left: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.18);
   color: var(--dauligor-text-muted);
   font-weight: 400;
   letter-spacing: 0.06em;
@@ -5713,7 +5751,7 @@ button.dauligor-option-picker__pill:hover {
   display: flex;
   gap: 16px;
   padding: 14px 18px;
-  border-bottom: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.18));
+  border-bottom: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.18);
   align-items: flex-start;
 }
 
@@ -5874,7 +5912,7 @@ button.dauligor-option-picker__pill:hover {
 .dauligor-spell-manager__detail-footer {
   padding: 12px 18px 16px;
   margin-top: auto;
-  border-top: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.18));
+  border-top: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.18);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -5901,7 +5939,7 @@ button.dauligor-option-picker__pill:hover {
 .dauligor-spell-manager__detail-tags-toggle {
   margin-top: 4px;
   padding: 6px 10px;
-  border: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.20));
+  border: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.20);
   background: rgba(170, 130, 80, 0.05);
   color: var(--dauligor-text-muted);
   font-size: 10px;
@@ -6213,7 +6251,7 @@ button.dauligor-option-picker__pill:hover {
 
 .dauligor-spell-manager__modal-shortcut {
   background: transparent;
-  border: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.22));
+  border: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.22);
   color: var(--dauligor-text-muted);
   padding: 1px 8px;
   font-size: 10px;
@@ -7185,7 +7223,7 @@ button.dauligor-option-picker__pill:hover {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--dauligor-accent-strong, #d2b350);
-  border: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.4));
+  border: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.4);
   background: rgba(170, 130, 80, 0.10);
   border-radius: 2px;
   white-space: nowrap;
