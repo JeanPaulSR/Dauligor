@@ -519,8 +519,8 @@ function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onA
       </div>
 
       {block.blockType === 'hero' && (<>
-        <Field label="Title"><Input className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="Stories in Dauligor" /></Field>
-        <Field label="Subtitle"><textarea className="field-input min-h-[70px] py-2 font-serif italic w-full" value={block.subtitle} onChange={(e) => set({ subtitle: e.target.value })} placeholder="A welcome line…" /></Field>
+        <Field label="Title"><Input autoComplete="off" className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="Stories in Dauligor" /></Field>
+        <Field label="Subtitle"><textarea autoComplete="off" className="field-input min-h-[70px] py-2 font-serif italic w-full" value={block.subtitle} onChange={(e) => set({ subtitle: e.target.value })} placeholder="A welcome line…" /></Field>
         <Seg label="Alignment" value={block.align} options={[['center', 'Center'], ['left', 'Left']]} onChange={(v) => set({ align: v })} />
         <Seg label="Size" value={block.size} options={[['normal', 'Normal'], ['large', 'Large']]} onChange={(v) => set({ size: v })} />
       </>)}
@@ -532,9 +532,9 @@ function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onA
 
       {block.blockType === 'image' && (<>
         <Field label="Image"><ImageUpload currentImageUrl={block.url || ''} onUpload={(url) => set({ url })} storagePath={`images/campaigns/home`} /></Field>
-        <Field label="Caption (optional)"><Input className="field-input" value={block.caption} onChange={(e) => set({ caption: e.target.value })} placeholder="A short caption" /></Field>
+        <Field label="Caption (optional)"><Input autoComplete="off" className="field-input" value={block.caption} onChange={(e) => set({ caption: e.target.value })} placeholder="A short caption" /></Field>
         <Seg label="Height" value={block.height} options={[['small', 'S'], ['medium', 'M'], ['large', 'L']]} onChange={(v) => set({ height: v })} />
-        <Field label="Links to (optional)"><Input className="field-input" value={block.link} onChange={(e) => set({ link: e.target.value })} placeholder="/wiki/article/…" /></Field>
+        <Field label="Links to (optional)"><Input autoComplete="off" className="field-input" value={block.link} onChange={(e) => set({ link: e.target.value })} placeholder="/wiki/article/…" /></Field>
       </>)}
 
       {block.blockType === 'divider' && (
@@ -542,18 +542,18 @@ function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onA
       )}
 
       {block.blockType === 'callout' && (<>
-        <Field label="Heading"><Input className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="Character Creation" /></Field>
-        <Field label="Body"><textarea className="field-input min-h-[70px] py-2 font-serif italic w-full" value={block.body} onChange={(e) => set({ body: e.target.value })} placeholder="A short message…" /></Field>
+        <Field label="Heading"><Input autoComplete="off" className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="Character Creation" /></Field>
+        <Field label="Body"><textarea autoComplete="off" className="field-input min-h-[70px] py-2 font-serif italic w-full" value={block.body} onChange={(e) => set({ body: e.target.value })} placeholder="A short message…" /></Field>
         <Seg label="Style" value={block.style} options={[['soft', 'Soft (dashed)'], ['plain', 'Plain']]} onChange={(v) => set({ style: v })} />
         <fieldset className="config-fieldset"><legend className="section-label px-1">Button (optional)</legend>
-          <Field label="Label"><Input className="field-input" value={block.buttonLabel} onChange={(e) => set({ buttonLabel: e.target.value })} placeholder="Browse Sources" /></Field>
-          <Field label="Links to"><Input className="field-input" value={block.buttonLink} onChange={(e) => set({ buttonLink: e.target.value })} placeholder="/sources" /></Field>
+          <Field label="Label"><Input autoComplete="off" className="field-input" value={block.buttonLabel} onChange={(e) => set({ buttonLabel: e.target.value })} placeholder="Browse Sources" /></Field>
+          <Field label="Links to"><Input autoComplete="off" className="field-input" value={block.buttonLink} onChange={(e) => set({ buttonLink: e.target.value })} placeholder="/sources" /></Field>
           <p className="field-hint">The button shows only when both label and link are set.</p>
         </fieldset>
       </>)}
 
       {block.blockType === 'recommended' && (<>
-        <Field label="Heading (optional)"><Input className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="Recommended for this campaign" /></Field>
+        <Field label="Heading (optional)"><Input autoComplete="off" className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="Recommended for this campaign" /></Field>
         <Seg label="Source" value={block.source} options={[['auto', 'Campaign pick'], ['specific', 'Specific entity']]} onChange={(v) => set({ source: v })} />
         {block.source === 'specific'
           ? <Field label="Entity"><EntityRefPicker mode="single" value={block.ref} onChange={(ref) => set({ ref })} /></Field>
@@ -562,14 +562,14 @@ function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onA
       </>)}
 
       {block.blockType === 'entity-feature' && (<>
-        <Field label="Heading (optional)"><Input className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} /></Field>
+        <Field label="Heading (optional)"><Input autoComplete="off" className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} /></Field>
         <Field label="Featured entity"><EntityRefPicker mode="single" value={block.ref} onChange={(ref) => set({ ref })} /></Field>
         <Seg label="Image side" value={block.imageSide} options={[['left', 'Left'], ['right', 'Right']]} onChange={(v) => set({ imageSide: v })} />
         <Toggle label="Show excerpt" value={block.excerpt} onChange={(v) => set({ excerpt: v })} />
       </>)}
 
       {block.blockType === 'entity-row' && (<>
-        <Field label="Heading"><Input className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="The World of Dauligor" /></Field>
+        <Field label="Heading"><Input autoComplete="off" className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="The World of Dauligor" /></Field>
         <Toggle label="Show heading" value={block.showHeading} onChange={(v) => set({ showHeading: v })} />
         <fieldset className="config-fieldset"><legend className="section-label px-1">Content</legend>
           <Field label="Entities"><EntityRefPicker mode="multi" value={block.refs} onChange={(refs) => set({ refs })} /></Field>
@@ -585,7 +585,7 @@ function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onA
       </>)}
 
       {block.blockType === 'group' && (<>
-        <Field label="Title"><Input className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="Section title" /></Field>
+        <Field label="Title"><Input autoComplete="off" className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="Section title" /></Field>
         <Toggle label="Show title" value={block.showTitle} onChange={(v) => set({ showTitle: v })} />
         <Seg label="Style" value={block.style} options={[['card', 'Card'], ['bordered', 'Bordered'], ['plain', 'Plain']]} onChange={(v) => set({ style: v })} />
         <Button onClick={() => onAddInside(block.id)} className="btn-gold w-full h-8 text-xs">Add block inside</Button>
@@ -702,12 +702,12 @@ function EntityRefPicker({ mode, value, onChange }: {
 
       <div ref={boxRef} className="relative">
         <div className="flex gap-2">
-          <select className="field-input w-[42%] text-xs" value={kind} onChange={(e) => { setKind(e.target.value); setResults([]); }}>
+          <select autoComplete="off" className="field-input w-[42%] text-xs" value={kind} onChange={(e) => { setKind(e.target.value); setResults([]); }}>
             {ENTITY_PICKER_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
           </select>
           <div className="relative flex-1">
             <Search className="w-3.5 h-3.5 text-ink/30 absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <Input className="field-input pl-7 text-xs" value={query} placeholder={`Search ${kindMeta.label.toLowerCase()}…`}
+            <Input autoComplete="off" className="field-input pl-7 text-xs" value={query} placeholder={`Search ${kindMeta.label.toLowerCase()}…`}
               onFocus={() => setOpen(true)} onChange={(e) => { setQuery(e.target.value); setOpen(true); }} />
           </div>
         </div>
