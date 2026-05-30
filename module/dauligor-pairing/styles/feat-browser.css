@@ -29,7 +29,7 @@
   text-transform: uppercase;
   color: var(--dauligor-accent-strong, #d2b350);
   border: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.4);
-  background: rgba(170, 130, 80, 0.10);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.10);
   border-radius: 2px;
   white-space: nowrap;
   line-height: 1.4;

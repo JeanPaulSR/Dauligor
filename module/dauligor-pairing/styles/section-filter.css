@@ -109,7 +109,7 @@
   transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
 .dauligor-section-filter__toolbar-btn:hover {
-  background: rgba(170, 130, 80, 0.12);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.12);
   color: var(--dauligor-accent-strong);
   border-color: var(--dauligor-accent);
 }
@@ -204,7 +204,7 @@
   line-height: 1.4;
 }
 .dauligor-section-filter__axis-btn:hover {
-  background: rgba(170, 130, 80, 0.14);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.14);
   color: var(--dauligor-accent-strong);
   border-color: var(--dauligor-accent);
 }
@@ -241,12 +241,12 @@
  * needing to relabel the button itself. Same visual energy as the
  * neutral hover state but applied unconditionally. */
 .dauligor-section-filter__axis-btn--active {
-  background: rgba(170, 130, 80, 0.18);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.18);
   border-color: var(--dauligor-accent);
   color: var(--dauligor-accent-strong);
 }
 .dauligor-section-filter__axis-btn--active:hover {
-  background: rgba(170, 130, 80, 0.30);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.30);
   border-color: var(--dauligor-accent);
 }
 
@@ -326,7 +326,7 @@
   color: var(--dauligor-accent-strong);
 }
 .dauligor-section-filter__chevron--open {
-  background: rgba(170, 130, 80, 0.18);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.18);
   border-color: var(--dauligor-accent);
   color: var(--dauligor-accent-strong);
 }
@@ -389,7 +389,7 @@
   transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
 .dauligor-section-filter__footer-btn:hover {
-  background: rgba(170, 130, 80, 0.14);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.14);
   color: var(--dauligor-accent-strong);
   border-color: var(--dauligor-accent);
 }
@@ -402,10 +402,10 @@
   border-color: var(--dauligor-danger);
 }
 .dauligor-section-filter__footer-btn--primary {
-  background: rgba(170, 130, 80, 0.18);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.18);
   border-color: var(--dauligor-accent);
   color: var(--dauligor-accent-strong);
 }
 .dauligor-section-filter__footer-btn--primary:hover {
-  background: rgba(170, 130, 80, 0.32);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.32);
 }

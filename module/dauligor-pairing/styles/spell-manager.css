@@ -345,7 +345,7 @@
   align-items: center;
   gap: 18px;
   padding: 8px 14px;
-  border-bottom: 1px solid var(--dauligor-border, rgba(170, 130, 80, 0.4));
+  border-bottom: 1px solid var(--dauligor-border, rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.4));
   background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.06);
   flex-shrink: 0;
 }
@@ -388,7 +388,7 @@
 .dauligor-spell-picker__col {
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--dauligor-border, rgba(170, 130, 80, 0.4));
+  border-right: 1px solid var(--dauligor-border, rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.4));
   overflow: hidden;
   min-height: 0;
 }
@@ -449,7 +449,7 @@
   min-width: 0;
   padding: 4px 8px;
   font-size: 12px;
-  border: 1px solid var(--dauligor-border, rgba(170, 130, 80, 0.4));
+  border: 1px solid var(--dauligor-border, rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.4));
   background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.04);
   border-radius: 2px;
 }
@@ -468,7 +468,7 @@
   font-weight: 900;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  border: 1px solid var(--dauligor-border, rgba(170, 130, 80, 0.4));
+  border: 1px solid var(--dauligor-border, rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.4));
   background: transparent;
   cursor: pointer;
   white-space: nowrap;
@@ -580,7 +580,7 @@
   padding: 3px 7px;
   font-size: 9px;
   font-weight: 700;
-  border: 1px solid var(--dauligor-border, rgba(170, 130, 80, 0.4));
+  border: 1px solid var(--dauligor-border, rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.4));
   background: transparent;
   color: inherit;
   border-radius: 2px;
@@ -899,13 +899,13 @@
 
 .dauligor-spell-manager__class-row:hover,
 .dauligor-spell-manager__class-row:focus {
-  background: rgba(170, 130, 80, 0.08);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.08);
   color: #f1e6c8;
   outline: none;
 }
 
 .dauligor-spell-manager__class-row--active {
-  background: rgba(170, 130, 80, 0.18);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.18);
   color: #f8e7b5;
   font-weight: 700;
 }
@@ -1124,7 +1124,7 @@
   text-transform: uppercase;
   color: var(--dauligor-accent-strong);
   border: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.4);
-  background: rgba(170, 130, 80, 0.08);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.08);
 }
 
 .dauligor-spell-manager__meta-stats {
@@ -1656,7 +1656,7 @@
 }
 
 .dauligor-spell-manager__detail-action--locked {
-  background: rgba(170, 130, 80, 0.08);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.08);
   border: 1px solid var(--dauligor-border);
   color: var(--dauligor-text-muted);
   cursor: not-allowed;
@@ -1715,12 +1715,12 @@
 }
 
 .dauligor-spell-manager__on-sheet-button:hover {
-  background: rgba(170, 130, 80, 0.12);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.12);
   color: var(--dauligor-text, #cbb98f);
 }
 
 .dauligor-spell-manager__on-sheet-button--active {
-  background: rgba(170, 130, 80, 0.22);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.22);
   border-color: var(--dauligor-accent, #b89a6b);
   color: #f8e7b5;
 }
@@ -1753,7 +1753,7 @@
 }
 
 .dauligor-spell-manager__select-all:hover {
-  background: rgba(170, 130, 80, 0.12);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.12);
   color: var(--dauligor-text, #cbb98f);
 }
 
@@ -1868,7 +1868,7 @@
   background: linear-gradient(90deg,
     rgba(210, 179, 80, 0.32),
     rgba(210, 179, 80, 0.10) 70%,
-    rgba(170, 130, 80, 0.08));
+    rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.08));
 }
 
 /* === Detail pane — SpellDetailPanel parity === */
@@ -1936,7 +1936,7 @@
   flex-shrink: 0;
   padding: 2px 8px;
   border: 1px solid var(--dauligor-accent, #b89a6b);
-  background: rgba(170, 130, 80, 0.12);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.12);
   color: #f1d999;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 10px;
@@ -1979,7 +1979,7 @@
 .dauligor-spell-manager__detail-star--active {
   color: #f1d999;
   border-color: var(--dauligor-accent, #b89a6b);
-  background: rgba(170, 130, 80, 0.15);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.15);
 }
 
 .dauligor-spell-manager__detail-subtitle {
@@ -2022,7 +2022,7 @@
 }
 
 .dauligor-spell-manager__detail-image--placeholder {
-  background: linear-gradient(135deg, rgba(170, 130, 80, 0.08), rgba(0, 0, 0, 0.4));
+  background: linear-gradient(135deg, rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.08), rgba(0, 0, 0, 0.4));
 }
 
 .dauligor-spell-manager__detail-info-grid {
@@ -2136,7 +2136,7 @@
   margin: 8px 0;
   padding: 6px 12px;
   border-left: 3px solid var(--dauligor-accent, #b89a6b);
-  background: rgba(170, 130, 80, 0.06);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.06);
   font-style: italic;
 }
 .dauligor-spell-manager__detail-description code {
@@ -2188,7 +2188,7 @@
   margin-top: 4px;
   padding: 6px 10px;
   border: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.20);
-  background: rgba(170, 130, 80, 0.05);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.05);
   color: var(--dauligor-text-muted);
   font-size: 10px;
   font-weight: 700;
@@ -2203,7 +2203,7 @@
 }
 
 .dauligor-spell-manager__detail-tags-toggle:hover {
-  background: rgba(170, 130, 80, 0.10);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.10);
   color: var(--dauligor-text, #cbb98f);
 }
 
@@ -2257,7 +2257,7 @@
 .dauligor-spell-manager__detail-tag {
   padding: 2px 7px;
   border: 1px solid var(--dauligor-border);
-  background: rgba(170, 130, 80, 0.06);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.06);
   color: var(--dauligor-text-muted);
   font-size: 10px;
   font-weight: 700;
@@ -2318,7 +2318,7 @@
   height: 32px;
   padding: 0 14px;
   border: 1px solid var(--dauligor-accent, #b89a6b);
-  background: rgba(170, 130, 80, 0.08);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.08);
   color: var(--dauligor-text, #cbb98f);
   font-family: inherit;
   font-size: 12px;
@@ -2330,7 +2330,7 @@
 }
 
 .dauligor-spell-manager__footer-button:hover {
-  background: rgba(170, 130, 80, 0.18);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.18);
   color: #f8e7b5;
 }
 
@@ -2363,7 +2363,7 @@
 
 .dauligor-spell-manager__footer-button--locked:hover,
 .dauligor-spell-manager__footer-button[disabled]:hover {
-  background: rgba(170, 130, 80, 0.08);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.08);
   color: var(--dauligor-text, #cbb98f);
 }
 
@@ -2432,7 +2432,7 @@
   justify-content: space-between;
   padding: 12px 16px;
   border-bottom: 1px solid var(--dauligor-border);
-  background: rgba(170, 130, 80, 0.08);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.08);
 }
 
 .dauligor-spell-manager__modal-title {
@@ -2457,7 +2457,7 @@
 }
 
 .dauligor-spell-manager__modal-close:hover {
-  background: rgba(170, 130, 80, 0.12);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.12);
   color: #f8e7b5;
 }
 
@@ -2509,7 +2509,7 @@
 }
 
 .dauligor-spell-manager__modal-shortcut:hover {
-  background: rgba(170, 130, 80, 0.10);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.10);
   color: var(--dauligor-text, #cbb98f);
 }
 
@@ -2531,7 +2531,7 @@
 }
 
 .dauligor-spell-manager__modal-chip:hover {
-  background: rgba(170, 130, 80, 0.10);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.10);
   color: var(--dauligor-text, #cbb98f);
 }
 
@@ -2553,7 +2553,7 @@
 .dauligor-spell-manager__modal-button {
   padding: 6px 14px;
   border: 1px solid var(--dauligor-accent, #b89a6b);
-  background: rgba(170, 130, 80, 0.14);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.14);
   color: #f8e7b5;
   font-size: 11px;
   font-weight: 700;
@@ -2563,7 +2563,7 @@
 }
 
 .dauligor-spell-manager__modal-button:hover {
-  background: rgba(170, 130, 80, 0.28);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.28);
 }
 
 .dauligor-spell-manager__modal-button--ghost {
