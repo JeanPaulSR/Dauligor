@@ -100,7 +100,10 @@ export type BlockContextValue = {
   /** Discard the active block (delete drafts + metadata). Clears local state on success. */
   discardBlock: () => Promise<{ discarded: number }>;
   /** Re-fetch the active block's drafts + metadata from the server. */
-  refresh: () => Promise<void>;
+  // Returns the freshly-fetched drafts for the active block (not just void)
+  // so a caller mid-flush can adopt server truth synchronously instead of
+  // waiting on the async React `drafts` state to re-render (R4 fold race).
+  refresh: () => Promise<DraftRevision[]>;
   /** Re-fetch the user's open blocks list. */
   refreshOpenBlocks: () => Promise<void>;
 };
@@ -151,6 +154,13 @@ export function BlockProvider({ children }: { children: ReactNode }) {
   });
   const [activeBundle, setActiveBundle] = useState<ProposalBundle | null>(null);
   const [drafts, setDrafts] = useState<DraftRevision[]>([]);
+  // Mirror of `drafts` for synchronous reads — `refresh()` returns this on
+  // superseded/transient-error paths so a mid-flush caller never adopts a
+  // wrongly-cleared set.
+  const draftsRef = useRef<DraftRevision[]>([]);
+  useEffect(() => {
+    draftsRef.current = drafts;
+  }, [drafts]);
   const [openBlocks, setOpenBlocks] = useState<ProposalBundle[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -192,7 +202,7 @@ export function BlockProvider({ children }: { children: ReactNode }) {
     if (!activeBundleId) {
       setDrafts([]);
       setActiveBundle(null);
-      return;
+      return [];
     }
     setLoading(true);
     const requestedId = activeBundleId;
@@ -214,7 +224,7 @@ export function BlockProvider({ children }: { children: ReactNode }) {
         persist(null);
         setDrafts([]);
         setActiveBundle(null);
-        return;
+        return [];
       }
       if (!bundleRes.ok) {
         if (bundleRes.status === 401 || bundleRes.status === 403) {
@@ -226,7 +236,7 @@ export function BlockProvider({ children }: { children: ReactNode }) {
         throw new Error(`Failed to load block metadata (HTTP ${bundleRes.status})`);
       }
       const bundleBody = await bundleRes.json();
-      if (lastFetchedIdRef.current !== requestedId) return;
+      if (lastFetchedIdRef.current !== requestedId) return draftsRef.current;
       setActiveBundle(bundleBody?.bundle ? hydrateBundle(bundleBody.bundle) : null);
 
       if (!draftsRes.ok) {
@@ -245,24 +255,25 @@ export function BlockProvider({ children }: { children: ReactNode }) {
       // Only keep rows belonging to the active bundle. The endpoint
       // returns every draft the user owns; other bundles are ignored
       // (we treat them as orphans — see comment above the context).
-      if (lastFetchedIdRef.current !== requestedId) return;
-      setDrafts(
-        all
-          .filter((d) => d.bundle_id === requestedId)
-          .map((d) => ({
-            id: String(d.id),
-            bundle_id: d.bundle_id,
-            entity_type: String(d.entity_type),
-            entity_id: d.entity_id,
-            operation: d.operation,
-            proposed_payload: d.proposed_payload ?? null,
-            notes_from_proposer: d.notes_from_proposer ?? null,
-            proposed_at: d.proposed_at,
-            cascade_parent_revision_id: d.cascade_parent_revision_id ?? null,
-          })),
-      );
+      if (lastFetchedIdRef.current !== requestedId) return draftsRef.current;
+      const mapped: DraftRevision[] = all
+        .filter((d) => d.bundle_id === requestedId)
+        .map((d) => ({
+          id: String(d.id),
+          bundle_id: d.bundle_id,
+          entity_type: String(d.entity_type),
+          entity_id: d.entity_id,
+          operation: d.operation,
+          proposed_payload: d.proposed_payload ?? null,
+          notes_from_proposer: d.notes_from_proposer ?? null,
+          proposed_at: d.proposed_at,
+          cascade_parent_revision_id: d.cascade_parent_revision_id ?? null,
+        }));
+      setDrafts(mapped);
+      return mapped;
     } catch (err) {
       console.error('[BlockProvider] refresh failed:', err);
+      return draftsRef.current;
     } finally {
       if (lastFetchedIdRef.current === requestedId) setLoading(false);
     }

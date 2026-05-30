@@ -173,6 +173,20 @@ export function ProposalEditorWrapper({
     [allDrafts, entityTypes],
   );
 
+  // Ref-mirror of this editor's drafts so `flushToBundle` partitions against
+  // the freshest known set rather than a closure-captured React value. After
+  // each flush we adopt `refreshBlock()`'s return (server truth) into it; the
+  // effect keeps it current for the first flush + any external cache updates.
+  // (R4 — closes the create→update fold race across rapid sequential flushes.)
+  const latestDraftsRef = useRef(drafts);
+  useEffect(() => {
+    latestDraftsRef.current = drafts;
+  }, [drafts]);
+  // Serializes flushes so a second flush can't partition against drafts the
+  // first one hasn't finished registering. Each flush chains behind the prior
+  // (running even if it failed, so one error doesn't wedge the queue).
+  const flushChain = useRef<Promise<unknown>>(Promise.resolve());
+
   const [queue, setQueue] = useState<QueuedChange[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -253,71 +267,91 @@ export function ProposalEditorWrapper({
   // revision (avoids "create then edit" landing as CREATE + UPDATE
   // in the same bundle).
   const flushToBundle = useCallback(
-    async (bundleId: string) => {
-      console.log('[ProposalEditorWrapper] flushToBundle start', {
-        bundleId,
-        queueLength: queueRef.current.length,
-        preFlushCount: preFlushCallbacks.current.size,
-      });
-      setSubmitting(true);
-      try {
-        // Run pre-flush callbacks first. Editors register these to
-        // capture their current form state via `queueChange` —
-        // populating the queue at flush time, which is what makes the
-        // wrapper's Submit Changes button stand in for per-editor
-        // Save buttons. Sequential await so editors don't race each
-        // other.
-        //
-        // SNAPSHOT THE SET before iterating. A callback that runs
-        // queueChange (its whole purpose) triggers a wrapper re-render,
-        // which used to cause useProposalPreFlushSave to unregister-
-        // then-reregister into the same Set — and JS for...of of a Set
-        // happily visits the newly-added entry, leading to an infinite
-        // queueing loop. The hook was patched (2026-05-26) to not
-        // re-register on context-value change; the snapshot here is the
-        // belt-and-braces second layer of defence.
-        const snapshot = Array.from(preFlushCallbacks.current);
-        for (let i = 0; i < snapshot.length; i++) {
-          console.log(`[ProposalEditorWrapper] preFlush callback ${i + 1}/${snapshot.length} start`);
-          await snapshot[i]();
-          console.log(`[ProposalEditorWrapper] preFlush callback ${i + 1}/${snapshot.length} done`);
-        }
-
-        // After pre-flush, `queueRef.current` is the authoritative
-        // list (the React `queue` state lags by one render).
-        const currentQueue = queueRef.current;
-        if (currentQueue.length === 0) return { submitted: 0 };
-
-        // Only drafts in THIS bundle are dedup-eligible — a draft from
-        // a different bundle (impossible today since only one is
-        // active, but defensive) shouldn't get patched here.
-        const sameBundleDrafts = drafts.filter(
-          (d) => d.bundle_id === bundleId,
-        );
-        console.log('[ProposalEditorWrapper] postQueuedChanges start', {
-          queueLength: currentQueue.length,
-          sameBundleDraftCount: sameBundleDrafts.length,
-        });
-        const result = await postQueuedChanges(
-          currentQueue,
+    (bundleId: string) => {
+      const run = async () => {
+        console.log('[ProposalEditorWrapper] flushToBundle start', {
           bundleId,
-          sameBundleDrafts,
-        );
-        console.log('[ProposalEditorWrapper] postQueuedChanges done', result);
-        resetQueue();
-        // Refresh the BlockProvider's local cache so the navbar
-        // pill + Block tab show the new draft count immediately.
-        void refreshBlock();
-        return result;
-      } catch (err) {
-        console.error('[ProposalEditorWrapper] flushToBundle failed:', err);
-        throw err;
-      } finally {
-        setSubmitting(false);
-        console.log('[ProposalEditorWrapper] flushToBundle finally — submitting=false');
-      }
+          queueLength: queueRef.current.length,
+          preFlushCount: preFlushCallbacks.current.size,
+        });
+        setSubmitting(true);
+        try {
+          // Run pre-flush callbacks first. Editors register these to
+          // capture their current form state via `queueChange` —
+          // populating the queue at flush time, which is what makes the
+          // wrapper's Submit Changes button stand in for per-editor
+          // Save buttons. Sequential await so editors don't race each
+          // other.
+          //
+          // SNAPSHOT THE SET before iterating. A callback that runs
+          // queueChange (its whole purpose) triggers a wrapper re-render,
+          // which used to cause useProposalPreFlushSave to unregister-
+          // then-reregister into the same Set — and JS for...of of a Set
+          // happily visits the newly-added entry, leading to an infinite
+          // queueing loop. The hook was patched (2026-05-26) to not
+          // re-register on context-value change; the snapshot here is the
+          // belt-and-braces second layer of defence.
+          const snapshot = Array.from(preFlushCallbacks.current);
+          for (let i = 0; i < snapshot.length; i++) {
+            console.log(`[ProposalEditorWrapper] preFlush callback ${i + 1}/${snapshot.length} start`);
+            await snapshot[i]();
+            console.log(`[ProposalEditorWrapper] preFlush callback ${i + 1}/${snapshot.length} done`);
+          }
+
+          // After pre-flush, `queueRef.current` is the authoritative
+          // list (the React `queue` state lags by one render).
+          const currentQueue = queueRef.current;
+          if (currentQueue.length === 0) return { submitted: 0 };
+
+          // Only drafts in THIS bundle are dedup-eligible — a draft from
+          // a different bundle (impossible today since only one is
+          // active, but defensive) shouldn't get patched here. Read from
+          // the ref (server truth as of the prior flush), not the stale
+          // closure, so a just-created draft is seen.
+          const sameBundleDrafts = latestDraftsRef.current.filter(
+            (d) => d.bundle_id === bundleId,
+          );
+          console.log('[ProposalEditorWrapper] postQueuedChanges start', {
+            queueLength: currentQueue.length,
+            sameBundleDraftCount: sameBundleDrafts.length,
+          });
+          const result = await postQueuedChanges(
+            currentQueue,
+            bundleId,
+            sameBundleDrafts,
+          );
+          console.log('[ProposalEditorWrapper] postQueuedChanges done', result);
+          resetQueue();
+          // Refresh the BlockProvider's local cache (so the navbar pill +
+          // Block tab update) AND adopt the freshly-fetched drafts into the
+          // ref synchronously, so the next serialized flush dedups against
+          // server truth without waiting on a React re-render (R4).
+          const fresh = await refreshBlock();
+          if (Array.isArray(fresh)) {
+            latestDraftsRef.current = fresh.filter((d) =>
+              entityTypes.includes(d.entity_type as ProposalEntityType),
+            );
+          }
+          return result;
+        } catch (err) {
+          console.error('[ProposalEditorWrapper] flushToBundle failed:', err);
+          throw err;
+        } finally {
+          setSubmitting(false);
+          console.log('[ProposalEditorWrapper] flushToBundle finally — submitting=false');
+        }
+      };
+      // Serialize: chain behind any in-flight flush (run on both fulfil and
+      // reject so one failure doesn't wedge the queue). The returned promise
+      // still reflects THIS flush's outcome.
+      const chained = flushChain.current.then(run, run);
+      flushChain.current = chained.then(
+        () => undefined,
+        () => undefined,
+      );
+      return chained;
     },
-    [drafts, refreshBlock, resetQueue],
+    [refreshBlock, resetQueue, entityTypes],
   );
 
   /* --------------------------------------------------------------- */
