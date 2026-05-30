@@ -3,7 +3,7 @@
 Started: `2026-05-28`
 Owner: `Claude`
 Goal: `Own and evolve the content-proposals subsystem — queue/drafts/blocks, cascade engine, review mode, and proposal-mode editor wiring. Specific task per session.`
-Status: `paused` — Part D (atomic approve + guard #1) deferred until `compendium-editors` finishes B/C and hands back. See [2026-05-29-partD-paused-awaiting-bc.md](2026-05-29-partD-paused-awaiting-bc.md).
+Status: `ready (held)` — compendium-editors handed back the §3 coverage; branch synced to `main` (`d55fc31`) and the reference graph re-verified against the landed B/C code. **Part D (atomic approve + guard #1) is ready to build but HELD pending an explicit go-ahead.** Verified build inputs + findings (incl. the F3 `subclass.preview` data-loss gap and the R4 confirmation) in [2026-05-29-handback-reverified-partD-ready.md](2026-05-29-handback-reverified-partD-ready.md).
 
 > Lives in the `loving-banach-d76c40` worktree directory (the dir
 > couldn't be renamed to match the branch — Windows locks the active
@@ -36,7 +36,14 @@ Proposal-mode logic lives *inside* these files, but the files themselves are own
 
 ## Open requests to other branches
 
-- [ ] `(2026-05-28)` **`compendium-editors`: implement Parts B + C — FULL SCOPE.**
+- [~] `(2026-05-28→29)` **`compendium-editors`: implement Parts B + C — FULL SCOPE.**
+  **Handed back `(2026-05-29)`** with the §3 coverage table
+  ([2026-05-29-from-compendium-editors-s3-coverage.md](2026-05-29-from-compendium-editors-s3-coverage.md)):
+  **Part B done** (scaling_column + feature saves route through the accumulator, on `main`),
+  **Part C in progress** (scaling_column L1 + own-list overlays done; remaining L1–L4 overlays
+  ongoing — not blocking Part D). Re-verified against landed code in
+  [2026-05-29-handback-reverified-partD-ready.md](2026-05-29-handback-reverified-partD-ready.md).
+  Still owed by them: rest of Part C; the e2e sample block (deferred to **after** Part D).
   They audited the original handoff and found it under-scoped; owner chose full
   coverage. Decisions + division of labor in the reply:
   **[handoffs/compendium-editors/2026-05-28-proposal-system-reply.md](../compendium-editors/2026-05-28-proposal-system-reply.md)**.
@@ -54,6 +61,19 @@ Proposal-mode logic lives *inside* these files, but the files themselves are own
 
 Newest at the top. Each entry: date + link to the handoff doc in this same folder.
 
+- `2026-05-29` — **Handback received + re-verified; Part D ready to build (held).**
+  compendium-editors handed back the §3 coverage table
+  ([2026-05-29-from-compendium-editors-s3-coverage.md](2026-05-29-from-compendium-editors-s3-coverage.md)).
+  Branch fast-forwarded `7d41e5b → d55fc31` (B/C is on `main`, not branch-local). Re-verified the
+  reference graph against the landed code:
+  [2026-05-29-handback-reverified-partD-ready.md](2026-05-29-handback-reverified-partD-ready.md) —
+  graph matches with reconciliations (advancement refs are 2-level: `advancements[].featureId` +
+  `.configuration.{scalingColumnId,optionScalingColumnId,optionGroupId,usesFeatureId}`;
+  `spell_rule_application` keys are `rule_id`/`applies_to_*`; scaling_column has 4 live parent_types
+  not 6). Found **F3** — `subclass.writableColumns` missing `preview` (migration `20260529-1200` on
+  `main`) → proposed subclass drops its blurb on approval (one-line fix, held with Part D). Confirmed
+  **R4** — submit-side flush is non-atomic (`functions/api/proposals` `handleSubmit` line ~314).
+  Build held pending explicit go-ahead.
 - `2026-05-29` — **Part D paused; handed off to compendium-editors to finish B/C
   first.** [2026-05-29-partD-paused-awaiting-bc.md](2026-05-29-partD-paused-awaiting-bc.md)
   documents the full proposal-system state + the §3 checklist I need back at
