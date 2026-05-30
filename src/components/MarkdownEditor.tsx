@@ -85,7 +85,7 @@ interface MarkdownEditorProps {
   fillContainer?: boolean;
 }
 
-export default function MarkdownEditor({
+function MarkdownEditor({
   value,
   onChange,
   placeholder,
@@ -413,3 +413,13 @@ export default function MarkdownEditor({
     </div>
   );
 }
+
+// Memoized: a ClassEditor (or any editor) holding several MarkdownEditors
+// re-renders the whole form on every keystroke in ANY field. Each TipTap
+// editor rebuilds ~13 extensions + re-parses bbcode on render, so an
+// unmemoized re-render of 3 idle editors per keystroke was the dominant
+// cost of the editor "typing lag". Props at the call sites are stable
+// (value, a stable state setter onChange, string literals), so memo lets
+// idle editors skip re-render entirely — only the one whose `value`
+// actually changed re-renders.
+export default React.memo(MarkdownEditor);
