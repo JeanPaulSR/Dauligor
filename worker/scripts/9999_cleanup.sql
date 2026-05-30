@@ -1,5 +1,17 @@
--- Cleanup Script: Drop all tables for a fresh start.
--- Run this before re-applying migration files in order.
+-- ============================================================================
+-- !!! DANGER - DESTRUCTIVE - DROPS EVERY TABLE - NOT A MIGRATION !!!
+-- ============================================================================
+-- Manual, LOCAL-ONLY "fresh start" helper. Kept OUT of worker/migrations/ on
+-- purpose so `wrangler d1 migrations apply` can NEVER pick it up and run it
+-- (which would wipe the database).
+--
+-- NEVER run this against remote/production D1. On remote it destroys all
+-- content and forces a restore from backup.
+--
+-- Use locally only when you deliberately want to rebuild local D1 from scratch:
+--   wrangler d1 execute dauligor-db --local --file=worker/scripts/9999_cleanup.sql
+-- then re-apply the migration files in order.
+-- ============================================================================
 
 -- Phase 2 tables (reverse dependency order)
 DROP TABLE IF EXISTS campaign_members;
