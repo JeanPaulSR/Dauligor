@@ -78,8 +78,11 @@ const FEAT_TYPE_LABELS = {
   feat: "Feat",
   class: "Class Feature",
   subclass: "Subclass Feature",
-  race: "Racial Feature",
-  background: "Background Feature",
+  // `race` / `background` rows in the feats table ARE the race / background
+  // entities (they export as Foundry `type:"race"` / `"background"`), not
+  // features of them — label them accordingly.
+  race: "Race",
+  background: "Background",
   monster: "Monster Feature",
 };
 const FEAT_TYPE_ORDER = ["feat", "class", "subclass", "race", "background", "monster"];
@@ -137,6 +140,25 @@ function featDbId(feat) {
 
 function featTypeLabel(featType) {
   return FEAT_TYPE_LABELS[String(featType ?? "")] || String(featType ?? "feat");
+}
+
+// Backgrounds and races live in the same `feats` table and ride this browser's
+// pool (the source-feat-list endpoint returns them too, tagged by `featType`),
+// but they export as their own Foundry item type from dedicated detail
+// endpoints. Map the row's featType to the detail endpoint segment, the bundle
+// `kind` to expect, and the key the full item lives under in that bundle.
+// Anything not listed (feat / class / subclass / monster features) uses the
+// feat endpoint. See docs/feat-import-contract.md + the bg/race import contract.
+const DETAIL_ENDPOINT_BY_FEAT_TYPE = {
+  background: { segment: "backgrounds", kind: "dauligor.background-item.v1", key: "background" },
+  race: { segment: "races", kind: "dauligor.race-item.v1", key: "race" },
+};
+
+function detailEndpointFor(featType) {
+  return (
+    DETAIL_ENDPOINT_BY_FEAT_TYPE[String(featType ?? "")] ??
+    { segment: "feats", kind: "dauligor.feat-item.v1", key: "feat" }
+  );
 }
 
 /**
@@ -441,27 +463,42 @@ export class DauligorFeatBrowserApp extends HandlebarsApplicationMixin(Applicati
   // Full-feat fetch + cache
   // -----------------------------------------------------------------------
 
+  /**
+   * Find the featType for a pool entry by dbId, so the detail fetch can route
+   * backgrounds/races to their own endpoints. dbIds are unique across the
+   * feats table, so this is a 1:1 lookup. Defaults to "feat" when the entry
+   * isn't in the current pool (e.g. a cross-source favorite).
+   */
+  _featTypeForDbId(dbId) {
+    const feats = Array.isArray(this._pool?.feats) ? this._pool.feats : [];
+    const match = feats.find((f) => featDbId(f) === String(dbId));
+    return String(featFlags(match).featType || "feat");
+  }
+
   async _ensureFullFeat(dbId) {
     if (!dbId) return null;
     if (this._fullFeatCache.has(dbId)) return this._fullFeatCache.get(dbId);
     if (this._fullFeatInFlight.has(dbId)) return null;
 
+    // Route by featType: backgrounds/races export from their own endpoints as
+    // their own Foundry item type; everything else uses the feat endpoint.
+    const endpoint = detailEndpointFor(this._featTypeForDbId(dbId));
     const host = resolveApiHost();
-    const url = `${host}/api/module/feats/${encodeURIComponent(dbId)}.json`;
+    const url = `${host}/api/module/${endpoint.segment}/${encodeURIComponent(dbId)}.json`;
     this._fullFeatInFlight.add(dbId);
     try {
       const response = await fetch(url, { cache: "no-store" });
       this._fullFeatInFlight.delete(dbId);
       if (!response.ok) {
-        log(`feat-browser full-feat fetch returned ${response.status}`, { url });
+        log(`feat-browser full-item fetch returned ${response.status}`, { url });
         return null;
       }
       const payload = await response.json();
-      if (payload?.kind !== "dauligor.feat-item.v1") {
-        log("feat-browser unexpected full-feat payload kind", { url, kind: payload?.kind });
+      if (payload?.kind !== endpoint.kind) {
+        log("feat-browser unexpected full-item payload kind", { url, expected: endpoint.kind, kind: payload?.kind });
         return null;
       }
-      const full = payload.feat ?? null;
+      const full = payload[endpoint.key] ?? null;
       if (full) {
         this._fullFeatCache.set(dbId, full);
         if (this._state.selectedDbId === dbId) {
@@ -531,13 +568,17 @@ export class DauligorFeatBrowserApp extends HandlebarsApplicationMixin(Applicati
       if (!full) continue;
       out.push({
         name: full.name ?? "",
-        type: "feat",
+        type: String(full?.type ?? "feat"),
         img: full.img,
         flags: {
           [MODULE_ID]: {
             dbId: id,
-            featType: String(full?.system?.type?.value ?? "feat"),
-            featSubtype: String(full?.system?.type?.subtype ?? ""),
+            // Prefer the full item's own Dauligor flags (set server-side and
+            // correct for backgrounds/races); fall back to the Foundry item
+            // type, then "feat". Do NOT read `system.type.value` — for a race
+            // that's the creature type ("humanoid"), not the featType.
+            featType: String(full?.flags?.[MODULE_ID]?.featType ?? full?.type ?? "feat"),
+            featSubtype: String(full?.flags?.[MODULE_ID]?.featSubtype ?? ""),
             repeatable: !!full?.system?.prerequisites?.repeatable,
             hasUses: !!String(full?.system?.uses?.max ?? "").trim(),
             hasActivities:

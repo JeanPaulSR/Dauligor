@@ -4,24 +4,29 @@
 > The current-state audit (`docs/_drafts/module-current-state-2026-05-30.html`) is the
 > source for what is *built* vs *deferred*; this file is the deferred-work backlog.
 
-## Next build task — Backgrounds & Races importer
+## Backgrounds & Races importer
 
-The `compendium-editors` branch shipped two app-side endpoints; build the module-side importers.
-
-- Consume `GET /api/module/backgrounds/<dbId>.json` (`dauligor.background-item.v1`, Foundry item
-  `type: "background"`) and `GET /api/module/races/<dbId>.json` (`dauligor.race-item.v1`, item
-  `type: "race"`). Both mirror the feat path (bg/race share the feats table), so reuse the
-  feat-browser/import flow with the item `type` swapped and the type-specific `system` fields
-  passed through.
-  - Background extras: `system.startingEquipment[]`, `system.wealth`.
-  - Race extras: `system.movement`, `system.senses`, `system.type`.
-  - Match by `flags.dauligor-pairing.sourceId` + name (not `_id`), same as feats.
-- Heads-up: those type-specific fields currently arrive as schema-clean **empty placeholders**
-  (the feats table has no dedicated bg/race columns yet) — build against the shapes, expect empty
-  blocks in test exports until a dedicated table lands.
-- Reply to `compendium-editors`: confirm the contract, round-trip-check `export-service.js`
-  output against what Foundry stores, and send creature/NPC bundle-shape preferences (creatures
-  are deferred — Actor shape, a separate `dauligor.creature-actor.v1` spec is coming).
+- **[done]** Consume `GET /api/module/backgrounds/<dbId>.json` (`dauligor.background-item.v1`,
+  item `type:"background"`) and `GET /api/module/races/<dbId>.json` (`dauligor.race-item.v1`,
+  item `type:"race"`). Implemented in `feat-browser-app.js`: the source-feat-list already returns
+  bg/race rows (tagged by `featType`), so the browser pool already shows them; the detail fetch +
+  imported item type now route by `featType` via `detailEndpointFor()`. Type-specific `system`
+  fields (`startingEquipment`/`wealth`, `movement`/`senses`/`type`) pass through. Match by
+  `sourceId` + name, same as feats. Labels updated (Background / Race).
+  - **App-side dependency:** the bg/race route arms in `functions/api/module/[[path]].ts` live on
+    `compendium-editors` and aren't on `main` yet — the endpoints go live when that branch merges.
+    The builders (`_backgroundExport.ts` / `_raceExport.ts`) are already on `main`.
+- **Follow-up — round-trip verification (owed to `compendium-editors`):** `export-service.js` has
+  no background/race folder exporter yet (only `buildFeatFolderExport` + the inventory item
+  exporter). Add `buildBackgroundFolderExport` / `buildRaceFolderExport` (mirror the feat one) so
+  we can export real Foundry bg/race items back out and confirm the `system` shapes round-trip —
+  the empirical check the export-first approach is for.
+- **Follow-up — reply to `compendium-editors`:** confirm the import contract works, report the
+  round-trip result, and send creature/NPC bundle-shape preferences (creatures are deferred —
+  Actor shape; a separate `dauligor.creature-actor.v1` spec is coming).
+- Heads-up: type-specific fields currently arrive as schema-clean **empty placeholders** (the
+  feats table has no dedicated bg/race columns yet) — expect empty equipment/movement blocks in
+  test data until a dedicated table lands.
 - Spec: `../../handoffs/foundry-module/2026-05-30-from-compendium-editors-bg-race-export.md`.
 
 ## Feature Manager

@@ -71,8 +71,8 @@ which parts are shipped vs planned — trust the banner over older body text.
 ## Current controls
 
 ### Import wizard
-Three-column wizard: **Import Type** (`Classes & Subclasses`, `Spells`, `Items` (planned),
-`Feats` (planned)) → **Source Type** (filtered by `supportedImportTypes`) → **Import Options**.
+Three-column wizard: **Import Type** (`Classes & Subclasses`, `Spells`, `Feats`, `Items` (planned))
+→ **Source Type** (filtered by `supportedImportTypes`) → **Import Options**.
 Bottom-right: `Cancel`, `Open Importer`.
 
 - **Classes & Subclasses** → dedicated class browser: search, tag filter, class cards with nested
@@ -81,6 +81,10 @@ Bottom-right: `Cancel`, `Open Importer`.
 - **Spells** → standalone Spell Browser: merges every selected source's pool, level-banded, with a
   3-state Select-All chip and an "Add N to Sheet" batch import into the alt sheet's "Other Spells"
   bucket.
+- **Feats** → feat browser. Because backgrounds and races live in the same `feats` table, the
+  source-feat-list also returns them, so the browser pool includes **Feats, Backgrounds, and
+  Races** (grouped + filterable by type). On import each is fetched from its own endpoint and
+  embedded as the correct Foundry item type (`feat` / `background` / `race`).
 
 ### Settings
 World settings: `defaultImportUrl`, `defaultClassCatalogUrl`, `defaultClassFolderPath`,
