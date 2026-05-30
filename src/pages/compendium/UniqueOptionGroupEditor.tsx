@@ -154,12 +154,23 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
         // Lookup fetches run in parallel — the option modal won't open
         // until at least the group itself is loaded below, so the extra
         // round-trips here just need to finish before authoring starts.
+        //
+        // Resilience: wrap each lookup so a single flaky collection (the
+        // worker intermittently 503s on one query) can't reject the WHOLE
+        // batch and skip EVERY setState below — that's what left the Source
+        // dropdown empty. A failed lookup logs and degrades to [] while the
+        // rest populate normally; reopening the editor retries.
+        const settleAll = (ps: Promise<any>[]): Promise<any[]> =>
+          Promise.all(ps.map((p, i) => p.catch((err) => {
+            console.error(`[UniqueOptionGroupEditor] lookup #${i} failed; using [] fallback`, err);
+            return [];
+          })));
         const [
           sourcesData, classesData, subclassesData, spellRulesData,
           allGroups, allOptionItems,
           weapons, weaponCategories, armor, armorCategories,
           tools, toolCategories, skills, languages, languageCategories,
-        ] = await Promise.all([
+        ] = await settleAll([
           fetchCollection('sources', { orderBy: 'name ASC' }),
           fetchCollection('classes', { orderBy: 'name ASC' }),
           fetchCollection('subclasses', { orderBy: 'name ASC' }),
