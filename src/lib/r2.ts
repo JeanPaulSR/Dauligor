@@ -36,6 +36,10 @@ export function r2Upload(
   file: File,
   key: string,
   onProgress?: (pct: number) => void,
+  // Active proposal block id. When set, the server allows a non-staff
+  // content-creator to upload INTO their own open block (otherwise uploads
+  // are staff-gated). Pass `useBlock().activeBundleId` from proposal-mode UI.
+  bundleId?: string | null,
 ): Promise<{ url: string; key: string }> {
   return new Promise(async (resolve, reject) => {
     const formData = new FormData();
@@ -53,6 +57,7 @@ export function r2Upload(
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `/api/r2/upload`);
     xhr.setRequestHeader('Authorization', authHeaders.Authorization);
+    if (bundleId) xhr.setRequestHeader('X-Proposal-Bundle-Id', bundleId);
 
     if (onProgress) {
       xhr.upload.onprogress = (e) => {
