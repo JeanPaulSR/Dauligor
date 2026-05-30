@@ -95,10 +95,15 @@
   align-self: center;
 }
 
-.dauligor-section-filter__toolbar-btn {
+/* Section-filter chrome buttons. The toolbar (top) and footer (bottom)
+ * buttons are the same small muted-uppercase button; they differ only in
+ * horizontal padding. Shared core here; padding deltas below. (Distinct
+ * from the canonical gold-hover button in base.css — darker bg, muted
+ * text, tint hover — so intentionally separate.) */
+.dauligor-section-filter__toolbar-btn,
+.dauligor-section-filter__footer-btn {
   height: 26px;
-  padding: 0 10px;
-  background: rgba(0, 0, 0, 0.20);
+  background: rgba(0, 0, 0, 0.2);
   border: 1px solid var(--dauligor-border);
   color: var(--dauligor-text-muted);
   font-size: 10px;
@@ -108,7 +113,11 @@
   cursor: pointer;
   transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
-.dauligor-section-filter__toolbar-btn:hover {
+.dauligor-section-filter__toolbar-btn { padding: 0 10px; }
+.dauligor-section-filter__footer-btn { padding: 0 14px; }
+
+.dauligor-section-filter__toolbar-btn:hover,
+.dauligor-section-filter__footer-btn:hover {
   background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.12);
   color: var(--dauligor-accent-strong);
   border-color: var(--dauligor-accent);
@@ -375,24 +384,7 @@
   background: rgba(255, 255, 255, 0.02);
 }
 
-.dauligor-section-filter__footer-btn {
-  height: 26px;
-  padding: 0 14px;
-  border: 1px solid var(--dauligor-border);
-  background: rgba(0, 0, 0, 0.22);
-  color: var(--dauligor-text-muted);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
-}
-.dauligor-section-filter__footer-btn:hover {
-  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.14);
-  color: var(--dauligor-accent-strong);
-  border-color: var(--dauligor-accent);
-}
+/* base + :hover now shared with __toolbar-btn near the top of this file. */
 .dauligor-section-filter__footer-btn--ghost:hover {
   /* Cancel reads as destructive in intent (discard work) — pick up
    * the existing danger token on hover for the same visual signal

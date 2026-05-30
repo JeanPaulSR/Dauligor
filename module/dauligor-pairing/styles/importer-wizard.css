@@ -231,22 +231,11 @@
   gap: 4px;
 }
 
+/* Inherits the canonical flat-button identity + hover from base.css;
+ * keeps only the compact toolbar size delta. */
 .dauligor-wizard__toolbar-button {
-  height: 28px;
-  border: 1px solid var(--dauligor-btn-border);
-  border-radius: 0;
-  background: var(--dauligor-btn-bg);
-  color: var(--dauligor-text);
+  min-height: 28px;
   padding: 0 10px;
-  cursor: pointer;
-  font-size: 12px;
-  transition: border-color 0.12s ease, background 0.12s ease;
-}
-
-.dauligor-wizard__toolbar-button:hover,
-.dauligor-wizard__toolbar-button:focus {
-  border-color: var(--dauligor-btn-border-hover);
-  background: var(--dauligor-btn-hover-bg);
 }
 
 .dauligor-wizard__toolbar-search {

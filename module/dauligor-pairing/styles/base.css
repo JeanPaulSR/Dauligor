@@ -30,6 +30,7 @@
  * is unified here. `.dauligor-directory-tools__button` is intentionally
  * NOT included — it inherits Foundry's native sidebar button styling. */
 .dauligor-wizard__button,
+.dauligor-wizard__toolbar-button,
 .dauligor-class-browser__button,
 .dauligor-spell-tab-tools__button,
 .dauligor-spell-manager__button {
@@ -49,6 +50,8 @@
 
 .dauligor-wizard__button:hover,
 .dauligor-wizard__button:focus,
+.dauligor-wizard__toolbar-button:hover,
+.dauligor-wizard__toolbar-button:focus,
 .dauligor-class-browser__button:hover,
 .dauligor-class-browser__button:focus,
 .dauligor-spell-tab-tools__button:hover,
@@ -60,6 +63,7 @@
 }
 
 .dauligor-wizard__button[disabled],
+.dauligor-wizard__toolbar-button[disabled],
 .dauligor-class-browser__button[disabled],
 .dauligor-spell-tab-tools__button[disabled],
 .dauligor-spell-manager__button[disabled] {
