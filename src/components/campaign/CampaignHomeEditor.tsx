@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
-  Sparkles, LayoutGrid, Star, BookMarked, Type, ImageIcon, Minus, Square, Columns3,
+  Sparkles, LayoutGrid, Star, BookMarked, Type, ImageIcon, Minus, Square, Columns3, Megaphone,
   ChevronUp, ChevronDown, Trash2, Copy, Plus, Save, X, GripVertical, Search, RotateCcw, ChevronLeft,
 } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -19,7 +19,7 @@ import {
   type HomeBlock, type HomeBlockType, type ContainerBlock, type EntityRef,
 } from '../../lib/campaignHome';
 
-const ICONS: Record<string, any> = { Sparkles, LayoutGrid, Star, BookMarked, Type, ImageIcon, Minus, Square, Columns3 };
+const ICONS: Record<string, any> = { Sparkles, LayoutGrid, Star, BookMarked, Type, ImageIcon, Minus, Square, Columns3, Megaphone };
 const PREVIEW_RECO = { id: 'preview', title: 'Recommended article', excerpt: 'Shown here from the campaign’s recommended lore setting.' };
 
 interface Props {
@@ -543,6 +543,17 @@ function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onA
         <Seg label="Style" value={block.style} options={[['line', 'Line'], ['dots', 'Dots'], ['space', 'Space']]} onChange={(v) => set({ style: v })} />
       )}
 
+      {block.blockType === 'callout' && (<>
+        <Field label="Heading"><Input className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="Character Creation" /></Field>
+        <Field label="Body"><textarea className="field-input min-h-[70px] py-2 font-serif italic w-full" value={block.body} onChange={(e) => set({ body: e.target.value })} placeholder="A short message…" /></Field>
+        <Seg label="Style" value={block.style} options={[['soft', 'Soft (dashed)'], ['plain', 'Plain']]} onChange={(v) => set({ style: v })} />
+        <fieldset className="config-fieldset"><legend className="section-label px-1">Button (optional)</legend>
+          <Field label="Label"><Input className="field-input" value={block.buttonLabel} onChange={(e) => set({ buttonLabel: e.target.value })} placeholder="Browse Sources" /></Field>
+          <Field label="Links to"><Input className="field-input" value={block.buttonLink} onChange={(e) => set({ buttonLink: e.target.value })} placeholder="/sources" /></Field>
+          <p className="field-hint">The button shows only when both label and link are set.</p>
+        </fieldset>
+      </>)}
+
       {block.blockType === 'recommended' && (<>
         <Field label="Heading (optional)"><Input className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="Recommended for this campaign" /></Field>
         <Seg label="Source" value={block.source} options={[['auto', 'Campaign pick'], ['specific', 'Specific entity']]} onChange={(v) => set({ source: v })} />
@@ -569,6 +580,9 @@ function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onA
           <Stepper label="Columns" value={block.columns} min={1} max={4} onChange={(v) => set({ columns: v })} />
           <Seg label="Card style" value={block.card} options={[['image', 'Image'], ['compact', 'Compact'], ['list', 'List']]} onChange={(v) => set({ card: v })} />
           <Toggle label="Show excerpts" value={block.excerpt} onChange={(v) => set({ excerpt: v })} />
+          {block.card !== 'list' && block.columns >= 2 && (
+            <Toggle label="Feature first card (spans 2 columns)" value={!!block.featureFirst} onChange={(v) => set({ featureFirst: v })} />
+          )}
         </fieldset>
       </>)}
 
