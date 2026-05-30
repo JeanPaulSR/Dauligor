@@ -205,7 +205,11 @@ const ENTITY_CONFIGS: Record<EntityType, EntityConfig> = {
     pkColumn: "id",
     writableColumns: new Set([
       "id", "class_id", "name", "identifier", "class_identifier", "source_id",
-      "description", "lore",
+      // `preview` is a short blurb mirroring classes.preview, added by
+      // migration 20260529-1200 and authored in SubclassEditor. Omitting it
+      // dropped a proposed subclass's blurb on approval (same bug class as the
+      // R1 scaling_column gap). (F3 fix.)
+      "description", "lore", "preview",
       "image_url", "image_display", "card_image_url", "card_display",
       "preview_image_url", "preview_display",
       "spellcasting", "advancements",
