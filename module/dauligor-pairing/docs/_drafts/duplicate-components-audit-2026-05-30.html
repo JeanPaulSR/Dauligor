@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Duplicate Components Audit (2026-05-30)</title>
+<style>
+  :root{--parchment:#f5f2e8;--parchment-soft:#faf7ed;--ink:#1a1a1a;--ink-soft:#3a3a3a;--muted:#6b6457;--gold:#c5a059;--gold-deep:#8a6d2f;--blood:#7a1f1f;--leaf:#355c3a;--card:#fbf8ee;--rule:#d8cfb8;--code-bg:#2b2620;--code-ink:#f0e9d2;--shadow:0 1px 3px rgba(0,0,0,.08),0 4px 10px rgba(0,0,0,.04);}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--parchment);color:var(--ink);font-family:"Inter",-apple-system,"Segoe UI",Roboto,sans-serif;font-size:15px;line-height:1.55;}
+  .wrap{max-width:1080px;margin:0 auto;padding:40px 32px 80px;}
+  header.hero{border-bottom:1px solid var(--rule);padding-bottom:20px;margin-bottom:26px;}
+  header.hero h1{font-family:"Cormorant Garamond","Georgia",serif;font-weight:600;font-size:36px;line-height:1.1;margin:0 0 6px;}
+  header.hero .sub{color:var(--muted);font-size:14px;}
+  h2{font-family:"Cormorant Garamond","Georgia",serif;font-size:24px;font-weight:600;margin:34px 0 12px;padding-bottom:6px;border-bottom:2px solid var(--gold);}
+  h3{font-family:"Cormorant Garamond","Georgia",serif;font-size:19px;margin:18px 0 6px;}
+  p{margin:8px 0;} ul{margin:8px 0 8px 22px;padding:0;} li{margin:5px 0;}
+  code{font-family:"JetBrains Mono","Consolas",monospace;font-size:12.5px;background:rgba(138,109,47,.12);padding:1px 5px;border-radius:3px;}
+  table{border-collapse:collapse;width:100%;margin:12px 0;background:var(--parchment-soft);box-shadow:var(--shadow);border-radius:4px;overflow:hidden;}
+  th,td{text-align:left;padding:8px 11px;border-bottom:1px solid var(--rule);font-size:13.5px;vertical-align:top;} tr:last-child td{border-bottom:none;}
+  th{background:rgba(138,109,47,.10);font-weight:600;color:var(--gold-deep);text-transform:uppercase;font-size:11px;letter-spacing:.6px;}
+  .sev{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:1px 8px;border-radius:3px;color:#fff;}
+  .s-hi{background:var(--blood);} .s-md{background:var(--gold-deep);} .s-lo{background:#b0a78f;color:var(--ink);} .s-ok{background:var(--leaf);}
+  .callout{background:rgba(138,109,47,.08);border:1px solid rgba(138,109,47,.35);border-radius:4px;padding:12px 16px;margin:14px 0;font-size:14px;}
+  .callout strong{color:var(--gold-deep);}
+  .path{font-family:"JetBrains Mono","Consolas",monospace;font-size:12.5px;color:var(--gold-deep);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>Duplicate Components Audit</h1>
+  <div class="sub">branch <code>foundry-module</code> &middot; 2026-05-30 &middot; cross-file scan of the 15 split stylesheets</div>
+</header>
+
+<p>I parsed every rule across the new files, normalized each declaration block, and looked for the same styling under different names. Verdict: there <em>are</em> genuine repeats — three worth acting on, plus a couple of minor ones — and a few things that look duplicated but are legitimately distinct (so the guide still earns its keep). Ranked by payoff:</p>
+
+<h2><span class="sev s-hi">consolidate</span> 1. The "detail pane" is built twice</h2>
+<p><code>subclass-preview</code> (in <span class="path">class-browser.css</span>) and <code>option-picker</code> (in <span class="path">option-picker.css</span>) each define a near-identical detail pane — image/name/meta/section/body. Several rules are <strong>byte-identical</strong>:</p>
+<table>
+  <tr><th>Element</th><th>subclass-preview</th><th>option-picker</th><th>same?</th></tr>
+  <tr><td>detail container</td><td><code>__detail</code> (flex col, gap 12px)</td><td><code>__detail</code></td><td>identical</td></tr>
+  <tr><td>section wrapper</td><td><code>__detail-section</code> (flex col gap 6px)</td><td><code>__detail-section</code></td><td>identical</td></tr>
+  <tr><td>section title</td><td><code>__detail-section-title</code></td><td><code>__detail-section-title</code></td><td>identical</td></tr>
+  <tr><td>meta line</td><td><code>__detail-meta</code> (muted 11px uppercase)</td><td><code>__detail-meta</code></td><td>identical</td></tr>
+  <tr><td>name</td><td><code>__detail-name</code> (<code>#f0e8d8</code> 22px)</td><td><code>__detail-name</code></td><td>identical (+ hardcoded hex)</td></tr>
+  <tr><td>body h1/h2</td><td><code>__detail-body h1,h2</code></td><td><code>__detail-body h1,h2</code></td><td>identical</td></tr>
+  <tr><td>header / body / empty</td><td><code>__detail-header/-body/-empty</code></td><td>+ <code>-img / -pane / -summary</code></td><td>option-picker is a superset</td></tr>
+</table>
+<div class="callout" style="background:rgba(122,31,31,.06);border-color:rgba(122,31,31,.25);">
+  <strong style="color:var(--blood);">Update on closer inspection (2026-05-30):</strong> a rule-by-rule diff shows the two panes are <em>mostly</em> the same
+  but have <strong>genuinely diverged</strong> in three spots — so they are <em>not</em> a clean single component:
+  <ul style="margin-top:6px;">
+    <li><strong><code>__detail-header</code> differs by design:</strong> option-picker is a grid (<code>64px minmax(0,1fr)</code>) because it shows a 64px option image; subclass-preview is a simple stacked column (no image). Forcing one layout would break the other.</li>
+    <li><strong><code>__detail-body</code> color:</strong> subclass uses <code>var(--dauligor-text)</code>; option-picker hardcodes <code>#d8d4c8</code> (a near-identical shade — a token-discipline miss).</li>
+    <li><strong><code>__detail-body p</code> margin</strong> differs trivially (<code>0 0 12px</code> vs <code>0 0 0.5em 0</code>).</li>
+  </ul>
+  Identical (safe to share): <code>__detail</code>, <code>__detail-name</code>, <code>__detail-meta</code>, <code>__detail-section-title</code>, <code>__detail-body strong</code>, <code>__detail-body p:last-child</code>. Option-picker also has unique <code>-img</code> / <code>-pane</code> / <code>-summary</code> / <code>-section</code> / <code>-empty</code>.
+</div>
+<p><strong>Recommendation (revised):</strong> the panes share a family but legitimately differ (images). Options:</p>
+<ul>
+  <li><strong>Reconcile into a shared <code>.dauligor-detail</code> with a header modifier</strong> — base header = stacked column; add <code>__header--with-image</code> (grid + 64px) that option-picker opts into. Unify body color to the token. Preserves both looks; needs JS markup changes in 2 files + a Foundry eyeball.</li>
+  <li><strong>Share only the identical sub-elements</strong> (<code>__detail-name/-meta/-section-title</code>…) — leaves a mixed markup (some <code>.dauligor-detail__*</code>, some block-specific), messier.</li>
+  <li><strong>Leave the panes separate</strong> (they diverged for a real reason) and just fix the one inconsistency: option-picker <code>__detail-body</code> color <code>#d8d4c8</code> → <code>var(--dauligor-text)</code>.</li>
+</ul>
+<p style="display:none"><strong>Recommendation:</strong> extract the shared detail-pane rules into one place. Two ways:</p>
+<br>• <em>CSS-only (low risk):</em> group the identical selectors into shared rules in <span class="path">base.css</span> (e.g. <code>.dauligor-subclass-preview__detail-section, .dauligor-option-picker__detail-section { … }</code>) and delete the copies. No HTML change, appearance-identical.
+<br>• <em>Shared class (cleaner, more work):</em> introduce a real <code>.dauligor-detail__*</code> component and switch both render sites to it (touches the JS that builds the markup).</p>
+
+<h2><span class="sev s-md">consolidate</span> 2. The button family is bigger than <code>__button</code></h2>
+<p>The first pass unified <code>__button</code>, but ~13 other button-like selectors exist, and several are the <em>same flat button</em> at a different height:</p>
+<ul>
+  <li><strong>Flat-button twins</strong> (token bg/border, square, gold hover) at divergent heights: <code>wizard__toolbar-button</code> (28px), <code>section-filter__toolbar-btn</code> (26px), <code>section-filter__footer-btn</code> (26px). These should fold into the canonical button (normalize height) — same as we did for <code>__button</code>.</li>
+  <li><strong>Deliberately different</strong> (leave, but document): <code>spell-manager__footer-button</code> (larger gold CTA with active/ghost/locked states), <code>section-filter__pill</code> / <code>option-picker__pill</code> / <code>class-browser__chip</code> / <code>spell-picker__chip</code> (stateful include/exclude/active <em>tags</em>, not action buttons), <code>feature-manager__change</code> / <code>__scope-toggle</code> (need a look).</li>
+</ul>
+<p><strong>Recommendation:</strong> add the three flat-button twins to the canonical rule in <span class="path">base.css</span>; record the pill/chip "tag" family and the gold-CTA as their own documented patterns.</p>
+
+<h2><span class="sev s-md">tokenize</span> 3. 38 raw accent tints bypass the tokens we just defined</h2>
+<p>38 occurrences of raw <code>rgba(170, 130, 80, α)</code> / <code>rgba(181, 136, 56, α)</code> still sit in the CSS instead of <code>rgba(var(--dauligor-accent-tint), α)</code> / <code>-accent-gold</code>. The first pass only converted the <code>var(--phantom, …)</code> forms; these plain ones were missed (section-filter active/toolbar/footer states, spell-manager footer-button hovers, etc.). <strong>Recommendation:</strong> mechanical, appearance-identical conversion to the tint tokens — pure "use what we defined."</p>
+
+<h2><span class="sev s-lo">minor</span> 4. Shared hover &amp; empty-state patterns</h2>
+<ul>
+  <li><strong>Gold-lift hover</strong> <code>{border-color: btn-border-hover; background: btn-hover-bg}</code> appears 6× (button, wizard__choice, wizard__toolbar-button, button--primary, spell class-button, spell filter/reset). <strong>Accent hover</strong> <code>{border-color: accent; color: accent-strong}</code> 4× (feature-manager scope-toggle/change, section-filter pill/chevron). Could each become one grouped hover rule. Optional — saves a few lines, low urgency.</li>
+  <li><strong>Empty states:</strong> <code>subclass-preview__empty</code> ≡ <code>section-filter__empty</code> (centered muted italic). The others (<code>wizard__empty</code> boxed, <code>spell-picker__empty</code> rich icon+serif, <code>feature-manager__empty</code> flex-center) genuinely differ. Merge only the two twins if at all.</li>
+</ul>
+
+<h2><span class="sev s-lo">architectural</span> 5. Layout utilities (not components)</h2>
+<p><code>display:flex; flex-direction:column; gap:Npx</code> repeats ~20×, <code>{flex:1; min-height:0; overflow-y:auto}</code> (scroll region) 3×, <code>{display:flex; align-items:center; gap:8px}</code> 3×. These are layout patterns, not components — collapsing them means introducing utility classes (<code>.dauligor-col</code>, <code>.dauligor-scroll</code>) and adding them in the JS markup. Bigger architectural choice; flag for later, not part of "repeated components."</p>
+
+<h2><span class="sev s-ok">leave</span> Confirmed genuinely distinct</h2>
+<ul>
+  <li><strong>Badges</strong> — three different jobs: label chip (spell-manager), uppercase status <em>tag</em> (feature-manager — arguably mis-named "badge"), micro V/S/M indicator (spell-picker). Keep separate; maybe rename the tag.</li>
+  <li><strong>Footers</strong> — status+action bar (importer) vs 2-col grid (class-options/sequence) vs stretch column (spell-manager). Different layouts.</li>
+</ul>
+
+<div class="callout">
+  <strong>What I'd do, in order:</strong> (3) tokenize the 38 raw tints — zero-risk, do now; (1) consolidate the detail pane — CSS-only grouping into base.css; (2) fold the 3 flat-button twins into the canonical button. (4)/(5) are optional polish. All appearance-preserving and CSS-only (no markup changes) unless you want the cleaner shared-<code>.dauligor-detail</code> class. Then you reload Foundry to confirm.
+</div>
+
+<p style="margin-top:18px;"><small style="color:var(--muted);">This audit: <span class="path">module/dauligor-pairing/docs/_drafts/duplicate-components-audit-2026-05-30.html</span>. Read-only — nothing changed.</small></p>
+
+</div>
+</body>
+</html>
