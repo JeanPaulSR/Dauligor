@@ -61,6 +61,21 @@ Proposal-mode logic lives *inside* these files, but the files themselves are own
 
 Newest at the top. Each entry: date + link to the handoff doc in this same folder.
 
+- `2026-05-30` — **Live-testing bug pass (4 reported).** **#1 block isolation**
+  (`bf7e53b`): active-block id was a global localStorage key → bled across
+  accounts in one browser; now per-uid + reset on auth change. **#4 option
+  overlay** (`868fbce`): `useProposalDraftOptions` dropped `group_id`, so
+  in-block option items were filtered out of their group's advancement picker;
+  now carries `groupId`/`parentId`/`parentType`. **#2 image upload** (`5e213df`):
+  staff-gated → 403 for content-creators; now allowed when the caller owns the
+  active OPEN block (x-proposal-bundle-id header + server ownership check). **#3
+  child-sections-locked-until-refresh**: investigated — Class/Subclass/
+  UniqueOptionGroup editors are ALL already correctly wired via
+  `useProposalSingleWorkId` (`effectiveId = routeId ?? pendingCreateId`,
+  `recordCreate` on first create, child panels gated on `effectiveId`), so no
+  reload should be needed in current `main`. Points at a stale deployed bundle;
+  awaiting the user's env/repro to confirm vs. a real gap. Follow-up: non-staff
+  uploads still take a client-chosen R2 key (proposal-scoped prefix would harden).
 - `2026-05-30` — **Remote entity_type migrations APPLIED (with go-ahead).** Ran
   `20260528-1200` (scaling_column) then `20260528-1400` (feature) on remote D1 via
   `wrangler d1 execute --remote --file=…` (NOT `migrations apply`). Captured a
