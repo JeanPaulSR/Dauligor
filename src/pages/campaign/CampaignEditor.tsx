@@ -12,7 +12,6 @@ import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, Command
 import { ClassImageEditor } from '@/components/compendium/ClassImageEditor';
 import { ChevronLeft, Save, Sparkles, LayoutGrid, ImageIcon, Calendar, FileText, MapPin, Scroll, Users, History, Check, X, Home as HomeIcon } from 'lucide-react';
 import { ImageUpload } from '@/components/ui/ImageUpload';
-import CampaignHomeEditor from '@/components/campaign/CampaignHomeEditor';
 
 export default function CampaignEditor({ userProfile }: { userProfile: any }) {
   const { id } = useParams();
@@ -483,9 +482,19 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
           )}
 
           {activeTab === 'homepage' && id && (
-            <div className="animate-in fade-in duration-300">
-              <CampaignHomeEditor campaignId={id} campaignName={formData.name} />
-            </div>
+            <Card className="border-gold/10 bg-card/60 shadow-xl backdrop-blur-sm rounded animate-in fade-in duration-300">
+              <CardHeader>
+                <CardTitle className="h2-title flex items-center gap-2">
+                  <HomeIcon className="w-5 h-5 text-gold" /> Homepage
+                </CardTitle>
+                <p className="field-hint mt-1">Design what players see on this campaign's home page — a full-page layout builder with a live preview.</p>
+              </CardHeader>
+              <CardContent>
+                <Button onClick={() => navigate(`/campaign/edit/${id}/homepage`)} className="btn-gold-solid gap-2">
+                  <LayoutGrid className="w-4 h-4" /> Open Homepage Editor
+                </Button>
+              </CardContent>
+            </Card>
           )}
 
           {activeTab === 'characters' && (

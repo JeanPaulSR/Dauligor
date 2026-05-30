@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   Sparkles, LayoutGrid, Star, BookMarked, Type, ImageIcon, Minus, Square, Columns3,
-  ChevronUp, ChevronDown, Trash2, Copy, Plus, Save, X, GripVertical, Search, RotateCcw,
+  ChevronUp, ChevronDown, Trash2, Copy, Plus, Save, X, GripVertical, Search, RotateCcw, ChevronLeft,
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -22,7 +22,34 @@ import {
 const ICONS: Record<string, any> = { Sparkles, LayoutGrid, Star, BookMarked, Type, ImageIcon, Minus, Square, Columns3 };
 const PREVIEW_RECO = { id: 'preview', title: 'Recommended article', excerpt: 'Shown here from the campaign’s recommended lore setting.' };
 
-interface Props { campaignId: string; campaignName?: string; }
+interface Props {
+  campaignId: string;
+  campaignName?: string;
+  /** Fullscreen route mode: mounts the admin-page-fullscreen body class, shows a
+   *  "Back to Campaign Editor" header, locks to the viewport, and enables the
+   *  draggable pane resizers. Off (default) = the old in-tab boxed layout. */
+  fullscreen?: boolean;
+  /** Called by the Back button in fullscreen mode. */
+  onBack?: () => void;
+}
+
+/* Pane widths (px) for the resizable Structure | Preview | Inspector layout —
+   only the side panes are sized; the preview is flex-1. Persisted per browser. */
+const PANE_KEY = 'dauligor:campaignHomeEditor:panes:v1';
+const TREE_MIN = 180, TREE_MAX = 420, TREE_DEFAULT = 248;
+const INSP_MIN = 260, INSP_MAX = 520, INSP_DEFAULT = 320;
+function loadPaneWidths(): { tree: number; insp: number } {
+  try {
+    const raw = localStorage.getItem(PANE_KEY);
+    if (raw) {
+      const p = JSON.parse(raw);
+      const tree = Math.min(TREE_MAX, Math.max(TREE_MIN, Number(p.tree) || TREE_DEFAULT));
+      const insp = Math.min(INSP_MAX, Math.max(INSP_MIN, Number(p.insp) || INSP_DEFAULT));
+      return { tree, insp };
+    }
+  } catch { /* ignore */ }
+  return { tree: TREE_DEFAULT, insp: INSP_DEFAULT };
+}
 
 /* ── tree mutation helpers (operate on a deep clone, return new tree) ── */
 const clone = (blocks: HomeBlock[]): HomeBlock[] => JSON.parse(JSON.stringify(blocks));
@@ -47,7 +74,7 @@ function isDescendant(blocks: HomeBlock[], ancestorId: string, id: string): bool
   return findBlock(a.children, id) !== null;
 }
 
-export default function CampaignHomeEditor({ campaignId, campaignName = '' }: Props) {
+export default function CampaignHomeEditor({ campaignId, campaignName = '', fullscreen = false, onBack }: Props) {
   const [blocks, setBlocks] = useState<HomeBlock[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -57,8 +84,27 @@ export default function CampaignHomeEditor({ campaignId, campaignName = '' }: Pr
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropInfo, setDropInfo] = useState<{ id: string; pos: 'before' | 'after' | 'into' } | null>(null);
   const [addAt, setAddAt] = useState<{ containerId: string | null } | null>(null);
+  // Resizable pane widths (fullscreen mode only).
+  const [paneW, setPaneW] = useState<{ tree: number; insp: number }>(() => loadPaneWidths());
 
   useUnsavedChangesWarning(dirty);
+
+  // Fullscreen mode: strip the global <main> padding + hide footer + lock body
+  // scroll, per the documented admin-page-fullscreen recipe (components.md).
+  useEffect(() => {
+    if (!fullscreen) return;
+    document.documentElement.classList.add('admin-page-fullscreen');
+    document.body.classList.add('admin-page-fullscreen');
+    return () => {
+      document.documentElement.classList.remove('admin-page-fullscreen');
+      document.body.classList.remove('admin-page-fullscreen');
+    };
+  }, [fullscreen]);
+
+  // Persist pane widths.
+  useEffect(() => {
+    try { localStorage.setItem(PANE_KEY, JSON.stringify(paneW)); } catch { /* ignore */ }
+  }, [paneW]);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,6 +128,31 @@ export default function CampaignHomeEditor({ campaignId, campaignName = '' }: Pr
     })();
     return () => { cancelled = true; };
   }, [campaignId]);
+
+  // Drag-to-resize a side pane. `which` = which pane the handle controls; the
+  // tree handle grows rightward, the inspector handle grows leftward.
+  const startResize = useCallback((which: 'tree' | 'insp', e: React.PointerEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = which === 'tree' ? paneW.tree : paneW.insp;
+    const min = which === 'tree' ? TREE_MIN : INSP_MIN;
+    const max = which === 'tree' ? TREE_MAX : INSP_MAX;
+    const onMove = (ev: PointerEvent) => {
+      const delta = which === 'tree' ? ev.clientX - startX : startX - ev.clientX;
+      const next = Math.min(max, Math.max(min, startW + delta));
+      setPaneW((p) => ({ ...p, [which]: next }));
+    };
+    const onUp = () => {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, [paneW.tree, paneW.insp]);
 
   const selected = useMemo(() => (selectedId ? findBlock(blocks, selectedId) : null), [blocks, selectedId]);
   const canSave = dirty || seededFromDefault;
@@ -186,100 +257,160 @@ export default function CampaignHomeEditor({ campaignId, campaignName = '' }: Pr
 
   if (loading) return <p className="description-text py-6">Loading homepage layout…</p>;
 
+  const actions = (
+    <div className="flex items-center gap-2 shrink-0">
+      <Button onClick={handleRestoreDefault} disabled={saving} variant="outline" className="gap-2 border-gold/20 text-ink/70 hover:text-gold">
+        <RotateCcw className="w-4 h-4" /> Restore Default
+      </Button>
+      <Button onClick={handleSave} disabled={saving || !canSave} className="btn-gold-solid gap-2">
+        <Save className="w-4 h-4" /> {saving ? 'Saving…' : canSave ? 'Save Layout' : 'Saved'}
+      </Button>
+    </div>
+  );
+
+  // The three panes + their drag handles. Side-pane widths come from `paneW` in
+  // fullscreen (resizable); in boxed mode they're the fixed defaults.
+  const treeWidth = fullscreen ? paneW.tree : TREE_DEFAULT;
+  const inspWidth = fullscreen ? paneW.insp : INSP_DEFAULT;
+  const panes = (
+    <div className={`browser-panel ${fullscreen ? 'flex-1 min-h-0' : 'h-[calc(100vh-15rem)] min-h-[540px]'}`}>
+      {/* Structure tree */}
+      <div className="browser-sidebar shrink-0" style={{ width: treeWidth }}>
+        <div className="pane-head">Structure</div>
+        <div className="flex-grow overflow-y-auto custom-scrollbar p-2">
+          <BlockTree
+            blocks={blocks} selectedId={selectedId} dragId={dragId} dropInfo={dropInfo}
+            onSelect={setSelectedId}
+            onDragStart={setDragId}
+            onDragEndAll={() => { setDragId(null); setDropInfo(null); }}
+            onHover={setDropInfo}
+            onDrop={performDrop}
+          />
+        </div>
+        <div className="p-2 border-t border-gold/20">
+          <Button onClick={() => setAddAt({ containerId: null })} className="btn-gold w-full gap-2 h-8 text-xs"><Plus className="w-3.5 h-3.5" /> Add block</Button>
+        </div>
+      </div>
+
+      {fullscreen && <ResizeHandle onPointerDown={(e) => startResize('tree', e)} />}
+
+      {/* Live preview */}
+      <div className="flex-1 min-w-0 flex flex-col bg-background/10">
+        <div className="pane-head">Live preview · what players see</div>
+        <div className="flex-grow overflow-y-auto custom-scrollbar p-4">
+          {blocks.length === 0 ? (
+            <div className="empty-state h-full"><LayoutGrid className="w-8 h-8 text-gold/20 mb-3" /><p className="description-text">No blocks — players see the default home page.</p><p className="label-text text-gold/40 mt-1">Add a block, or save to keep the default</p></div>
+          ) : (
+            // Clicks are swallowed so preview links don't navigate away mid-edit.
+            <div onClickCapture={(e) => e.preventDefault()}>
+              <CampaignHomeBlocks blocks={blocks} recommendedLore={PREVIEW_RECO} campaignName={campaignName || 'this campaign'} />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {fullscreen && <ResizeHandle onPointerDown={(e) => startResize('insp', e)} />}
+
+      {/* Inspector */}
+      <div className="border-l border-gold/20 bg-gold/5 flex flex-col shrink-0" style={{ width: inspWidth }}>
+        <div className="pane-head">Inspector</div>
+        <div className="flex-grow overflow-y-auto custom-scrollbar">
+          {selected ? (
+            <Inspector
+              key={selected.id}
+              block={selected}
+              parent={findParentList(blocks, selected.id)}
+              onUpdate={updateBlock}
+              onMove={moveByArrow}
+              onDuplicate={duplicateBlock}
+              onRemove={removeBlock}
+              onAddInside={(cid) => setAddAt({ containerId: cid })}
+            />
+          ) : (
+            <p className="insp-empty">Select a block in the structure tree to edit it.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  const seedBanner = seededFromDefault && !dirty && (
+    <div className="flex items-start gap-2 px-3 py-2.5 border border-gold/20 bg-gold/5 shrink-0">
+      <Sparkles className="w-4 h-4 text-gold shrink-0 mt-0.5" />
+      <p className="text-[12px] text-ink/70 leading-snug">
+        This is the <strong className="text-ink">default layout</strong>. Customize the blocks below, then <strong className="text-ink">Save</strong> to make it this campaign's homepage.
+      </p>
+    </div>
+  );
+
+  const pickerModal = addAt && <AddBlockPicker containerId={addAt.containerId} onPick={(t) => addBlock(t, addAt.containerId)} onClose={() => setAddAt(null)} />;
+
+  // ── Fullscreen route mode: edge-to-edge, back header, resizable panes ──
+  if (fullscreen) {
+    return (
+      <div className="h-[calc(100vh-4rem)] flex flex-col w-full px-3 sm:px-4 py-2 lg:py-3 gap-2">
+        <div className="flex items-center gap-3 shrink-0 pb-2 border-b border-gold/20">
+          <Button variant="ghost" onClick={() => onBack?.()} className="text-ink/60 hover:text-gold gap-2 px-2">
+            <ChevronLeft className="w-4 h-4" /> Back to Campaign Editor
+          </Button>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-lg font-serif font-bold text-ink truncate flex items-center gap-2">
+              <LayoutGrid className="w-4 h-4 text-gold shrink-0" />
+              Homepage Layout{campaignName ? <span className="text-ink/40 font-normal">· {campaignName}</span> : null}
+            </h2>
+          </div>
+          {actions}
+        </div>
+        {seedBanner}
+        {panes}
+        {pickerModal}
+        {EDITOR_STYLE}
+      </div>
+    );
+  }
+
+  // ── Boxed in-tab mode (legacy fallback) ──
   return (
     <div className="space-y-3">
-      {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="h2-title flex items-center gap-2"><LayoutGrid className="w-5 h-5 text-gold shrink-0" /> Homepage Layout</h2>
           <p className="field-hint mt-1">Build what players see on this campaign's home page — drag to reorder &amp; nest, fill each block, then save. Delete every block and save to fall back to the default site home.</p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <Button onClick={handleRestoreDefault} disabled={saving} variant="outline" className="gap-2 border-gold/20 text-ink/70 hover:text-gold">
-            <RotateCcw className="w-4 h-4" /> Restore Default
-          </Button>
-          <Button onClick={handleSave} disabled={saving || !canSave} className="btn-gold-solid gap-2">
-            <Save className="w-4 h-4" /> {saving ? 'Saving…' : canSave ? 'Save Layout' : 'Saved'}
-          </Button>
-        </div>
+        {actions}
       </div>
-
-      {seededFromDefault && !dirty && (
-        <div className="flex items-start gap-2 px-3 py-2.5 border border-gold/20 bg-gold/5">
-          <Sparkles className="w-4 h-4 text-gold shrink-0 mt-0.5" />
-          <p className="text-[12px] text-ink/70 leading-snug">
-            This is the <strong className="text-ink">default layout</strong>. Customize the blocks below, then <strong className="text-ink">Save</strong> to make it this campaign's homepage.
-          </p>
-        </div>
-      )}
-
-      {/* 3-pane builder */}
-      <div className="browser-panel h-[calc(100vh-15rem)] min-h-[540px]">
-        {/* Structure tree */}
-        <div className="w-[248px] browser-sidebar">
-          <div className="pane-head">Structure</div>
-          <div className="flex-grow overflow-y-auto custom-scrollbar p-2">
-            <BlockTree
-              blocks={blocks} selectedId={selectedId} dragId={dragId} dropInfo={dropInfo}
-              onSelect={setSelectedId}
-              onDragStart={setDragId}
-              onDragEndAll={() => { setDragId(null); setDropInfo(null); }}
-              onHover={setDropInfo}
-              onDrop={performDrop}
-            />
-          </div>
-          <div className="p-2 border-t border-gold/20">
-            <Button onClick={() => setAddAt({ containerId: null })} className="btn-gold w-full gap-2 h-8 text-xs"><Plus className="w-3.5 h-3.5" /> Add block</Button>
-          </div>
-        </div>
-
-        {/* Live preview */}
-        <div className="flex-1 min-w-0 flex flex-col bg-background/10">
-          <div className="pane-head">Live preview · what players see</div>
-          <div className="flex-grow overflow-y-auto custom-scrollbar p-4">
-            {blocks.length === 0 ? (
-              <div className="empty-state h-full"><LayoutGrid className="w-8 h-8 text-gold/20 mb-3" /><p className="description-text">No blocks — players see the default home page.</p><p className="label-text text-gold/40 mt-1">Add a block, or save to keep the default</p></div>
-            ) : (
-              // Clicks are swallowed so preview links don't navigate away mid-edit.
-              <div onClickCapture={(e) => e.preventDefault()}>
-                <CampaignHomeBlocks blocks={blocks} recommendedLore={PREVIEW_RECO} campaignName={campaignName || 'this campaign'} />
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Inspector */}
-        <div className="w-[320px] border-l border-gold/20 bg-gold/5 flex flex-col">
-          <div className="pane-head">Inspector</div>
-          <div className="flex-grow overflow-y-auto custom-scrollbar">
-            {selected ? (
-              <Inspector
-                key={selected.id}
-                block={selected}
-                parent={findParentList(blocks, selected.id)}
-                onUpdate={updateBlock}
-                onMove={moveByArrow}
-                onDuplicate={duplicateBlock}
-                onRemove={removeBlock}
-                onAddInside={(cid) => setAddAt({ containerId: cid })}
-              />
-            ) : (
-              <p className="insp-empty">Select a block in the structure tree to edit it.</p>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {addAt && <AddBlockPicker containerId={addAt.containerId} onPick={(t) => addBlock(t, addAt.containerId)} onClose={() => setAddAt(null)} />}
-
-      <style>{`
-        .pane-head{font-family:ui-monospace,Menlo,monospace;font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:rgba(26,26,26,.4);padding:10px 12px 6px;font-weight:700;}
-        .dark .pane-head{color:rgba(255,255,255,.4);}
-        .insp-empty{padding:30px 16px;text-align:center;color:var(--muted-foreground);font-style:italic;font-family:var(--font-serif);font-size:13px;}
-      `}</style>
+      {seedBanner}
+      {panes}
+      {pickerModal}
+      {EDITOR_STYLE}
     </div>
   );
 }
+
+/** A vertical drag handle between two panes (fullscreen resizable layout). */
+function ResizeHandle({ onPointerDown }: { onPointerDown: (e: React.PointerEvent) => void }) {
+  return (
+    <div
+      onPointerDown={onPointerDown}
+      role="separator"
+      aria-orientation="vertical"
+      className="group relative w-1.5 shrink-0 cursor-col-resize bg-gold/10 hover:bg-gold/30 transition-colors"
+      title="Drag to resize"
+    >
+      {/* Wider invisible hit-area + a centered grip dot-line on hover. */}
+      <span className="absolute inset-y-0 -left-1 -right-1" />
+      <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-8 w-0.5 rounded bg-gold/40 opacity-0 group-hover:opacity-100 transition-opacity" />
+    </div>
+  );
+}
+
+const EDITOR_STYLE = (
+  <style>{`
+    .pane-head{font-family:ui-monospace,Menlo,monospace;font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:rgba(26,26,26,.4);padding:10px 12px 6px;font-weight:700;}
+    .dark .pane-head{color:rgba(255,255,255,.4);}
+    .insp-empty{padding:30px 16px;text-align:center;color:var(--muted-foreground);font-style:italic;font-family:var(--font-serif);font-size:13px;}
+  `}</style>
+);
 
 /* ════════════════════ Structure tree ════════════════════ */
 interface TreeProps {
