@@ -858,8 +858,6 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
         requiredTags: parseStringArray(entry.requiredTags ?? entry.required_tags),
         prerequisiteText: String(entry.prerequisiteText ?? entry.prerequisite_text ?? ''),
       };
-      console.log('[imgdbg] FORM-LOAD setFormData(loaded)', { editingId, loadedIdRef: loadedIdRef.current, loaded_imageUrl: loaded.imageUrl });
-      console.trace('[imgdbg] form-load trace');
       setFormData(loaded);
       lastLoadedFormRef.current = JSON.stringify(loaded);
       loadedIdRef.current = editingId;
@@ -917,7 +915,6 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
     // dirty-check below already trusts — read it here so the two stay
     // consistent and a last-moment edit can't be dropped on save.
     const fd = formDataRef.current ?? formData;
-    console.log('[imgdbg] SAVE', { editingId, closure_imageUrl: formData.imageUrl, ref_imageUrl: formDataRef.current?.imageUrl, fd_imageUrl: fd.imageUrl, silent: opts.silent });
     if (!fd.name.trim()) {
       if (!opts.silent) toast.error('Spell name is required');
       return;
@@ -1056,8 +1053,6 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
   const handleSaveRef = useRef(handleSave);
   useEffect(() => { handleSaveRef.current = handleSave; });
   useEffect(() => { formDataRef.current = formData; }, [formData]);
-  // TEMP DEBUG (remove after image-save diagnosis): trace every imageUrl change
-  useEffect(() => { console.log('[imgdbg] formData.imageUrl =>', JSON.stringify(formData.imageUrl), '| editingId', editingId, '| loadedIdRef', loadedIdRef.current); }, [formData.imageUrl]);
 
   useProposalPreFlushSave({
     enabled: isProposalMode,
@@ -1196,7 +1191,7 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
             <ImageUpload
               currentImageUrl={formData.imageUrl}
               storagePath={`images/spells/${editingId || 'draft'}/`}
-              onUpload={(url) => { console.log('[imgdbg] onUpload <-', JSON.stringify(url)); setFormData(prev => ({ ...prev, imageUrl: url })); }}
+              onUpload={(url) => setFormData(prev => ({ ...prev, imageUrl: url }))}
               imageType="icon"
               compact
               className="h-[80px] w-[80px]"
