@@ -1073,7 +1073,7 @@ function AdvancementManager({
                       type="number"
                       min={isFeatContext ? '0' : '1'}
                       max="20"
-                      value={editingAdv.featureId && availableFeatures.find(f => f.id === editingAdv.featureId) ? availableFeatures.find(f => f.id === editingAdv.featureId)?.level : (editingAdv.level ?? (isFeatContext ? 0 : 1))}
+                      value={editingAdv.featureId && availableFeatures.find(f => f.id === editingAdv.featureId) ? (availableFeatures.find(f => f.id === editingAdv.featureId)?.level ?? editingAdv.level ?? (isFeatContext ? 0 : 1)) : (editingAdv.level ?? (isFeatContext ? 0 : 1))}
                       onChange={e => {
                         const parsed = parseInt(e.target.value);
                         const next = Number.isNaN(parsed)
