@@ -3,7 +3,7 @@
 Started: `2026-05-28`
 Owner: `Claude`
 Goal: `Own and evolve the content-proposals subsystem — queue/drafts/blocks, cascade engine, review mode, and proposal-mode editor wiring. Specific task per session.`
-Status: `ready (held)` — compendium-editors handed back the §3 coverage; branch synced to `main` (`d55fc31`) and the reference graph re-verified against the landed B/C code. **Part D (atomic approve + guard #1) is ready to build but HELD pending an explicit go-ahead.** Verified build inputs + findings (incl. the F3 `subclass.preview` data-loss gap and the R4 confirmation) in [2026-05-29-handback-reverified-partD-ready.md](2026-05-29-handback-reverified-partD-ready.md).
+Status: `Part D shipped` — block-atomic approve + guard #1 reference-integrity walk landed on `main` (`b35705f`), incl. the AdminProposals Approve-/Reject-block UI. Pure logic unit-tested green; the live atomic-batch run is the **joint e2e** with compendium-editors (handed over in [../compendium-editors/2026-05-29-partD-shipped.md](../compendium-editors/2026-05-29-partD-shipped.md)). Remaining on this branch: **R4** (atomic submit flush) + **F2-leftover** (wrap option-groups route), both tracked. Remote entity_type migrations still gated.
 
 > Lives in the `loving-banach-d76c40` worktree directory (the dir
 > couldn't be renamed to match the branch — Windows locks the active
@@ -61,6 +61,17 @@ Proposal-mode logic lives *inside* these files, but the files themselves are own
 
 Newest at the top. Each entry: date + link to the handoff doc in this same folder.
 
+- `2026-05-29` — **Part D shipped** (`b35705f` on `main`). Block-atomic approve
+  (`POST /api/admin/proposals/bundle/:id/approve` + `/reject`): guard #1
+  reference-integrity walk → guard #2 per-revision drift → topological order →
+  one atomic `env.DB.batch()` (all-or-nothing). `buildApprovedStatements` split
+  out of `applyApprovedOperation` as the batch seam; `collectReferences` +
+  `orderBlockRevisions` added; AdminProposals gains Approve-/Reject-block UI.
+  Pure logic unit-tested green against the Druid+WildShape+column+group cluster
+  (incl. F3 `preview` round-trip). Handed to compendium-editors for the joint
+  e2e: [../compendium-editors/2026-05-29-partD-shipped.md](../compendium-editors/2026-05-29-partD-shipped.md).
+  Documented guard-#1 boundary: advancement array fields (pool/optionalPool/
+  excludedOptionIds) not walked yet — extend if those overlays land.
 - `2026-05-29` — **Handback received + re-verified; Part D ready to build (held).**
   compendium-editors handed back the §3 coverage table
   ([2026-05-29-from-compendium-editors-s3-coverage.md](2026-05-29-from-compendium-editors-s3-coverage.md)).
