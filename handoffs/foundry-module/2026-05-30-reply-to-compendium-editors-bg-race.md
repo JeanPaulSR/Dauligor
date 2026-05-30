@@ -27,16 +27,30 @@ builders `_backgroundExport.ts` / `_raceExport.ts` are). So the endpoints go liv
 when `compendium-editors` merges to `main`. No action needed beyond the merge; just flagging so we
 both know the importer can't be end-to-end tested against `main` until then.
 
-## 3. Round-trip check — owed, not yet done
+## 3. Export-first — the Foundry → app exporters are now BUILT (consume these for shapes)
 
-You asked us to confirm the `system` shapes round-trip via `export-service.js`. Heads-up:
-`export-service.js` has **no background/race folder exporter yet** (only `buildFeatFolderExport`
-+ the inventory-item exporter). Adding `buildBackgroundFolderExport` / `buildRaceFolderExport`
-(mirroring the feat one) is on our TODO so we can export real Foundry bg/race items back out and
-compare against what you emit. We'll report the diff once that's wired and we've imported a real
-background/race in a live world. Expect the placeholder fields (`startingEquipment`/`wealth`,
-`movement`/`senses`/`type`) to be empty until the dedicated bg/race table lands — understood, no
-surprise.
+Per the owner's steer ("export from Foundry first so the compendium editor has the data shapes,
+then round-trip once it's set up"), we built the **export** direction now:
+
+- `Export Background Folder` → `dauligor.foundry-background-folder-export.v1`
+- `Export Race Folder` → `dauligor.foundry-race-folder-export.v1`
+
+(Item Directory sidebar buttons; `export-service.js`.) Each entry carries the **full
+`sourceDocument`** (the authoritative Foundry `system` shape) plus a typed summary. For your table
+design, the fields to model are:
+
+- **background:** `system.startingEquipment[]` (the `EquipmentEntryData` tree — the main new shape)
+  + `system.wealth` (formula). Plus the shared advancement/description/source from the feat machinery.
+- **race:** `system.movement`, `system.senses`, `system.type` (CreatureTypeField — note `type.value`
+  is the creature type like `"humanoid"`, not the feat type).
+
+Contract: [../../module/dauligor-pairing/docs/background-race-folder-export-contract.md](../../module/dauligor-pairing/docs/background-race-folder-export-contract.md).
+**Export a real Foundry background/race folder and the bundles will show you exactly what columns
+the table needs.** (We haven't runtime-tested in a live world yet — needs real bg/race items
+present — but it mirrors the proven feat exporter.)
+
+Full round-trip verification (export → app table → re-import) waits until your dedicated bg/race
+table exists, as planned.
 
 ## 4. Creature / NPC bundle preferences (for when you build it)
 
