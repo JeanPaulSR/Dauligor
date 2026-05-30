@@ -33,7 +33,13 @@ console.log(
 
 const worker = spawn(
   'npx',
-  ['wrangler', 'dev', '--port', WORKER_PORT, '--inspector-port', INSPECTOR_PORT],
+  [
+    'wrangler', 'dev', '--port', WORKER_PORT, '--inspector-port', INSPECTOR_PORT,
+    // Dev-only: make the worker its own image host so uploaded images return a
+    // local URL the worker's public /images serve route can render (in prod,
+    // images.dauligor.com serves R2 directly). Overrides the wrangler.toml var.
+    '--var', `R2_PUBLIC_URL:http://localhost:${WORKER_PORT}`,
+  ],
   { cwd: path.join(rootDir, 'worker'), stdio: 'inherit', shell: true, env: process.env },
 );
 
