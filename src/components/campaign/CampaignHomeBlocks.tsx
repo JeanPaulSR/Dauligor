@@ -4,7 +4,7 @@ import { motion } from 'motion/react';
 import { ChevronRight } from 'lucide-react';
 import BBCodeRenderer from '../BBCodeRenderer';
 import { resolveReference, type RefResolved } from '../../lib/references';
-import { isContainer, type EntityRef, type HomeBlock } from '../../lib/campaignHome';
+import { isContainer, isPlaceholderRef, type EntityRef, type HomeBlock } from '../../lib/campaignHome';
 
 interface ArticleLite {
   id: string;
@@ -34,17 +34,51 @@ function plainExcerpt(bbcode: string, max = 140): string {
 
 const refKey = (r: EntityRef) => `${r.kind}::${r.id}`;
 
-/** Walk the block tree and collect every EntityRef that needs resolving. */
+/** Walk the block tree and collect every EntityRef that needs resolving.
+ *  Placeholder refs are skipped — they don't point at a real entity. */
 function collectRefs(blocks: HomeBlock[]): EntityRef[] {
   const out: EntityRef[] = [];
+  const push = (r: EntityRef | null) => { if (r && !isPlaceholderRef(r)) out.push(r); };
   const visit = (b: HomeBlock) => {
-    if (b.blockType === 'entity-row' && b.source === 'manual') out.push(...b.refs);
-    if (b.blockType === 'entity-feature' && b.ref) out.push(b.ref);
-    if (b.blockType === 'recommended' && b.source === 'specific' && b.ref) out.push(b.ref);
+    if (b.blockType === 'entity-row' && b.source === 'manual') b.refs.forEach(push);
+    if (b.blockType === 'entity-feature') push(b.ref);
+    if (b.blockType === 'recommended' && b.source === 'specific') push(b.ref);
     if (isContainer(b)) b.children.forEach(visit);
   };
   blocks.forEach(visit);
   return out;
+}
+
+/** A card view-model: either resolved entity data, or a placeholder (an
+ *  intentional GM placeholder, OR a real ref whose target doesn't exist yet —
+ *  both render a graceful card instead of vanishing, matching the legacy
+ *  "(Article not found)" tile). */
+type CardVM = { data: RefResolved } | { placeholder: string; missing: boolean };
+function refToCard(r: EntityRef, resolved: Record<string, RefResolved>): CardVM {
+  if (isPlaceholderRef(r)) return { placeholder: r.name || 'Untitled', missing: false };
+  const d = resolved[refKey(r)];
+  if (d) return { data: d };
+  return { placeholder: r.name || r.id || 'Untitled', missing: true };
+}
+
+/** A graceful placeholder tile — used for GM placeholders and not-yet-created
+ *  targets. Mirrors the legacy dashed "coming soon" card. */
+function PlaceholderCard({ name, missing, card }: { name: string; missing: boolean; card: 'image' | 'compact' | 'list' }) {
+  if (card === 'list') {
+    return (
+      <span className="flex items-center gap-2 py-2 border-b border-gold/10 text-ink/40">
+        <ChevronRight className="w-3.5 h-3.5 text-gold/30 shrink-0" />
+        <span className="font-serif text-base italic">{name}</span>
+        <span className="label-text ml-auto text-ink/20">{missing ? 'Coming soon' : 'Placeholder'}</span>
+      </span>
+    );
+  }
+  return (
+    <div className="h-full border border-dashed border-gold/20 bg-card/30 flex flex-col items-center justify-center text-center min-h-[150px] p-6">
+      <p className="text-xs font-bold uppercase tracking-widest text-ink/30 font-serif">{name}</p>
+      <p className="text-[10px] text-ink/20 italic mt-1">{missing ? 'Coming soon' : 'Placeholder'}</p>
+    </div>
+  );
 }
 
 /** One entity card — image-led, links to the entity's route when it has one. */
@@ -177,29 +211,29 @@ export default function CampaignHomeBlocks({ blocks, recommendedLore, campaignNa
         return <hr key={block.id} className="border-gold/20" />;
 
       case 'entity-row': {
-        // Auto mode is article-only and resolved server-naively for now —
-        // fall back to manual rendering of whatever refs exist. (Auto-by-category
-        // fetch is a follow-up; manual covers the user's "specific entities" ask.)
-        const cards = block.refs
-          .map((r) => resolved[refKey(r)])
-          .filter((d): d is RefResolved => Boolean(d));
-        if (cards.length === 0 && !block.title) return null;
+        // Each ref → a card view-model: resolved entity OR a placeholder
+        // (intentional, or a not-yet-created target). Placeholders render a
+        // graceful tile instead of vanishing — matching the legacy home.
+        // (Auto-by-category fetch is a follow-up; manual covers the
+        // "specific entities" ask.)
+        const vms = block.refs.map((r) => refToCard(r, resolved));
+        if (vms.length === 0 && !block.title) return null;
         const colClass = block.card === 'list'
           ? ''
           : { 1: '', 2: 'md:grid-cols-2', 3: 'md:grid-cols-3', 4: 'md:grid-cols-2 lg:grid-cols-4' }[block.columns];
+        const renderCard = (vm: CardVM, i: number) =>
+          'data' in vm
+            ? <EntityCard key={i} data={vm.data} card={block.card} excerpt={block.card === 'list' ? false : block.excerpt} />
+            : <PlaceholderCard key={i} name={vm.placeholder} missing={vm.missing} card={block.card} />;
         return (
           <section key={block.id} className="space-y-8">
             {block.showHeading && block.title && (
               <div className="flex items-center gap-3 border-b border-gold/20 pb-4"><h2 className="h2-title">{block.title}</h2></div>
             )}
-            {cards.length > 0 ? (
-              block.card === 'list' ? (
-                <div>{cards.map((d, i) => <EntityCard key={i} data={d} card="list" excerpt={false} />)}</div>
-              ) : (
-                <div className={`grid ${colClass} gap-8`}>
-                  {cards.map((d, i) => <EntityCard key={i} data={d} card={block.card} excerpt={block.excerpt} />)}
-                </div>
-              )
+            {vms.length > 0 ? (
+              block.card === 'list'
+                ? <div>{vms.map(renderCard)}</div>
+                : <div className={`grid ${colClass} gap-8`}>{vms.map(renderCard)}</div>
             ) : (
               <p className="description-text">Nothing to show here yet.</p>
             )}
@@ -208,8 +242,22 @@ export default function CampaignHomeBlocks({ blocks, recommendedLore, campaignNa
       }
 
       case 'entity-feature': {
-        const d = block.ref ? resolved[refKey(block.ref)] : null;
-        if (!d) return null;
+        if (!block.ref) return null;
+        const ph = isPlaceholderRef(block.ref);
+        const d = ph ? null : resolved[refKey(block.ref)];
+        // Intentional placeholder OR unresolved real ref → graceful feature tile.
+        if (!d) {
+          const name = block.ref.name || block.ref.id || 'Untitled';
+          return (
+            <section key={block.id} className="space-y-8">
+              {block.title && <div className="flex items-center gap-3 border-b border-gold/20 pb-4"><h2 className="h2-title">{block.title}</h2></div>}
+              <div className="border border-dashed border-gold/20 bg-card/30 flex flex-col items-center justify-center text-center min-h-[120px] p-8">
+                <p className="text-sm font-bold uppercase tracking-widest text-ink/30 font-serif">{name}</p>
+                <p className="text-[10px] text-ink/20 italic mt-1">{ph ? 'Placeholder' : 'Coming soon'}</p>
+              </div>
+            </section>
+          );
+        }
         const img = d.imageUrl ? (
           <div className="md:w-1/3 h-48 md:h-auto overflow-hidden">
             <img src={d.imageUrl} alt={d.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" referrerPolicy="no-referrer" />

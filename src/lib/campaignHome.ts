@@ -75,9 +75,19 @@ export interface EntityRef {
   kind: string;
   id: string;
   /** Cached display name — lets the editor render chips without a round-trip.
-   *  Display still re-resolves live so renames are reflected. */
+   *  Display still re-resolves live so renames are reflected. For a PLACEHOLDER
+   *  ref (`kind === PLACEHOLDER_KIND`) this is the only meaningful field — it's
+   *  the card title to show. */
   name?: string;
 }
+
+/** A placeholder ref names a card slot without pointing at a real entity — the
+ *  GM gets a styled "coming soon" card without having to create a fake article.
+ *  Mirrors the legacy Home behaviour where a missing article still rendered a
+ *  card. Renderer + picker special-case this kind. */
+export const PLACEHOLDER_KIND = 'placeholder';
+export const isPlaceholderRef = (r: EntityRef): boolean => r.kind === PLACEHOLDER_KIND;
+export const makePlaceholderRef = (name: string): EntityRef => ({ kind: PLACEHOLDER_KIND, id: '', name });
 
 export interface EntityRowBlock extends BlockBase {
   blockType: 'entity-row';
@@ -198,16 +208,36 @@ export function makeBlock(type: HomeBlockType, id: string): HomeBlock {
  *  the structural skeleton of the default site home. Lets a GM customize the
  *  basic style instead of an empty page. */
 export function defaultHomeBlocks(): HomeBlock[] {
+  // Faithful to the legacy Home layout (src/pages/core/Home.tsx): the four
+  // sections a fresh campaign starts from. The World row is seeded with the same
+  // five entries by ARTICLE SLUG; any that don't exist in this world render as a
+  // graceful placeholder card (just like the old "(Article not found)" tile), so
+  // the GM never has to create fake content to start customizing.
   const hero = makeBlock('hero', crypto.randomUUID()) as HeroBlock;
   hero.title = 'Stories in Dauligor';
   hero.subtitle = 'Your GM has made this website to give you easy access to the lore of the setting of Dauligor, and to the homebrew options they allow.';
 
   const row = makeBlock('entity-row', crypto.randomUUID()) as EntityRowBlock;
   row.title = 'The World of Dauligor';
+  row.refs = [
+    { kind: 'article', id: 'world-primer', name: 'World Primer' },
+    { kind: 'article', id: 'world-history', name: 'World History' },
+    { kind: 'article', id: 'rules', name: 'Rules' },
+    { kind: 'article', id: 'divinity', name: 'Divinity' },
+    { kind: 'article', id: 'magic', name: 'Magic' },
+  ];
+
+  // Character Creation — a Group holding a "work in progress" placeholder, the
+  // same stub the legacy home shows until creation tools are built.
+  const charGroup = makeBlock('group', crypto.randomUUID()) as GroupBlock;
+  charGroup.title = 'Character Creation';
+  const charNote = makeBlock('text', crypto.randomUUID()) as TextBlock;
+  charNote.body = '[i]Work in progress — character creation tools are still being built. In the meantime, browse the available [url=/sources]sources[/url].[/i]';
+  charGroup.children = [charNote];
 
   const reco = makeBlock('recommended', crypto.randomUUID()) as RecommendedBlock;
 
-  return [hero, row, reco];
+  return [hero, row, charGroup, reco];
 }
 
 function asRef(v: any): EntityRef | null {

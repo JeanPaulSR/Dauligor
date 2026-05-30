@@ -72,6 +72,7 @@ import CharacterErrorBoundary from './pages/characters/CharacterErrorBoundary';
 import { TooltipProvider } from './components/ui/tooltip';
 import CampaignManager from './pages/campaign/CampaignManager';
 import CampaignEditor from './pages/campaign/CampaignEditor';
+import CampaignHomeEditorPage from './pages/campaign/CampaignHomeEditorPage';
 import RedeemTokenPage from './pages/auth/RedeemTokenPage';
 
 import Sidebar from './components/Sidebar';
@@ -439,6 +440,7 @@ export default function App() {
                   <Route path="/admin/campaigns" element={<AdminCampaigns userProfile={effectiveProfile} />} />
                   <Route path="/campaign/:id" element={<CampaignManager userProfile={effectiveProfile} />} />
                   <Route path="/campaign/edit/:id" element={<CampaignEditor userProfile={effectiveProfile} />} />
+                  <Route path="/campaign/edit/:id/homepage" element={<CampaignHomeEditorPage userProfile={effectiveProfile} />} />
                   <Route path="/admin/proficiencies" element={<AdminProficiencies userProfile={effectiveProfile} />} />
                   <Route path="/admin/statuses" element={<StatusesEditor userProfile={effectiveProfile} />} />
                   <Route path="/admin/images" element={<ImageManager userProfile={effectiveProfile} />} />

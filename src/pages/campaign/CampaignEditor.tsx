@@ -12,7 +12,6 @@ import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, Command
 import { ClassImageEditor } from '@/components/compendium/ClassImageEditor';
 import { ChevronLeft, Save, Sparkles, LayoutGrid, ImageIcon, Calendar, FileText, MapPin, Scroll, Users, History, Check, X, Home as HomeIcon } from 'lucide-react';
 import { ImageUpload } from '@/components/ui/ImageUpload';
-import CampaignHomeEditor from '@/components/campaign/CampaignHomeEditor';
 
 export default function CampaignEditor({ userProfile }: { userProfile: any }) {
   const { id } = useParams();
@@ -278,7 +277,12 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => {
+                  // Homepage is its own fullscreen route, not an in-page tab —
+                  // clicking it navigates straight to the layout builder.
+                  if (tab.id === 'homepage') { if (id) navigate(`/campaign/edit/${id}/homepage`); return; }
+                  setActiveTab(tab.id);
+                }}
                 className={`flex items-center gap-3 px-4 py-3 rounded text-xs lg:text-sm font-bold transition-all text-left border ${
                   isActive 
                     ? 'bg-gold/15 text-gold border-gold/30 shadow-sm' 
@@ -382,10 +386,12 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
                 <CardContent className="space-y-4">
                   <div className="flex items-center gap-3">
                     <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className="h-9 border-gold/20 text-gold hover:bg-gold/5 flex items-center gap-2 rounded">
-                          <Users className="w-4 h-4" /> Add Player
-                        </Button>
+                      {/* Base UI's PopoverTrigger composes via `render`, NOT
+                          Radix's `asChild`. With asChild the trigger renders its
+                          own <button> around the child <Button> → nested buttons
+                          (hydration error). render={<Button/>} makes them one. */}
+                      <PopoverTrigger render={<Button variant="outline" className="h-9 border-gold/20 text-gold hover:bg-gold/5 flex items-center gap-2 rounded" />}>
+                        <Users className="w-4 h-4" /> Add Player
                       </PopoverTrigger>
                       <PopoverContent className="w-72 p-0" align="start">
                         <Command>
@@ -477,12 +483,6 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
                   </div>
                 </CardContent>
               </Card>
-            </div>
-          )}
-
-          {activeTab === 'homepage' && id && (
-            <div className="animate-in fade-in duration-300">
-              <CampaignHomeEditor campaignId={id} campaignName={formData.name} />
             </div>
           )}
 
