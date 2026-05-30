@@ -3,7 +3,7 @@
 Started: `2026-05-28`
 Owner: `Claude`
 Goal: `Own and evolve the content-proposals subsystem — queue/drafts/blocks, cascade engine, review mode, and proposal-mode editor wiring. Specific task per session.`
-Status: `Part D shipped` — block-atomic approve + guard #1 reference-integrity walk landed on `main` (`b35705f`), incl. the AdminProposals Approve-/Reject-block UI. Pure logic unit-tested green; the live atomic-batch run is the **e2e** (mine to drive — needs the running app to author a real block). **R4** (atomic submit flush + fold-race closure) shipped `700f23a`; **F2-leftover** verified already-satisfied in the merged tree. Only the live e2e + the gated remote entity_type migrations remain.
+Status: `Part D shipped` — block-atomic approve + guard #1 reference-integrity walk landed on `main` (`b35705f`), incl. the AdminProposals Approve-/Reject-block UI. Pure logic unit-tested green **and the live data-layer e2e passed** (19/19) against local D1 through the real worker `env.DB.batch()` — see the log entry below. **R4** (atomic submit flush + fold-race closure) shipped `700f23a`; **F2-leftover** verified already-satisfied in the merged tree. The whole cross-referential-cluster feature is now functionally complete; only the **gated remote entity_type migrations** remain before prod.
 
 > Lives in the `loving-banach-d76c40` worktree directory (the dir
 > couldn't be renamed to match the branch — Windows locks the active
@@ -61,6 +61,20 @@ Proposal-mode logic lives *inside* these files, but the files themselves are own
 
 Newest at the top. Each entry: date + link to the handoff doc in this same folder.
 
+- `2026-05-30` — **Part D live e2e PASSED (19/19).** Drove the real approve path
+  (guard #1 → `orderBlockRevisions` → `buildApprovedStatements` → one
+  `env.DB.batch()`) against a real seeded *Druid + Wild Shape + scaling column +
+  option group + option item + subclass* cluster, through the local wrangler
+  worker into local D1 (FK enforcement ON). Verified: whole cluster lands
+  atomically in FK-safe order (subclass after class, item after group — proves
+  the topo-ordering live); `subclass.preview` round-trips (F3); all revisions
+  flip to approved; guard #1 rejects a dangling parent ref; a bad-statement batch
+  rolls back with nothing applied. Only gap vs a full UI run: the HTTP/admin-auth
+  wrapper + the Approve-block button (admin Firebase login is out of scope for me
+  to drive). Applied `subclass_preview` to local D1 to enable the F3 check.
+  **Footgun spotted:** `worker/migrations/9999_cleanup.sql` is a destructive
+  DROP-ALL helper sitting in `migrations_dir` — `wrangler d1 migrations apply`
+  would run it last and wipe the DB (flagged for a separate fix).
 - `2026-05-29` — **R4 shipped + F2-leftover verified done** (`700f23a` on `main`).
   R4(a): submit-side flush is now one atomic `env.DB.batch()` (no orphaned
   staging rows / dup-on-retry). R4(b): `BlockProvider.refresh()` returns the
