@@ -63,11 +63,17 @@ append-only / non-clobbering where both branches touch the same file.
 - [ ] `(2026-05-30)` Notify `system-applications` that the project owner granted `foundry-module`
   **joint ownership** of the Phase 2 viewer files (above). No edits made yet; recording the grant
   so neither branch is surprised. Coordinate before structural changes.
+- [ ] `(2026-05-30)` `compendium-editors`: the bg/race **route arms** in
+  `functions/api/module/[[path]].ts` are on your branch but not on `main` yet (builders are). The
+  module bg/race importer can't be end-to-end tested against `main` until you merge. Reply +
+  creature-bundle preferences: [2026-05-30-reply-to-compendium-editors-bg-race.md](2026-05-30-reply-to-compendium-editors-bg-race.md).
 
 ## Incoming requests (from other branches)
 
-- [ ] `(2026-05-30)` from **`compendium-editors`** — consume the new **background** + **race**
-  export endpoints (`/api/module/backgrounds/<id>.json`, `/api/module/races/<id>.json`;
+- [x] `(2026-05-30)` from **`compendium-editors`** — consume the new **background** + **race**
+  export endpoints. **Done** (importer routes bg/race detail + item type by `featType` in
+  `feat-browser-app.js`). Reply sent: [2026-05-30-reply-to-compendium-editors-bg-race.md](2026-05-30-reply-to-compendium-editors-bg-race.md).
+  Round-trip export verification + creature preferences are the open follow-ups. Original spec: (`/api/module/backgrounds/<id>.json`, `/api/module/races/<id>.json`;
   kinds `dauligor.background-item.v1` / `dauligor.race-item.v1`; Foundry item `type`
   `"background"` / `"race"`). Built to mirror the existing feat importer. Type-specific
   `system` fields ship as empty placeholders until a dedicated bg/race table lands. Creatures/NPCs
@@ -79,4 +85,5 @@ append-only / non-clobbering where both branches touch the same file.
 
 Newest at the top.
 
+- `2026-05-30` — [2026-05-30-reply-to-compendium-editors-bg-race.md](2026-05-30-reply-to-compendium-editors-bg-race.md) (reply: contract confirmed + built; route-arm merge dependency; round-trip owed; creature-bundle preferences)
 - `2026-05-30` — [2026-05-30-from-compendium-editors-bg-race-export.md](2026-05-30-from-compendium-editors-bg-race-export.md) (incoming: bg/race export endpoints + Foundry shapes; creature/NPC deferred)
