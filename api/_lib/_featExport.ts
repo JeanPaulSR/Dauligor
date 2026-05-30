@@ -107,16 +107,44 @@ function arrayToFoundryMap(entries: any): Record<string, any> {
 }
 
 /**
- * Build the full Foundry-ready feat item bundle for one feat row.
- *
- * Returns null when no row matches.
+ * The shared Foundry-item shape produced from a `feats`-table row. Backgrounds
+ * and races live in the same table (discriminated by `feat_type`), carry the
+ * same advancement / description / source machinery, and differ only in the
+ * Foundry `type` they map to plus a few type-specific `system` fields. So the
+ * core transform is extracted here and reused by `_backgroundExport` /
+ * `_raceExport`, which pass their own `foundryType` and then layer their extra
+ * fields onto the returned `system`.
  */
-export async function buildFeatItemBundle(
-  featId: string,
+export interface FeatLikeItem {
+  name: string;
+  type: string;
+  img?: string;
+  system: Record<string, any>;
+  effects: unknown[];
+  flags: Record<string, any>;
+}
+
+export interface BuildFeatLikeOptions {
+  /** Foundry Item `type` to stamp — "feat" (default), "background", "race". */
+  foundryType?: string;
+  /** `flags.dauligor-pairing.entityKind` — defaults to `foundryType`. */
+  entityKind?: string;
+}
+
+/**
+ * Build the shared feat-shaped Foundry item from a `feats`-table row. Returns
+ * the `{ name, type, img, system, effects, flags }` object (NOT the bundle
+ * envelope) plus the resolved `sourceId`, so callers can wrap it in their own
+ * `kind`-tagged bundle and extend `system`. Returns null when no row matches.
+ */
+export async function buildFeatLikeItem(
+  rowId: string,
   fetchers: ExportFetchers,
-): Promise<FeatItemBundle | null> {
+  opts: BuildFeatLikeOptions = {},
+): Promise<{ row: any; item: FeatLikeItem; sourceId: string } | null> {
+  const foundryType = opts.foundryType ?? "feat";
   const { fetchDocument, fetchCollection } = fetchers;
-  const row: any = await fetchDocument<any>("feats", featId);
+  const row: any = await fetchDocument<any>("feats", rowId);
   if (!row) return null;
 
   const tagIds = parseJsonField(row.tags, []) || [];
@@ -274,16 +302,16 @@ export async function buildFeatItemBundle(
   system.crewed = false;
   system.enchant = {};
 
-  const feat = {
+  const item: FeatLikeItem = {
     name: String(row.name || ""),
-    type: "feat" as const,
+    type: foundryType,
     img: row.image_url || undefined,
     system,
     effects: Array.isArray(effectsArr) ? effectsArr : [],
     flags: {
       "dauligor-pairing": {
         schemaVersion: 1,
-        entityKind: "feat",
+        entityKind: opts.entityKind ?? foundryType,
         sourceId,
         dbId: String(row.id),
         // Distinguishes general feats from class-/subclass-features
@@ -298,12 +326,27 @@ export async function buildFeatItemBundle(
     },
   };
 
+  return { row, item, sourceId };
+}
+
+/**
+ * Build the full Foundry-ready feat item bundle for one feat row.
+ * Thin wrapper over `buildFeatLikeItem` (foundryType = "feat").
+ *
+ * Returns null when no row matches.
+ */
+export async function buildFeatItemBundle(
+  featId: string,
+  fetchers: ExportFetchers,
+): Promise<FeatItemBundle | null> {
+  const built = await buildFeatLikeItem(featId, fetchers, { foundryType: "feat" });
+  if (!built) return null;
   return {
     kind: "dauligor.feat-item.v1",
     schemaVersion: 1,
-    dbId: String(row.id),
-    sourceId,
-    feat,
+    dbId: String(built.row.id),
+    sourceId: built.sourceId,
+    feat: { ...built.item, type: "feat" },
     generatedAt: Date.now(),
   };
 }

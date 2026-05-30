@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Backgrounds, Races &amp; Creatures in Foundry — Deep Dive</title>
+<style>
+  :root{--parch:#f4ecd8;--parch2:#ece0c4;--ink:#2b2419;--ink2:#5c5142;--gold:#9a7b34;
+    --line:#c9a96133;--green:#3f6f43;--red:#8a2f2f;--blue:#2f5a8a;--amber:#8a5a1f;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--parch);color:var(--ink);
+    font:15px/1.65 "Iowan Old Style","Palatino Linotype",Georgia,serif;padding:2.5rem 1rem 6rem;}
+  .wrap{max-width:920px;margin:0 auto;}
+  h1{font-size:2rem;color:var(--gold);margin:0 0 .2rem;letter-spacing:-.01em;}
+  h2{font-size:1.3rem;color:var(--gold);margin:2.6rem 0 .6rem;border-bottom:2px solid var(--line);padding-bottom:.3rem;}
+  h3{font-size:1.05rem;margin:1.5rem 0 .35rem;}
+  .sub{color:var(--ink2);font-style:italic;margin-top:.1rem;}
+  code{background:var(--parch2);padding:.08em .4em;border-radius:3px;font-size:.85em;font-family:"SF Mono",Consolas,monospace;}
+  pre{background:#fffaf0;border:1px solid var(--line);border-radius:8px;padding:.8rem 1rem;overflow:auto;font-size:.82rem;line-height:1.5;}
+  .card{background:#fffaf0;border:1px solid var(--line);border-radius:10px;padding:1rem 1.2rem;margin:1rem 0;}
+  .banner{border-left:5px solid var(--gold);background:#fff7e6;padding:.85rem 1.1rem;border-radius:0 8px 8px 0;margin:1rem 0 1.6rem;}
+  table{border-collapse:collapse;width:100%;margin:.8rem 0;font-size:.9rem;}
+  th,td{border:1px solid var(--line);padding:.45rem .6rem;text-align:left;vertical-align:top;}
+  th{background:var(--parch2);color:var(--gold);font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;}
+  .pill{display:inline-block;padding:.05em .55em;border-radius:999px;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;}
+  .item{background:#dff0df;color:var(--green);} .actor{background:#dde7f4;color:var(--blue);} .new{background:#f6e7c8;color:var(--amber);}
+  .small{font-size:.86rem;color:var(--ink2);}
+  hr{border:none;border-top:1px solid var(--line);margin:2rem 0;}
+  .keymap{font-family:"SF Mono",Consolas,monospace;font-size:.8rem;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Backgrounds, Races &amp; Creatures in Foundry</h1>
+<p class="sub">How dnd5e (v13 / system 5.x) models these three object types, what our codebase already has, and the plan: clone the spell/item/feat export buttons for them so we can study their real Foundry shapes before building editors. Branch <code>compendium-editors</code>, 2026-05-30. Schema facts verified against the live dnd5e <code>master</code> source.</p>
+
+<div class="banner">
+<strong>The one-sentence version.</strong> Backgrounds and races are <em>Items</em> (same family as feats/spells — they live in an actor's items array and carry <code>advancement[]</code>), but <strong>creatures are <em>Actors</em></strong> — a fundamentally different document with abilities, attributes, CR, and their <em>own</em> embedded items. So bg/race export can clone the feat builder almost verbatim; creature export is a new shape that wraps an Actor, not an Item.
+</div>
+
+<h2>1 · The core split: Item vs Actor</h2>
+<p>Foundry has two top-level document classes that matter here. dnd5e subtypes each:</p>
+<table>
+<tr><th>Our type</th><th>Foundry document</th><th>dnd5e subtype</th><th>Data model (source)</th></tr>
+<tr><td>Background</td><td class="keymap">Item</td><td><span class="pill item">Item</span> <code>type:"background"</code></td><td><code>module/data/item/background.mjs</code> → <code>BackgroundData</code></td></tr>
+<tr><td>Race / Species</td><td class="keymap">Item</td><td><span class="pill item">Item</span> <code>type:"race"</code></td><td><code>module/data/item/race.mjs</code> → <code>RaceData</code></td></tr>
+<tr><td>Creature / Monster</td><td class="keymap">Actor</td><td><span class="pill actor">Actor</span> <code>type:"npc"</code></td><td><code>module/data/actor/npc.mjs</code> → <code>NPCData</code></td></tr>
+</table>
+<p>This is <em>the</em> architectural fact that shapes the work. Our existing exporters (<code>_spellExport</code>, <code>_itemExport</code>, <code>_featExport</code>) all build <strong>Item</strong> bundles — a <code>{ name, type, img, system, effects, flags }</code> object that drops into an actor's items. Backgrounds and races fit that mold exactly. A creature does not: it's an actor with its <em>own</em> embedded items.</p>
+
+<h2>2 · Background — <code>BackgroundData</code> (Item)</h2>
+<p>Composed from three mixins + base <code>ItemDataModel</code>. <code>singleton: true</code> (an actor holds at most one background).</p>
+<table>
+<tr><th>system.* field</th><th>Source</th><th>Notes</th></tr>
+<tr><td><code>description.{value,chat}</code></td><td>ItemDescriptionTemplate</td><td>HTML blurb (+ chat card text)</td></tr>
+<tr><td><code>source.{book,page,license,revision,rules}</code></td><td>ItemDescriptionTemplate</td><td>publication metadata (our <code>source_id</code> maps to this)</td></tr>
+<tr><td><code>identifier</code></td><td>base item</td><td>slug</td></tr>
+<tr><td><code>advancement[]</code></td><td>AdvancementTemplate</td><td>the grants — skill/tool/language proficiencies, an ItemGrant for a background feature, ASI/feat (2024 rules), etc.</td></tr>
+<tr><td><code>startingEquipment[]</code></td><td>StartingEquipmentTemplate</td><td>array of <code>EquipmentEntryData</code> (see below)</td></tr>
+<tr><td><code>wealth</code></td><td>StartingEquipmentTemplate</td><td>FormulaField — starting gold alternative</td></tr>
+</table>
+<p><code>EquipmentEntryData</code> entries: <code>{_id, group, sort, type, count, key, requiresProficiency}</code> where <code>type ∈ { "AND","OR" (grouping), "armor","tool","weapon","focus" (category choice), "currency", "linked" (specific item by UUID) }</code>. This is the "choose a martial weapon OR (a shield AND a mace)" tree.</p>
+<p class="small"><strong>Takeaway:</strong> a background is essentially <em>a feat with advancements + a starting-equipment tree</em>. The feat exporter already emits <code>system.advancement</code>; background export = feat export with <code>type:"background"</code> + the equipment/wealth fields.</p>
+
+<h2>3 · Race / Species — <code>RaceData</code> (Item)</h2>
+<p>Same mixins as background (Advancement + ItemDescription) minus starting-equipment, plus three creature-shaped fields:</p>
+<table>
+<tr><th>system.* field</th><th>Type</th><th>Notes</th></tr>
+<tr><td><code>description.*</code> / <code>source.*</code> / <code>identifier</code></td><td>(shared)</td><td>as background</td></tr>
+<tr><td><code>advancement[]</code></td><td>AdvancementTemplate</td><td>ASI, the racial traits (ItemGrant of feature items), Size, etc.</td></tr>
+<tr><td><code>movement</code></td><td>MovementField</td><td><code>{walk,fly,swim,climb,burrow,hover,units}</code> (bonus/special disabled for races)</td></tr>
+<tr><td><code>senses</code></td><td>SensesField</td><td><code>{darkvision,blindsight,tremorsense,truesight,units,special}</code></td></tr>
+<tr><td><code>type</code></td><td>CreatureTypeField</td><td><code>{value:"humanoid", subtype, swarm:false, custom}</code> — the creature type the species confers</td></tr>
+</table>
+<p class="small"><strong>Takeaway:</strong> race export = feat export with <code>type:"race"</code> + <code>movement</code>/<code>senses</code>/<code>type</code>. The advancement machinery is identical.</p>
+
+<h2>4 · Creature / Monster — <code>NPCData</code> (Actor) — the different one</h2>
+<p>Extends <code>CreatureTemplate</code> (shared with the PC actor) which mixes in AttributesFields / DetailsFields / TraitsFields. This is a whole stat block, not an item:</p>
+<table>
+<tr><th>system.* field</th><th>Holds</th></tr>
+<tr><td><code>abilities.{str,dex,con,int,wis,cha}.{value,proficient,bonuses,…}</code></td><td>the six ability scores</td></tr>
+<tr><td><code>attributes.hp.{value,max,formula,temp,…}</code></td><td>hit points (+ <code>hd.spent</code> hit dice)</td></tr>
+<tr><td><code>attributes.ac.{flat,calc,formula}</code></td><td>armor class</td></tr>
+<tr><td><code>attributes.movement</code> / <code>attributes.senses</code></td><td>same field types as race, on the actor</td></tr>
+<tr><td><code>attributes.{init, spell.level, death, …}</code></td><td>initiative, spellcasting level, death saves</td></tr>
+<tr><td><code>details.type</code></td><td><code>CreatureTypeField</code> — creature type (dragon, fiend, …)</td></tr>
+<tr><td><code>details.cr</code></td><td>NumberField — Challenge Rating</td></tr>
+<tr><td><code>details.{alignment, biography.value, habitat, treasure, source}</code></td><td>flavor + publication</td></tr>
+<tr><td><code>traits.{di,dr,dv,ci}</code></td><td>damage immunities / resistances / vulnerabilities, condition immunities</td></tr>
+<tr><td><code>traits.{languages, size, …}</code></td><td>languages, size</td></tr>
+<tr><td><code>resources.{legact, legres, lair}</code></td><td>legendary actions / resistances / lair actions</td></tr>
+</table>
+<p><strong>Features and actions are NOT system fields.</strong> A monster's attacks, traits, and spells are <strong>embedded Item documents</strong> in the actor's <code>items[]</code> array (each a <code>weapon</code>/<code>feat</code>/<code>spell</code> Item with its own Activities). So a creature export bundle has to carry an actor envelope <em>plus an array of item documents</em> — structurally a superset of everything the item exporters already do.</p>
+<div class="banner">
+<strong>Design consequence.</strong> Backgrounds + races slot into the existing Item-bundle pipeline with a near-verbatim clone of <code>_featExport</code>. Creatures need a new <em>actor</em>-bundle shape (<code>kind:"dauligor.creature-actor.v1"</code>) whose <code>system</code> is the NPC schema and whose nested <code>items[]</code> reuse the item exporters. Plan the buttons for all three now, but expect creature export to reveal the most about a shape we don't model yet — which is exactly why we're adding the button first.
+</div>
+
+<h2>5 · What our codebase already has</h2>
+<table>
+<tr><th>Piece</th><th>Background</th><th>Race</th><th>Creature</th></tr>
+<tr><td>Editor page</td><td><code>BackgroundEditor.tsx</code> ✓</td><td><code>RaceEditor.tsx</code> ✓</td><td>— (none)</td></tr>
+<tr><td>List page</td><td><code>BackgroundsList.tsx</code> ✓</td><td><code>RacesList.tsx</code> ✓</td><td>—</td></tr>
+<tr><td>Route (<code>App.tsx</code>)</td><td>✓ ~308-311</td><td>✓</td><td>—</td></tr>
+<tr><td>Storage</td><td colspan="2"><code>feats</code> table, <code>feat_type='background'</code> / <code>'race'</code> (intentional placeholder per memory)</td><td>likely <code>feat_type='monster'</code> today (see <code>_featExport.ts:146</code>); no dedicated table</td></tr>
+<tr><td>Export builder</td><td colspan="3">— none for any of the three (<code>_spellExport</code>/<code>_itemExport</code>/<code>_featExport</code> only)</td></tr>
+<tr><td>Export route / kind</td><td colspan="3">— not in <code>ExportEntityKind</code>, <code>VALID_KINDS</code>, or the rebake dispatcher</td></tr>
+</table>
+<p class="small">Storage is largely ready for bg/race: <code>scaling_columns</code> already accepts <code>parent_type='background'|'race'</code>; the <code>feats</code> table has description/advancements/source/tags. Creatures have no real home yet — the <code>feat_type='monster'</code> placeholder can't express HP/AC/abilities/CR, so a creature table (or a new actor-shaped table) is part of the eventual work, not the export-button step.</p>
+
+<h2>6 · The export-button wiring (what to clone)</h2>
+<p>The "export to Foundry" path is server-side bake → R2, fired by the client. The seams (from the architecture sweep):</p>
+<table>
+<tr><th>Layer</th><th>File</th><th>What to add</th></tr>
+<tr><td>Client trigger</td><td><code>src/components/compendium/BakeNowButton.tsx</code> + <code>src/lib/moduleExport.ts</code> (<code>rebakeNow</code>/<code>queueRebake</code>)</td><td>render <code>BakeNowButton kind="background|race|creature"</code> in the editors; extend the <code>ExportEntityKind</code> union (line ~15)</td></tr>
+<tr><td>Kind validation</td><td><code>functions/api/module/[[path]].ts</code> (<code>VALID_KINDS</code>, ~132)</td><td>add <code>"background","race","creature"</code></td></tr>
+<tr><td>Builder</td><td><code>api/_lib/_featExport.ts</code> (template)</td><td>new <code>_backgroundExport.ts</code> + <code>_raceExport.ts</code> (clone feat; vary <code>type</code> + add the fields in §2/§3). <code>_creatureExport.ts</code> = new actor shape (§4)</td></tr>
+<tr><td>GET route</td><td><code>functions/api/module/[[path]].ts</code> (~328-388)</td><td><code>/api/module/backgrounds|races|creatures/&lt;id&gt;.json</code> dispatch arms</td></tr>
+<tr><td>Rebake dispatch</td><td><code>api/_lib/module-export-pipeline.ts</code> (~507) + <code>module-export-queue.ts</code> (~20)</td><td>cases for the three kinds (bg/race can reuse <code>rebakeFeat</code>'s catalog-only logic; creature likely its own)</td></tr>
+</table>
+
+<h2>7 · The plan (this is the order)</h2>
+<ol>
+<li><strong>Clone the export buttons</strong> for backgrounds, races, creatures (this step). Wire the 5 seams in §6. For bg/race this is a feat-export clone; for creature, a first-pass actor bundle. <em>Purpose: produce real Foundry JSON for each so we can see exactly how the dnd5e module ingests them</em> — empirical, not inferred.</li>
+<li><strong>Study the round-trip.</strong> Export → drop into a Foundry world → observe how backgrounds/races apply their advancements and how an NPC stat block + embedded items render. Capture the real shapes the system expects.</li>
+<li><strong>Then build the editors</strong> — the same treatment we gave feats and spells (tagging-aware editor, proposal-mode, draft overlays). bg/race graduate out of the <code>feats</code>-table placeholder into their own tables (per the "new table for new functionality" preference); creature gets a genuine actor-shaped home.</li>
+</ol>
+<p class="small">Caveat captured for step 3: per project memory, prefer a <em>new D1 table</em> over extending <code>feats</code> with more discriminators — the <code>feat_type='background'|'race'|'monster'</code> placeholder is explicitly temporary. The export-button step does <strong>not</strong> require the migration; it reads whatever the editors store today.</p>
+
+<hr>
+<p class="small">Schema facts in §§2-4 verified against dnd5e <code>master</code>: <code>background.mjs</code>, <code>race.mjs</code>, <code>npc.mjs</code>, <code>templates/starting-equipment.mjs</code>. Foundry v13 + dnd5e 5.x. Codebase facts from the export-architecture sweep of <code>src/lib/moduleExport.ts</code>, <code>api/_lib/_*Export.ts</code>, <code>functions/api/module/[[path]].ts</code>, <code>api/_lib/module-export-pipeline.ts</code>.</p>
+
+</div>
+</body>
+</html>

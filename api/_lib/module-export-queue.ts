@@ -31,7 +31,13 @@ export type ExportEntityKind =
   // without it, the Foundry importer wizard reports "no feats-capable
   // sources" even when the per-source `/feats.json` endpoint serves
   // real data.
-  | "feat";
+  | "feat"
+  // Backgrounds + races. Stored in the `feats` table (feat_type
+  // discriminator) but exported as their own Foundry Item types
+  // ("background" / "race"). Like feats, a save only affects the
+  // top-level catalog counts, so they reuse the feat rebake path.
+  | "background"
+  | "race";
 
 const DEBOUNCE_MS = 60 * 60 * 1000; // 1 hour after last edit
 
