@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   Sparkles, LayoutGrid, Star, BookMarked, Type, ImageIcon, Minus, Square, Columns3, Megaphone,
-  ChevronUp, ChevronDown, Trash2, Copy, Plus, Save, X, GripVertical, Search, RotateCcw, ChevronLeft,
+  ChevronUp, ChevronDown, Trash2, Copy, X, GripVertical, Search, ChevronLeft,
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -259,11 +259,11 @@ export default function CampaignHomeEditor({ campaignId, campaignName = '', full
 
   const actions = (
     <div className="flex items-center gap-2 shrink-0">
-      <Button onClick={handleRestoreDefault} disabled={saving} variant="outline" className="gap-2 border-gold/20 text-ink/70 hover:text-gold">
-        <RotateCcw className="w-4 h-4" /> Restore Default
+      <Button onClick={handleRestoreDefault} disabled={saving} variant="outline" className="border-gold/20 text-ink/70 hover:text-gold">
+        Restore Default
       </Button>
-      <Button onClick={handleSave} disabled={saving || !canSave} className="btn-gold-solid gap-2">
-        <Save className="w-4 h-4" /> {saving ? 'Saving…' : canSave ? 'Save Layout' : 'Saved'}
+      <Button onClick={handleSave} disabled={saving || !canSave} className="btn-gold-solid">
+        {saving ? 'Saving…' : canSave ? 'Save Layout' : 'Saved'}
       </Button>
     </div>
   );
@@ -288,7 +288,7 @@ export default function CampaignHomeEditor({ campaignId, campaignName = '', full
           />
         </div>
         <div className="p-2 border-t border-gold/20">
-          <Button onClick={() => setAddAt({ containerId: null })} className="btn-gold w-full gap-2 h-8 text-xs"><Plus className="w-3.5 h-3.5" /> Add block</Button>
+          <Button onClick={() => setAddAt({ containerId: null })} className="btn-gold w-full h-8 text-xs">Add block</Button>
         </div>
       </div>
 
@@ -299,7 +299,7 @@ export default function CampaignHomeEditor({ campaignId, campaignName = '', full
         <div className="pane-head">Live preview · what players see</div>
         <div className="flex-grow overflow-y-auto custom-scrollbar p-4">
           {blocks.length === 0 ? (
-            <div className="empty-state h-full"><LayoutGrid className="w-8 h-8 text-gold/20 mb-3" /><p className="description-text">No blocks — players see the default home page.</p><p className="label-text text-gold/40 mt-1">Add a block, or save to keep the default</p></div>
+            <div className="empty-state h-full"><p className="description-text">No blocks — players see the default home page.</p><p className="label-text text-gold/40 mt-1">Add a block, or save to keep the default</p></div>
           ) : (
             // Clicks are swallowed so preview links don't navigate away mid-edit.
             <div onClickCapture={(e) => e.preventDefault()}>
@@ -335,8 +335,7 @@ export default function CampaignHomeEditor({ campaignId, campaignName = '', full
   );
 
   const seedBanner = seededFromDefault && !dirty && (
-    <div className="flex items-start gap-2 px-3 py-2.5 border border-gold/20 bg-gold/5 shrink-0">
-      <Sparkles className="w-4 h-4 text-gold shrink-0 mt-0.5" />
+    <div className="px-3 py-2.5 border border-gold/20 bg-gold/5 shrink-0">
       <p className="text-[12px] text-ink/70 leading-snug">
         This is the <strong className="text-ink">default layout</strong>. Customize the blocks below, then <strong className="text-ink">Save</strong> to make it this campaign's homepage.
       </p>
@@ -354,8 +353,7 @@ export default function CampaignHomeEditor({ campaignId, campaignName = '', full
             <ChevronLeft className="w-4 h-4" /> Back to Campaign Editor
           </Button>
           <div className="min-w-0 flex-1">
-            <h2 className="text-lg font-serif font-bold text-ink truncate flex items-center gap-2">
-              <LayoutGrid className="w-4 h-4 text-gold shrink-0" />
+            <h2 className="text-lg font-serif font-bold text-ink truncate">
               Homepage Layout{campaignName ? <span className="text-ink/40 font-normal">· {campaignName}</span> : null}
             </h2>
           </div>
@@ -374,7 +372,7 @@ export default function CampaignHomeEditor({ campaignId, campaignName = '', full
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="h2-title flex items-center gap-2"><LayoutGrid className="w-5 h-5 text-gold shrink-0" /> Homepage Layout</h2>
+          <h2 className="h2-title">Homepage Layout</h2>
           <p className="field-hint mt-1">Build what players see on this campaign's home page — drag to reorder &amp; nest, fill each block, then save. Delete every block and save to fall back to the default site home.</p>
         </div>
         {actions}
@@ -590,14 +588,14 @@ function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onA
         <Field label="Title"><Input className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="Section title" /></Field>
         <Toggle label="Show title" value={block.showTitle} onChange={(v) => set({ showTitle: v })} />
         <Seg label="Style" value={block.style} options={[['card', 'Card'], ['bordered', 'Bordered'], ['plain', 'Plain']]} onChange={(v) => set({ style: v })} />
-        <Button onClick={() => onAddInside(block.id)} className="btn-gold w-full gap-2 h-8 text-xs"><Plus className="w-3.5 h-3.5" /> Add block inside</Button>
+        <Button onClick={() => onAddInside(block.id)} className="btn-gold w-full h-8 text-xs">Add block inside</Button>
         <p className="field-hint">Or drag any block onto this group in the structure tree to nest it.</p>
       </>)}
 
       {block.blockType === 'columns' && (<>
         <Stepper label="Columns" value={block.columns} min={2} max={4} onChange={(v) => set({ columns: v })} />
         <Seg label="Gap" value={block.gap} options={[['small', 'S'], ['medium', 'M'], ['large', 'L']]} onChange={(v) => set({ gap: v })} />
-        <Button onClick={() => onAddInside(block.id)} className="btn-gold w-full gap-2 h-8 text-xs"><Plus className="w-3.5 h-3.5" /> Add column block</Button>
+        <Button onClick={() => onAddInside(block.id)} className="btn-gold w-full h-8 text-xs">Add column block</Button>
         <p className="field-hint">Each nested block becomes one column cell, left to right.</p>
       </>)}
     </div>

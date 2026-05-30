@@ -85,14 +85,32 @@ export default function Home({ userProfile }: { userProfile: any }) {
   }, [homeBlocks, activeCampaign]);
 
   if (loading) {
+    // Skeleton mirrors the real default layout's shape (centered hero → an
+    // asymmetric featureFirst entity grid → a callout band) so the page doesn't
+    // visibly reflow when content arrives. Square corners + `space-y-16`/`pb-20`
+    // to match the live container (the app is `--radius: 0` everywhere — no
+    // `rounded-*`, or the skeleton would snap from rounded to square on load).
     return (
-      <div className="max-w-6xl mx-auto py-20 text-center">
-        <div className="animate-pulse space-y-8">
-          <div className="h-20 bg-gold/5 rounded-xl w-3/4 mx-auto" />
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="h-64 bg-gold/5 rounded-xl md:col-span-2" />
-            <div className="h-64 bg-gold/5 rounded-xl" />
+      <div className="max-w-6xl mx-auto space-y-16 pb-20" aria-hidden="true">
+        <div className="animate-pulse space-y-16">
+          {/* Hero: title + subtitle, centered */}
+          <div className="flex flex-col items-center gap-4 pt-10">
+            <div className="h-12 w-2/3 bg-gold/5" />
+            <div className="h-5 w-1/2 bg-gold/5" />
           </div>
+          {/* Entity row: section heading + the featureFirst grid (first spans 2) */}
+          <div className="space-y-8">
+            <div className="h-8 w-1/3 bg-gold/5" />
+            <div className="grid md:grid-cols-3 gap-8">
+              <div className="h-44 bg-gold/5 md:col-span-2" />
+              <div className="h-44 bg-gold/5" />
+              <div className="h-44 bg-gold/5" />
+              <div className="h-44 bg-gold/5" />
+              <div className="h-44 bg-gold/5" />
+            </div>
+          </div>
+          {/* Callout band */}
+          <div className="h-40 bg-gold/5 border border-dashed border-gold/10" />
         </div>
       </div>
     );
