@@ -32,8 +32,10 @@ interface BlockBase {
 export interface HeroBlock extends BlockBase {
   blockType: 'hero';
   title: string;
+  /** BBCode, rendered via BBCodeRenderer. The seeded default wraps its text in
+   *  [i]…[/i] for the classic italic look, but a GM can use any BBCode now. */
   subtitle: string;
-  align: 'center' | 'left';
+  align: 'center' | 'left' | 'right';
   size: 'normal' | 'large';
 }
 export interface TextBlock extends BlockBase {
@@ -80,7 +82,29 @@ export interface EntityRef {
    *  ref (`kind === PLACEHOLDER_KIND`) this is the only meaningful field — it's
    *  the card title to show. */
   name?: string;
+  /** Per-card heading override ("what it says"). When non-empty it wins over the
+   *  resolved entity name / `name`. Empty → resolved name, then `name`, then the
+   *  PLACEHOLDER_TITLE default. */
+  title?: string;
+  /** Per-card description override ("what its description says"). When non-empty
+   *  it wins over the resolved entity summary. Empty → resolved summary, then the
+   *  PLACEHOLDER_DESCRIPTION default. */
+  description?: string;
+  /** How many grid columns this card spans (1–4, default 1). Lets a GM size any
+   *  card — supersedes the row-level `featureFirst` shortcut, which only widens
+   *  the first card. Clamped to the row's column count at render time. */
+  span?: number;
 }
+
+/** Defaults shown when a card has neither an override nor resolved entity data —
+ *  e.g. a fresh placeholder, or a real ref whose target doesn't exist yet. */
+export const PLACEHOLDER_TITLE = 'Placeholder';
+export const PLACEHOLDER_DESCRIPTION = 'Coming Soon';
+/** A card's column span, clamped 1–4 (default 1). */
+export const clampSpan = (v: any): number => {
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) ? Math.max(1, Math.min(4, n)) : 1;
+};
 
 /** A placeholder ref names a card slot without pointing at a real entity — the
  *  GM gets a styled "coming soon" card without having to create a fake article.
@@ -168,7 +192,7 @@ export const BLOCK_TYPE_META: Record<
   HomeBlockType,
   { label: string; icon: string; description: string; group: 'content' | 'container' }
 > = {
-  hero:             { label: 'Hero',             icon: 'Sparkles',   description: 'A large title + subtitle banner.',          group: 'content' },
+  hero:             { label: 'Header',           icon: 'Sparkles',   description: 'A large title + subtitle banner.',          group: 'content' },
   'entity-row':     { label: 'Entity Row',       icon: 'LayoutGrid', description: 'A row/grid of cards — articles, classes, items, system pages…', group: 'content' },
   'entity-feature': { label: 'Featured',         icon: 'Star',       description: 'One large highlighted entity.',             group: 'content' },
   recommended:      { label: 'Recommended',      icon: 'BookMarked', description: "The campaign's recommended article.",       group: 'content' },
@@ -237,7 +261,7 @@ export function defaultHomeBlocks(): HomeBlock[] {
   // the GM never has to create fake content to start customizing.
   const hero = makeBlock('hero', crypto.randomUUID()) as HeroBlock;
   hero.title = 'Stories in Dauligor';
-  hero.subtitle = 'Your GM has made this website to give you easy access to the lore of the setting of Dauligor, and to the homebrew options they allow.';
+  hero.subtitle = '[i]Your GM has made this website to give you easy access to the lore of the setting of Dauligor, and to the homebrew options they allow.[/i]';
 
   // "The World of Dauligor" — five articles in the asymmetric feature-first grid
   // (World Primer spans 2 cols, then the rest fill an even 3-col grid), exactly
@@ -270,7 +294,12 @@ export function defaultHomeBlocks(): HomeBlock[] {
 function asRef(v: any): EntityRef | null {
   // id may legitimately be '' (a page-level system ref), so check kind only.
   if (!v || typeof v !== 'object' || !v.kind) return null;
-  return { kind: String(v.kind), id: String(v.id ?? ''), name: v.name ? String(v.name) : undefined };
+  const ref: EntityRef = { kind: String(v.kind), id: String(v.id ?? '') };
+  if (v.name) ref.name = String(v.name);
+  if (v.title) ref.title = String(v.title);
+  if (v.description) ref.description = String(v.description);
+  if (v.span != null) ref.span = clampSpan(v.span);
+  return ref;
 }
 function asRefArray(v: any): EntityRef[] {
   if (!Array.isArray(v)) return [];
@@ -311,7 +340,8 @@ export function parseHomeBlock(row: any): HomeBlock | null {
   switch (type) {
     case 'hero':
       return { id, blockType: 'hero', title: s(config.title), subtitle: s(config.subtitle),
-        align: config.align === 'left' ? 'left' : 'center', size: config.size === 'large' ? 'large' : 'normal' };
+        align: config.align === 'left' ? 'left' : config.align === 'right' ? 'right' : 'center',
+        size: config.size === 'large' ? 'large' : 'normal' };
     case 'text':
       return { id, blockType: 'text', body: s(config.body),
         width: config.width === 'narrow' ? 'narrow' : config.width === 'wide' ? 'wide' : 'normal' };

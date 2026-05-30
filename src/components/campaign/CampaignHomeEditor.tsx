@@ -16,6 +16,7 @@ import CampaignHomeBlocks from './CampaignHomeBlocks';
 import {
   fetchCampaignHomeBlocks, saveCampaignHomeBlocks, makeBlock, defaultHomeBlocks,
   isContainer, makePlaceholderRef, BLOCK_TYPE_META, HOME_BLOCK_TYPES, ENTITY_PICKER_KINDS,
+  PLACEHOLDER_TITLE, PLACEHOLDER_DESCRIPTION,
   type HomeBlock, type HomeBlockType, type ContainerBlock, type EntityRef,
 } from '../../lib/campaignHome';
 
@@ -519,9 +520,9 @@ function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onA
       </div>
 
       {block.blockType === 'hero' && (<>
-        <Field label="Title"><Input className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="Stories in Dauligor" /></Field>
-        <Field label="Subtitle"><textarea className="field-input min-h-[70px] py-2 font-serif italic w-full" value={block.subtitle} onChange={(e) => set({ subtitle: e.target.value })} placeholder="A welcome line…" /></Field>
-        <Seg label="Alignment" value={block.align} options={[['center', 'Center'], ['left', 'Left']]} onChange={(v) => set({ align: v })} />
+        <Field label="Title"><Input autoComplete="off" className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="Stories in Dauligor" /></Field>
+        <Field label="Subtitle (BBCode)"><MarkdownEditor value={block.subtitle} onChange={(v) => set({ subtitle: v })} placeholder="A welcome line…" /></Field>
+        <Seg label="Alignment" value={block.align} options={[['left', 'Left'], ['center', 'Center'], ['right', 'Right']]} onChange={(v) => set({ align: v })} />
         <Seg label="Size" value={block.size} options={[['normal', 'Normal'], ['large', 'Large']]} onChange={(v) => set({ size: v })} />
       </>)}
 
@@ -532,9 +533,9 @@ function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onA
 
       {block.blockType === 'image' && (<>
         <Field label="Image"><ImageUpload currentImageUrl={block.url || ''} onUpload={(url) => set({ url })} storagePath={`images/campaigns/home`} /></Field>
-        <Field label="Caption (optional)"><Input className="field-input" value={block.caption} onChange={(e) => set({ caption: e.target.value })} placeholder="A short caption" /></Field>
+        <Field label="Caption (optional)"><Input autoComplete="off" className="field-input" value={block.caption} onChange={(e) => set({ caption: e.target.value })} placeholder="A short caption" /></Field>
         <Seg label="Height" value={block.height} options={[['small', 'S'], ['medium', 'M'], ['large', 'L']]} onChange={(v) => set({ height: v })} />
-        <Field label="Links to (optional)"><Input className="field-input" value={block.link} onChange={(e) => set({ link: e.target.value })} placeholder="/wiki/article/…" /></Field>
+        <Field label="Links to (optional)"><Input autoComplete="off" className="field-input" value={block.link} onChange={(e) => set({ link: e.target.value })} placeholder="/wiki/article/…" /></Field>
       </>)}
 
       {block.blockType === 'divider' && (
@@ -542,18 +543,18 @@ function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onA
       )}
 
       {block.blockType === 'callout' && (<>
-        <Field label="Heading"><Input className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="Character Creation" /></Field>
-        <Field label="Body"><textarea className="field-input min-h-[70px] py-2 font-serif italic w-full" value={block.body} onChange={(e) => set({ body: e.target.value })} placeholder="A short message…" /></Field>
+        <Field label="Heading"><Input autoComplete="off" className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="Character Creation" /></Field>
+        <Field label="Body"><textarea autoComplete="off" className="field-input min-h-[70px] py-2 font-serif italic w-full" value={block.body} onChange={(e) => set({ body: e.target.value })} placeholder="A short message…" /></Field>
         <Seg label="Style" value={block.style} options={[['soft', 'Soft (dashed)'], ['plain', 'Plain']]} onChange={(v) => set({ style: v })} />
         <fieldset className="config-fieldset"><legend className="section-label px-1">Button (optional)</legend>
-          <Field label="Label"><Input className="field-input" value={block.buttonLabel} onChange={(e) => set({ buttonLabel: e.target.value })} placeholder="Browse Sources" /></Field>
-          <Field label="Links to"><Input className="field-input" value={block.buttonLink} onChange={(e) => set({ buttonLink: e.target.value })} placeholder="/sources" /></Field>
+          <Field label="Label"><Input autoComplete="off" className="field-input" value={block.buttonLabel} onChange={(e) => set({ buttonLabel: e.target.value })} placeholder="Browse Sources" /></Field>
+          <Field label="Links to"><Input autoComplete="off" className="field-input" value={block.buttonLink} onChange={(e) => set({ buttonLink: e.target.value })} placeholder="/sources" /></Field>
           <p className="field-hint">The button shows only when both label and link are set.</p>
         </fieldset>
       </>)}
 
       {block.blockType === 'recommended' && (<>
-        <Field label="Heading (optional)"><Input className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="Recommended for this campaign" /></Field>
+        <Field label="Heading (optional)"><Input autoComplete="off" className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="Recommended for this campaign" /></Field>
         <Seg label="Source" value={block.source} options={[['auto', 'Campaign pick'], ['specific', 'Specific entity']]} onChange={(v) => set({ source: v })} />
         {block.source === 'specific'
           ? <Field label="Entity"><EntityRefPicker mode="single" value={block.ref} onChange={(ref) => set({ ref })} /></Field>
@@ -562,14 +563,14 @@ function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onA
       </>)}
 
       {block.blockType === 'entity-feature' && (<>
-        <Field label="Heading (optional)"><Input className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} /></Field>
+        <Field label="Heading (optional)"><Input autoComplete="off" className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} /></Field>
         <Field label="Featured entity"><EntityRefPicker mode="single" value={block.ref} onChange={(ref) => set({ ref })} /></Field>
         <Seg label="Image side" value={block.imageSide} options={[['left', 'Left'], ['right', 'Right']]} onChange={(v) => set({ imageSide: v })} />
         <Toggle label="Show excerpt" value={block.excerpt} onChange={(v) => set({ excerpt: v })} />
       </>)}
 
       {block.blockType === 'entity-row' && (<>
-        <Field label="Heading"><Input className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="The World of Dauligor" /></Field>
+        <Field label="Heading"><Input autoComplete="off" className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="The World of Dauligor" /></Field>
         <Toggle label="Show heading" value={block.showHeading} onChange={(v) => set({ showHeading: v })} />
         <fieldset className="config-fieldset"><legend className="section-label px-1">Content</legend>
           <Field label="Entities"><EntityRefPicker mode="multi" value={block.refs} onChange={(refs) => set({ refs })} /></Field>
@@ -585,7 +586,7 @@ function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onA
       </>)}
 
       {block.blockType === 'group' && (<>
-        <Field label="Title"><Input className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="Section title" /></Field>
+        <Field label="Title"><Input autoComplete="off" className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="Section title" /></Field>
         <Toggle label="Show title" value={block.showTitle} onChange={(v) => set({ showTitle: v })} />
         <Seg label="Style" value={block.style} options={[['card', 'Card'], ['bordered', 'Bordered'], ['plain', 'Plain']]} onChange={(v) => set({ style: v })} />
         <Button onClick={() => onAddInside(block.id)} className="btn-gold w-full h-8 text-xs">Add block inside</Button>
@@ -669,6 +670,20 @@ function EntityRefPicker({ mode, value, onChange }: {
     if (chipDrag == null || chipDrag === to) return;
     const next = [...list]; const [m] = next.splice(chipDrag, 1); next.splice(to, 0, m); onChange(next); setChipDrag(null);
   };
+  // Per-card override editing (title / description / span). One chip expanded at
+  // a time. `updateAt` patches a single ref, dropping empty/default overrides so
+  // they fall back to the resolved entity / Placeholder · Coming-Soon defaults.
+  const [editIdx, setEditIdx] = useState<number | null>(null);
+  const updateAt = (idx: number, patch: Partial<EntityRef>) => {
+    onChange(list.map((r, j) => {
+      if (j !== idx) return r;
+      const next: EntityRef = { ...r, ...patch };
+      if (!next.title) delete next.title;
+      if (!next.description) delete next.description;
+      if (!next.span || next.span <= 1) delete next.span;
+      return next;
+    }));
+  };
 
   return (
     <div className="space-y-2">
@@ -677,18 +692,61 @@ function EntityRefPicker({ mode, value, onChange }: {
           ? <p className="field-hint">No entities yet — add some below.</p>
           : <div className="data-table">
               <div className="data-table-body">
-                {list.map((r, idx) => (
-                  <div key={`${r.kind}:${r.id}:${idx}`} draggable
-                    onDragStart={() => setChipDrag(idx)}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={() => reorder(idx)}
-                    className={cn('data-table-row grid grid-cols-[auto_1fr_auto_auto] gap-2', chipDrag === idx && 'opacity-40')}>
-                    <GripVertical className="w-3.5 h-3.5 text-ink/30 cursor-grab" />
-                    <span className="text-xs font-serif truncate" title={r.name}>{r.name || r.id}</span>
-                    <span className="label-text">{kindLabel(r.kind)}</span>
-                    <button onClick={() => onChange(list.filter((_, j) => j !== idx))} className="text-ink/30 hover:text-blood" aria-label="Remove"><X className="w-3.5 h-3.5" /></button>
+                {list.map((r, idx) => {
+                  const ph = r.kind === 'placeholder';
+                  const expanded = editIdx === idx;
+                  return (
+                  <div key={`${r.kind}:${r.id}:${idx}`} className={cn(chipDrag === idx && 'opacity-40')}>
+                    {/* Summary row — drag to reorder; chevron toggles the override editor. */}
+                    <div draggable
+                      onDragStart={() => setChipDrag(idx)}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={() => reorder(idx)}
+                      className="data-table-row grid grid-cols-[auto_1fr_auto_auto_auto] gap-2 items-center">
+                      <GripVertical className="w-3.5 h-3.5 text-ink/30 cursor-grab" />
+                      <span className="text-xs font-serif truncate" title={r.title || r.name}>
+                        {r.title || r.name || r.id}
+                        {!!r.span && r.span > 1 && <span className="label-text ml-1.5 text-gold/70">×{r.span}</span>}
+                      </span>
+                      <span className="label-text">{kindLabel(r.kind)}</span>
+                      <button onClick={() => setEditIdx(expanded ? null : idx)} className={cn('text-ink/30 hover:text-gold', expanded && 'text-gold')} aria-label="Edit card">
+                        <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', !expanded && '-rotate-90')} />
+                      </button>
+                      <button onClick={() => { onChange(list.filter((_, j) => j !== idx)); if (expanded) setEditIdx(null); }} className="text-ink/30 hover:text-blood" aria-label="Remove"><X className="w-3.5 h-3.5" /></button>
+                    </div>
+                    {/* Per-card overrides: heading ("what it says"), description
+                        ("what its description says"), and column span. Empty fields
+                        fall back to the resolved entity / Placeholder · Coming Soon. */}
+                    {expanded && (
+                      <div className="px-2 py-2 space-y-2 bg-gold/5 border-t border-gold/10">
+                        <div className="space-y-1">
+                          <label className="field-label">Card title</label>
+                          <Input autoComplete="off" className="field-input text-xs" value={r.title || ''} placeholder={r.name || PLACEHOLDER_TITLE} onChange={(e) => updateAt(idx, { title: e.target.value })} />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="field-label">Description</label>
+                          <textarea autoComplete="off" className="field-input text-xs min-h-[48px] py-1.5 w-full" value={r.description || ''} placeholder={ph ? PLACEHOLDER_DESCRIPTION : "Uses the entity's own summary"} onChange={(e) => updateAt(idx, { description: e.target.value })} />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="field-label">Card width (columns)</label>
+                          <div className="flex border border-gold/20 w-fit">
+                            {[1, 2, 3, 4].map((n) => {
+                              const active = (r.span || 1) === n;
+                              return (
+                                <button key={n} onClick={() => updateAt(idx, { span: n })}
+                                  className={cn('w-8 text-[11px] py-1 transition-colors', n > 1 && 'border-l border-gold/10', active ? 'bg-gold text-white font-semibold' : 'bg-card text-ink/60 hover:bg-gold/5')}>
+                                  {n}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <p className="field-hint">1 = normal. Wider cards are capped at the row's column count.</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
       )}
@@ -702,12 +760,12 @@ function EntityRefPicker({ mode, value, onChange }: {
 
       <div ref={boxRef} className="relative">
         <div className="flex gap-2">
-          <select className="field-input w-[42%] text-xs" value={kind} onChange={(e) => { setKind(e.target.value); setResults([]); }}>
+          <select autoComplete="off" className="field-input w-[42%] text-xs" value={kind} onChange={(e) => { setKind(e.target.value); setResults([]); }}>
             {ENTITY_PICKER_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
           </select>
           <div className="relative flex-1">
             <Search className="w-3.5 h-3.5 text-ink/30 absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <Input className="field-input pl-7 text-xs" value={query} placeholder={`Search ${kindMeta.label.toLowerCase()}…`}
+            <Input autoComplete="off" className="field-input pl-7 text-xs" value={query} placeholder={`Search ${kindMeta.label.toLowerCase()}…`}
               onFocus={() => setOpen(true)} onChange={(e) => { setQuery(e.target.value); setOpen(true); }} />
           </div>
         </div>
