@@ -26,8 +26,10 @@ page identifier is `conditions`.
 **Migration** — `worker/migrations/20260529-1500_system_pages.sql`. Two tables
 (`system_pages`, `system_page_entries`) with the hybrid `source_kind`/`source_id`
 columns kept on the entry schema for the later condition→entry linking even
-though the create-UI for entity-backed entries is held off. **LOCAL only —
-remote pending explicit per-migration go-ahead.**
+though the create-UI for entity-backed entries is held off. **Applied to LOCAL
+and REMOTE D1** (remote applied 2026-05-29; verified `system_pages`,
+`system_page_entries`, and the `idx_system_page_entries_page_order` index in
+remote `sqlite_master`).
 
 **Data layer** — `src/lib/systemPages.ts`. Types, fetch/resolve/search/CRUD,
 `getSystemPageKindMap()` (kind → canonical identifier, includes slugified-name
@@ -146,11 +148,10 @@ the client `bbcode.ts`. **Do not mirror.**
   `status_conditions` row (populate `source_kind='condition'` +
   `source_id=<id>`, leave `body` null so the reader pulls live text from the
   linked row). Reader already handles backed entries via `resolveEntries`.
-- **Apply `20260529-1500_system_pages.sql` to REMOTE D1** — pending explicit
-  per-migration go-ahead. Once approved:
-  `cd worker && npx wrangler d1 execute dauligor-db --remote --file=migrations/20260529-1500_system_pages.sql`
-  then verify with
-  `SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'system_page%';`.
+- **Apply `20260529-1500_system_pages.sql` to REMOTE D1** — ✅ **done 2026-05-29**
+  (applied with `npx wrangler d1 execute dauligor-db --remote --yes
+  --file=migrations/20260529-1500_system_pages.sql`; both tables + the
+  page-order index verified on remote via `sqlite_master`).
 - **Subclass image-led hover** — handed off to `compendium-editors`. Open
   request added in [manifest.md § Open requests](manifest.md). Full detail in
   [../compendium-editors/2026-05-29-from-system-applications.md](../compendium-editors/2026-05-29-from-system-applications.md).
@@ -185,9 +186,9 @@ the client `bbcode.ts`. **Do not mirror.**
    `#7 Foundry inline-roll formulas` is the smallest tangible win;
    `condition → entry linking` closes the hybrid loop; the `live-content
    bridge` is the original branch goal.
-4. If remote migration is approved this turn, apply
-   `worker/migrations/20260529-1500_system_pages.sql` (command above) and
-   verify the tables exist on remote.
+4. Remote migration is **already applied** (2026-05-29) — `system_pages` /
+   `system_page_entries` + the page-order index exist on both local and remote
+   D1. No action needed.
 5. Local-only design drafts that stay UNTRACKED per convention (don't push):
    `docs/_drafts/system-page-spec.html` (locked design),
    `docs/_drafts/system-page-design-concepts.html` (initial 4 concepts +
