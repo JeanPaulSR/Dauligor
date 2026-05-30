@@ -16,11 +16,17 @@
   - **App-side dependency:** the bg/race route arms in `functions/api/module/[[path]].ts` live on
     `compendium-editors` and aren't on `main` yet — the endpoints go live when that branch merges.
     The builders (`_backgroundExport.ts` / `_raceExport.ts`) are already on `main`.
-- **Follow-up — round-trip verification (owed to `compendium-editors`):** `export-service.js` has
-  no background/race folder exporter yet (only `buildFeatFolderExport` + the inventory item
-  exporter). Add `buildBackgroundFolderExport` / `buildRaceFolderExport` (mirror the feat one) so
-  we can export real Foundry bg/race items back out and confirm the `system` shapes round-trip —
-  the empirical check the export-first approach is for.
+- **[done] Foundry → app export (the current priority).** `export-service.js` now has
+  `buildBackgroundFolderExport` / `buildRaceFolderExport` (+ `export*Folder`), emitting
+  `dauligor.foundry-background-folder-export.v1` / `…-race-folder-export.v1`. Each entry carries the
+  full `sourceDocument` + a typed summary (`startingEquipment`/`wealth` for backgrounds;
+  `movement`/`senses`/`type` for races). Wired to two Item-directory sidebar buttons. Contract:
+  `docs/background-race-folder-export-contract.md`. This gives `compendium-editors` the real shapes
+  to design the bg/race table. **Not yet runtime-tested in a live Foundry world** (needs real
+  bg/race items present).
+- **Follow-up — round-trip verification (after the app table exists):** once the app has dedicated
+  bg/race columns and re-serves them, export a real Foundry bg/race, import it back, and confirm the
+  `system` shapes survive the round-trip — the empirical check the export-first approach is for.
 - **Follow-up — reply to `compendium-editors`:** confirm the import contract works, report the
   round-trip result, and send creature/NPC bundle-shape preferences (creatures are deferred —
   Actor shape; a separate `dauligor.creature-actor.v1` spec is coming).

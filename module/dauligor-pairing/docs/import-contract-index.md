@@ -100,6 +100,17 @@ These are the files that should be treated as the primary references.
 - `docs/journal-import-contract.md`
   - canonical journal import contract
 
+### Folder exports (Foundry → app)
+
+These document the reverse direction — batch-exporting native Foundry documents
+out as JSON so the app team can study real shapes (export-first / corpus).
+
+- `docs/feat-folder-export-contract.md` — `dauligor.foundry-feat-folder-export.v1`
+- `docs/background-race-folder-export-contract.md` — `dauligor.foundry-background-folder-export.v1` + `…-race-folder-export.v1`
+- `docs/item-folder-export-contract.md` — `dauligor.foundry-item-folder-export.v1`
+- `docs/actor-folder-export-contract.md` — `dauligor.foundry-actor-folder-export.v1`
+- `docs/spell-folder-export-contract.md` — `dauligor.foundry-spell-folder-export.v1`
+
 ### Automation compatibility
 
 - `docs/dae-midi-character-support.md`

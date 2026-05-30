@@ -1,6 +1,6 @@
 import { CLASS_CATALOG_FILE, MODULE_ID, SETTINGS } from "./constants.js";
 import { registerDauligorCharacterSheet } from "./dauligor-character-sheet.js";
-import { exportActorFolder, exportApplicationWindow, exportFeatFolder, exportItemFolder, exportSpellFolder } from "./export-service.js";
+import { exportActorFolder, exportApplicationWindow, exportBackgroundFolder, exportFeatFolder, exportItemFolder, exportRaceFolder, exportSpellFolder } from "./export-service.js";
 import { openFeatureManager, promptLongRestCommit } from "./feature-manager-app.js";
 import { openDauligorImporter } from "./importer-app.js";
 import { initializeSocket } from "./import-service.js";
@@ -715,6 +715,14 @@ function injectSidebarDirectoryButtons(root, { directoryType = "" } = {}) {
       <i class="fas fa-box-archive"></i>
       <span>Export Item Folder</span>
     </button>
+    <button type="button" class="dauligor-directory-tools__button" data-action="export-background-folder" title="Export a Foundry background folder for Dauligor background research (captures startingEquipment / wealth shapes)">
+      <i class="fas fa-scroll"></i>
+      <span>Export Background Folder</span>
+    </button>
+    <button type="button" class="dauligor-directory-tools__button" data-action="export-race-folder" title="Export a Foundry race folder for Dauligor race research (captures movement / senses / creature-type shapes)">
+      <i class="fas fa-dragon"></i>
+      <span>Export Race Folder</span>
+    </button>
   `;
   } else if (directoryType === "Actor") {
     exportButtons = `
@@ -747,6 +755,12 @@ function injectSidebarDirectoryButtons(root, { directoryType = "" } = {}) {
   });
   wrapper.querySelector(`[data-action="export-item-folder"]`)?.addEventListener("click", async () => {
     await promptAndExportItemFolder();
+  });
+  wrapper.querySelector(`[data-action="export-background-folder"]`)?.addEventListener("click", async () => {
+    await promptAndExportBackgroundFolder();
+  });
+  wrapper.querySelector(`[data-action="export-race-folder"]`)?.addEventListener("click", async () => {
+    await promptAndExportRaceFolder();
   });
   wrapper.querySelector(`[data-action="export-actor-folder"]`)?.addEventListener("click", async () => {
     await promptAndExportActorFolder();
@@ -950,6 +964,114 @@ async function promptAndExportFeatFolder() {
   }
 
   await exportFeatFolder(folder, { includeSubfolders: result?.includeSubfolders !== false });
+}
+
+// ─── Background + Race folder export pickers ────────────────────────
+//
+// Backgrounds and races are their own Foundry Item document types. These
+// pickers mirror the feat picker but count `item.type === "background"` /
+// `"race"`. Export-first: the goal is to hand the Dauligor app the real
+// Foundry shapes (startingEquipment / wealth for backgrounds; movement /
+// senses / creature-type for races) so it can build dedicated columns
+// before the import round-trip is wired.
+
+function collectItemTypeFolderChoices(docType) {
+  return Array.from(game.folders ?? [])
+    .filter((folder) => folder.type === "Item")
+    .map((folder) => {
+      const descendants = new Set([folder.id]);
+      const queue = [folder.id];
+      while (queue.length) {
+        const parentId = queue.shift();
+        for (const candidate of Array.from(game.folders ?? [])) {
+          if (candidate.type !== "Item") continue;
+          if ((candidate.folder?.id ?? null) !== parentId) continue;
+          if (descendants.has(candidate.id)) continue;
+          descendants.add(candidate.id);
+          queue.push(candidate.id);
+        }
+      }
+      const count = Array.from(game.items ?? []).filter((item) =>
+        item.type === docType && descendants.has(item.folder?.id ?? "")
+      ).length;
+      return { folder, path: getItemFolderPath(folder), count };
+    })
+    .filter((entry) => entry.count > 0)
+    .sort((a, b) => a.path.localeCompare(b.path));
+}
+
+async function promptAndExportFeatFamilyFolder({ docType, noun, title, exportFn }) {
+  const choices = collectItemTypeFolderChoices(docType);
+  if (!choices.length) {
+    notifyWarn(`No Item folders with ${noun} were found in this world.`);
+    return;
+  }
+
+  const optionsHtml = choices.map((entry) => `
+    <option value="${foundry.utils.escapeHTML(entry.folder.id)}">
+      ${foundry.utils.escapeHTML(`${entry.path} (${entry.count} ${noun})`)}
+    </option>
+  `).join("");
+
+  const label = `${noun.charAt(0).toUpperCase()}${noun.slice(1)} folder`;
+  let result = null;
+  try {
+    result = await foundry.applications.api.DialogV2.prompt({
+      window: { title },
+      content: `
+        <div class="form-group">
+          <label>${label}</label>
+          <select name="folderId" autofocus>
+            ${optionsHtml}
+          </select>
+          <p class="hint">Exports all native Foundry ${docType} items in the selected Item folder, capturing the full Foundry shape so the Dauligor app can model its ${noun} table.</p>
+        </div>
+        <div class="form-group">
+          <label class="checkbox">
+            <input type="checkbox" name="includeSubfolders" checked>
+            <span>Include subfolders</span>
+          </label>
+        </div>
+      `,
+      ok: {
+        label: "Export",
+        callback: (_event, button) => ({
+          folderId: button.form.elements.folderId.value,
+          includeSubfolders: Boolean(button.form.elements.includeSubfolders.checked),
+        }),
+      },
+      rejectClose: false,
+      modal: true,
+    });
+  } catch {
+    return;
+  }
+
+  const folder = game.folders.get(result?.folderId ?? "");
+  if (!folder) {
+    notifyWarn("The selected folder could not be found.");
+    return;
+  }
+
+  await exportFn(folder, { includeSubfolders: result?.includeSubfolders !== false });
+}
+
+function promptAndExportBackgroundFolder() {
+  return promptAndExportFeatFamilyFolder({
+    docType: "background",
+    noun: "backgrounds",
+    title: "Export Background Folder",
+    exportFn: exportBackgroundFolder,
+  });
+}
+
+function promptAndExportRaceFolder() {
+  return promptAndExportFeatFamilyFolder({
+    docType: "race",
+    noun: "races",
+    title: "Export Race Folder",
+    exportFn: exportRaceFolder,
+  });
 }
 
 // ─── Item folder export ─────────────────────────────────────────────

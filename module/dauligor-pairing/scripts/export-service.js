@@ -535,6 +535,224 @@ export async function exportFeatFolder(folder, { includeSubfolders = true } = {}
   if (shouldDownload) downloadJson(payload, `${folder.name}-feats-export`);
 }
 
+// ─── Background + Race folder exports ───────────────────────────────
+//
+// Backgrounds and races are feat-family Item documents (`type:"background"`
+// / `"race"`). The Dauligor app currently stores them in the `feats` table
+// with no dedicated columns for their type-specific `system` fields, so the
+// app side (compendium editors) needs the REAL shipped Foundry shape to
+// design that table. EXPORT-FIRST: these exporters capture real Foundry
+// background/race items so the app can model the exact shapes before the
+// import round-trip is wired.
+//
+// Mirrors the feat folder export. Each entry carries the full
+// `sourceDocument` (the authoritative shape evidence) plus a type-specific
+// summary surfacing the fields the app must add columns for:
+//   - background: system.startingEquipment[] (EquipmentEntryData tree),
+//                 system.wealth (formula), advancement map
+//   - race:       system.movement, system.senses, system.type
+//                 (CreatureTypeField), advancement map
+
+function buildFeatFamilyFolderHeader(folder, kind, includeSubfolders, includedFolderIds, folderPath) {
+  return {
+    kind,
+    schemaVersion: 1,
+    exportedAt: new Date().toISOString(),
+    moduleId: MODULE_ID,
+    game: {
+      worldId: game.world?.id ?? null,
+      worldTitle: game.world?.title ?? null,
+      systemId: game.system?.id ?? null,
+      systemVersion: game.system?.version ?? null,
+      coreVersion: game.release?.version ?? null,
+    },
+    folder: {
+      id: folder.id,
+      uuid: folder.uuid ?? null,
+      name: folder.name,
+      type: folder.type,
+      path: folderPath,
+      includeSubfolders,
+      includedFolderIds: Array.from(includedFolderIds),
+      parentId: folder.folder?.id ?? null,
+    },
+  };
+}
+
+function buildFeatFamilyEntryBase(doc, rootFolder) {
+  const source = getCleanSource(doc);
+  const folderPath = doc.folder ? getFolderPath(doc.folder) : "";
+  return {
+    entry: {
+      id: doc.id,
+      uuid: doc.uuid,
+      name: doc.name,
+      type: doc.type,                                   // "background" / "race"
+      folderId: doc.folder?.id ?? null,
+      folderPath,
+      relativeFolderPath: folderPath && rootFolder
+        ? folderPath.replace(new RegExp(`^${escapeRegex(getFolderPath(rootFolder))}/?`), "")
+        : "",
+      source: {
+        book: source.system?.source?.book ?? "",
+        page: source.system?.source?.page ?? null,
+        rules: source.system?.source?.rules ?? "",
+      },
+    },
+    source,
+  };
+}
+
+function buildBackgroundExportEntry(doc, rootFolder) {
+  const { entry, source } = buildFeatFamilyEntryBase(doc, rootFolder);
+  const startingEquipment = Array.isArray(source.system?.startingEquipment)
+    ? source.system.startingEquipment
+    : [];
+  return {
+    ...entry,
+    backgroundSummary: {
+      identifier: source.system?.identifier ?? "",
+      // The two StartingEquipmentTemplate fields the feats table can't hold yet.
+      startingEquipment,                               // EquipmentEntryData[]
+      startingEquipmentCount: startingEquipment.length,
+      wealth: source.system?.wealth ?? "",             // starting-gold formula
+      advancementKeys: Object.keys(source.system?.advancement ?? {}),
+      advancementTypes: Object.values(source.system?.advancement ?? {}).map((a) => a?.type ?? "unknown"),
+      hasDescription: !!String(source.system?.description?.value ?? "").trim(),
+    },
+    sourceDocument: source,
+  };
+}
+
+function buildRaceExportEntry(doc, rootFolder) {
+  const { entry, source } = buildFeatFamilyEntryBase(doc, rootFolder);
+  return {
+    ...entry,
+    raceSummary: {
+      identifier: source.system?.identifier ?? "",
+      // The dnd5e RaceData fields beyond the feat machinery.
+      movement: source.system?.movement ?? {},         // {walk,fly,swim,climb,burrow,hover,units}
+      senses: source.system?.senses ?? {},             // {darkvision,blindsight,tremorsense,truesight,units,special}
+      type: source.system?.type ?? {},                 // CreatureTypeField {value,subtype,swarm,custom}
+      advancementKeys: Object.keys(source.system?.advancement ?? {}),
+      advancementTypes: Object.values(source.system?.advancement ?? {}).map((a) => a?.type ?? "unknown"),
+      hasDescription: !!String(source.system?.description?.value ?? "").trim(),
+    },
+    sourceDocument: source,
+  };
+}
+
+function summarizeBackgroundCounts(docs) {
+  let withStartingEquipment = 0;
+  let withWealth = 0;
+  let withAdvancements = 0;
+  for (const d of docs) {
+    const s = d.toObject().system ?? {};
+    if (Array.isArray(s.startingEquipment) && s.startingEquipment.length) withStartingEquipment++;
+    if (String(s.wealth ?? "").trim()) withWealth++;
+    if (Object.keys(s.advancement ?? {}).length) withAdvancements++;
+  }
+  return { backgroundCount: docs.length, withStartingEquipment, withWealth, withAdvancements };
+}
+
+function summarizeRaceCounts(docs) {
+  const byCreatureType = {};
+  let withMovement = 0;
+  let withSenses = 0;
+  let withAdvancements = 0;
+  for (const d of docs) {
+    const s = d.toObject().system ?? {};
+    const ct = String(s.type?.value ?? "").trim() || "unknown";
+    byCreatureType[ct] = (byCreatureType[ct] ?? 0) + 1;
+    if (s.movement && Object.values(s.movement).some((v) => v != null && v !== false && v !== "")) withMovement++;
+    if (s.senses && Object.values(s.senses).some((v) => v != null && v !== "")) withSenses++;
+    if (Object.keys(s.advancement ?? {}).length) withAdvancements++;
+  }
+  return { raceCount: docs.length, byCreatureType, withMovement, withSenses, withAdvancements };
+}
+
+function buildFeatFamilyFolderExport(folder, { docType, kind, listKey, summarize, buildEntry, includeSubfolders = true }) {
+  if (!folder || folder.documentName !== "Folder" || folder.type !== "Item") return null;
+
+  const includedFolderIds = includeSubfolders ? collectDescendantFolderIds(folder) : new Set([folder.id]);
+  const docs = Array.from(game.items ?? []).filter((item) =>
+    item.type === docType
+    && includedFolderIds.has(item.folder?.id ?? "")
+  );
+  const folderPath = getFolderPath(folder);
+
+  return {
+    ...buildFeatFamilyFolderHeader(folder, kind, includeSubfolders, includedFolderIds, folderPath),
+    summary: summarize(docs),
+    [listKey]: docs
+      .slice()
+      .sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? "")))
+      .map((doc) => buildEntry(doc, folder)),
+  };
+}
+
+export function buildBackgroundFolderExport(folder, { includeSubfolders = true } = {}) {
+  return buildFeatFamilyFolderExport(folder, {
+    docType: "background",
+    kind: "dauligor.foundry-background-folder-export.v1",
+    listKey: "backgrounds",
+    summarize: summarizeBackgroundCounts,
+    buildEntry: buildBackgroundExportEntry,
+    includeSubfolders,
+  });
+}
+
+export function buildRaceFolderExport(folder, { includeSubfolders = true } = {}) {
+  return buildFeatFamilyFolderExport(folder, {
+    docType: "race",
+    kind: "dauligor.foundry-race-folder-export.v1",
+    listKey: "races",
+    summarize: summarizeRaceCounts,
+    buildEntry: buildRaceExportEntry,
+    includeSubfolders,
+  });
+}
+
+export async function exportBackgroundFolder(folder, { includeSubfolders = true } = {}) {
+  if (!folder || folder.documentName !== "Folder" || folder.type !== "Item") {
+    notifyWarn("Select an Item folder before exporting backgrounds.");
+    return;
+  }
+  const payload = buildBackgroundFolderExport(folder, { includeSubfolders });
+  const count = payload?.summary?.backgroundCount ?? 0;
+  if (!count) {
+    notifyWarn(`No background items were found in "${folder.name}".`);
+    return;
+  }
+  log("Prepared background folder export", payload);
+  notifyInfo(`Prepared ${count} backgrounds from "${folder.name}". See console for the full object.`);
+  const shouldDownload = await chooseDownload({
+    title: "Export Background Folder",
+    name: `${folder.name} (${count} backgrounds)`,
+  });
+  if (shouldDownload) downloadJson(payload, `${folder.name}-backgrounds-export`);
+}
+
+export async function exportRaceFolder(folder, { includeSubfolders = true } = {}) {
+  if (!folder || folder.documentName !== "Folder" || folder.type !== "Item") {
+    notifyWarn("Select an Item folder before exporting races.");
+    return;
+  }
+  const payload = buildRaceFolderExport(folder, { includeSubfolders });
+  const count = payload?.summary?.raceCount ?? 0;
+  if (!count) {
+    notifyWarn(`No race items were found in "${folder.name}".`);
+    return;
+  }
+  log("Prepared race folder export", payload);
+  notifyInfo(`Prepared ${count} races from "${folder.name}". See console for the full object.`);
+  const shouldDownload = await chooseDownload({
+    title: "Export Race Folder",
+    name: `${folder.name} (${count} races)`,
+  });
+  if (shouldDownload) downloadJson(payload, `${folder.name}-races-export`);
+}
+
 // ─── Item folder export ─────────────────────────────────────────────
 //
 // Mirrors the spell + feat folder exports but covers the seven dnd5e v5
