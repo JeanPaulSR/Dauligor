@@ -15,6 +15,13 @@
  */
 import { batchQueryD1, queryD1 } from './d1';
 import { resolveRefRoute, type RefKind } from './bbcode';
+import {
+  resolveSystemEntry,
+  resolveSystemPage,
+  searchSystemEntries,
+  searchSystemPages,
+  getSystemPageKindMap,
+} from './systemPages';
 import { parseRequirementTree, resolveDetailPrereq, type RequirementFormatLookup } from './requirements';
 import { slugifyReferenceSegment } from './referenceSyntax';
 
@@ -135,15 +142,37 @@ export async function searchReferenceFamily(
   query: string,
   limit = 8,
 ): Promise<RefSearchResult[]> {
-  const kinds = FAMILY_KINDS[family];
+  let kinds = FAMILY_KINDS[family];
   if (!kinds || kinds.length === 0) return [];
   const like = `%${escapeLike(query.trim())}%`;
-  // One SELECT per kind, issued as a single D1 batch. We can't UNION the
-  // kinds into one statement: Cloudflare D1 caps a compound SELECT at 5
-  // terms, and the entity family has 6 kinds — a 6-term UNION fails with
-  // "too many terms in compound SELECT" and the whole search returns
-  // nothing. Batching keeps each statement independent (no compound cap)
-  // and still costs a single round-trip.
+
+  // Rule family: system-page entries are the primary `&` targets, and the pages
+  // themselves are page-level targets (`&kind[]` — empty brackets cite the page
+  // itself, not an entry). Pull both in, and drop any static rule kind shadowed
+  // by a same-named system page (a "condition" system page replaces the
+  // status_conditions search, per locked spec §8 #3).
+  let systemResults: RefSearchResult[] = [];
+  if (family === 'rule') {
+    // Kind map includes name-slug aliases, so the shadow check also fires
+    // when a Foundry-style kind (`condition`) matches a same-named system
+    // page authored under a different identifier (`conditions`).
+    const kindMap = await getSystemPageKindMap();
+    const [sysPages, sysEntries] = await Promise.all([
+      searchSystemPages(query, limit),
+      searchSystemEntries(query, limit),
+    ]);
+    systemResults = [
+      ...sysPages.map((r) => ({ kind: r.kind as RefKind, id: r.id, name: r.name })),
+      ...sysEntries.map((r) => ({ kind: r.kind as RefKind, id: r.id, name: r.name })),
+    ];
+    kinds = kinds.filter((k) => !kindMap.has(k));
+  }
+
+  // One SELECT per remaining kind, issued as a single D1 batch. We can't UNION
+  // the kinds into one statement: Cloudflare D1 caps a compound SELECT at 5
+  // terms, and the entity family has 6 kinds — a 6-term UNION fails with "too
+  // many terms in compound SELECT" and the whole search returns nothing.
+  // Batching keeps each statement independent (no compound cap), one round-trip.
   const queries = kinds.map((k) => {
     const cfg = KIND_CONFIG[k];
     return {
@@ -155,18 +184,21 @@ export async function searchReferenceFamily(
       params: [like, like],
     };
   });
-  const sets = await batchQueryD1(queries);
+  const sets = queries.length ? await batchQueryD1(queries) : [];
   const rows = sets.flatMap(
     (s: { results?: Array<{ kind: string; id: string; name: string | null }> }) => s?.results ?? [],
   );
-  rows.sort((a, b) => String(a.name ?? a.id).localeCompare(String(b.name ?? b.id)));
-  return rows.slice(0, limit).map((r) => {
+  const staticResults: RefSearchResult[] = rows.map((r) => {
     const kind = r.kind as RefKind;
     const name = String(r.name ?? r.id);
     // Kinds without a stored slug (option groups) key by slugify(name).
     const id = KIND_CONFIG[kind]?.deriveSlugId ? slugifyReferenceSegment(name) : String(r.id);
     return { kind, id, name };
   });
+
+  const merged = [...systemResults, ...staticResults];
+  merged.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  return merged.slice(0, limit);
 }
 
 /**
@@ -256,6 +288,51 @@ function getRequirementLookup(): Promise<RequirementFormatLookup> {
  * (a dangling reference).
  */
 export async function resolveReference(kind: string, id: string): Promise<RefResolved | null> {
+  // System pages own the `&` rule kinds (locked: identifier = kind). Try them
+  // first so a "condition" system page replaces the static status_conditions
+  // resolve. Gated on the cached identifier set, so non-system kinds (@spell,
+  // @class, …) skip the extra query and fall straight through.
+  // System pages own the `&` rule kinds. The reference's `kind` might be a
+  // canonical page identifier OR a slug of the page's name — Foundry imports
+  // cite `&Reference[condition=…]` even when the admin's page is `conditions`,
+  // so the kind map exposes both. Resolve via the canonical identifier so the
+  // returned route always lands on the right URL.
+  const kindMap = await getSystemPageKindMap();
+  const canonical = kindMap.get(kind.toLowerCase());
+  if (canonical) {
+    if (!id) {
+      // Page-level reference (`&kind[]`) → the page itself; summary is the
+      // admin-authored description rendered atop the reader.
+      const page = await resolveSystemPage(canonical);
+      if (page) {
+        return {
+          kind: kind as RefKind,
+          id: '',
+          name: page.name,
+          summary: page.description,
+          prereq: '',
+          prereqFull: '',
+          imageUrl: null,
+          route: `/system/${encodeURIComponent(canonical)}`,
+        };
+      }
+    } else {
+      const entry = await resolveSystemEntry(canonical, id);
+      if (entry) {
+        return {
+          kind: kind as RefKind,
+          id,
+          name: entry.name,
+          summary: entry.summary,
+          prereq: '',
+          prereqFull: '',
+          imageUrl: entry.imageUrl ?? null,
+          route: `/system/${encodeURIComponent(canonical)}#${encodeURIComponent(id)}`,
+        };
+      }
+    }
+    // Page exists but no matching entry → fall through to any static config.
+  }
   const cfg = KIND_CONFIG[kind];
   if (!cfg) return null;
   if (cfg.deriveSlugId) {

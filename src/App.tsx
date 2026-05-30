@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { auth, onAuthStateChanged, User } from './lib/firebase';
 import { WikiPreviewContext, type WikiPreviewCampaign } from './lib/wikiPreviewContext';
@@ -17,6 +17,7 @@ import Home from './pages/core/Home';
 import Wiki from './pages/wiki/Wiki';
 import LoreEditor from './pages/wiki/LoreEditor';
 import LoreArticle from './pages/wiki/LoreArticle';
+import SystemPageView from './pages/system/SystemPageView';
 import Map from './pages/core/Map';
 import AdminUsers from './pages/admin/AdminUsers';
 import AdminCampaigns from './pages/admin/AdminCampaigns';
@@ -44,6 +45,8 @@ import SpellsKnownScalingEditor from './pages/compendium/scaling/SpellsKnownScal
 import UniqueOptionGroupList from './pages/compendium/UniqueOptionGroupList';
 import UniqueOptionGroupEditor from './pages/compendium/UniqueOptionGroupEditor';
 import UniqueOptionGroupView from './pages/compendium/UniqueOptionGroupView';
+import SystemPagesList from './pages/compendium/SystemPagesList';
+import SystemPageEditor from './pages/compendium/SystemPageEditor';
 import TagsExplorer from './pages/compendium/TagsExplorer';
 import TagClassifications from './pages/compendium/TagClassifications';
 import SkillsEditor from './pages/compendium/SkillsEditor';
@@ -80,6 +83,22 @@ import { ProposalEditorWrapper } from './components/proposals/ProposalEditorWrap
 import DebugConsole from './components/DebugConsole';
 import ReferenceHoverCard from './components/reference/ReferenceHoverCard';
 import { Toaster } from 'sonner';
+
+// Global OGL/copyright footer — suppressed on system pages (/system/*) so those
+// reference glossaries read clean. Lives inside <Router> so it can read the route.
+function RouteAwareFooter() {
+  const location = useLocation();
+  const p = location.pathname;
+  if (p.startsWith('/system/') || p.startsWith('/compendium/system-pages')) return null;
+  return (
+    <footer className="bg-card border-t border-gold/10 text-ink py-8 mt-auto">
+      <div className="container mx-auto px-4 text-center opacity-70">
+        <p className="font-serif italic">"This site contains material used under the Open Game License (OGL). All original content is the property of its respective creators. Access to this website is restricted to registered players for use within private tabletop roleplaying sessions."</p>
+        <p className="text-xs mt-2">© 2026 Dauligor: Compendium and Lore Manager</p>
+      </div>
+    </footer>
+  );
+}
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -247,6 +266,9 @@ export default function App() {
                   <Route path="/wiki/new" element={<LoreEditor userProfile={effectiveProfile} />} />
                   <Route path="/wiki/edit/:id" element={<LoreEditor userProfile={effectiveProfile} />} />
                   <Route path="/wiki/article/:id" element={<LoreArticle userProfile={effectiveProfile} />} />
+                  {/* System pages — public reader for the reference-addressable
+                      glossary type (&condition[prone] -> /system/condition#prone). */}
+                  <Route path="/system/:identifier" element={<SystemPageView />} />
                   <Route path="/sources" element={<Sources userProfile={effectiveProfile} />} />
                   <Route path="/sources/view/:id" element={<SourceDetail userProfile={effectiveProfile} />} />
                   <Route path="/sources/new" element={<SourceEditor userProfile={effectiveProfile} />} />
@@ -298,6 +320,11 @@ export default function App() {
                   <Route path="/compendium/unique-options/new" element={<UniqueOptionGroupEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/unique-options/edit/:id" element={<UniqueOptionGroupEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/unique-options/:id" element={<UniqueOptionGroupView userProfile={effectiveProfile} />} />
+                  {/* System pages — admin authoring for the reference-addressable
+                      glossary type. Public reader is /system/:identifier. */}
+                  <Route path="/compendium/system-pages" element={<SystemPagesList userProfile={effectiveProfile} />} />
+                  <Route path="/compendium/system-pages/new" element={<AdminOnly userProfile={effectiveProfile}><SystemPageEditor userProfile={effectiveProfile} /></AdminOnly>} />
+                  <Route path="/compendium/system-pages/edit/:id" element={<AdminOnly userProfile={effectiveProfile}><SystemPageEditor userProfile={effectiveProfile} /></AdminOnly>} />
                   <Route path="/compendium/tags" element={<AdminOnly userProfile={effectiveProfile}><TagsExplorer userProfile={effectiveProfile} /></AdminOnly>} />
                   <Route path="/compendium/tags/classifications" element={<AdminOnly userProfile={effectiveProfile}><TagClassifications userProfile={effectiveProfile} /></AdminOnly>} />
                   <Route path="/compendium/tags/:id" element={<AdminOnly userProfile={effectiveProfile}><TagsExplorer userProfile={effectiveProfile} /></AdminOnly>} />
@@ -446,12 +473,7 @@ export default function App() {
             </div>
           </ErrorBoundary>
         </main>
-          <footer className="bg-card border-t border-gold/10 text-ink py-8 mt-auto">
-              <div className="container mx-auto px-4 text-center opacity-70">
-                <p className="font-serif italic">"This site contains material used under the Open Game License (OGL). All original content is the property of its respective creators. Access to this website is restricted to registered players for use within private tabletop roleplaying sessions."</p>
-                <p className="text-xs mt-2">© 2026 Dauligor: Compendium and Lore Manager</p>
-              </div>
-            </footer>
+          <RouteAwareFooter />
             {effectiveProfile?.role === 'admin' && <DebugConsole />}
             <ReferenceHoverCard />
             <Toaster position="top-center" richColors />

@@ -5,14 +5,22 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../..
 import { Book, Map as MapIcon, Users, ChevronRight, Sparkles, ScrollText, History, Shield, Zap, Swords, Wand2, Hammer, Star, Home as HomeIcon, Plus, LogIn } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Badge } from '../../components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../../components/ui/dialog';
 import { Button } from '../../components/ui/button';
+import { fetchCampaignHomeBlocks, type HomeBlock } from '../../lib/campaignHome';
+import CampaignHomeBlocks from '../../components/campaign/CampaignHomeBlocks';
 
 export default function Home({ userProfile }: { userProfile: any }) {
   const [activeCampaign, setActiveCampaign] = useState<any>(null);
   const [specialArticles, setSpecialArticles] = useState<Record<string, any>>({});
   const [recommendedLore, setRecommendedLore] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  // Campaign-specific homepage layout. When the active campaign has at least
+  // one block, these replace the default Home body for its members; otherwise
+  // the default layout below renders. CampaignHomeBlocks resolves its own
+  // entity refs (articles, classes, items, system pages, …) via
+  // resolveReference, so Home only has to hand it the blocks + the campaign's
+  // auto-recommended article.
+  const [homeBlocks, setHomeBlocks] = useState<HomeBlock[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -77,6 +85,14 @@ export default function Home({ userProfile }: { userProfile: any }) {
                 }
               }
             }
+
+            // Campaign-specific homepage layout. Empty → default layout.
+            try {
+              const blocks = await fetchCampaignHomeBlocks(campaignData.id);
+              setHomeBlocks(blocks);
+            } catch (blockErr) {
+              console.error('Failed to load campaign home layout:', blockErr);
+            }
           }
         }
 
@@ -140,12 +156,24 @@ export default function Home({ userProfile }: { userProfile: any }) {
       <div className="max-w-6xl mx-auto py-20 text-center">
         <div className="animate-pulse space-y-8">
           <div className="h-20 bg-gold/5 rounded-xl w-3/4 mx-auto" />
-          <div className="grid grid-cols-3 gap-8">
-            <div className="h-64 bg-gold/5 rounded-xl col-span-2" />
+          <div className="grid md:grid-cols-3 gap-8">
+            <div className="h-64 bg-gold/5 rounded-xl md:col-span-2" />
             <div className="h-64 bg-gold/5 rounded-xl" />
           </div>
         </div>
       </div>
+    );
+  }
+
+  // A campaign with a custom homepage layout takes over the whole body.
+  // No blocks (or no active campaign) → the default layout below.
+  if (homeBlocks.length > 0) {
+    return (
+      <CampaignHomeBlocks
+        blocks={homeBlocks}
+        recommendedLore={recommendedLore}
+        campaignName={activeCampaign?.name ?? ''}
+      />
     );
   }
 
@@ -162,7 +190,7 @@ export default function Home({ userProfile }: { userProfile: any }) {
             Stories in Dauligor
           </h1>
           <p className="description-text text-xl max-w-3xl mx-auto">
-            Jean, your dm, has made this website with the purpose of having easy access to the lore of the setting of Dauligor and to have easy access to homebrew options that he allows.
+            Your GM has made this website to give you easy access to the lore of the setting of Dauligor, and to the homebrew options they allow.
           </p>
         </motion.div>
       </section>
@@ -193,8 +221,8 @@ export default function Home({ userProfile }: { userProfile: any }) {
         
         <div className="py-20 text-center bg-gold/5 rounded-3xl border border-dashed border-gold/20">
           <Sparkles className="w-12 h-12 text-gold mx-auto mb-4 opacity-20" />
-          <h3 className="h3-title text-ink/40">The Archive is expanding...</h3>
-          <p className="description-text mt-2 mb-8 text-ink/30">Character options and creation tools are currently being reorganized by the DM.</p>
+          <h3 className="h3-title text-ink/40">Work in Progress</h3>
+          <p className="description-text mt-2 mb-8 text-ink/30">Character creation tools are still being built. In the meantime, you can browse the available sources.</p>
           <Link to="/sources">
             <Button variant="outline" className="border-gold text-gold hover:bg-gold/5 gap-2">
               <Book className="w-4 h-4" /> Browse Sources

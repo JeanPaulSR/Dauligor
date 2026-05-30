@@ -13,7 +13,8 @@ import {
   Brain,
   ChevronRight,
   Tags as TagsIcon,
-  HeartPulse
+  HeartPulse,
+  Layers
 } from 'lucide-react';
 
 export default function Compendium({ userProfile }: { userProfile: any }) {
@@ -55,6 +56,7 @@ export default function Compendium({ userProfile }: { userProfile: any }) {
       title: 'Reference',
       items: [
         { name: 'Sources', icon: Book, path: '/sources', description: 'Official books and homebrew documents.' },
+        { name: 'System Pages', icon: Layers, path: '/compendium/system-pages', description: 'Reference glossaries — Conditions, Skills, Magic, homebrew rulesets.' },
       ]
     },
     ...(userProfile?.role === 'admin' ? [{

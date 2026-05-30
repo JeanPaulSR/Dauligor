@@ -18,6 +18,7 @@ Topic-segmented documentation. If you're working on one area, you should not nee
 | Permissions / RBAC change | [architecture/permissions-rbac.md](architecture/permissions-rbac.md) |
 | Adding a new sensitive table or per-route endpoint | [platform/security-gates.md](platform/security-gates.md) |
 | BBCode tag / TipTap extension | [ui/bbcode.md](ui/bbcode.md) |
+| Cross-references (`@`/`&`) or system pages | [architecture/cross-references.md](architecture/cross-references.md) |
 | Filter modal / chip combinators | [ui/filters.md](ui/filters.md) |
 | FoundryVTT pairing or export | [architecture/foundry-integration.md](architecture/foundry-integration.md) |
 | Debugging an error | [operations/troubleshooting.md](operations/troubleshooting.md) |
@@ -47,6 +48,7 @@ Topic-segmented documentation. If you're working on one area, you should not nee
 *One doc per feature. UI work in feature X should not require reading feature Y.*
 
 - [wiki-lore.md](features/wiki-lore.md) — articles, secrets, DM notes, nesting, era/campaign visibility
+- [maps.md](features/maps.md) — interactive era-scoped maps: pins, highlights, submap drill-down, draft-visibility filtering
 - [compendium-classes.md](features/compendium-classes.md) — classes, subclasses, features, advancements
 - [compendium-spells.md](features/compendium-spells.md) — spell index (data layer, summary index, common tasks) → splits into:
   - [compendium-spells-browser.md](features/compendium-spells-browser.md) — public `/compendium/spells` browser (3-pane fullscreen, sort/hide cols, favourites pane)
@@ -82,7 +84,8 @@ Topic-segmented documentation. If you're working on one area, you should not nee
 - [routing.md](architecture/routing.md) — `App.tsx` route table, RBAC enforcement at the route boundary
 - [permissions-rbac.md](architecture/permissions-rbac.md) — role matrix, `effectiveProfile`, preview mode
 - [foundry-integration.md](architecture/foundry-integration.md) — pairing module philosophy, dual-state functionality
-- [reference-syntax.md](architecture/reference-syntax.md) — `@prof` / `@level` / `@scale.*` formula references and exporter resolution
+- [reference-syntax.md](architecture/reference-syntax.md) — `@prof` / `@level` / `@scale.*` *formula* references and exporter resolution
+- [cross-references.md](architecture/cross-references.md) — `@kind[id]` / `&kind[id]` *cross-reference* links (compendium entities, lore articles, system pages); hover + autocomplete resolution
 - [compendium-editor-patterns.md](architecture/compendium-editor-patterns.md) — the four CRUD patterns in use, decision tree, and **post-migration cleanup roadmap**
 
 ### [operations/](operations/) — running the app

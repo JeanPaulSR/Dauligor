@@ -1,5 +1,7 @@
 # Reference Syntax (Formula References)
 
+> **Not the same as [cross-references.md](cross-references.md).** That doc covers `@kind[id]` / `&kind[id]` *cross-reference links* (to compendium entities, lore articles, and system pages). **This** doc covers `@prof` / `@scale.*` *formula* references resolved at Foundry-export time.
+
 A formula authored in a Dauligor editor (spellcasting formula, feature usage, activity damage) can use shorthand references like `@prof` or `@scale.<class>.<column>`. These are resolved at export time into Foundry-native paths so the resulting Foundry items roll correctly.
 
 This doc covers the supported shorthand, how it maps to Foundry, and where in the app users see/use it.

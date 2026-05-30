@@ -15,6 +15,29 @@ Conventions:
 
 ---
 
+## Foundry inline-roll formulas → readable chips
+
+**Status**: open (carried from the system-pages handoff Open items — task #7). **Size**: small.
+
+Pasted Foundry / dnd5e content embeds inline-roll enrichers — `[[/r 1d20+5]]`,
+`[[/damage 2d6 fire]]`, and the related `[[/check …]]` / `[[/save …]]` forms. Today these
+render verbatim as raw `[[/…]]` text in the app reader, which is noise to a human reader.
+
+Turn them into readable, **non-interactive** chips in the **client** renderer only:
+- Parse the `[[/…]]` forms in [src/lib/bbcode.ts](../src/lib/bbcode.ts) (`bbcodeToHtml`,
+  **view mode only** — leave them as plain text in editor mode, mirroring the existing `@`/`&`
+  reference handling).
+- Render each as a styled `.inline-roll` chip (small die glyph + the formula / flavor), with the
+  selector added to [src/index.css](../src/index.css) under `@layer components` (append-only).
+- **Do NOT mirror to `api/_lib/_bbcode.ts`.** The server intentionally leaves these as text for
+  Foundry's own enrichers — same drift-pair rule as the `&`/`@` reference rendering. See
+  [architecture/cross-references.md](architecture/cross-references.md).
+- Display sugar only — no dice execution, no rolling. Just make the formula legible in-app.
+
+Created 2026-05-29.
+
+---
+
 ## Live-content bridge — Phase 2+ work
 
 **Status**: Phase 1 foundation patches shipped 2026-05-27 on `claude/phase1-foundation`. Phase 2 (read-only live viewer) gated on article revamp — see "Article system unification" below. **Working spec**: [docs/_drafts/foundry-enricher-deep-dive-2026-05-26.html](_drafts/foundry-enricher-deep-dive-2026-05-26.html).
@@ -33,7 +56,7 @@ The plan: instead of baking Dauligor content into Foundry as static compendium d
 - Custom enricher registration via `CONFIG.TextEditor.enrichers.push(...)` for `@article[slug]`, `@condition[key]`, `@rule[key]`, etc.
 - Hover tooltips via `data-tooltip-html` populated by lazy fetch + per-session cache
 - World-local cache (Foundry world `setFlag`) keyed by `kind/source/key/hash` — offline reads fall through to cache
-- "System page" article type on the app side (parent article + child glossary entries, addressable by slug — mirrors dnd5e's Conditions / Rules journal structure)
+- ✅ **"System page" article type — SHIPPED 2026-05-29** as a standalone `system_pages` + `system_page_entries` table pair (addressed by `identifier`, which doubles as the `&` ref kind — *not* the parent-article-by-slug structure first sketched here). App-side reader + admin + the `&`/`@` cross-reference resolution are live; see [architecture/cross-references.md](architecture/cross-references.md). The Foundry-side enricher/viewer for system pages remains Phase 2 work.
 
 **Phase 3 (drag-construct mechanical items)** — relies on deterministic Foundry `_id` helper from Phase 1 above:
 - Pre-fetch full Foundry-shape JSON on hover (extends Phase 2's summary fetch)
@@ -94,7 +117,7 @@ Created 2026-05-27.
 That's fine for the existing wiki use case but breaks down when articles need to participate in the live-content bridge:
 
 - **`@article[slug]` references** — what scope does the slug live in? Currently global (since `slug` is per-row, no namespacing). If two campaigns ship articles named "Deep Shadow Cult," they collide. Need either source-scoping (`@article[deep-shadow-cult]{slug + source}`) or world-scoping.
-- **"System page" article type** — a parent + children glossary structure (mirroring dnd5e Conditions journal) needs addressable child identifiers. The current `parent_id` hierarchy supports the structure; what's missing is a stable identifier per child that's not just the parent's row id.
+- ~~**"System page" article type**~~ — ✅ **resolved independently 2026-05-29.** System pages shipped as their own `system_pages` + `system_page_entries` tables (each with its own `identifier`), so they never needed `lore_articles`' `parent_id` hierarchy. This item no longer blocks them; see [architecture/cross-references.md](architecture/cross-references.md). (Article unification is still wanted for `@article[…]` namespacing + the module deep-link URL below.)
 - **Module deep-link URL** — Foundry-side `DauligorViewer` needs to compose `https://www.dauligor.com/wiki/<something>` for "open in app." Today's wiki uses slug-based URLs but the slug isn't guaranteed unique outside its parent.
 
 **Recommended path**:
@@ -214,3 +237,11 @@ Status: not started. Owner: TBD. Created 2026-05-19.
 
 _Move shipped items here with a one-line link to the commit / PR
 once the bullet above is no longer relevant._
+
+### System page article type + `&`/`@` cross-reference resolution — 2026-05-29
+Site-consistent glossary pages (`system_pages` + `system_page_entries`, migration
+`20260529-1500`, local + remote) that `&` rule references resolve into, plus the `@`/`&`
+cross-reference layer (page-level `&kind[]`, Foundry `&Reference[…]`, name-slug aliases,
+hover + autocomplete). Commits `8989bd1` + `1ecbf0a` on `main`. Reference doc:
+[architecture/cross-references.md](architecture/cross-references.md); handoff:
+[../handoffs/system-applications/2026-05-29-system-pages.md](../handoffs/system-applications/2026-05-29-system-pages.md).

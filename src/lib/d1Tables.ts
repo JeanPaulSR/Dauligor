@@ -74,10 +74,20 @@ export const D1_TABLE_MAP: Record<string, string> = {
   characterSpellListExtensions: 'character_spell_list_extensions',
   characterProficiencies: 'character_proficiencies',
   campaignMembers: 'campaign_members',
+  // Per-campaign homepage layout (ordered content blocks). Migration
+  // 20260529-1700. When a campaign has blocks, they replace the default
+  // Home body for its members.
+  campaignHomeBlocks: 'campaign_home_blocks',
   systemMetadata: 'system_metadata',
   maps: 'maps',
   mapMarkers: 'map_markers',
   mapHighlights: 'map_highlights',
+  // System pages — a site-consistent, reference-addressable glossary article
+  // type (Conditions, Skills, Magic, homebrew), distinct from lore_articles.
+  // The page `identifier` doubles as the `&`-reference kind. Migration
+  // 20260529-1500.
+  systemPages: 'system_pages',
+  systemPageEntries: 'system_page_entries',
 };
 
 export function getTableName(collectionName: string): string {

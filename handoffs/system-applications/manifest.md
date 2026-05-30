@@ -94,13 +94,14 @@ Editing these in append-only style is fine without requesting through the protoc
 
 ## Open requests to other branches
 
-None currently. Add `- [ ] (date) Request <other-branch> to <change> in <file>` entries here as they come up.
+- [ ] `(2026-05-29)` Request `compendium-editors` to apply the class image-led hover treatment to subclasses (`SubclassPreviewCard` + `SubclassPreviewPane`, mirroring the class implementation). Templates: `src/components/compendium/{ClassPreviewCard,ClassPreviewPane}.tsx`. Subclass `preview` column already shipped (migration `20260529-1200`, remote applied). Optional sub-task on our side: add `imageExpr` / `sourceExpr` to `KIND_CONFIG['subclass']` in `src/lib/references.ts` (small structural edit; do on request). Full detail: [../compendium-editors/2026-05-29-from-system-applications.md](../compendium-editors/2026-05-29-from-system-applications.md).
 
 ## Handoff log
 
 - 2026-05-27 — [2026-05-27-live-content-bridge-phase1.md](2026-05-27-live-content-bridge-phase1.md) — Phase 1 status + complete pickup context for Phases 1.5 / 2 / 3 / 4 / 5
 - 2026-05-28 — [2026-05-28-reference-authoring.md](2026-05-28-reference-authoring.md) — reference-authoring track (grammar + autocomplete done, hover card + summary field next). Archival.
-- 2026-05-29 — [2026-05-29-reference-enhancements.md](2026-05-29-reference-enhancements.md) — **CURRENT**: P4 hover card (`ae49935`); prereq resolution + option-group drill-down + class card data (`57607d8`); subclass preview + local migration (`ffacedd`); ClassPreviewCard + self-fetching ClassPreviewPane with class-ref click-to-pane overlay (`a611b2d`). Pane integration shipped + browser-verified. Next: Foundry inline-roll formulas (#7), subclass image-led hover (deferred). Subclass migration still LOCAL-only.
+- 2026-05-29 — [2026-05-29-reference-enhancements.md](2026-05-29-reference-enhancements.md) — P4 hover card (`ae49935`); prereq resolution + option-group drill-down + class card data (`57607d8`); subclass preview + local migration (`ffacedd`); ClassPreviewCard + self-fetching ClassPreviewPane with class-ref click-to-pane overlay (`a611b2d`). Pane integration shipped + browser-verified. Next (at the time): Foundry inline-roll formulas (#7), subclass image-led hover (deferred).
+- 2026-05-29 — [2026-05-29-system-pages.md](2026-05-29-system-pages.md) — **CURRENT**: System page article type shipped — `system_pages` + `system_page_entries` migration (local + **remote applied 2026-05-29**), data layer, reader (`/system/:identifier`, Quiet-Focus blocks + right Contents rail + StrictMode-safe deep-link), master-detail admin (sticky save, `/new` opens editor directly), `&kind[]` page-level refs + Foundry `&Reference[…]` pre-pass + name-slug aliases. Commits `8989bd1` (feature) + `1ecbf0a` (refs wiring), both on `origin/main`. Next: Foundry inline-roll formulas (#7), condition→entry linking (hybrid UI).
 
 ## When to retire this manifest
 
