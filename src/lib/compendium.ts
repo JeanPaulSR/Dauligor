@@ -78,10 +78,24 @@ export function normalizeCompendiumData(data: Record<string, any>): Record<strin
 
   const normalized: Record<string, any> = {};
 
-  // 1. Basic Mapping
+  // 1. Basic Mapping — two passes so a camelCase editor key ALWAYS wins over a
+  // stale snake_case counterpart carried in from a denormalized DB load.
+  // `denormalizeCompendiumData` spreads the raw row (keeping e.g. `image_url`)
+  // AND adds the camel alias (`imageUrl`), so an edited row's save payload (the
+  // editor spreads `...formData`) contains BOTH. Picking a new icon updates
+  // only `imageUrl`; the leftover `image_url` still holds the old value. A
+  // single pass lets whichever key is iterated last win — and the snake key
+  // sorts after the camel one — silently overwriting the fresh value with the
+  // stale one. That's why changing an image (or any other mapped field, e.g.
+  // source) on an EXISTING row didn't save, while new rows (no snake key yet)
+  // did. Pass 1 copies snake/unmapped keys; pass 2 applies the camel→snake
+  // mappings last, so the editor's value wins.
+  const isMappingKey = (k: string) => Object.prototype.hasOwnProperty.call(mapping, k);
   for (const [key, value] of Object.entries(data)) {
-    const mappedKey = mapping[key] || key;
-    normalized[mappedKey] = value;
+    if (!isMappingKey(key)) normalized[key] = value;
+  }
+  for (const [key, value] of Object.entries(data)) {
+    if (isMappingKey(key)) normalized[mapping[key]] = value;
   }
 
   // 2. Unwrap Automation (Activities & Effects)
