@@ -16,6 +16,7 @@ import CampaignHomeBlocks from './CampaignHomeBlocks';
 import {
   fetchCampaignHomeBlocks, saveCampaignHomeBlocks, makeBlock, defaultHomeBlocks,
   isContainer, makePlaceholderRef, BLOCK_TYPE_META, HOME_BLOCK_TYPES, ENTITY_PICKER_KINDS,
+  PLACEHOLDER_TITLE, PLACEHOLDER_DESCRIPTION,
   type HomeBlock, type HomeBlockType, type ContainerBlock, type EntityRef,
 } from '../../lib/campaignHome';
 
@@ -669,6 +670,20 @@ function EntityRefPicker({ mode, value, onChange }: {
     if (chipDrag == null || chipDrag === to) return;
     const next = [...list]; const [m] = next.splice(chipDrag, 1); next.splice(to, 0, m); onChange(next); setChipDrag(null);
   };
+  // Per-card override editing (title / description / span). One chip expanded at
+  // a time. `updateAt` patches a single ref, dropping empty/default overrides so
+  // they fall back to the resolved entity / Placeholder · Coming-Soon defaults.
+  const [editIdx, setEditIdx] = useState<number | null>(null);
+  const updateAt = (idx: number, patch: Partial<EntityRef>) => {
+    onChange(list.map((r, j) => {
+      if (j !== idx) return r;
+      const next: EntityRef = { ...r, ...patch };
+      if (!next.title) delete next.title;
+      if (!next.description) delete next.description;
+      if (!next.span || next.span <= 1) delete next.span;
+      return next;
+    }));
+  };
 
   return (
     <div className="space-y-2">
@@ -677,18 +692,61 @@ function EntityRefPicker({ mode, value, onChange }: {
           ? <p className="field-hint">No entities yet — add some below.</p>
           : <div className="data-table">
               <div className="data-table-body">
-                {list.map((r, idx) => (
-                  <div key={`${r.kind}:${r.id}:${idx}`} draggable
-                    onDragStart={() => setChipDrag(idx)}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={() => reorder(idx)}
-                    className={cn('data-table-row grid grid-cols-[auto_1fr_auto_auto] gap-2', chipDrag === idx && 'opacity-40')}>
-                    <GripVertical className="w-3.5 h-3.5 text-ink/30 cursor-grab" />
-                    <span className="text-xs font-serif truncate" title={r.name}>{r.name || r.id}</span>
-                    <span className="label-text">{kindLabel(r.kind)}</span>
-                    <button onClick={() => onChange(list.filter((_, j) => j !== idx))} className="text-ink/30 hover:text-blood" aria-label="Remove"><X className="w-3.5 h-3.5" /></button>
+                {list.map((r, idx) => {
+                  const ph = r.kind === 'placeholder';
+                  const expanded = editIdx === idx;
+                  return (
+                  <div key={`${r.kind}:${r.id}:${idx}`} className={cn(chipDrag === idx && 'opacity-40')}>
+                    {/* Summary row — drag to reorder; chevron toggles the override editor. */}
+                    <div draggable
+                      onDragStart={() => setChipDrag(idx)}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={() => reorder(idx)}
+                      className="data-table-row grid grid-cols-[auto_1fr_auto_auto_auto] gap-2 items-center">
+                      <GripVertical className="w-3.5 h-3.5 text-ink/30 cursor-grab" />
+                      <span className="text-xs font-serif truncate" title={r.title || r.name}>
+                        {r.title || r.name || r.id}
+                        {!!r.span && r.span > 1 && <span className="label-text ml-1.5 text-gold/70">×{r.span}</span>}
+                      </span>
+                      <span className="label-text">{kindLabel(r.kind)}</span>
+                      <button onClick={() => setEditIdx(expanded ? null : idx)} className={cn('text-ink/30 hover:text-gold', expanded && 'text-gold')} aria-label="Edit card">
+                        <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', !expanded && '-rotate-90')} />
+                      </button>
+                      <button onClick={() => { onChange(list.filter((_, j) => j !== idx)); if (expanded) setEditIdx(null); }} className="text-ink/30 hover:text-blood" aria-label="Remove"><X className="w-3.5 h-3.5" /></button>
+                    </div>
+                    {/* Per-card overrides: heading ("what it says"), description
+                        ("what its description says"), and column span. Empty fields
+                        fall back to the resolved entity / Placeholder · Coming Soon. */}
+                    {expanded && (
+                      <div className="px-2 py-2 space-y-2 bg-gold/5 border-t border-gold/10">
+                        <div className="space-y-1">
+                          <label className="field-label">Card title</label>
+                          <Input autoComplete="off" className="field-input text-xs" value={r.title || ''} placeholder={r.name || PLACEHOLDER_TITLE} onChange={(e) => updateAt(idx, { title: e.target.value })} />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="field-label">Description</label>
+                          <textarea autoComplete="off" className="field-input text-xs min-h-[48px] py-1.5 w-full" value={r.description || ''} placeholder={ph ? PLACEHOLDER_DESCRIPTION : "Uses the entity's own summary"} onChange={(e) => updateAt(idx, { description: e.target.value })} />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="field-label">Card width (columns)</label>
+                          <div className="flex border border-gold/20 w-fit">
+                            {[1, 2, 3, 4].map((n) => {
+                              const active = (r.span || 1) === n;
+                              return (
+                                <button key={n} onClick={() => updateAt(idx, { span: n })}
+                                  className={cn('w-8 text-[11px] py-1 transition-colors', n > 1 && 'border-l border-gold/10', active ? 'bg-gold text-white font-semibold' : 'bg-card text-ink/60 hover:bg-gold/5')}>
+                                  {n}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <p className="field-hint">1 = normal. Wider cards are capped at the row's column count.</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
       )}

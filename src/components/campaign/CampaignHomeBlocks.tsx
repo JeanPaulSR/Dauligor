@@ -4,7 +4,10 @@ import { motion } from 'motion/react';
 import { ChevronRight } from 'lucide-react';
 import BBCodeRenderer from '../BBCodeRenderer';
 import { resolveReference, type RefResolved } from '../../lib/references';
-import { isContainer, isPlaceholderRef, type EntityRef, type HomeBlock } from '../../lib/campaignHome';
+import {
+  isContainer, isPlaceholderRef, clampSpan, PLACEHOLDER_TITLE, PLACEHOLDER_DESCRIPTION,
+  type EntityRef, type HomeBlock,
+} from '../../lib/campaignHome';
 
 interface ArticleLite {
   id: string;
@@ -53,41 +56,72 @@ function collectRefs(blocks: HomeBlock[]): EntityRef[] {
  *  intentional GM placeholder, OR a real ref whose target doesn't exist yet —
  *  both render a graceful card instead of vanishing, matching the legacy
  *  "(Article not found)" tile). */
-type CardVM = { data: RefResolved } | { placeholder: string; missing: boolean };
+/** A resolved card view-model. `title`/`description` are the EFFECTIVE strings
+ *  after applying per-card overrides (ref.title / ref.description) over the
+ *  resolved entity, falling back to the Placeholder / Coming-Soon defaults.
+ *  `data` is the resolved entity (image/route/sourceLabel) or null for a
+ *  placeholder/missing tile. `span` is the ref's raw column span (0 = unset). */
+interface CardVM {
+  title: string;
+  description: string;
+  span: number;
+  data: RefResolved | null;
+  placeholder: boolean;
+}
 function refToCard(r: EntityRef, resolved: Record<string, RefResolved>): CardVM {
-  if (isPlaceholderRef(r)) return { placeholder: r.name || 'Untitled', missing: false };
+  const span = r.span == null ? 0 : clampSpan(r.span);
+  if (isPlaceholderRef(r)) {
+    return {
+      title: r.title || r.name || PLACEHOLDER_TITLE,
+      description: r.description || PLACEHOLDER_DESCRIPTION,
+      span, data: null, placeholder: true,
+    };
+  }
   const d = resolved[refKey(r)];
-  if (d) return { data: d };
-  return { placeholder: r.name || r.id || 'Untitled', missing: true };
+  if (d) {
+    return {
+      title: r.title || d.name,
+      description: r.description || plainExcerpt(d.summary),
+      span, data: d, placeholder: false,
+    };
+  }
+  // Real ref whose target doesn't exist yet → graceful tile (legacy "(not found)").
+  return {
+    title: r.title || r.name || r.id || PLACEHOLDER_TITLE,
+    description: r.description || PLACEHOLDER_DESCRIPTION,
+    span, data: null, placeholder: true,
+  };
 }
 
 /** A graceful placeholder tile — used for GM placeholders and not-yet-created
  *  targets. Mirrors the legacy dashed "coming soon" card. */
-function PlaceholderCard({ name, missing, card }: { name: string; missing: boolean; card: 'image' | 'compact' | 'list' }) {
+function PlaceholderCard({ title, description, card }: { title: string; description: string; card: 'image' | 'compact' | 'list' }) {
   if (card === 'list') {
     return (
       <span className="flex items-center gap-2 py-2 border-b border-gold/10 text-ink/40">
         <ChevronRight className="w-3.5 h-3.5 text-gold/30 shrink-0" />
-        <span className="font-serif text-base italic">{name}</span>
-        <span className="label-text ml-auto text-ink/20">{missing ? 'Coming soon' : 'Placeholder'}</span>
+        <span className="font-serif text-base italic">{title}</span>
+        {description && <span className="label-text ml-auto text-ink/20">{description}</span>}
       </span>
     );
   }
   return (
     <div className="h-full border border-dashed border-gold/20 bg-card/30 flex flex-col items-center justify-center text-center min-h-[150px] p-6">
-      <p className="text-xs font-bold uppercase tracking-widest text-ink/30 font-serif">{name}</p>
-      <p className="text-[10px] text-ink/20 italic mt-1">{missing ? 'Coming soon' : 'Placeholder'}</p>
+      <p className="text-xs font-bold uppercase tracking-widest text-ink/30 font-serif">{title}</p>
+      {description && <p className="text-[10px] text-ink/20 italic mt-1">{description}</p>}
     </div>
   );
 }
 
-/** One entity card — image-led, links to the entity's route when it has one. */
-function EntityCard({ data, card, excerpt }: { data: RefResolved; card: 'image' | 'compact' | 'list'; excerpt: boolean }) {
+/** One entity card — image-led, links to the entity's route when it has one.
+ *  `title`/`description` are the effective strings (per-card override, else the
+ *  resolved entity's name / plain summary). */
+function EntityCard({ data, card, excerpt, title, description }: { data: RefResolved; card: 'image' | 'compact' | 'list'; excerpt: boolean; title: string; description: string }) {
   if (card === 'list') {
     const inner = (
       <span className="flex items-center gap-2 py-2 border-b border-gold/10 text-ink/80 hover:text-gold transition-colors">
         <ChevronRight className="w-3.5 h-3.5 text-gold shrink-0" />
-        <span className="font-serif text-base">{data.name}</span>
+        <span className="font-serif text-base">{title}</span>
         {data.sourceLabel && <span className="label-text ml-auto">{data.sourceLabel}</span>}
       </span>
     );
@@ -100,7 +134,7 @@ function EntityCard({ data, card, excerpt }: { data: RefResolved; card: 'image' 
         <div className="h-32 overflow-hidden border-b border-gold/10">
           <img
             src={data.imageUrl}
-            alt={data.name}
+            alt={title}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
             referrerPolicy="no-referrer"
           />
@@ -108,11 +142,11 @@ function EntityCard({ data, card, excerpt }: { data: RefResolved; card: 'image' 
       )}
       <div className="p-5 pb-2">
         {data.sourceLabel && <span className="label-text">{data.sourceLabel}</span>}
-        <h3 className="h3-title group-hover:text-gold transition-colors leading-tight">{data.name}</h3>
+        <h3 className="h3-title group-hover:text-gold transition-colors leading-tight">{title}</h3>
       </div>
-      {excerpt && (
+      {excerpt && description && (
         <div className="p-5 pt-0 flex-grow">
-          <p className="description-text line-clamp-3 text-sm">{plainExcerpt(data.summary)}</p>
+          <p className="description-text line-clamp-3 text-sm">{description}</p>
         </div>
       )}
     </div>
@@ -229,15 +263,22 @@ export default function CampaignHomeBlocks({ blocks, recommendedLore, campaignNa
         const colClass = block.card === 'list'
           ? ''
           : { 1: '', 2: 'md:grid-cols-2', 3: 'md:grid-cols-3', 4: 'md:grid-cols-2 lg:grid-cols-4' }[block.columns];
-        // featureFirst: the first card spans 2 columns (the asymmetric default-
-        // home look). Only meaningful for card grids with ≥2 columns.
-        const feature = !!block.featureFirst && block.card !== 'list' && block.columns >= 2;
+        const isGrid = block.card !== 'list';
         const renderCard = (vm: CardVM, i: number) => {
-          const span = feature && i === 0 ? 'md:col-span-2' : '';
-          const inner = 'data' in vm
-            ? <EntityCard key={i} data={vm.data} card={block.card} excerpt={block.card === 'list' ? false : block.excerpt} />
-            : <PlaceholderCard key={i} name={vm.placeholder} missing={vm.missing} card={block.card} />;
-          return span ? <div key={i} className={span}>{inner}</div> : inner;
+          // Per-card column span: an explicit ref.span (>1) wins; otherwise the
+          // featureFirst shortcut widens just the first card. Clamped to the row's
+          // column count so a card never overflows its grid.
+          let span = vm.span > 1 ? vm.span : (block.featureFirst && i === 0 ? 2 : 1);
+          span = Math.min(span, block.columns);
+          // Static classes (Tailwind needs literal strings). For the 4-col grid
+          // (md:grid-cols-2 lg:grid-cols-4) a 4-span is full width at both stops.
+          const spanCls = isGrid && span >= 2
+            ? ({ 2: 'md:col-span-2', 3: 'md:col-span-3', 4: 'md:col-span-2 lg:col-span-4' }[span] || '')
+            : '';
+          const inner = vm.data
+            ? <EntityCard key={i} data={vm.data} card={block.card} excerpt={block.card === 'list' ? false : block.excerpt} title={vm.title} description={vm.description} />
+            : <PlaceholderCard key={i} title={vm.title} description={vm.description} card={block.card} />;
+          return spanCls ? <div key={i} className={spanCls}>{inner}</div> : inner;
         };
         return (
           <section key={block.id} className="space-y-8">

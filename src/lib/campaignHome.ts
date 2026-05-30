@@ -82,7 +82,29 @@ export interface EntityRef {
    *  ref (`kind === PLACEHOLDER_KIND`) this is the only meaningful field — it's
    *  the card title to show. */
   name?: string;
+  /** Per-card heading override ("what it says"). When non-empty it wins over the
+   *  resolved entity name / `name`. Empty → resolved name, then `name`, then the
+   *  PLACEHOLDER_TITLE default. */
+  title?: string;
+  /** Per-card description override ("what its description says"). When non-empty
+   *  it wins over the resolved entity summary. Empty → resolved summary, then the
+   *  PLACEHOLDER_DESCRIPTION default. */
+  description?: string;
+  /** How many grid columns this card spans (1–4, default 1). Lets a GM size any
+   *  card — supersedes the row-level `featureFirst` shortcut, which only widens
+   *  the first card. Clamped to the row's column count at render time. */
+  span?: number;
 }
+
+/** Defaults shown when a card has neither an override nor resolved entity data —
+ *  e.g. a fresh placeholder, or a real ref whose target doesn't exist yet. */
+export const PLACEHOLDER_TITLE = 'Placeholder';
+export const PLACEHOLDER_DESCRIPTION = 'Coming Soon';
+/** A card's column span, clamped 1–4 (default 1). */
+export const clampSpan = (v: any): number => {
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) ? Math.max(1, Math.min(4, n)) : 1;
+};
 
 /** A placeholder ref names a card slot without pointing at a real entity — the
  *  GM gets a styled "coming soon" card without having to create a fake article.
@@ -272,7 +294,12 @@ export function defaultHomeBlocks(): HomeBlock[] {
 function asRef(v: any): EntityRef | null {
   // id may legitimately be '' (a page-level system ref), so check kind only.
   if (!v || typeof v !== 'object' || !v.kind) return null;
-  return { kind: String(v.kind), id: String(v.id ?? ''), name: v.name ? String(v.name) : undefined };
+  const ref: EntityRef = { kind: String(v.kind), id: String(v.id ?? '') };
+  if (v.name) ref.name = String(v.name);
+  if (v.title) ref.title = String(v.title);
+  if (v.description) ref.description = String(v.description);
+  if (v.span != null) ref.span = clampSpan(v.span);
+  return ref;
 }
 function asRefArray(v: any): EntityRef[] {
   if (!Array.isArray(v)) return [];
