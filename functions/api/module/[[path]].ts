@@ -37,6 +37,8 @@ import { buildSourceSpellListBundle } from "../../../api/_lib/_sourceSpellList.j
 import { buildSpellItemBundle } from "../../../api/_lib/_spellExport.js";
 import { buildSourceFeatListBundle } from "../../../api/_lib/_sourceFeatList.js";
 import { buildFeatItemBundle } from "../../../api/_lib/_featExport.js";
+import { buildBackgroundItemBundle } from "../../../api/_lib/_backgroundExport.js";
+import { buildRaceItemBundle } from "../../../api/_lib/_raceExport.js";
 import { buildItemBundle } from "../../../api/_lib/_itemExport.js";
 import { buildTagCatalog } from "../../../api/_lib/_tagCatalog.js";
 import { SERVER_EXPORT_FETCHERS } from "../../../api/_lib/d1-fetchers-server.js";
@@ -131,6 +133,7 @@ async function getOrBuild<T>(
 
 const VALID_KINDS: ReadonlySet<ExportEntityKind> = new Set([
   "class", "subclass", "feature", "scalingColumn", "optionGroup", "optionItem", "source", "feat",
+  "background", "race",
 ]);
 
 function parseEntityFromBody(body: any): { kind: ExportEntityKind; id: string } | null {
@@ -366,6 +369,38 @@ export const onRequest = async (context: any): Promise<Response> => {
       const result = await buildFeatItemBundle(dbId, SERVER_EXPORT_FETCHERS);
       if (result) return serveLive(result);
       // Fall through to 404 if no feat row matched.
+    }
+
+    // Per-background full item — live read-through. URL:
+    //   /api/module/backgrounds/<dbId>.json
+    // Backgrounds live in the `feats` table (feat_type='background')
+    // but export as Foundry `type:"background"` items with the
+    // startingEquipment / wealth fields. Mirrors the per-feat arm.
+    else if (
+      pathParts.length === 2
+      && pathParts[0] === "backgrounds"
+      && pathParts[1].endsWith(".json")
+    ) {
+      const dbId = pathParts[1].replace(".json", "");
+      const result = await buildBackgroundItemBundle(dbId, SERVER_EXPORT_FETCHERS);
+      if (result) return serveLive(result);
+      // Fall through to 404 if no background row matched.
+    }
+
+    // Per-race full item — live read-through. URL:
+    //   /api/module/races/<dbId>.json
+    // Races live in the `feats` table (feat_type='race') but export as
+    // Foundry `type:"race"` items with movement / senses / creature-type
+    // fields. Mirrors the per-feat arm.
+    else if (
+      pathParts.length === 2
+      && pathParts[0] === "races"
+      && pathParts[1].endsWith(".json")
+    ) {
+      const dbId = pathParts[1].replace(".json", "");
+      const result = await buildRaceItemBundle(dbId, SERVER_EXPORT_FETCHERS);
+      if (result) return serveLive(result);
+      // Fall through to 404 if no race row matched.
     }
 
     // Per-item full document — live read-through, no R2 cache. URL:

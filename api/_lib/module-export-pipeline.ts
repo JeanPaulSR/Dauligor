@@ -515,6 +515,12 @@ export async function rebakeBundle(kind: ExportEntityKind, id: string): Promise<
       case "optionItem": return await rebakeOptionItem(id);
       case "source": return await rebakeSource(id);
       case "feat": return await rebakeFeat(id);
+      // Backgrounds + races live in the feats table and (like feats)
+      // only affect the top-level catalog counts; no per-entity R2
+      // bundle is cached (the detail endpoint is live-built), so reuse
+      // the feat catalog-only rebake.
+      case "background": return await rebakeFeat(id);
+      case "race": return await rebakeFeat(id);
       default:
         console.warn("[pipeline] unknown entity kind", { kind, id });
         return [];

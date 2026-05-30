@@ -24,7 +24,11 @@ export type ExportEntityKind =
   // source catalog so the Foundry importer's wizard sees the updated
   // `counts.feats` + `supportedImportTypes` (otherwise it reports
   // "no feats-capable sources" until someone manually rebakes).
-  | 'feat';
+  | 'feat'
+  // Backgrounds + races — stored in the feats table, exported as their
+  // own Foundry Item types. Same catalog-only rebake as feats.
+  | 'background'
+  | 'race';
 
 async function authHeaders(): Promise<HeadersInit | null> {
   if (!auth.currentUser) return null;
