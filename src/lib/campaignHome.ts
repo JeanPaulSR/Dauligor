@@ -69,6 +69,33 @@ export const BLOCK_TYPE_META: Record<
 
 export const HOME_BLOCK_TYPES = Object.keys(BLOCK_TYPE_META) as HomeBlockType[];
 
+/**
+ * The starting layout an editor seeds when a campaign has no saved blocks yet —
+ * the structural skeleton of the default site home (hero → a "World of …" article
+ * row to fill → the recommended-article highlight). Lets a GM customize the basic
+ * style instead of building from an empty page. Saving this unchanged renders the
+ * same as the no-blocks default; deleting every block and saving reverts to it.
+ */
+export function defaultHomeBlocks(): HomeBlock[] {
+  return [
+    {
+      id: crypto.randomUUID(),
+      blockType: 'hero',
+      title: 'Stories in Dauligor',
+      subtitle:
+        'Your GM has made this website to give you easy access to the lore of the setting of Dauligor, and to the homebrew options they allow.',
+    },
+    {
+      id: crypto.randomUUID(),
+      blockType: 'article-row',
+      title: 'The World of Dauligor',
+      columns: 3,
+      articleIds: [],
+    },
+    { id: crypto.randomUUID(), blockType: 'recommended', title: '' },
+  ];
+}
+
 /** A fresh block of the given type with sensible empty defaults. */
 export function makeBlock(type: HomeBlockType, id: string): HomeBlock {
   switch (type) {

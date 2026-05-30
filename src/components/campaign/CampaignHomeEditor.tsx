@@ -11,7 +11,7 @@ import MarkdownEditor from '../MarkdownEditor';
 import SingleSelectSearch from '../ui/SingleSelectSearch';
 import { ImageUpload } from '../ui/ImageUpload';
 import {
-  fetchCampaignHomeBlocks, saveCampaignHomeBlocks, makeBlock,
+  fetchCampaignHomeBlocks, saveCampaignHomeBlocks, makeBlock, defaultHomeBlocks,
   BLOCK_TYPE_META, HOME_BLOCK_TYPES,
   type HomeBlock, type HomeBlockType,
 } from '../../lib/campaignHome';
@@ -35,6 +35,13 @@ export default function CampaignHomeEditor({ campaignId, articles }: Props) {
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  // True when the campaign had no saved blocks and we seeded the default layout.
+  // Keeps Save enabled (so the GM can persist the starting point) and drives the
+  // "this is the default" banner until they save or edit.
+  const [seededFromDefault, setSeededFromDefault] = useState(false);
+  // Native HTML5 drag-reorder state (no dep — matches the ImageManager pattern).
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [overIndex, setOverIndex] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,7 +49,16 @@ export default function CampaignHomeEditor({ campaignId, articles }: Props) {
       setLoading(true);
       try {
         const loaded = await fetchCampaignHomeBlocks(campaignId);
-        if (!cancelled) setBlocks(loaded);
+        if (cancelled) return;
+        if (loaded.length === 0) {
+          // No saved layout yet → start from the default skeleton so the GM
+          // customizes the basic style instead of a blank page.
+          setBlocks(defaultHomeBlocks());
+          setSeededFromDefault(true);
+        } else {
+          setBlocks(loaded);
+          setSeededFromDefault(false);
+        }
       } catch (err) {
         console.error('Failed to load home layout:', err);
       } finally {
@@ -87,6 +103,7 @@ export default function CampaignHomeEditor({ campaignId, articles }: Props) {
     try {
       await saveCampaignHomeBlocks(campaignId, blocks);
       setDirty(false);
+      setSeededFromDefault(false);
       toast.success('Homepage layout saved');
     } catch (err: any) {
       console.error(err);
@@ -95,6 +112,25 @@ export default function CampaignHomeEditor({ campaignId, articles }: Props) {
       setSaving(false);
     }
   };
+
+  // Drag-reorder: drop the dragged block at the target slot. Removing first then
+  // inserting at the target index gives the standard "lands where you dropped it"
+  // behaviour; the drop-target highlight (overIndex) shows where it'll land.
+  const handleDrop = (targetIndex: number) => {
+    setOverIndex(null);
+    const from = dragIndex;
+    setDragIndex(null);
+    if (from === null || from === targetIndex) return;
+    setBlocks((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(targetIndex, 0, moved);
+      return next;
+    });
+    setDirty(true);
+  };
+
+  const canSave = dirty || seededFromDefault;
 
   if (loading) {
     return <p className="description-text py-4">Loading homepage layout…</p>;
@@ -109,19 +145,28 @@ export default function CampaignHomeEditor({ campaignId, articles }: Props) {
               <LayoutGrid className="w-5 h-5 text-gold shrink-0" /> Homepage Layout
             </CardTitle>
             <p className="field-hint mt-1">
-              Arrange the blocks players see on the home page for this campaign. Empty layout = the default site home.
+              Drag the blocks to reorder them, fill each with content, and save. Delete every block and save to fall back to the default site home.
             </p>
           </div>
-          <Button onClick={handleSave} disabled={saving || !dirty} className="btn-gold-solid gap-2 rounded shrink-0">
+          <Button onClick={handleSave} disabled={saving || !canSave} className="btn-gold-solid gap-2 rounded shrink-0">
             <Save className="w-4 h-4" />
-            {saving ? 'Saving…' : dirty ? 'Save Layout' : 'Saved'}
+            {saving ? 'Saving…' : canSave ? 'Save Layout' : 'Saved'}
           </Button>
         </CardHeader>
         <CardContent className="space-y-4">
+          {seededFromDefault && !dirty && (
+            <div className="flex items-start gap-2 px-3 py-2.5 rounded border border-gold/20 bg-gold/5">
+              <Sparkles className="w-4 h-4 text-gold shrink-0 mt-0.5" />
+              <p className="text-[12px] text-ink/70 leading-snug">
+                This is the <strong className="text-ink">default layout</strong>. Customize the blocks below — fill the article row, reorder by dragging — then <strong className="text-ink">Save</strong> to make it this campaign's homepage.
+              </p>
+            </div>
+          )}
+
           {blocks.length === 0 ? (
             <div className="py-10 text-center bg-background/40 rounded border border-dashed border-gold/15">
-              <p className="text-ink/40 font-serif italic mb-1">No custom blocks yet.</p>
-              <p className="text-[11px] text-ink/30">Players see the default home page until you add blocks below.</p>
+              <p className="text-ink/40 font-serif italic mb-1">No blocks — players see the default home page.</p>
+              <p className="text-[11px] text-ink/30">Add a block below, or save now to keep the default.</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -137,6 +182,12 @@ export default function CampaignHomeEditor({ campaignId, articles }: Props) {
                   onUpdate={update}
                   onMove={move}
                   onRemove={remove}
+                  isDragging={dragIndex === index}
+                  isDropTarget={overIndex === index && dragIndex !== null && dragIndex !== index}
+                  onDragStart={() => setDragIndex(index)}
+                  onDragOver={() => { if (dragIndex !== null && dragIndex !== index) setOverIndex(index); }}
+                  onDropBlock={() => handleDrop(index)}
+                  onDragEnd={() => { setDragIndex(null); setOverIndex(null); }}
                 />
               ))}
             </div>
@@ -200,17 +251,38 @@ interface BlockEditorProps {
   onUpdate: (id: string, patch: Partial<HomeBlock>) => void;
   onMove: (index: number, dir: -1 | 1) => void;
   onRemove: (id: string) => void;
+  isDragging: boolean;
+  isDropTarget: boolean;
+  onDragStart: () => void;
+  onDragOver: () => void;
+  onDropBlock: () => void;
+  onDragEnd: () => void;
 }
 
-function BlockEditor({ block, index, total, articleOptions, titleById, campaignId, onUpdate, onMove, onRemove }: BlockEditorProps) {
+function BlockEditor({
+  block, index, total, articleOptions, titleById, campaignId, onUpdate, onMove, onRemove,
+  isDragging, isDropTarget, onDragStart, onDragOver, onDropBlock, onDragEnd,
+}: BlockEditorProps) {
   const meta = BLOCK_TYPE_META[block.blockType];
   const Icon = ICONS[meta.icon] ?? LayoutGrid;
 
   return (
-    <div className="border border-gold/15 rounded bg-background/40 overflow-hidden">
-      {/* Block header row: type label + reorder/delete controls */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-gold/5 border-b border-gold/10">
-        <GripVertical className="w-4 h-4 text-ink/20 shrink-0" />
+    <div
+      className={`border rounded bg-background/40 overflow-hidden transition-all ${
+        isDropTarget ? 'border-gold ring-2 ring-gold/30' : 'border-gold/15'
+      } ${isDragging ? 'opacity-40' : ''}`}
+      onDragOver={(e) => { e.preventDefault(); onDragOver(); }}
+      onDrop={(e) => { e.preventDefault(); onDropBlock(); }}
+    >
+      {/* Block header row: drag handle + type label + reorder/delete controls.
+          The header is the drag surface (draggable) — grab the grip to reorder. */}
+      <div
+        className="flex items-center gap-2 px-3 py-2 bg-gold/5 border-b border-gold/10 cursor-grab active:cursor-grabbing"
+        draggable
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+      >
+        <GripVertical className="w-4 h-4 text-ink/30 shrink-0" />
         <Icon className="w-4 h-4 text-gold shrink-0" />
         <span className="text-xs font-bold uppercase tracking-widest text-ink/60 flex-1">{meta.label}</span>
         <button
