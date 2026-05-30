@@ -74,6 +74,10 @@ export const D1_TABLE_MAP: Record<string, string> = {
   characterSpellListExtensions: 'character_spell_list_extensions',
   characterProficiencies: 'character_proficiencies',
   campaignMembers: 'campaign_members',
+  // Per-campaign homepage layout (ordered content blocks). Migration
+  // 20260529-1700. When a campaign has blocks, they replace the default
+  // Home body for its members.
+  campaignHomeBlocks: 'campaign_home_blocks',
   systemMetadata: 'system_metadata',
   maps: 'maps',
   mapMarkers: 'map_markers',

@@ -10,8 +10,9 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from '@/components/ui/command';
 import { ClassImageEditor } from '@/components/compendium/ClassImageEditor';
-import { ChevronLeft, Save, Sparkles, LayoutGrid, ImageIcon, Calendar, FileText, MapPin, Scroll, Users, History, Check, X } from 'lucide-react';
+import { ChevronLeft, Save, Sparkles, LayoutGrid, ImageIcon, Calendar, FileText, MapPin, Scroll, Users, History, Check, X, Home as HomeIcon } from 'lucide-react';
 import { ImageUpload } from '@/components/ui/ImageUpload';
+import CampaignHomeEditor from '@/components/campaign/CampaignHomeEditor';
 
 export default function CampaignEditor({ userProfile }: { userProfile: any }) {
   const { id } = useParams();
@@ -48,6 +49,7 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
 
   const tabs = [
     { id: 'info', label: 'Campaign Info', icon: LayoutGrid },
+    { id: 'homepage', label: 'Homepage', icon: HomeIcon },
     { id: 'characters', label: 'Player Characters', icon: Users },
     { id: 'articles', label: 'Articles', icon: FileText },
     { id: 'maps', label: 'Maps', icon: MapPin },
@@ -475,6 +477,12 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
                   </div>
                 </CardContent>
               </Card>
+            </div>
+          )}
+
+          {activeTab === 'homepage' && id && (
+            <div className="animate-in fade-in duration-300">
+              <CampaignHomeEditor campaignId={id} articles={lorePages} />
             </div>
           )}
 

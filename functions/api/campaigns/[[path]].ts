@@ -10,11 +10,13 @@
 //   GET    /api/campaigns                          (role-filtered list)
 //   GET    /api/campaigns/[id]                     (members + staff)
 //   GET    /api/campaigns/[id]/members             (members + staff)
+//   GET    /api/campaigns/[id]/home-blocks         (members + staff)
 //   POST   /api/campaigns                          (isCharacterDM)
 //   PATCH  /api/campaigns/[id]                     (isCharacterDM)
 //   DELETE /api/campaigns/[id]                     (admin)
 //   PUT    /api/campaigns/[id]/members/[uid]       (isCharacterDM)
 //   DELETE /api/campaigns/[id]/members/[uid]       (isCharacterDM)
+//   PUT    /api/campaigns/[id]/home-blocks         (isCharacterDM)
 //
 // `/api/admin/eras/*` writes now live in a dedicated file at
 // functions/api/admin/eras/[[path]].ts — the Vercel-era 12-function
@@ -135,6 +137,34 @@ async function handleMembers(uid: string, staff: boolean, campaignId: string): P
   return Response.json({ members });
 }
 
+async function handleHomeBlocks(uid: string, staff: boolean, campaignId: string): Promise<Response> {
+  const campaignCheck = await executeD1QueryInternal({
+    sql: "SELECT id FROM campaigns WHERE id = ? LIMIT 1",
+    params: [campaignId],
+  });
+  const checkRows = Array.isArray(campaignCheck?.results) ? campaignCheck.results : [];
+  if (checkRows.length === 0) {
+    throw new HttpError(404, "Campaign not found.");
+  }
+
+  if (!staff) {
+    const member = await isCampaignMember(uid, campaignId);
+    if (!member) {
+      throw new HttpError(404, "Campaign not found.");
+    }
+  }
+
+  const result = await executeD1QueryInternal({
+    sql: `SELECT id, campaign_id, block_type, "order", config
+            FROM campaign_home_blocks
+           WHERE campaign_id = ?
+           ORDER BY "order" ASC`,
+    params: [campaignId],
+  });
+  const blocks = Array.isArray(result?.results) ? result.results : [];
+  return Response.json({ blocks });
+}
+
 /* -------------------------------------------------------------------------- */
 /* Write handlers                                                              */
 /* -------------------------------------------------------------------------- */
@@ -157,6 +187,14 @@ const ALLOWED_CAMPAIGN_FIELDS = new Set([
 ]);
 
 const ALLOWED_MEMBER_ROLES = new Set(["dm", "co-dm", "player"]);
+
+const ALLOWED_HOME_BLOCK_TYPES = new Set([
+  "hero",
+  "text",
+  "article-row",
+  "image",
+  "recommended",
+]);
 
 function coerceCampaignValue(value: any): any {
   if (value === undefined || value === null) return null;
@@ -275,6 +313,45 @@ async function handleMemberPut(request: Request, campaignId: string, userId: str
   return Response.json({ ok: true, campaign_id: campaignId, user_id: userId, role: requestedRole });
 }
 
+async function handleHomeBlocksPut(request: Request, campaignId: string): Promise<Response> {
+  const check = await executeD1QueryInternal({
+    sql: "SELECT id FROM campaigns WHERE id = ? LIMIT 1",
+    params: [campaignId],
+  });
+  if (!Array.isArray(check?.results) || check.results.length === 0) {
+    throw new HttpError(404, "Campaign not found.");
+  }
+
+  const body = (await request.json().catch(() => ({}))) as any;
+  const blocks = Array.isArray(body?.blocks) ? body.blocks : [];
+
+  // Replace-all: clear the campaign's blocks, then re-insert in array order.
+  // Plain INSERT after DELETE (NOT INSERT OR REPLACE) — same batch idiom the
+  // lore junctions use. `order` is derived from the array index so the client
+  // never has to renumber.
+  const now = new Date().toISOString();
+  const queries: Array<{ sql: string; params: any[] }> = [
+    { sql: "DELETE FROM campaign_home_blocks WHERE campaign_id = ?", params: [campaignId] },
+  ];
+
+  blocks.forEach((b: any, index: number) => {
+    const blockType = typeof b?.block_type === "string" ? b.block_type : "";
+    if (!ALLOWED_HOME_BLOCK_TYPES.has(blockType)) {
+      throw new HttpError(400, `Invalid home block type \`${blockType}\`.`);
+    }
+    const id = typeof b?.id === "string" && b.id ? b.id : crypto.randomUUID();
+    const config = b?.config && typeof b.config === "object" ? JSON.stringify(b.config) : "{}";
+    queries.push({
+      sql: `INSERT INTO campaign_home_blocks (id, campaign_id, block_type, "order", config, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      params: [id, campaignId, blockType, index, config, now, now],
+    });
+  });
+
+  await executeD1QueryInternal(queries);
+  return Response.json({ ok: true, count: blocks.length });
+}
+
 async function handleMemberDelete(campaignId: string, userId: string): Promise<Response> {
   await executeD1QueryInternal({
     sql: "DELETE FROM campaign_members WHERE campaign_id = ? AND user_id = ?",
@@ -314,6 +391,9 @@ export const onRequest = async (context: any): Promise<Response> => {
       if (path.length === 2 && path[1] === "members") {
         return await handleMembers(uid, staff, path[0]);
       }
+      if (path.length === 2 && path[1] === "home-blocks") {
+        return await handleHomeBlocks(uid, staff, path[0]);
+      }
       return Response.json(
         { error: `Unknown /api/campaigns route: /${path.join("/")}` },
         { status: 404 },
@@ -330,6 +410,9 @@ export const onRequest = async (context: any): Promise<Response> => {
     }
     if (request.method === "PATCH" && path.length === 1) {
       return await handleUpdate(request, path[0]);
+    }
+    if (request.method === "PUT" && path.length === 2 && path[1] === "home-blocks") {
+      return await handleHomeBlocksPut(request, path[0]);
     }
     if (request.method === "DELETE" && path.length === 1) {
       return await handleDelete(authHeader, path[0]);
