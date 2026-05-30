@@ -194,6 +194,7 @@ const ALLOWED_HOME_BLOCK_TYPES = new Set([
   "image",
   "divider",
   "recommended",
+  "callout",
   "entity-row",
   "entity-feature",
   "group",
