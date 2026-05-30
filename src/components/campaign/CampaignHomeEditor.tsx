@@ -515,7 +515,7 @@ function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onA
         <button disabled={i === 0} onClick={() => onMove(block.id, -1)} className="p-1.5 text-ink/40 hover:text-gold disabled:opacity-20" aria-label="Move up"><ChevronUp className="w-4 h-4" /></button>
         <button disabled={i === n - 1} onClick={() => onMove(block.id, 1)} className="p-1.5 text-ink/40 hover:text-gold disabled:opacity-20" aria-label="Move down"><ChevronDown className="w-4 h-4" /></button>
         <button onClick={() => onDuplicate(block.id)} className="p-1.5 text-ink/40 hover:text-gold" aria-label="Duplicate"><Copy className="w-4 h-4" /></button>
-        <button onClick={() => onRemove(block.id)} className="p-1.5 btn-danger" aria-label="Delete"><Trash2 className="w-4 h-4" /></button>
+        <button onClick={() => onRemove(block.id)} className="p-1.5 text-ink/40 hover:text-blood" aria-label="Delete"><Trash2 className="w-4 h-4" /></button>
       </div>
 
       {block.blockType === 'hero' && (<>
@@ -820,9 +820,9 @@ function Stepper({ label, value, min, max, onChange }: { label: string; value: n
     <div className="space-y-1.5">
       <label className="field-label">{label}</label>
       <div className="inline-flex border border-gold/20">
-        <button onClick={() => onChange(Math.max(min, value - 1))} className="px-3 py-1.5 text-ink/60 hover:bg-gold/10 hover:text-gold">−</button>
+        <button onClick={() => onChange(Math.max(min, value - 1))} disabled={value <= min} className="px-3 py-1.5 text-ink/60 hover:bg-gold/10 hover:text-gold disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-ink/60" aria-label="Decrease">−</button>
         <span className="px-4 py-1.5 text-sm border-x border-gold/20 min-w-[40px] text-center">{value}</span>
-        <button onClick={() => onChange(Math.min(max, value + 1))} className="px-3 py-1.5 text-ink/60 hover:bg-gold/10 hover:text-gold">＋</button>
+        <button onClick={() => onChange(Math.min(max, value + 1))} disabled={value >= max} className="px-3 py-1.5 text-ink/60 hover:bg-gold/10 hover:text-gold disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-ink/60" aria-label="Increase">+</button>
       </div>
     </div>
   );
