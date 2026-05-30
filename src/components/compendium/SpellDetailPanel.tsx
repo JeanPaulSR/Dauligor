@@ -75,6 +75,11 @@ type Props = {
    *  which means anything passed here will hug the bottom of the
    *  available reading surface in lockstep with Show Tags. */
   bottomSlot?: React.ReactNode;
+  /** Bump to force a re-fetch of the spell + memberships even when
+   *  `spellId` is unchanged. The editor preview passes this so a Save
+   *  refreshes the pane — the panel reads the *persisted* row, so an
+   *  in-place UPDATE to the same id only reflects once we re-fetch. */
+  refreshKey?: number;
 };
 
 export default function SpellDetailPanel({
@@ -84,6 +89,7 @@ export default function SpellDetailPanel({
   onToggleFavorite,
   size = 'normal',
   bottomSlot,
+  refreshKey,
 }: Props) {
   const navigate = useNavigate();
   const [sources, setSources] = useState<SourceRecord[]>([]);
@@ -136,9 +142,26 @@ export default function SpellDetailPanel({
   }, []);
 
   // Fetch the full spell + its class memberships when the selected ID changes.
+  //
+  // Re-fetch whenever the selected id OR `refreshKey` changes. The deps are
+  // intentionally JUST `[spellId, refreshKey]` and NOT the result maps:
+  // the original infinite loop came from listing `spellsById` +
+  // `membershipsBySpellId` as deps while this effect setState's them — when
+  // `spellData` came back null the spell setState was skipped but the
+  // memberships setState still ran, mutating a dep, so the effect re-ran
+  // forever ("Maximum update depth exceeded" + repeated `[D1] Fetched 242
+  // rows from tags`). Keeping the maps out of the deps breaks that loop by
+  // itself. We deliberately do NOT gate on a `useRef` "already attempted"
+  // set: a ref persists across React 19 StrictMode's mount double-invoke, so
+  // when the panel mounts with `spellId` ALREADY set (the editor preview
+  // case, `selectedId={editingId}`) the first invocation's fetch is discarded
+  // by `active=false` while the ref blocks the second invocation — leaving
+  // the pane permanently blank. The catalog dodged this only because it
+  // mounts with `spellId=null` and the id arrives via a later dep-change
+  // (single invoke). The `active` flag alone is the correct StrictMode guard.
+  // `refreshKey` lets the editor force a re-read after it persists the row.
   useEffect(() => {
     if (!spellId) return;
-    if (spellsById[spellId] && membershipsBySpellId[spellId]) return;
 
     let active = true;
     setLoading(true);
@@ -172,11 +195,13 @@ export default function SpellDetailPanel({
         }
         setMembershipsBySpellId(prev => ({ ...prev, [spellId]: memberships }));
       })
-      .catch(err => console.error('[SpellDetailPanel] failed to load spell:', err))
+      .catch(err => {
+        console.error('[SpellDetailPanel] failed to load spell:', err);
+      })
       .finally(() => { if (active) setLoading(false); });
 
     return () => { active = false; };
-  }, [spellId, spellsById, membershipsBySpellId]);
+  }, [spellId, refreshKey]);
 
   const sourceById = useMemo(
     () => Object.fromEntries(sources.map(s => [s.id, s])) as Record<string, SourceRecord>,

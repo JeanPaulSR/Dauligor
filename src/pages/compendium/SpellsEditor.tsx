@@ -262,6 +262,11 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
+  // Bumped after every successful save so the right-side <SpellDetailPanel>
+  // preview re-reads the now-persisted row. The panel caches by spellId and
+  // can't otherwise tell that an in-place UPDATE (same editingId) changed the
+  // underlying spell — the id is unchanged, so only a key bump re-triggers it.
+  const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
   const [formData, setFormData] = useState<SpellFormData>(makeInitialSpellForm());
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [listDeleteTarget, setListDeleteTarget] = useState<{ id: string; name: string } | null>(null);
@@ -900,11 +905,21 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
   // ── Save ──────────────────────────────────────────────────────
   const handleSave = async (e?: React.FormEvent, opts: { silent?: boolean } = {}) => {
     if (e) e.preventDefault();
-    if (!formData.name.trim()) {
+    // Build the save from the LATEST committed form state, not this
+    // closure's `formData`. On the edit-existing-spell path the handleSave
+    // that fires can be from an earlier render whose closed-over `formData`
+    // predates a just-picked icon, so the payload serialized an empty
+    // image_url even though the new icon was live in state and shown in the
+    // icon slot (the "image won't save on update" bug). `formDataRef` is
+    // kept in sync with `formData` via an effect and is the same source the
+    // dirty-check below already trusts — read it here so the two stay
+    // consistent and a last-moment edit can't be dropped on save.
+    const fd = formDataRef.current ?? formData;
+    if (!fd.name.trim()) {
       if (!opts.silent) toast.error('Spell name is required');
       return;
     }
-    if (!formData.sourceId) {
+    if (!fd.sourceId) {
       if (!opts.silent) toast.error('Source is required');
       return;
     }
@@ -914,7 +929,7 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
       const existingSystem = editingId
         ? (parseFoundrySystemForEditor(spellDetailsById[editingId]?.foundry_data ?? spellDetailsById[editingId]?.foundryData) || {})
         : {};
-      const descriptionHtmlForFoundry = bbcodeToHtml(String(formData.description || ''));
+      const descriptionHtmlForFoundry = bbcodeToHtml(String(fd.description || ''));
 
       const mergedFoundryData = {
         ...existingSystem,
@@ -922,38 +937,38 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
           ...(existingSystem.description || {}),
           value: descriptionHtmlForFoundry,
         },
-        activation: { ...(existingSystem.activation || {}), ...formData.activation },
-        range:      { ...(existingSystem.range      || {}), ...formData.range      },
-        duration:   { ...(existingSystem.duration   || {}), ...formData.duration   },
+        activation: { ...(existingSystem.activation || {}), ...fd.activation },
+        range:      { ...(existingSystem.range      || {}), ...fd.range      },
+        duration:   { ...(existingSystem.duration   || {}), ...fd.duration   },
         target: {
           ...(existingSystem.target || {}),
-          template: { ...((existingSystem.target || {}).template || {}), ...formData.target.template },
-          affects:  { ...((existingSystem.target || {}).affects  || {}), ...formData.target.affects  },
+          template: { ...((existingSystem.target || {}).template || {}), ...fd.target.template },
+          affects:  { ...((existingSystem.target || {}).affects  || {}), ...fd.target.affects  },
         },
         uses: {
           ...(existingSystem.uses || {}),
-          max:      formData.uses.max,
-          recovery: formData.uses.recovery,
+          max:      fd.uses.max,
+          recovery: fd.uses.recovery,
         },
       };
 
-      const effectsArr = Array.isArray(formData.effects) ? formData.effects : [];
+      const effectsArr = Array.isArray(fd.effects) ? fd.effects : [];
 
       const payload: Record<string, any> = {
-        ...formData,
-        identifier: formData.identifier.trim() || slugify(formData.name),
+        ...fd,
+        identifier: fd.identifier.trim() || slugify(fd.name),
         automation: {
-          activities: Array.isArray(formData.activities)
-            ? formData.activities
-            : Object.values(formData.activities || {}),
+          activities: Array.isArray(fd.activities)
+            ? fd.activities
+            : Object.values(fd.activities || {}),
           effects: effectsArr,
         },
         updatedAt: new Date().toISOString(),
         status: 'development',
         sourceType: 'spell',
         type: 'spell',
-        level: Number(formData.level || 0),
-        preparationMode: formData.preparationMode || 'spell',
+        level: Number(fd.level || 0),
+        preparationMode: fd.preparationMode || 'spell',
         foundry_data: mergedFoundryData,
       };
 
@@ -977,7 +992,7 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
       const payloadWithCreatedAt = {
         ...payload,
         createdAt: editingIdAtStart
-          ? (formData.createdAt || new Date().toISOString())
+          ? (fd.createdAt || new Date().toISOString())
           : new Date().toISOString(),
       };
 
@@ -1019,6 +1034,12 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
         if (wasCreate) markSaving();
         setEditingId(savedId);
       }
+
+      // Refresh the preview pane against the freshly-persisted row. For a
+      // new spell the id changes (null → savedId) and the panel re-fetches
+      // on its own; for an in-place UPDATE the id is unchanged, so the bump
+      // is what makes the preview reflect the save.
+      setPreviewRefreshKey(k => k + 1);
     } catch (error) {
       console.error('Error saving spell:', error);
       if (!opts.silent) toast.error('Failed to save spell');
@@ -2039,6 +2060,7 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
             <SpellDetailPanel
               spellId={id}
               emptyMessage="Loading preview…"
+              refreshKey={previewRefreshKey}
             />
           ) : (
             <div className="h-full flex items-center justify-center px-6 py-12 text-center">
