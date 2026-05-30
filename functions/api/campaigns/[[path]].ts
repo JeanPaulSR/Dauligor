@@ -191,9 +191,13 @@ const ALLOWED_MEMBER_ROLES = new Set(["dm", "co-dm", "player"]);
 const ALLOWED_HOME_BLOCK_TYPES = new Set([
   "hero",
   "text",
-  "article-row",
   "image",
+  "divider",
   "recommended",
+  "entity-row",
+  "entity-feature",
+  "group",
+  "columns",
 ]);
 
 function coerceCampaignValue(value: any): any {

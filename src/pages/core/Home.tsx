@@ -16,11 +16,11 @@ export default function Home({ userProfile }: { userProfile: any }) {
   const [loading, setLoading] = useState(true);
   // Campaign-specific homepage layout. When the active campaign has at least
   // one block, these replace the default Home body for its members; otherwise
-  // the default layout below renders. `homeArticlesById` resolves the article
-  // ids referenced by article-row blocks (gate-filtered to what the viewer
-  // may see — drafts a player can't read are simply absent).
+  // the default layout below renders. CampaignHomeBlocks resolves its own
+  // entity refs (articles, classes, items, system pages, …) via
+  // resolveReference, so Home only has to hand it the blocks + the campaign's
+  // auto-recommended article.
   const [homeBlocks, setHomeBlocks] = useState<HomeBlock[]>([]);
-  const [homeArticlesById, setHomeArticlesById] = useState<Record<string, any>>({});
 
   useEffect(() => {
     const fetchData = async () => {
@@ -39,7 +39,6 @@ export default function Home({ userProfile }: { userProfile: any }) {
         // titles client-side because the set is fixed and tiny; not
         // worth a query-param surface for this single caller.
         const articlesMap: Record<string, any> = {};
-        const byId: Record<string, any> = {};
         const idToken = await auth.currentUser?.getIdToken();
         const listRes = await fetch('/api/lore/articles?orderBy=title%20ASC', {
           headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
@@ -49,14 +48,12 @@ export default function Home({ userProfile }: { userProfile: any }) {
           const allArticles: any[] = Array.isArray(body?.articles) ? body.articles : [];
           const titleSet = new Set(titles);
           allArticles.forEach((art) => {
-            byId[art.id] = art;
             if (titleSet.has(art.title)) {
               articlesMap[art.title] = art;
             }
           });
         }
         setSpecialArticles(articlesMap);
-        setHomeArticlesById(byId);
 
         // 2. Fetch Active Campaign and its Recommended Lore via the
         // per-route endpoints. Active campaign read goes through
@@ -174,7 +171,6 @@ export default function Home({ userProfile }: { userProfile: any }) {
     return (
       <CampaignHomeBlocks
         blocks={homeBlocks}
-        articlesById={homeArticlesById}
         recommendedLore={recommendedLore}
         campaignName={activeCampaign?.name ?? ''}
       />

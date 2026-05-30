@@ -1,17 +1,27 @@
-// Campaign homepage layout — the ordered content blocks a GM arranges to
-// build a campaign-specific Home page. When a campaign has at least one block,
-// the blocks replace the default Home body for its members; otherwise the
-// global default layout shows.
+// Campaign homepage layout — the ordered, nestable content blocks a GM arranges
+// to build a campaign-specific Home page. When a campaign has at least one block,
+// the blocks replace the default Home body for its members; otherwise the global
+// default layout shows.
 //
-// Storage: one row per block in `campaign_home_blocks` (migration 20260529-1700),
-// with a JSON `config` whose shape depends on `block_type`. Read/write go through
-// the per-route campaigns API (`/api/campaigns/:id/home-blocks`) — reads admit
-// any campaign member, writes are staff-only — so no generic-proxy table grant
-// is needed.
+// Storage: one row per ROOT block in `campaign_home_blocks` (migration
+// 20260529-1700), with a JSON `config`. Container blocks (group/columns) carry
+// their children INSIDE `config.children` — nesting is config-local, only the
+// root list uses the `order` column. Read/write go through the per-route
+// campaigns API (`/api/campaigns/:id/home-blocks`) — reads admit any campaign
+// member, writes are staff-only — so no generic-proxy table grant is needed.
 
 import { auth } from './firebase';
 
-export type HomeBlockType = 'hero' | 'text' | 'article-row' | 'image' | 'recommended';
+export type HomeBlockType =
+  | 'hero'
+  | 'text'
+  | 'image'
+  | 'divider'
+  | 'recommended'
+  | 'entity-row'       // a row/grid of entity cards (articles, classes, items, …)
+  | 'entity-feature'   // one large highlighted entity
+  | 'group'            // container: a titled card holding children
+  | 'columns';         // container: a 2–4 column grid of children
 
 interface BlockBase {
   /** Stable id (uuid). Generated client-side when a block is added. */
@@ -22,131 +32,263 @@ export interface HeroBlock extends BlockBase {
   blockType: 'hero';
   title: string;
   subtitle: string;
+  align: 'center' | 'left';
+  size: 'normal' | 'large';
 }
 export interface TextBlock extends BlockBase {
   blockType: 'text';
   /** BBCode body, rendered via BBCodeRenderer. */
   body: string;
-}
-export interface ArticleRowBlock extends BlockBase {
-  blockType: 'article-row';
-  title: string;
-  columns: 2 | 3;
-  /** Ordered lore-article ids; resolved to cards at render time. */
-  articleIds: string[];
+  width: 'narrow' | 'normal' | 'wide';
 }
 export interface ImageBlock extends BlockBase {
   blockType: 'image';
   url: string;
   caption: string;
+  height: 'small' | 'medium' | 'large';
+  /** Optional in-app link the image navigates to on click. */
+  link: string;
+}
+export interface DividerBlock extends BlockBase {
+  blockType: 'divider';
+  style: 'line' | 'dots' | 'space';
 }
 export interface RecommendedBlock extends BlockBase {
   blockType: 'recommended';
   /** Optional heading override; defaults to "Recommended for <campaign>". */
   title: string;
+  /** 'auto' = the campaign's recommended_lore_id; 'specific' = a chosen article. */
+  source: 'auto' | 'specific';
+  /** When source==='specific': the chosen entity ref (kind+id). */
+  ref: EntityRef | null;
+  layout: 'side' | 'stacked';
+}
+
+/** A reference to one compendium / lore / system entity, resolved to a card via
+ *  `resolveReference(kind, id)` at render time. `kind` is a STRING (not the
+ *  narrow `RefKind`) because system pages are addressed by their page identifier
+ *  (`condition`, `skill`, `magic`, …) which isn't in the static `RefKind` union;
+ *  `resolveReference` accepts any string and routes via the system-page kind map.
+ *  `id` is the semantic identifier/slug (article uses its slug; a system PAGE
+ *  ref uses an empty id, a system ENTRY ref uses the entry identifier). */
+export interface EntityRef {
+  kind: string;
+  id: string;
+  /** Cached display name — lets the editor render chips without a round-trip.
+   *  Display still re-resolves live so renames are reflected. */
+  name?: string;
+}
+
+export interface EntityRowBlock extends BlockBase {
+  blockType: 'entity-row';
+  title: string;
+  showHeading: boolean;
+  /** 'manual' = the hand-picked `refs`; 'auto' = latest N articles of a category. */
+  source: 'manual' | 'auto';
+  refs: EntityRef[];
+  /** auto-mode: which lore category to pull from. */
+  category: string;
+  /** auto-mode: how many to show (1–12). */
+  count: number;
+  columns: 1 | 2 | 3 | 4;
+  card: 'image' | 'compact' | 'list';
+  excerpt: boolean;
+}
+export interface EntityFeatureBlock extends BlockBase {
+  blockType: 'entity-feature';
+  title: string;
+  ref: EntityRef | null;
+  imageSide: 'left' | 'right';
+  excerpt: boolean;
+}
+export interface GroupBlock extends BlockBase {
+  blockType: 'group';
+  title: string;
+  showTitle: boolean;
+  style: 'card' | 'bordered' | 'plain';
+  children: HomeBlock[];
+}
+export interface ColumnsBlock extends BlockBase {
+  blockType: 'columns';
+  columns: 2 | 3 | 4;
+  gap: 'small' | 'medium' | 'large';
+  children: HomeBlock[];
 }
 
 export type HomeBlock =
   | HeroBlock
   | TextBlock
-  | ArticleRowBlock
   | ImageBlock
-  | RecommendedBlock;
+  | DividerBlock
+  | RecommendedBlock
+  | EntityRowBlock
+  | EntityFeatureBlock
+  | GroupBlock
+  | ColumnsBlock;
 
-/** Display metadata for the block-type picker in the editor. `icon` is a
- *  lucide icon NAME — the editor maps it to a component (keeps this lib
- *  dependency-free / server-safe to import the type from). */
+export type ContainerBlock = GroupBlock | ColumnsBlock;
+export function isContainer(b: HomeBlock): b is ContainerBlock {
+  return b.blockType === 'group' || b.blockType === 'columns';
+}
+
+/** Display metadata for the block-type picker. `icon` is a lucide icon NAME —
+ *  the editor maps it to a component (the structure tree shows these glyphs for
+ *  at-a-glance scanning; they're kept minimal everywhere else). `group` buckets
+ *  the add-block menu into Content vs Containers. */
 export const BLOCK_TYPE_META: Record<
   HomeBlockType,
-  { label: string; icon: string; description: string }
+  { label: string; icon: string; description: string; group: 'content' | 'container' }
 > = {
-  hero: { label: 'Hero', icon: 'Sparkles', description: 'A large title + subtitle banner.' },
-  text: { label: 'Text', icon: 'Type', description: 'Free BBCode prose.' },
-  'article-row': { label: 'Article Row', icon: 'LayoutGrid', description: 'A row of linked article cards.' },
-  image: { label: 'Image', icon: 'ImageIcon', description: 'A full-width image with an optional caption.' },
-  recommended: { label: 'Recommended', icon: 'Star', description: "Highlights the campaign's recommended article." },
+  hero:             { label: 'Hero',             icon: 'Sparkles',   description: 'A large title + subtitle banner.',          group: 'content' },
+  'entity-row':     { label: 'Entity Row',       icon: 'LayoutGrid', description: 'A row/grid of cards — articles, classes, items, system pages…', group: 'content' },
+  'entity-feature': { label: 'Featured',         icon: 'Star',       description: 'One large highlighted entity.',             group: 'content' },
+  recommended:      { label: 'Recommended',      icon: 'BookMarked', description: "The campaign's recommended article.",       group: 'content' },
+  text:             { label: 'Text',             icon: 'Type',       description: 'Free BBCode prose.',                        group: 'content' },
+  image:            { label: 'Image',            icon: 'ImageIcon',  description: 'A banner image + optional caption.',        group: 'content' },
+  divider:          { label: 'Divider',          icon: 'Minus',      description: 'A line, dots, or spacer.',                  group: 'content' },
+  group:            { label: 'Group',            icon: 'Square',     description: 'A titled card that holds other blocks.',    group: 'container' },
+  columns:          { label: 'Columns',          icon: 'Columns3',   description: 'A 2–4 column grid; each child is a cell.',   group: 'container' },
 };
 
 export const HOME_BLOCK_TYPES = Object.keys(BLOCK_TYPE_META) as HomeBlockType[];
 
-/**
- * The starting layout an editor seeds when a campaign has no saved blocks yet —
- * the structural skeleton of the default site home (hero → a "World of …" article
- * row to fill → the recommended-article highlight). Lets a GM customize the basic
- * style instead of building from an empty page. Saving this unchanged renders the
- * same as the no-blocks default; deleting every block and saving reverts to it.
- */
-export function defaultHomeBlocks(): HomeBlock[] {
-  return [
-    {
-      id: crypto.randomUUID(),
-      blockType: 'hero',
-      title: 'Stories in Dauligor',
-      subtitle:
-        'Your GM has made this website to give you easy access to the lore of the setting of Dauligor, and to the homebrew options they allow.',
-    },
-    {
-      id: crypto.randomUUID(),
-      blockType: 'article-row',
-      title: 'The World of Dauligor',
-      columns: 3,
-      articleIds: [],
-    },
-    { id: crypto.randomUUID(), blockType: 'recommended', title: '' },
-  ];
-}
+/** The entity kinds offered in the picker, in menu order.
+ *  - `mode: 'ref'` → searched via `searchReferences(value, query)`.
+ *  - `mode: 'system'` → searched via the system-page search (pages + entries);
+ *    results carry the page identifier as their kind.
+ *  Backgrounds are intentionally absent — they live in the feats table
+ *  (`feat_type='background'`) and aren't a top-level reference kind yet
+ *  (see the cleanup TODO in references.ts). A picked Feat can stand in meanwhile. */
+export const ENTITY_PICKER_KINDS: { value: string; label: string; mode: 'ref' | 'system' }[] = [
+  { value: 'article', label: 'Articles', mode: 'ref' },
+  { value: 'class', label: 'Classes', mode: 'ref' },
+  { value: 'subclass', label: 'Subclasses', mode: 'ref' },
+  { value: 'spell', label: 'Spells', mode: 'ref' },
+  { value: 'item', label: 'Items', mode: 'ref' },
+  { value: 'feat', label: 'Feats', mode: 'ref' },
+  { value: 'condition', label: 'Conditions', mode: 'ref' },
+  { value: 'system', label: 'System Pages', mode: 'system' },
+];
 
 /** A fresh block of the given type with sensible empty defaults. */
 export function makeBlock(type: HomeBlockType, id: string): HomeBlock {
   switch (type) {
     case 'hero':
-      return { id, blockType: 'hero', title: '', subtitle: '' };
+      return { id, blockType: 'hero', title: '', subtitle: '', align: 'center', size: 'normal' };
     case 'text':
-      return { id, blockType: 'text', body: '' };
-    case 'article-row':
-      return { id, blockType: 'article-row', title: '', columns: 3, articleIds: [] };
+      return { id, blockType: 'text', body: '', width: 'normal' };
     case 'image':
-      return { id, blockType: 'image', url: '', caption: '' };
+      return { id, blockType: 'image', url: '', caption: '', height: 'medium', link: '' };
+    case 'divider':
+      return { id, blockType: 'divider', style: 'line' };
     case 'recommended':
-      return { id, blockType: 'recommended', title: '' };
+      return { id, blockType: 'recommended', title: '', source: 'auto', ref: null, layout: 'side' };
+    case 'entity-row':
+      return { id, blockType: 'entity-row', title: '', showHeading: true, source: 'manual', refs: [], category: '', count: 3, columns: 3, card: 'image', excerpt: true };
+    case 'entity-feature':
+      return { id, blockType: 'entity-feature', title: '', ref: null, imageSide: 'left', excerpt: true };
+    case 'group':
+      return { id, blockType: 'group', title: '', showTitle: true, style: 'card', children: [] };
+    case 'columns':
+      return { id, blockType: 'columns', columns: 2, gap: 'medium', children: [] };
   }
 }
 
-/** Parse one `{ id, block_type, order, config }` D1 row into a typed block.
- *  Tolerant of a string or already-parsed `config`. Unknown types are dropped
- *  by the caller (returns null). */
-export function parseHomeBlockRow(row: any): HomeBlock | null {
-  const type = String(row?.block_type ?? '') as HomeBlockType;
+/** The starting layout an editor seeds when a campaign has no saved blocks yet —
+ *  the structural skeleton of the default site home. Lets a GM customize the
+ *  basic style instead of an empty page. */
+export function defaultHomeBlocks(): HomeBlock[] {
+  const hero = makeBlock('hero', crypto.randomUUID()) as HeroBlock;
+  hero.title = 'Stories in Dauligor';
+  hero.subtitle = 'Your GM has made this website to give you easy access to the lore of the setting of Dauligor, and to the homebrew options they allow.';
+
+  const row = makeBlock('entity-row', crypto.randomUUID()) as EntityRowBlock;
+  row.title = 'The World of Dauligor';
+
+  const reco = makeBlock('recommended', crypto.randomUUID()) as RecommendedBlock;
+
+  return [hero, row, reco];
+}
+
+function asRef(v: any): EntityRef | null {
+  // id may legitimately be '' (a page-level system ref), so check kind only.
+  if (!v || typeof v !== 'object' || !v.kind) return null;
+  return { kind: String(v.kind), id: String(v.id ?? ''), name: v.name ? String(v.name) : undefined };
+}
+function asRefArray(v: any): EntityRef[] {
+  if (!Array.isArray(v)) return [];
+  return v.map(asRef).filter((r): r is EntityRef => r !== null);
+}
+/** Clamp to 1..4 for entity-row card grids (default 3). */
+const clampCols = (v: any): 1 | 2 | 3 | 4 => {
+  const n = Math.round(Number(v));
+  if (n >= 1 && n <= 4) return n as 1 | 2 | 3 | 4;
+  return 3;
+};
+/** Clamp to 2..4 for the Columns container (default 2). */
+const clampColumnsContainer = (v: any): 2 | 3 | 4 => {
+  const n = Math.round(Number(v));
+  if (n >= 2 && n <= 4) return n as 2 | 3 | 4;
+  return 2;
+};
+
+/** Parse one `{ id, block_type, config }` D1 row (or a nested config child) into
+ *  a typed block. Recurses into container children. Unknown types → null. */
+export function parseHomeBlock(row: any): HomeBlock | null {
+  const type = String(row?.block_type ?? row?.blockType ?? '') as HomeBlockType;
   if (!HOME_BLOCK_TYPES.includes(type)) return null;
-  let config: any = row?.config ?? {};
+  let config: any = row?.config ?? row ?? {};
   if (typeof config === 'string') {
     try { config = JSON.parse(config); } catch { config = {}; }
   }
-  const id = String(row?.id ?? '');
+  const id = String(row?.id ?? crypto.randomUUID());
+  const s = (v: any, d = '') => (v == null ? d : String(v));
   switch (type) {
     case 'hero':
-      return { id, blockType: 'hero', title: String(config.title ?? ''), subtitle: String(config.subtitle ?? '') };
+      return { id, blockType: 'hero', title: s(config.title), subtitle: s(config.subtitle),
+        align: config.align === 'left' ? 'left' : 'center', size: config.size === 'large' ? 'large' : 'normal' };
     case 'text':
-      return { id, blockType: 'text', body: String(config.body ?? '') };
-    case 'article-row':
-      return {
-        id, blockType: 'article-row',
-        title: String(config.title ?? ''),
-        columns: config.columns === 2 ? 2 : 3,
-        articleIds: Array.isArray(config.articleIds) ? config.articleIds.map(String) : [],
-      };
+      return { id, blockType: 'text', body: s(config.body),
+        width: config.width === 'narrow' ? 'narrow' : config.width === 'wide' ? 'wide' : 'normal' };
     case 'image':
-      return { id, blockType: 'image', url: String(config.url ?? ''), caption: String(config.caption ?? '') };
+      return { id, blockType: 'image', url: s(config.url), caption: s(config.caption),
+        height: config.height === 'small' ? 'small' : config.height === 'large' ? 'large' : 'medium', link: s(config.link) };
+    case 'divider':
+      return { id, blockType: 'divider', style: config.style === 'dots' ? 'dots' : config.style === 'space' ? 'space' : 'line' };
     case 'recommended':
-      return { id, blockType: 'recommended', title: String(config.title ?? '') };
+      return { id, blockType: 'recommended', title: s(config.title),
+        source: config.source === 'specific' ? 'specific' : 'auto', ref: asRef(config.ref),
+        layout: config.layout === 'stacked' ? 'stacked' : 'side' };
+    case 'entity-row':
+      return { id, blockType: 'entity-row', title: s(config.title), showHeading: config.showHeading !== false,
+        source: config.source === 'auto' ? 'auto' : 'manual', refs: asRefArray(config.refs),
+        category: s(config.category), count: Math.max(1, Math.min(12, Math.round(Number(config.count)) || 3)),
+        columns: clampCols(config.columns), card: ['image', 'compact', 'list'].includes(config.card) ? config.card : 'image',
+        excerpt: config.excerpt !== false };
+    case 'entity-feature':
+      return { id, blockType: 'entity-feature', title: s(config.title), ref: asRef(config.ref),
+        imageSide: config.imageSide === 'right' ? 'right' : 'left', excerpt: config.excerpt !== false };
+    case 'group':
+      return { id, blockType: 'group', title: s(config.title), showTitle: config.showTitle !== false,
+        style: ['card', 'bordered', 'plain'].includes(config.style) ? config.style : 'card',
+        children: Array.isArray(config.children) ? config.children.map(parseHomeBlock).filter(Boolean) as HomeBlock[] : [] };
+    case 'columns':
+      return { id, blockType: 'columns', columns: clampColumnsContainer(config.columns),
+        gap: config.gap === 'small' ? 'small' : config.gap === 'large' ? 'large' : 'medium',
+        children: Array.isArray(config.children) ? config.children.map(parseHomeBlock).filter(Boolean) as HomeBlock[] : [] };
   }
 }
 
 /** Split a typed block into the wire shape the PUT endpoint expects
- *  (`{ id, block_type, config }`; server assigns `order` from array index). */
+ *  (`{ id, block_type, config }`). Container children are serialized recursively
+ *  into `config.children`. The server assigns root `order` from array index. */
 export function serializeHomeBlock(block: HomeBlock): { id: string; block_type: HomeBlockType; config: Record<string, any> } {
   const { id, blockType, ...rest } = block as any;
-  return { id, block_type: blockType, config: rest };
+  const config: Record<string, any> = { ...rest };
+  if (Array.isArray(config.children)) {
+    config.children = (config.children as HomeBlock[]).map(serializeHomeBlock);
+  }
+  return { id, block_type: blockType, config };
 }
 
 async function authHeaders(): Promise<Record<string, string>> {
@@ -154,7 +296,7 @@ async function authHeaders(): Promise<Record<string, string>> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-/** Load a campaign's homepage blocks (ordered). Any member may read. */
+/** Load a campaign's homepage blocks (ordered, with nesting). Any member may read. */
 export async function fetchCampaignHomeBlocks(campaignId: string): Promise<HomeBlock[]> {
   const res = await fetch(`/api/campaigns/${encodeURIComponent(campaignId)}/home-blocks`, {
     headers: await authHeaders(),
@@ -162,11 +304,11 @@ export async function fetchCampaignHomeBlocks(campaignId: string): Promise<HomeB
   if (!res.ok) return [];
   const body = await res.json().catch(() => ({}));
   const rows: any[] = Array.isArray(body?.blocks) ? body.blocks : [];
-  return rows.map(parseHomeBlockRow).filter((b): b is HomeBlock => b !== null);
+  return rows.map(parseHomeBlock).filter((b): b is HomeBlock => b !== null);
 }
 
 /** Replace a campaign's entire homepage layout. Staff-only (server-enforced).
- *  Order is taken from array position. */
+ *  Root order is taken from array position; nesting travels in config.children. */
 export async function saveCampaignHomeBlocks(campaignId: string, blocks: HomeBlock[]): Promise<void> {
   const res = await fetch(`/api/campaigns/${encodeURIComponent(campaignId)}/home-blocks`, {
     method: 'PUT',

@@ -482,7 +482,7 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
 
           {activeTab === 'homepage' && id && (
             <div className="animate-in fade-in duration-300">
-              <CampaignHomeEditor campaignId={id} articles={lorePages} />
+              <CampaignHomeEditor campaignId={id} campaignName={formData.name} />
             </div>
           )}
 
