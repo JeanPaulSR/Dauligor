@@ -46,8 +46,22 @@ import {
   type ReactNode,
 } from 'react';
 import { auth } from './firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 
 const LS_KEY = 'dauligor:active-block-id';
+// The active-block id is persisted PER USER. A global key let one account's
+// active block bleed into another account signed in on the same browser
+// (they'd see a block they can't open — the server 404s on a non-owned
+// bundle). Keying by uid means each account only ever reads/writes its own.
+const keyFor = (uid: string | null) => `${LS_KEY}:${uid}`;
+function storedBlockId(uid: string | null): string | null {
+  if (!uid || typeof window === 'undefined') return null;
+  try {
+    return window.localStorage.getItem(keyFor(uid));
+  } catch {
+    return null;
+  }
+}
 
 export type DraftRevision = {
   id: string;
@@ -144,14 +158,13 @@ function hydrateBundle(raw: any): ProposalBundle {
 }
 
 export function BlockProvider({ children }: { children: ReactNode }) {
-  const [activeBundleId, setActiveBundleId] = useState<string | null>(() => {
-    if (typeof window === 'undefined') return null;
-    try {
-      return window.localStorage.getItem(LS_KEY);
-    } catch {
-      return null;
-    }
-  });
+  // Signed-in user id — drives per-account scoping of the active block.
+  const [currentUid, setCurrentUid] = useState<string | null>(
+    () => auth.currentUser?.uid ?? null,
+  );
+  const [activeBundleId, setActiveBundleId] = useState<string | null>(
+    () => storedBlockId(auth.currentUser?.uid ?? null),
+  );
   const [activeBundle, setActiveBundle] = useState<ProposalBundle | null>(null);
   const [drafts, setDrafts] = useState<DraftRevision[]>([]);
   // Mirror of `drafts` for synchronous reads — `refresh()` returns this on
@@ -172,13 +185,32 @@ export function BlockProvider({ children }: { children: ReactNode }) {
   const persist = useCallback((id: string | null) => {
     setActiveBundleId(id);
     try {
-      if (id) window.localStorage.setItem(LS_KEY, id);
-      else window.localStorage.removeItem(LS_KEY);
+      const uid = auth.currentUser?.uid ?? null;
+      if (!uid) return; // no signed-in user → nothing to persist against
+      if (id) window.localStorage.setItem(keyFor(uid), id);
+      else window.localStorage.removeItem(keyFor(uid));
     } catch {
       // localStorage failure is non-fatal — block still works in
       // memory; just won't survive reloads.
     }
   }, []);
+
+  // Track auth changes so block state is scoped per account.
+  useEffect(() => onAuthStateChanged(auth, (u) => setCurrentUid(u?.uid ?? null)), []);
+
+  // On account switch (incl. the async restore of the signed-in user after
+  // mount), drop in-memory block state and load THIS user's persisted active
+  // block — never inherit the previous account's. Closes the cross-account
+  // block leak when accounts share a browser.
+  const lastUidRef = useRef<string | null>(currentUid);
+  useEffect(() => {
+    if (lastUidRef.current === currentUid) return;
+    lastUidRef.current = currentUid;
+    setActiveBundleId(storedBlockId(currentUid));
+    setActiveBundle(null);
+    setDrafts([]);
+    setOpenBlocks([]);
+  }, [currentUid]);
 
   const refreshOpenBlocks = useCallback(async () => {
     try {
