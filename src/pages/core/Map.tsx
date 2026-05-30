@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { auth } from '../../lib/firebase';
 import { fetchCollection, fetchDocument, upsertDocument, deleteDocument, queryD1 } from '../../lib/d1';
 import { Button } from '../../components/ui/button';
@@ -67,6 +68,7 @@ interface HighlightRecord {
 export default function Map({ userProfile }: { userProfile: any }) {
   const isAdmin = userProfile?.role === 'admin' || userProfile?.role === 'co-dm' || userProfile?.role === 'lore-writer';
   const activeCampaignId = userProfile?.active_campaign_id ?? null;
+  const navigate = useNavigate();
 
   const [eraId, setEraId] = useState<string | null>(null);
   const [maps, setMaps] = useState<MapRecord[]>([]);
@@ -363,14 +365,18 @@ export default function Map({ userProfile }: { userProfile: any }) {
               className={`map-container ${isAdmin ? 'cursor-crosshair' : 'cursor-default'}`}
               onClick={handleMapClick}
             >
-              {/* Background — fall back to a placeholder until a real map image is uploaded */}
-              <div
-                className="absolute inset-0 bg-cover bg-center opacity-50"
-                style={{
-                  backgroundImage: `url('${selectedMap.background_image_url || 'https://picsum.photos/seed/map/1200/800'}')`,
-                  filter: selectedMap.background_image_url ? 'none' : 'grayscale(1)',
-                }}
-              />
+              {/* Background — only render when a real map image is uploaded;
+                  otherwise show a quiet empty state (no external placeholder). */}
+              {selectedMap.background_image_url ? (
+                <div
+                  className="absolute inset-0 bg-cover bg-center opacity-50"
+                  style={{ backgroundImage: `url('${selectedMap.background_image_url}')` }}
+                />
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-ink/30 text-sm italic">No map image uploaded yet</span>
+                </div>
+              )}
               <div className="absolute inset-0 bg-gold/5 mix-blend-multiply" />
               <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle, #000 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
 
@@ -378,7 +384,7 @@ export default function Map({ userProfile }: { userProfile: any }) {
               {highlights.map(h => (
                 <div
                   key={h.id}
-                  className="absolute border-2 border-gold/40 bg-gold/10 hover:bg-gold/20 transition pointer-events-auto cursor-pointer"
+                  className="group absolute border-2 border-gold/40 bg-gold/10 hover:bg-gold/20 transition pointer-events-auto cursor-pointer"
                   style={{
                     left: `${h.x}%`,
                     top: `${h.y}%`,
@@ -435,9 +441,13 @@ export default function Map({ userProfile }: { userProfile: any }) {
                     {selectedMarker.article_title ? (
                       <>
                         <Badge className="bg-gold/10 text-gold hover:bg-gold/10">Article</Badge>
-                        <Button variant="outline" className="w-full border-gold text-gold hover:bg-gold/5" render={
-                          <a href={`/wiki?id=${selectedMarker.article_id}`}>Read Full Lore</a>
-                        } />
+                        <Button
+                          variant="outline"
+                          className="w-full border-gold text-gold hover:bg-gold/5"
+                          onClick={() => navigate(`/wiki/article/${selectedMarker.article_id}`)}
+                        >
+                          Read Full Lore
+                        </Button>
                       </>
                     ) : (
                       <p className="text-sm text-ink/40 italic">This pin has no article linked yet.</p>
@@ -458,9 +468,13 @@ export default function Map({ userProfile }: { userProfile: any }) {
                       {selectedHighlight.label || selectedHighlight.article_title || selectedHighlight.child_map_name || 'Highlighted area'}
                     </h3>
                     {selectedHighlight.article_title && (
-                      <Button variant="outline" className="w-full border-gold text-gold hover:bg-gold/5" render={
-                        <a href={`/wiki?id=${selectedHighlight.article_id}`}>Read Full Lore</a>
-                      } />
+                      <Button
+                        variant="outline"
+                        className="w-full border-gold text-gold hover:bg-gold/5"
+                        onClick={() => navigate(`/wiki/article/${selectedHighlight.article_id}`)}
+                      >
+                        Read Full Lore
+                      </Button>
                     )}
                     {selectedHighlight.child_map_id && (
                       <Button
