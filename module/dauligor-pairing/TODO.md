@@ -35,6 +35,19 @@
   test data until a dedicated table lands.
 - Spec: `../../handoffs/foundry-module/2026-05-30-from-compendium-editors-bg-race-export.md`.
 
+## Creatures / NPCs (export-first)
+
+- **[done] Foundry → app creature export.** `export-service.js` `buildCreatureFolderExport` /
+  `exportCreatureFolder` → `dauligor.foundry-creature-folder-export.v1` (npc-only). Each entry
+  carries the full `sourceDocument` (stat block + embedded items + effects) + a rich
+  `creatureSummary` (type, CR, AC/HP, abilities, skills, movement, senses, traits, spellcasting,
+  legendary, embedded-type counts). Wired to an Actor-directory `Export Creature Folder` button.
+  Contract: `docs/creature-folder-export-contract.md`. Gives `compendium-editors` the shapes to
+  design the creatures table. **Not yet runtime-tested in a live Foundry world.**
+- **Deferred — creature importer.** `dauligor.creature-actor.v1` (embed an npc Actor + its items)
+  waits until the app has a creatures table. Module-side bundle-shape preferences already sent to
+  `compendium-editors` (see the reply handoff). Round-trip verification after the table lands.
+
 ## Feature Manager
 
 - **[done]** Spells tab: the Prepare Spells manager is embedded under the Feature Manager shell

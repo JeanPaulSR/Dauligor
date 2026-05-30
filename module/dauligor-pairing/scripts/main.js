@@ -1,6 +1,6 @@
 import { CLASS_CATALOG_FILE, MODULE_ID, SETTINGS } from "./constants.js";
 import { registerDauligorCharacterSheet } from "./dauligor-character-sheet.js";
-import { exportActorFolder, exportApplicationWindow, exportBackgroundFolder, exportFeatFolder, exportItemFolder, exportRaceFolder, exportSpellFolder } from "./export-service.js";
+import { exportActorFolder, exportApplicationWindow, exportBackgroundFolder, exportCreatureFolder, exportFeatFolder, exportItemFolder, exportRaceFolder, exportSpellFolder } from "./export-service.js";
 import { openFeatureManager, promptLongRestCommit } from "./feature-manager-app.js";
 import { openDauligorImporter } from "./importer-app.js";
 import { initializeSocket } from "./import-service.js";
@@ -726,6 +726,10 @@ function injectSidebarDirectoryButtons(root, { directoryType = "" } = {}) {
   `;
   } else if (directoryType === "Actor") {
     exportButtons = `
+    <button type="button" class="dauligor-directory-tools__button" data-action="export-creature-folder" title="Export a Foundry NPC folder for Dauligor creature research (captures full stat blocks + embedded items)">
+      <i class="fas fa-dragon"></i>
+      <span>Export Creature Folder</span>
+    </button>
     <button type="button" class="dauligor-directory-tools__button" data-action="export-actor-folder" title="Export a Foundry actor folder (characters / npcs / vehicles / groups) for Dauligor actor research">
       <i class="fas fa-users"></i>
       <span>Export Actor Folder</span>
@@ -761,6 +765,9 @@ function injectSidebarDirectoryButtons(root, { directoryType = "" } = {}) {
   });
   wrapper.querySelector(`[data-action="export-race-folder"]`)?.addEventListener("click", async () => {
     await promptAndExportRaceFolder();
+  });
+  wrapper.querySelector(`[data-action="export-creature-folder"]`)?.addEventListener("click", async () => {
+    await promptAndExportCreatureFolder();
   });
   wrapper.querySelector(`[data-action="export-actor-folder"]`)?.addEventListener("click", async () => {
     await promptAndExportActorFolder();
@@ -1274,6 +1281,92 @@ async function promptAndExportActorFolder() {
   }
 
   await exportActorFolder(folder, { includeSubfolders: result?.includeSubfolders !== false });
+}
+
+// ─── Creature folder export picker ──────────────────────────────────
+//
+// Actor-folder picker scoped to `npc` only (creatures / monsters). The
+// generic actor picker above covers all actor types; this one targets
+// stat-block evidence for the future Dauligor creatures table.
+
+function collectCreatureFolderChoices() {
+  return Array.from(game.folders ?? [])
+    .filter((folder) => folder.type === "Actor")
+    .map((folder) => {
+      const descendants = new Set([folder.id]);
+      const queue = [folder.id];
+      while (queue.length) {
+        const parentId = queue.shift();
+        for (const candidate of Array.from(game.folders ?? [])) {
+          if (candidate.type !== "Actor") continue;
+          if ((candidate.folder?.id ?? null) !== parentId) continue;
+          if (descendants.has(candidate.id)) continue;
+          descendants.add(candidate.id);
+          queue.push(candidate.id);
+        }
+      }
+      const count = Array.from(game.actors ?? []).filter((actor) =>
+        actor.type === "npc" && descendants.has(actor.folder?.id ?? "")
+      ).length;
+      return { folder, path: getItemFolderPath(folder), count };
+    })
+    .filter((entry) => entry.count > 0)
+    .sort((a, b) => a.path.localeCompare(b.path));
+}
+
+async function promptAndExportCreatureFolder() {
+  const choices = collectCreatureFolderChoices();
+  if (!choices.length) {
+    notifyWarn("No Actor folders with creature (npc) actors were found in this world.");
+    return;
+  }
+
+  const optionsHtml = choices.map((entry) => `
+    <option value="${foundry.utils.escapeHTML(entry.folder.id)}">
+      ${foundry.utils.escapeHTML(`${entry.path} (${entry.count} creatures)`)}
+    </option>
+  `).join("");
+
+  let result = null;
+  try {
+    result = await foundry.applications.api.DialogV2.prompt({
+      window: { title: "Export Creature Folder" },
+      content: `
+        <div class="form-group">
+          <label>Creature folder</label>
+          <select name="folderId" autofocus>
+            ${optionsHtml}
+          </select>
+          <p class="hint">Exports all native Foundry NPC actors in the selected Actor folder — full stat blocks plus embedded items — so the Dauligor app can model a creatures table before the import round-trip is wired.</p>
+        </div>
+        <div class="form-group">
+          <label class="checkbox">
+            <input type="checkbox" name="includeSubfolders" checked>
+            <span>Include subfolders</span>
+          </label>
+        </div>
+      `,
+      ok: {
+        label: "Export",
+        callback: (_event, button) => ({
+          folderId: button.form.elements.folderId.value,
+          includeSubfolders: Boolean(button.form.elements.includeSubfolders.checked),
+        }),
+      },
+      rejectClose: false,
+      modal: true,
+    });
+  } catch {
+    return;
+  }
+
+  const folder = game.folders.get(result?.folderId ?? "");
+  if (!folder) {
+    notifyWarn("The selected creature folder could not be found.");
+    return;
+  }
+
+  await exportCreatureFolder(folder, { includeSubfolders: result?.includeSubfolders !== false });
 }
 
 function injectSpellTabButton(appLike, root) {

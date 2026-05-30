@@ -553,7 +553,7 @@ export async function exportFeatFolder(folder, { includeSubfolders = true } = {}
 //   - race:       system.movement, system.senses, system.type
 //                 (CreatureTypeField), advancement map
 
-function buildFeatFamilyFolderHeader(folder, kind, includeSubfolders, includedFolderIds, folderPath) {
+function buildFolderExportHeader(folder, kind, includeSubfolders, includedFolderIds, folderPath) {
   return {
     kind,
     schemaVersion: 1,
@@ -682,7 +682,7 @@ function buildFeatFamilyFolderExport(folder, { docType, kind, listKey, summarize
   const folderPath = getFolderPath(folder);
 
   return {
-    ...buildFeatFamilyFolderHeader(folder, kind, includeSubfolders, includedFolderIds, folderPath),
+    ...buildFolderExportHeader(folder, kind, includeSubfolders, includedFolderIds, folderPath),
     summary: summarize(docs),
     [listKey]: docs
       .slice()
@@ -1402,6 +1402,202 @@ export async function exportActorFolder(folder, { includeSubfolders = true } = {
   });
 
   if (shouldDownload) downloadJson(payload, `${folder.name}-actors-export`);
+}
+
+// ─── Creature folder export ─────────────────────────────────────────
+//
+// Creatures are Actors (`type:"npc"`), not Items. Export-first: capture
+// real Foundry NPC stat blocks (the full `sourceDocument` incl. embedded
+// items + effects) plus a creature-focused summary, so the app can design
+// a dedicated creatures table before the import round-trip is wired.
+// Parallels the background/race folder exports.
+//
+// Scoped to `npc` only — PCs / vehicles / groups are covered by the
+// generic actor folder export above. Use that one for a broad actor
+// sweep; use this one for monster / NPC stat-block evidence.
+
+function summarizeCreatureCounts(creatures) {
+  const byCr = {};
+  const byCreatureType = {};
+  let withSpellcasting = 0;
+  let withLegendary = 0;
+  let totalEmbeddedItems = 0;
+  for (const actor of creatures) {
+    const obj = actor.toObject();
+    const s = obj.system ?? {};
+    const crLabel = s.details?.cr == null ? "unknown" : String(s.details.cr);
+    byCr[crLabel] = (byCr[crLabel] ?? 0) + 1;
+    const ct = String(s.details?.type?.value ?? "").trim() || "unknown";
+    byCreatureType[ct] = (byCreatureType[ct] ?? 0) + 1;
+    if (String(s.attributes?.spellcasting ?? "").trim()) withSpellcasting++;
+    if (Number(s.resources?.legact?.max ?? 0) > 0 || Number(s.resources?.legres?.max ?? 0) > 0) withLegendary++;
+    totalEmbeddedItems += Array.isArray(obj.items) ? obj.items.length : 0;
+  }
+  const sortedByCr = {};
+  Object.keys(byCr)
+    .sort((a, b) => Number(a) - Number(b) || a.localeCompare(b))
+    .forEach((key) => { sortedByCr[key] = byCr[key]; });
+  return {
+    creatureCount: creatures.length,
+    byCr: sortedByCr,
+    byCreatureType,
+    withSpellcasting,
+    withLegendary,
+    totalEmbeddedItems,
+  };
+}
+
+/**
+ * Rich creature (npc) stat-block summary — surfaces the fields a Dauligor
+ * creatures table will need columns for. The authoritative full shape is
+ * always on the entry's `sourceDocument`; this is the convenience digest.
+ * dnd5e v5 npc paths; read defensively so a missing field defaults clean.
+ */
+function buildCreatureSummary(actor, source) {
+  const system = source.system ?? {};
+  const items = Array.isArray(source.items) ? source.items : [];
+  const hp = system.attributes?.hp ?? {};
+  const ac = system.attributes?.ac ?? {};
+
+  const abilities = {};
+  for (const k of ["str", "dex", "con", "int", "wis", "cha"]) {
+    const a = system.abilities?.[k] ?? {};
+    abilities[k] = { value: Number(a.value ?? 0) || 0, proficient: Number(a.proficient ?? 0) || 0 };
+  }
+
+  // Only proficient/expertise skills (value > 0) — keeps the digest tight.
+  const skills = {};
+  for (const [k, v] of Object.entries(system.skills ?? {})) {
+    const prof = Number(v?.value ?? 0) || 0;
+    if (prof > 0) skills[k] = { value: prof, ability: String(v?.ability ?? "") };
+  }
+
+  return {
+    img: source.img ?? "",
+    tokenImg: source.prototypeToken?.texture?.src ?? "",
+    creatureType: {
+      value: String(system.details?.type?.value ?? "").trim(),
+      subtype: String(system.details?.type?.subtype ?? "").trim(),
+      swarm: String(system.details?.type?.swarm ?? "").trim(),
+      custom: String(system.details?.type?.custom ?? "").trim(),
+    },
+    size: String(system.traits?.size ?? "").trim(),
+    alignment: String(system.details?.alignment ?? "").trim(),
+    cr: system.details?.cr ?? null,
+    proficiencyBonus: Number(system.attributes?.prof ?? 0) || 0,
+    source: {
+      book: String(system.details?.source?.book ?? "").trim(),
+      page: system.details?.source?.page ?? null,
+    },
+    hp: {
+      value: Number(hp.value ?? 0) || 0,
+      max: Number(hp.max ?? 0) || 0,
+      formula: String(hp.formula ?? ""),
+      temp: Number(hp.temp ?? 0) || 0,
+    },
+    ac: {
+      value: Number(ac.value ?? 0) || 0,
+      flat: ac.flat ?? null,
+      formula: String(ac.formula ?? ""),
+      calc: String(ac.calc ?? ""),
+    },
+    abilities,
+    skills,
+    movement: system.attributes?.movement ?? {},   // {walk,fly,swim,climb,burrow,hover,units}
+    senses: system.attributes?.senses ?? {},        // {darkvision,blindsight,tremorsense,truesight,special,units}
+    traits: {
+      damageImmunities: Array.from(system.traits?.di?.value ?? []),
+      damageResistances: Array.from(system.traits?.dr?.value ?? []),
+      damageVulnerabilities: Array.from(system.traits?.dv?.value ?? []),
+      conditionImmunities: Array.from(system.traits?.ci?.value ?? []),
+      languages: Array.from(system.traits?.languages?.value ?? []),
+    },
+    spellcasting: {
+      ability: String(system.attributes?.spellcasting ?? "").trim(),
+      level: Number(system.details?.spellLevel ?? 0) || 0,
+      slots: extractSpellSlotSummary(system.spells ?? {}),
+    },
+    legendary: {
+      actions: {
+        value: Number(system.resources?.legact?.value ?? 0) || 0,
+        max: Number(system.resources?.legact?.max ?? 0) || 0,
+      },
+      resistance: {
+        value: Number(system.resources?.legres?.value ?? 0) || 0,
+        max: Number(system.resources?.legres?.max ?? 0) || 0,
+      },
+      lair: !!system.resources?.lair?.value,
+    },
+    biography: buildBiographySnippet(system.details?.biography?.value ?? ""),
+    itemCount: items.length,
+    effectCount: Array.isArray(source.effects) ? source.effects.length : 0,
+    // Embedded stat-block pieces by type — feat (traits/actions), weapon
+    // (attacks), spell (spellcasting), consumable, etc. The full items
+    // live on sourceDocument.items.
+    embeddedTypeCounts: items.reduce((acc, it) => {
+      const key = String(it.type ?? "unknown");
+      acc[key] = (acc[key] ?? 0) + 1;
+      return acc;
+    }, {}),
+  };
+}
+
+function buildCreatureExportEntry(actor, rootFolder) {
+  const source = getCleanSource(actor);
+  const folderPath = actor.folder ? getFolderPath(actor.folder) : "";
+  return {
+    id: actor.id,
+    uuid: actor.uuid,
+    name: actor.name,
+    type: actor.type,                                 // "npc"
+    folderId: actor.folder?.id ?? null,
+    folderPath,
+    relativeFolderPath: folderPath && rootFolder
+      ? folderPath.replace(new RegExp(`^${escapeRegex(getFolderPath(rootFolder))}/?`), "")
+      : "",
+    creatureSummary: buildCreatureSummary(actor, source),
+    sourceDocument: source,
+  };
+}
+
+export function buildCreatureFolderExport(folder, { includeSubfolders = true } = {}) {
+  if (!folder || folder.documentName !== "Folder" || folder.type !== "Actor") return null;
+
+  const includedFolderIds = includeSubfolders ? collectDescendantFolderIds(folder) : new Set([folder.id]);
+  const creatures = Array.from(game.actors ?? []).filter((actor) =>
+    actor.type === "npc"
+    && includedFolderIds.has(actor.folder?.id ?? "")
+  );
+  const folderPath = getFolderPath(folder);
+
+  return {
+    ...buildFolderExportHeader(folder, "dauligor.foundry-creature-folder-export.v1", includeSubfolders, includedFolderIds, folderPath),
+    summary: summarizeCreatureCounts(creatures),
+    creatures: creatures
+      .slice()
+      .sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? "")))
+      .map((actor) => buildCreatureExportEntry(actor, folder)),
+  };
+}
+
+export async function exportCreatureFolder(folder, { includeSubfolders = true } = {}) {
+  if (!folder || folder.documentName !== "Folder" || folder.type !== "Actor") {
+    notifyWarn("Select an Actor folder before exporting creatures.");
+    return;
+  }
+  const payload = buildCreatureFolderExport(folder, { includeSubfolders });
+  const count = payload?.summary?.creatureCount ?? 0;
+  if (!count) {
+    notifyWarn(`No creature (npc) actors were found in "${folder.name}".`);
+    return;
+  }
+  log("Prepared creature folder export", payload);
+  notifyInfo(`Prepared ${count} creatures from "${folder.name}". See console for the full object.`);
+  const shouldDownload = await chooseDownload({
+    title: "Export Creature Folder",
+    name: `${folder.name} (${count} creatures)`,
+  });
+  if (shouldDownload) downloadJson(payload, `${folder.name}-creatures-export`);
 }
 
 function serializeForJson(value, { seen = new WeakSet(), depth = 0, maxDepth = 10 } = {}) {

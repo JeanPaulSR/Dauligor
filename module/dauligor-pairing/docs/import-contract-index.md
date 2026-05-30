@@ -108,7 +108,8 @@ out as JSON so the app team can study real shapes (export-first / corpus).
 - `docs/feat-folder-export-contract.md` — `dauligor.foundry-feat-folder-export.v1`
 - `docs/background-race-folder-export-contract.md` — `dauligor.foundry-background-folder-export.v1` + `…-race-folder-export.v1`
 - `docs/item-folder-export-contract.md` — `dauligor.foundry-item-folder-export.v1`
-- `docs/actor-folder-export-contract.md` — `dauligor.foundry-actor-folder-export.v1`
+- `docs/actor-folder-export-contract.md` — `dauligor.foundry-actor-folder-export.v1` (broad actor sweep)
+- `docs/creature-folder-export-contract.md` — `dauligor.foundry-creature-folder-export.v1` (npc-only stat blocks)
 - `docs/spell-folder-export-contract.md` — `dauligor.foundry-spell-folder-export.v1`
 
 ### Automation compatibility
