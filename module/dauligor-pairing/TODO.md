@@ -48,6 +48,18 @@
   waits until the app has a creatures table. Module-side bundle-shape preferences already sent to
   `compendium-editors` (see the reply handoff). Round-trip verification after the table lands.
 
+## Option picker / requirements
+
+- **[done 2026-05-30] Honor `excludedOptionIds`** — the picker now hides options a group excludes
+  (was showing e.g. Arcane Warrior in a Blood Hunter's Alternate Fighting Style). `class-import-service.js`
+  `buildOptionGroupExclusions` + filters in all three option-list paths.
+- **Follow-up — entity-prerequisite leaves are advisory/non-blocking.** `requirements-walker.js`
+  evaluates `optionItem`/`level`/`abilityScore`/`proficiency`/`spellRule` leaves, but `class` /
+  `subclass` / `feature` / `spell` leaves are rendered as advisory text only (not remapped to the
+  actor's owned ids), so an option gated on "requires feature/subclass X" is NOT actually blocked.
+  If options that should be prereq-gated still appear, this is why — needs the export to remap those
+  leaf references to sourceIds + the walker to evaluate them against owned items.
+
 ## Feature Manager
 
 - **[done]** Spells tab: the Prepare Spells manager is embedded under the Feature Manager shell
