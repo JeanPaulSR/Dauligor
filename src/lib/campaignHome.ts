@@ -32,8 +32,10 @@ interface BlockBase {
 export interface HeroBlock extends BlockBase {
   blockType: 'hero';
   title: string;
+  /** BBCode, rendered via BBCodeRenderer. The seeded default wraps its text in
+   *  [i]…[/i] for the classic italic look, but a GM can use any BBCode now. */
   subtitle: string;
-  align: 'center' | 'left';
+  align: 'center' | 'left' | 'right';
   size: 'normal' | 'large';
 }
 export interface TextBlock extends BlockBase {
@@ -168,7 +170,7 @@ export const BLOCK_TYPE_META: Record<
   HomeBlockType,
   { label: string; icon: string; description: string; group: 'content' | 'container' }
 > = {
-  hero:             { label: 'Hero',             icon: 'Sparkles',   description: 'A large title + subtitle banner.',          group: 'content' },
+  hero:             { label: 'Header',           icon: 'Sparkles',   description: 'A large title + subtitle banner.',          group: 'content' },
   'entity-row':     { label: 'Entity Row',       icon: 'LayoutGrid', description: 'A row/grid of cards — articles, classes, items, system pages…', group: 'content' },
   'entity-feature': { label: 'Featured',         icon: 'Star',       description: 'One large highlighted entity.',             group: 'content' },
   recommended:      { label: 'Recommended',      icon: 'BookMarked', description: "The campaign's recommended article.",       group: 'content' },
@@ -237,7 +239,7 @@ export function defaultHomeBlocks(): HomeBlock[] {
   // the GM never has to create fake content to start customizing.
   const hero = makeBlock('hero', crypto.randomUUID()) as HeroBlock;
   hero.title = 'Stories in Dauligor';
-  hero.subtitle = 'Your GM has made this website to give you easy access to the lore of the setting of Dauligor, and to the homebrew options they allow.';
+  hero.subtitle = '[i]Your GM has made this website to give you easy access to the lore of the setting of Dauligor, and to the homebrew options they allow.[/i]';
 
   // "The World of Dauligor" — five articles in the asymmetric feature-first grid
   // (World Primer spans 2 cols, then the rest fill an even 3-col grid), exactly
@@ -311,7 +313,8 @@ export function parseHomeBlock(row: any): HomeBlock | null {
   switch (type) {
     case 'hero':
       return { id, blockType: 'hero', title: s(config.title), subtitle: s(config.subtitle),
-        align: config.align === 'left' ? 'left' : 'center', size: config.size === 'large' ? 'large' : 'normal' };
+        align: config.align === 'left' ? 'left' : config.align === 'right' ? 'right' : 'center',
+        size: config.size === 'large' ? 'large' : 'normal' };
     case 'text':
       return { id, blockType: 'text', body: s(config.body),
         width: config.width === 'narrow' ? 'narrow' : config.width === 'wide' ? 'wide' : 'normal' };

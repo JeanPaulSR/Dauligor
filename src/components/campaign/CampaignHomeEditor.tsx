@@ -520,8 +520,8 @@ function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onA
 
       {block.blockType === 'hero' && (<>
         <Field label="Title"><Input autoComplete="off" className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="Stories in Dauligor" /></Field>
-        <Field label="Subtitle"><textarea autoComplete="off" className="field-input min-h-[70px] py-2 font-serif italic w-full" value={block.subtitle} onChange={(e) => set({ subtitle: e.target.value })} placeholder="A welcome line…" /></Field>
-        <Seg label="Alignment" value={block.align} options={[['center', 'Center'], ['left', 'Left']]} onChange={(v) => set({ align: v })} />
+        <Field label="Subtitle (BBCode)"><MarkdownEditor value={block.subtitle} onChange={(v) => set({ subtitle: v })} placeholder="A welcome line…" /></Field>
+        <Seg label="Alignment" value={block.align} options={[['left', 'Left'], ['center', 'Center'], ['right', 'Right']]} onChange={(v) => set({ align: v })} />
         <Seg label="Size" value={block.size} options={[['normal', 'Normal'], ['large', 'Large']]} onChange={(v) => set({ size: v })} />
       </>)}
 

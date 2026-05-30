@@ -170,19 +170,27 @@ export default function CampaignHomeBlocks({ blocks, recommendedLore, campaignNa
 
   const renderBlock = (block: HomeBlock): React.ReactNode => {
     switch (block.blockType) {
-      case 'hero':
+      case 'hero': {
+        const alignClass = block.align === 'left' ? 'text-left' : block.align === 'right' ? 'text-right' : 'text-center';
         return (
-          <section key={block.id} className={`space-y-6 pt-10 ${block.align === 'left' ? 'text-left' : 'text-center'}`}>
+          <section key={block.id} className={`space-y-6 pt-10 ${alignClass}`}>
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
               {block.title && (
                 <h1 className={`${block.size === 'large' ? 'h1-title' : 'h2-title'} mb-4`}>{block.title}</h1>
               )}
               {block.subtitle && (
-                <p className={`description-text text-xl ${block.align === 'left' ? '' : 'max-w-3xl mx-auto'}`}>{block.subtitle}</p>
+                // BBCode subtitle — the wrapper carries the size/serif/colour so
+                // the classic italic look comes from the default's [i]…[/i], not a
+                // hardcoded `italic`. Only the centered variant gets the readable
+                // max-width; left/right stay full-width so text-align positions them.
+                <div className={`text-xl text-ink/70 font-serif ${block.align === 'center' ? 'max-w-3xl mx-auto' : ''}`}>
+                  <BBCodeRenderer content={block.subtitle} />
+                </div>
               )}
             </motion.div>
           </section>
         );
+      }
 
       case 'text': {
         const w = block.width === 'narrow' ? 'max-w-2xl' : block.width === 'wide' ? 'max-w-none' : 'max-w-4xl';
