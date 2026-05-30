@@ -36,19 +36,25 @@ The current semantic class export is already good enough for:
 - HP persistence
 - custom option-group prompting in the Foundry importer
 
-The two areas that are still not fully native are:
+The one area that is still not fully native is:
 
-1. `ItemChoice`-style advancement generation
-2. feature `system.activities` generation
+1. `ItemChoice`-style advancement **synthesis from option groups**
+
+> **Status update (supersedes the older text below):** feature `system.activities` generation is
+> **done** — `createSemanticFeatureItem` calls `normalizeSemanticActivityCollection` and writes
+> native `system.activities` + `effects` (11 supported activity types), while *also* keeping the
+> semantic copy in `flags.dauligor-pairing.semanticAutomation`. So activities are active import
+> input, not advisory metadata. The remaining gap is synthesizing a native `ItemChoice` advancement
+> from semantic option groups (those still run through the importer's option-group wizard step and
+> are stored in `flags.dauligor-pairing.optionGroups`). The `buildItemChoiceAdvancements` design
+> below is the plan for closing that gap.
 
 Right now:
 
 - the module builds class progression from top-level semantic sections
-- the module does not yet consume feature-owned semantic `advancements`
-- the module preserves `feature.automation` in flags
-- the module does not yet convert semantic activities into native `system.activities`
-
-That means the current app export can already drive imports, but some of the newly added data is still advisory metadata rather than active import input.
+- the module converts feature semantic activities into native `system.activities` + `effects`
+- the module additionally preserves `feature.automation` in `flags.semanticAutomation`
+- the module does not yet synthesize native `ItemChoice` advancement from option groups
 
 ## Core Rule
 

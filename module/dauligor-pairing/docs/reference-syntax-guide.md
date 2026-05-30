@@ -1,5 +1,14 @@
 # Dauligor Reference Syntax Guide
 
+> **Implemented-vs-planned (2026-05-30).** `reference-service.js` parses most of the grammar below
+> (scalars `@prof` / `@level` / `@ability.*` / `@class.<id>.level|tier|hit-die*` /
+> `@subclass.<id>.level` / `@scale.*` / bare skill·tool·language slugs / class-column shorthand, and
+> entity refs `@class[…]` / `@subclass[…]` / `@feature[…]` / `@option[…]` → `@UUID[…]`). **Three
+> documented forms are NOT implemented yet** (tracked in [../TODO.md](../TODO.md)):
+> `@source[…]` (matched but hard-disabled — never resolves), `@class.<id>.spellcasting-ability`,
+> and the dotted `@skill.<skill>.prof|value` form (only the bare `@acrobatics` slug form works).
+> Treat those three as planned.
+
 This document defines the reference syntax Dauligor should use when the site wants to reference:
 
 - actor statistics

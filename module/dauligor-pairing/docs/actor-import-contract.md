@@ -1,5 +1,11 @@
 # Dauligor Actor Import Contract
 
+> **Status: planned, not built.** No actor importer exists yet — `import-service.js` is a test
+> harness that consumes only `dauligor.character.v1`, `dauligor.item.v1`, and bare Foundry-like
+> objects. The `dauligor.actor-bundle.v1` / `dauligor.actor-catalog.v1` flows below are the target
+> (blocked on the app gaining an actor/creature table — see the creature/NPC work). Tracked in
+> [../TODO.md](../TODO.md). Read this as a spec, not a description of shipped behavior.
+
 This is the generic actor transport contract.
 
 Use this file when the question is broader than class-driven character import, for example:

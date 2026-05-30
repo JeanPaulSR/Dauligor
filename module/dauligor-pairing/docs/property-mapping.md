@@ -5,6 +5,15 @@ share the same slug vocabulary. This doc is the authoritative reference for
 which slugs are 1:1 with dnd5e, which are Dauligor-specific extensions, and how
 both sides handle slugs they don't recognize.
 
+> **Module-side status (2026-05-30): the "Module behavior" runtime interpretation described in
+> this doc is the _intended_ design, NOT yet implemented.** Today the module passes
+> `system.properties` through verbatim with no per-slug interpreter — the custom slugs
+> (`lance` / `net` / `range` / `improvised-weapons`) and homebrew slugs are not decorated or
+> registered with display names at runtime. The target is a runtime resolver that maps every slug
+> (standard + custom + homebrew) to a proper display label via `CONFIG.DND5E.itemProperties`,
+> registering custom/new ones so they render correctly even as new properties are added. Tracked in
+> [../TODO.md](../TODO.md). Read the "Module behavior" notes below as the spec for that resolver.
+
 Schema baseline: migration `20260526-1700` renamed the 11 standard 5e
 `weapon_properties.identifier` values to match dnd5e's `CONFIG.DND5E.itemProperties`
 codes (commit `cd3257a`).

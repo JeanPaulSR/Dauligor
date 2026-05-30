@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dauligor Pairing — Module Current-State &amp; Doc Audit (2026-05-30)</title>
+<style>
+  :root {
+    --parchment: #f5f2e8;
+    --parchment-soft: #faf7ed;
+    --ink: #1a1a1a;
+    --ink-soft: #3a3a3a;
+    --muted: #6b6457;
+    --gold: #c5a059;
+    --gold-deep: #8a6d2f;
+    --blood: #7a1f1f;
+    --leaf: #355c3a;
+    --card: #fbf8ee;
+    --rule: #d8cfb8;
+    --code-bg: #2b2620;
+    --code-ink: #f0e9d2;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 10px rgba(0,0,0,0.04);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--parchment);
+    color: var(--ink);
+    font-family: "Inter", -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 40px 32px 80px; }
+  header.hero { border-bottom: 1px solid var(--rule); padding-bottom: 20px; margin-bottom: 30px; }
+  header.hero h1 {
+    font-family: "Cormorant Garamond", "Georgia", serif;
+    font-weight: 600; font-size: 40px; line-height: 1.1; margin: 0 0 6px; color: var(--ink);
+  }
+  header.hero .sub { color: var(--muted); font-size: 14px; }
+  header.hero .meta { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .badge {
+    display: inline-block; padding: 2px 9px; border-radius: 3px; font-size: 11px;
+    font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase;
+  }
+  .badge.gold { background: var(--gold); color: #fff; }
+  .badge.blood { background: var(--blood); color: #fff; }
+  .badge.leaf { background: var(--leaf); color: #fff; }
+  .badge.muted { background: #d8cfb8; color: var(--ink-soft); }
+  h2 {
+    font-family: "Cormorant Garamond", "Georgia", serif; font-size: 28px; font-weight: 600;
+    margin: 48px 0 14px; padding-bottom: 6px; border-bottom: 2px solid var(--gold); color: var(--ink);
+  }
+  h3 {
+    font-family: "Cormorant Garamond", "Georgia", serif; font-size: 21px; font-weight: 600;
+    margin: 28px 0 8px; color: var(--ink);
+  }
+  h4 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.7px; color: var(--gold-deep); margin: 18px 0 6px; }
+  p { margin: 8px 0; }
+  ul, ol { margin: 8px 0 8px 22px; padding: 0; }
+  li { margin: 4px 0; }
+  code {
+    font-family: "JetBrains Mono", "Consolas", monospace; font-size: 13px;
+    background: rgba(138, 109, 47, 0.12); color: var(--ink); padding: 1px 5px; border-radius: 3px;
+  }
+  pre {
+    background: var(--code-bg); color: var(--code-ink); padding: 14px 16px; border-radius: 5px;
+    overflow-x: auto; font-family: "JetBrains Mono", "Consolas", monospace; font-size: 13px;
+    line-height: 1.5; box-shadow: var(--shadow);
+  }
+  pre code { background: transparent; color: inherit; padding: 0; }
+  .card {
+    background: var(--card); border: 1px solid var(--rule); border-left: 4px solid var(--gold);
+    border-radius: 4px; padding: 16px 20px; margin: 14px 0; box-shadow: var(--shadow);
+  }
+  .card.built { border-left-color: var(--leaf); }
+  .card.partial { border-left-color: var(--gold); }
+  .card.stub { border-left-color: var(--blood); }
+  .card h3 { margin-top: 0; }
+  table {
+    border-collapse: collapse; width: 100%; margin: 14px 0; background: var(--parchment-soft);
+    box-shadow: var(--shadow); border-radius: 4px; overflow: hidden;
+  }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--rule); font-size: 14px; vertical-align: top; }
+  th {
+    background: rgba(138, 109, 47, 0.10); font-weight: 600; color: var(--gold-deep);
+    text-transform: uppercase; font-size: 11px; letter-spacing: 0.6px;
+  }
+  tr:last-child td { border-bottom: none; }
+  .callout {
+    background: rgba(122, 31, 31, 0.06); border: 1px solid rgba(122, 31, 31, 0.25);
+    border-radius: 4px; padding: 12px 16px; margin: 14px 0; font-size: 14px;
+  }
+  .callout strong { color: var(--blood); }
+  .callout.leaf { background: rgba(53, 92, 58, 0.07); border-color: rgba(53,92,58,0.3); }
+  .callout.leaf strong { color: var(--leaf); }
+  .toc {
+    background: var(--parchment-soft); border: 1px solid var(--rule); border-radius: 4px;
+    padding: 14px 20px; margin-bottom: 30px; box-shadow: var(--shadow);
+  }
+  .toc h4 { margin: 0 0 8px; }
+  .toc ol { margin: 0 0 0 20px; columns: 2; column-gap: 32px; }
+  .toc a { color: var(--gold-deep); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; color: var(--blood); }
+  .path { font-family: "JetBrains Mono", "Consolas", monospace; font-size: 13px; color: var(--gold-deep); }
+  hr.section { border: none; border-top: 1px solid var(--rule); margin: 36px 0; }
+  .tag { display:inline-block; font-size:10px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; padding:1px 7px; border-radius:3px; }
+  .tag.stale { background: rgba(122,31,31,.12); color: var(--blood); }
+  .tag.aspir { background: rgba(138,109,47,.16); color: var(--gold-deep); }
+  .tag.accurate { background: rgba(53,92,58,.14); color: var(--leaf); }
+  .tag.uncertain { background: #ddd5c0; color: var(--ink-soft); }
+  .q { background: var(--card); border: 1px solid var(--rule); border-left: 4px solid var(--blood); border-radius:4px; padding: 14px 18px; margin: 14px 0; box-shadow: var(--shadow); }
+  .q .n { font-weight:700; color: var(--blood); }
+  small.note { color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>Dauligor Pairing &mdash; Module Current-State &amp; Documentation Audit</h1>
+  <div class="sub">Verified survey of the Foundry-side module against its own docs &middot; branch <code>foundry-module</code> &middot; 2026-05-30</div>
+  <div class="meta">
+    <span class="badge gold">module v0.5.60</span>
+    <span class="badge gold">Foundry v13</span>
+    <span class="badge gold">dnd5e 5.x</span>
+    <span class="badge muted">20 scripts</span>
+    <span class="badge muted">~40 contract docs</span>
+    <span class="badge blood">README significantly drifted</span>
+  </div>
+</header>
+
+<div class="toc">
+  <h4>Contents</h4>
+  <ol>
+    <li><a href="#tldr">TL;DR &mdash; what this is</a></li>
+    <li><a href="#contract">How the module fits (the app&harr;module contract)</a></li>
+    <li><a href="#subsystems">What the module actually does today</a></li>
+    <li><a href="#ui">The registered UI surface (verified)</a></li>
+    <li><a href="#manifest">module.json facts</a></li>
+    <li><a href="#kinds">Bundle &amp; flag inventory</a></li>
+    <li><a href="#drift">Documentation drift audit</a></li>
+    <li><a href="#data">Bundled data &amp; README problems</a></li>
+    <li><a href="#incoming">Incoming request: backgrounds &amp; races</a></li>
+    <li><a href="#questions">Open questions on intentions</a></li>
+  </ol>
+</div>
+
+<h2 id="tldr">TL;DR &mdash; what this is</h2>
+<p>
+  The <code>foundry-module</code> branch is the sole steward of <span class="path">module/dauligor-pairing/</span> &mdash; the
+  FoundryVTT v13 + dnd5e module that <em>consumes</em> the website's <code>/api/module/*</code> export bundles and imports them into Foundry.
+  This document is the result of a read-only verification pass: five parallel surveys read the real script source (~1.5&nbsp;MB across 20 files)
+  and compared it against the ~40 contract docs. <strong>No code or docs were changed</strong> &mdash; this is the &ldquo;current facts&rdquo; snapshot
+  you asked for, so you can tell me which direction each drift should be resolved.
+</p>
+<div class="callout leaf">
+  <strong>Resolution (applied 2026-05-30):</strong> the owner reviewed this audit and set direction. The doc-reconciliation pass is now <strong>done</strong> &mdash;
+  stale class/spell/feat/reference/property/import docs were corrected or given clear &ldquo;planned vs shipped&rdquo; status banners, the README was rewritten to
+  current facts, and deferred work was folded into <span class="path">TODO.md</span>. Two findings in this snapshot were corrected on closer inspection:
+  <code>importedAt</code>/<code>lastSyncedAt</code>/<code>moduleVersion</code> <em>are</em> written (on the class import path, as provenance), and virtual folders
+  <em>do</em> exist on the alt character sheet (just not in the prep manager). The next build task is the backgrounds/races importer.
+</div>
+<div class="callout">
+  <strong>The headline finding:</strong> the <em>code</em> is considerably more capable than several docs claim, while the <em>README</em> and a few
+  contract docs describe an <em>earlier generation</em> of the module. The drift runs in both directions, which is exactly why intent matters: for each
+  mismatch, either the doc is <span class="tag stale">stale</span> (code is canonical &rarr; fix the doc) or <span class="tag aspir">aspirational</span>
+  (doc is the target &rarr; code is behind). Only you can set the direction for the ambiguous ones.
+</div>
+
+<h2 id="contract">How the module fits (the app&harr;module contract)</h2>
+<p>The repo is two halves meeting at a JSON contract:</p>
+<table>
+  <tr><th>Side</th><th>Role</th><th>Owned by</th></tr>
+  <tr><td><strong>App</strong> (React / D1 / Worker)</td><td><em>Builds &amp; serves</em> export bundles at <code>/api/module/*</code></td><td>compendium-editors, system-applications, proposal-system</td></tr>
+  <tr><td><strong>Module</strong> (<span class="path">module/dauligor-pairing/</span>)</td><td><em>Fetches &amp; imports</em> those bundles into Foundry; also exports Foundry docs back out as research</td><td><strong>this branch (foundry-module)</strong></td></tr>
+</table>
+<p>
+  The module reaches a single host, chosen by the world setting <code>apiEndpointMode</code>
+  (<code>production</code> &rarr; <code>https://www.dauligor.com</code>, <code>local</code> &rarr; <code>http://localhost:3000</code>).
+  Everything below is the module side only.
+</p>
+<p class="callout leaf"><strong>Boundary note:</strong> the Phase&nbsp;2 live-content viewer (<span class="path">scripts/dauligor-viewer.js</span>, <span class="path">scripts/enrichers/</span>,
+  <span class="path">templates/dauligor-viewer.hbs</span>, <span class="path">styles/dauligor-viewer.css</span>) is owned by <code>system-applications</code>, not this branch.
+  <span class="path">scripts/main.js</span> is shared append-only with that branch.</p>
+
+<h2 id="subsystems">What the module actually does today</h2>
+<p>Five subsystems, each verified against source. <span class="tag accurate">built</span> = working today; <span class="tag aspir">partial</span> = real but incomplete; <span class="tag stale">stub</span> = placeholder only.</p>
+
+<div class="card built">
+  <h3>1. Class import &amp; advancement <span class="badge leaf">largest subsystem</span></h3>
+  <p><span class="path">class-import-service.js</span> (7,188 lines) + <span class="path">importer-app.js</span> (7,107 lines) + <span class="path">importer-base-features.js</span>, <span class="path">foundry-id.js</span>, <span class="path">requirements-walker.js</span>, <span class="path">update-character.js</span>, <span class="path">importer-utils.js</span>.</p>
+  <ul>
+    <li>Accepts <strong>four payload families</strong>: <code>dauligor.class-bundle.v1</code>, <code>dauligor.item.v1</code> (class), raw Foundry class item, and the structurally-detected <strong>semantic full export</strong> (normalized to the bundle flow).</li>
+    <li><strong>World import</strong> and <strong>actor import</strong>, the latter driven by a sequenced wizard: <code>prepare &rarr; levels &rarr; hp &rarr; skills? &rarr; tools? &rarr; subclass? &rarr; option-groups* &rarr; spells? &rarr; import</code>.</li>
+    <li>Builds <strong>native dnd5e advancements</strong> (HitPoints, SavingThrow, Skill, ScaleValue, ItemGrant) and normalizes <strong>semantic activities into native <code>system.activities</code></strong> (11 supported activity types) + effects &mdash; while <em>also</em> preserving the semantic copy in <code>flags.semanticAutomation</code>.</li>
+    <li>Author-supplied <code>ItemChoice</code> and <code>AbilityScoreImprovement</code> advancements <em>are</em> normalized. ASI is collected via a <strong>custom Dauligor app</strong> (<code>DauligorAbilityScoreImprovementApp</code>), not the native dnd5e AdvancementManager.</li>
+    <li>Deterministic Foundry <code>_id</code>s derived from <code>SHA-256(moduleId:sourceId)</code> so drag-drop and re-import stay stable; preserves actor-side advancement identity via <code>flags.advancementIdMap</code>.</li>
+    <li>Multiclass-aware proficiency overlay; full requirements-tree evaluation (<code>all/any/one</code> groups) against actor state.</li>
+  </ul>
+  <p><small class="note">Not built: synthesizing a native <code>ItemChoice</code> <em>from option groups</em> (still wizard-driven + stored in <code>flags.optionGroups</code>); starting-equipment step (a dead stub, deliberately omitted from the sequence); export-side remap of <code>feature</code> requirement leaves (advisory text only).</small></p>
+</div>
+
+<div class="card built">
+  <h3>2. Spell preparation &amp; spell browser</h3>
+  <p><span class="path">spell-preparation-app.js</span> (4,420 lines) + <span class="path">spell-points-service.js</span>.</p>
+  <ul>
+    <li><code>DauligorSpellPreparationApp</code> &mdash; sheet-side prep manager. Two modes: <code>sheet</code> (class-scoped) and <code>importer</code> (source-scoped). Can render standalone <em>or</em> embed into the Feature Manager's Spells tab.</li>
+    <li><code>DauligorSpellBrowserApp</code> (subclass) &mdash; the standalone Spell Browser; merges every selected source's pool, multi-select bulk import into the alt sheet's &ldquo;Other Spells&rdquo; bucket.</li>
+    <li>Three sheet modes (<code>prepared</code>/<code>spellbook</code>/<code>free</code>), all using dnd5e&nbsp;5.x <strong>boolean</strong> <code>system.prepared</code> + <code>system.method</code> (not the legacy numeric 0/1/2). Cap accounting via the Dauligor-owned <code>flags.sheetMode</code>.</li>
+    <li>Fetches <code>dauligor.class-spell-list.v1</code>, <code>dauligor.source-spell-list.v1</code>, <code>dauligor.spell-item.v1</code>, <code>dauligor.tag-catalog.v1</code>.</li>
+    <li>Favorites stored as an <strong>actor-level array of dbIds</strong> (<code>flags.spellFavorites</code>), not per-item. Embedded-mode mutations defer into a long-rest queue; known-caster &ldquo;one swap per long rest&rdquo; home-rule <em>is</em> enforced.</li>
+  </ul>
+  <p><small class="note">Not built: virtual folders <em>in the prep manager</em> (folders <em>are</em> built on the alt character sheet). This file registers <strong>no hooks</strong>; the <code>dnd5e.restCompleted</code> auto-open the docs describe lives in <code>main.js</code>/Feature Manager, not here. Two catalog fetches hardcode the production host, ignoring <code>apiEndpointMode</code> (likely a bug).</small></p>
+  <p><small class="note"><code>spell-points-service.js</code>: offers to attach the third-party <code>dnd5e-spellpoints</code> item to spellcasters; reads/writes only that module's flags + <code>flags.core.sourceId</code> &mdash; no Dauligor flags.</small></p>
+</div>
+
+<div class="card partial">
+  <h3>3. Feat browser &amp; Feature Manager</h3>
+  <p><span class="path">feat-browser-app.js</span> (1,377 lines) + <span class="path">feature-manager-app.js</span> (1,887 lines).</p>
+  <ul>
+    <li><code>DauligorFeatBrowserApp</code> &mdash; fetches <code>dauligor.source-feat-list.v1</code> (pool) + <code>dauligor.feat-item.v1</code> (detail), imports the <strong>already-Foundry-shaped</strong> feat verbatim (no activity construction on this side). Match by <code>sourceId</code> then name+type. Favorites in <code>flags.featFavorites</code> (actor).</li>
+    <li><code>DauligorFeatureManagerApp</code> &mdash; six tabs. <strong>Built:</strong> Overview (long-rest card + queued-change preview), Features (real option-group re-pick / &ldquo;Swap this pick&rdquo;), Spells (embeds the prep manager). <strong>Placeholders:</strong> Crafting, Feats, Advancement.</li>
+    <li>Long-rest deferred-mutation queue in <code>flags.featureManagerQueue</code>; the commit engine currently only commits <code>spellChange</code> entries (<code>optionItem</code> is a stub; level-up-scope commit is upcoming).</li>
+    <li>Registers <code>updateActor</code> + <code>dnd5e.advancementManagerComplete</code> hooks for live refresh.</li>
+  </ul>
+  <p><small class="note">Option-group swap applies <em>immediately</em> (delete+create), not gated on the proposed <code>swappable_on_long_rest</code> source flag (that concept is unbuilt). Dead legacy <code>_renderGroupSection</code> + its queue stub remain in the file.</small></p>
+</div>
+
+<div class="card built">
+  <h3>4. Export / research / reference services</h3>
+  <p><span class="path">export-service.js</span> (1,626 lines) + <span class="path">import-service.js</span> + <span class="path">reference-service.js</span>.</p>
+  <ul>
+    <li><strong>Exporters</strong> (Foundry &rarr; JSON, for research/corpus building): single-document envelope, research bundle, world snapshot, world-research snapshot, and folder exports for spells / feats / items / actors, plus a live-window dump and an actor class snapshot. Eight carry a <code>dauligor.*</code> kind; two (single-doc, plain world snapshot) are un-kinded.</li>
+    <li><strong>import-service.js</strong> is a <em>test harness</em>: consumes <code>dauligor.character.v1</code>, <code>dauligor.item.v1</code>, or a bare Foundry-like object; registers the socketlib handler. Writes <code>sourceId</code>/<code>sourceBookId</code>/<code>entityId</code>/<code>identifier</code> on upsert.</li>
+    <li><strong>reference-service.js</strong> normalizes semantic references in whitelisted text/formula fields: scalar refs (<code>@prof</code>, <code>@level</code>, <code>@ability.*</code>, <code>@class.*.level|tier|hit-die*</code>, <code>@subclass.*.level</code>, <code>@scale.*</code>, bare skill/tool/language slugs, class-column shorthand) and entity refs (<code>@class[…]</code>, <code>@subclass[…]</code>, <code>@feature[…]</code>, <code>@option[…]</code> &rarr; <code>@UUID[…]</code>).</li>
+  </ul>
+  <p><small class="note">Notable gaps vs docs: <code>@source[…]</code> is matched but <strong>deliberately never resolves</strong>; <code>@class.*.spellcasting-ability</code> and the dotted <code>@skill.*</code> form are documented but <strong>not parsed</strong>; the actor folder export is self-described as research-only with no consumer.</small></p>
+</div>
+
+<div class="card partial">
+  <h3>5. Module shell: entry, alt sheet, GM app, UI</h3>
+  <p><span class="path">main.js</span> (entry) + <span class="path">dauligor-character-sheet.js</span> + <span class="path">gm-app.js</span> + <span class="path">section-filter-panel.js</span> + <span class="path">constants.js</span> + <span class="path">utils.js</span>.</p>
+  <ul>
+    <li><strong>main.js</strong> registers ~18 hooks: init/ready, sheet header controls, rest-bar button, settings launcher, scene-control GM button, sidebar directory buttons, settings-config form group, spell-tab buttons, <code>dnd5e.preLongRest</code> diversion to the Feature Manager, <code>dnd5e.restCompleted</code> long-rest commit, and a libWrapper patch preserving remote class/subclass image URLs. Four world settings + one GM keybinding.</li>
+    <li><strong>Alt character sheet</strong> &mdash; opt-in (<code>makeDefault:false</code>), extends the dnd5e CharacterActorSheet, overrides only the Spells tab to host per-class sections/folders and cross-class drag-drop gated by class spell-list membership. Rich flag model (<code>customSections</code>, <code>customFolders</code>, <code>classOrder</code>, collapse state, etc.).</li>
+    <li><strong>GM console</strong> (<code>gm-app.js</code>) is a confirmed empty &ldquo;Coming soon&rdquo; shell.</li>
+    <li><strong>section-filter-panel.js</strong> &mdash; shared tri-state filter UI; pure functions, no hooks.</li>
+  </ul>
+  <p class="callout"><strong>Dead path:</strong> <code>constants.js</code> still points <code>SAMPLE_FILE</code> and <code>CLASS_CATALOG_FILE</code> at <span class="path">data/sample-character.json</span> and <span class="path">data/classes/catalog.json</span> &mdash; <em>neither file exists on disk</em> (see &sect;Data).</p>
+</div>
+
+<h2 id="ui">The registered UI surface (verified)</h2>
+<p>This is the actual control set wired in <code>main.js</code> &mdash; the source of truth the README's &ldquo;Current controls&rdquo; section should be rewritten against.</p>
+<table>
+  <tr><th>Surface</th><th>Controls</th></tr>
+  <tr><td>World settings</td><td><code>defaultImportUrl</code>, <code>defaultClassCatalogUrl</code>, <code>defaultClassFolderPath</code>, <code>apiEndpointMode</code> (local/production)</td></tr>
+  <tr><td>Keybinding (GM)</td><td>Open Dauligor Importer (unbound by default)</td></tr>
+  <tr><td>Actor sheet header menu (GM)</td><td>Dauligor Level Up (if actor has a Dauligor class), Dauligor Import, Dauligor Options</td></tr>
+  <tr><td>Actor sheet rest bar</td><td>Feature Manager toolbox button (characters)</td></tr>
+  <tr><td>Settings app header</td><td>&ldquo;Dauligor&rdquo; launcher icon</td></tr>
+  <tr><td>Scene controls (GM)</td><td>Dauligor GM Console category &rarr; Open</td></tr>
+  <tr><td>Settings config form (GM)</td><td>Dauligor Tools: Open Importer, Open Options</td></tr>
+  <tr><td>Actor directory sidebar (GM)</td><td>Dauligor Import, Export Actor Folder, Open Options</td></tr>
+  <tr><td>Item directory sidebar (GM)</td><td>Dauligor Import, Export Spell/Feat/Item Folder, Open Options</td></tr>
+  <tr><td>Spells tab (stock sheet)</td><td>Per-class Prepare button + global Prepare button</td></tr>
+  <tr><td>Launcher dialog</td><td>Import; Actor Tools; Character Creator*; HP Gain Behavior*; Spell Points Behavior; Loot Generator*; Equipment Shop*</td></tr>
+  <tr><td>Actor Tools hub</td><td>Item Cleaner*, Prepare Spells, Feature Manager, Polymorpher*, Show Players*</td></tr>
+  <tr><td>Alt sheet context menus</td><td>Move to Section / Move to Folder; section &amp; folder add/rename/delete</td></tr>
+</table>
+<p><small class="note">* = &ldquo;under construction&rdquo; dialog stub. There are <strong>no</strong> per-document &ldquo;Export JSON/Research&rdquo; <em>context-menu</em> items and <strong>no</strong> journal export, despite the README claiming them.</small></p>
+
+<h2 id="manifest">module.json facts</h2>
+<table>
+  <tr><th>Field</th><th>Value</th></tr>
+  <tr><td>version</td><td><code>0.5.60</code></td></tr>
+  <tr><td>compatibility</td><td>minimum <code>13</code>, verified <code>13</code> (no maximum)</td></tr>
+  <tr><td>system</td><td><code>["dnd5e"]</code> &mdash; <strong>no version pin</strong> (README/docs say &ldquo;5.3.1&rdquo;)</td></tr>
+  <tr><td>requires</td><td><code>lib-wrapper</code> (1.13.4.0), <code>socketlib</code> (1.1.3); <code>socket: true</code></td></tr>
+  <tr><td>esmodules</td><td><code>["scripts/main.js"]</code> &mdash; everything else imported transitively</td></tr>
+  <tr><td>styles</td><td><code>["styles/dauligor-importer.css"]</code> &mdash; the only CSS on disk</td></tr>
+</table>
+<p>No referenced-but-missing esmodules/styles; no orphan style files.</p>
+
+<h2 id="kinds">Bundle &amp; flag inventory</h2>
+<h4>Bundle kinds the module CONSUMES (fetches from the app)</h4>
+<p><code>dauligor.source-catalog.v1</code>, <code>dauligor.class-catalog.v1</code>, <code>dauligor.class-bundle.v1</code>, <code>dauligor.item.v1</code>, <code>dauligor.class-spell-list.v1</code>, <code>dauligor.source-spell-list.v1</code>, <code>dauligor.spell-item.v1</code>, <code>dauligor.source-feat-list.v1</code>, <code>dauligor.feat-item.v1</code>, <code>dauligor.tag-catalog.v1</code>, <code>dauligor.character.v1</code> (test import).</p>
+<h4>Bundle kinds the module EMITS (Foundry &rarr; JSON exports)</h4>
+<p><code>dauligor.research-bundle.v1</code>, <code>dauligor.world-research-snapshot.v1</code>, <code>dauligor.foundry-spell-folder-export.v1</code>, <code>dauligor.foundry-feat-folder-export.v1</code>, <code>dauligor.foundry-item-folder-export.v1</code>, <code>dauligor.foundry-actor-folder-export.v1</code>, <code>dauligor.window-export.v1</code>, <code>dauligor.actor-class-snapshot.v1</code> (+ two un-kinded: single-doc envelope, plain world snapshot).</p>
+<h4>flags.dauligor-pairing.* &mdash; the live namespace</h4>
+<p>~50 keys in active use. Identity/provenance: <code>sourceId</code>, <code>entityId</code>, <code>dbId</code>, <code>identifier</code>, <code>sourceType</code>, <code>classSourceId</code>, <code>parentSourceId</code>, <code>payloadKind</code>, <code>schemaVersion</code>, <code>importMode</code>. Advancement/option: <code>advancementIdMap</code>, <code>semanticAutomation</code>, <code>semanticAdvancements</code>, <code>optionGroups</code>, <code>groupSourceId</code>, <code>requirementsTree</code>, <code>scaleFormula</code>. Spell/sheet: <code>sheetMode</code>, <code>classIdentifier</code>, <code>spellListUrl</code>, <code>spellcasting</code>, <code>spellFavorites</code>, <code>featFavorites</code>, <code>featureManagerQueue</code>. Alt sheet: <code>customSections</code>, <code>customFolders</code>, <code>classOrder</code>, <code>collapsedClasses</code>, <code>collapsedSections</code>, <code>customSectionId</code>, <code>customFolderId</code>.</p>
+<p class="callout"><strong>Identity drift to note:</strong> several docs treat <code>sourceId</code> as the universal match key, but spell/feat consumers actually key on <code>entityId</code> then <code>dbId</code>. The contract docs' <code>importedAt</code> / <code>lastSyncedAt</code> / <code>moduleVersion</code> sync flags <strong>are written on the class import path</strong> (class-import-service.js:6117) as provenance &mdash; but <em>not</em> by the spell/feat/item importers (aspirational there).</p>
+
+<h2 id="drift">Documentation drift audit</h2>
+<p>Consolidated, classified findings. <span class="tag stale">stale</span> = doc describes old behavior, code moved on. <span class="tag aspir">aspirational</span> = doc describes a target not yet built. <span class="tag accurate">accurate</span> = matches. <span class="tag uncertain">uncertain</span> = needs a wider check.</p>
+
+<h3>Class / advancement docs</h3>
+<table>
+  <tr><th>Doc &amp; claim</th><th>Reality</th><th>Class</th></tr>
+  <tr><td><code>advancement-and-activity-implementation-guide.md</code> / <code>class-semantic-export-notes.md</code> &mdash; &ldquo;module does not yet convert semantic activities into native <code>system.activities</code>; only preserves them in flags&rdquo;</td><td>It does both: normalizes 11 activity types into native <code>system.activities</code> + effects <em>and</em> keeps the semantic copy in flags</td><td><span class="tag stale">stale</span></td></tr>
+  <tr><td>Multiple docs &mdash; ASI &ldquo;opens the native dnd5e advancement flow&rdquo;</td><td>ASI uses a <strong>custom</strong> Dauligor app, not the native AdvancementManager</td><td><span class="tag stale">stale</span></td></tr>
+  <tr><td><code>class-import-contract.md</code> &mdash; &ldquo;ItemChoice / AbilityScoreImprovement not yet in the contract&rdquo;</td><td>Author-supplied ItemChoice &amp; ASI <em>are</em> normalized today</td><td><span class="tag stale">stale</span></td></tr>
+  <tr><td><code>class-import-contract.md</code> &mdash; &ldquo;spell lists &amp; proficiency choices out of scope&rdquo;</td><td>Spell selection + skill/tool/trait proficiency choices fully wired; only <em>equipment</em> remains out of scope</td><td><span class="tag stale">stale</span> (equipment part <span class="tag accurate">accurate</span>)</td></tr>
+  <tr><td><code>advancement-and-activity-implementation-guide.md</code> &mdash; &ldquo;module does not synthesize native ItemChoice from option groups&rdquo;</td><td>Still true &mdash; option groups stay wizard-driven; no <code>buildItemChoiceAdvancements</code> exists</td><td><span class="tag accurate">accurate</span></td></tr>
+  <tr><td>Several class docs pin <strong>dnd5e 5.3.1</strong></td><td>module.json carries no system version; code references &ldquo;5.x&rdquo;</td><td><span class="tag uncertain">uncertain</span></td></tr>
+  <tr><td>Contract lists module-written <code>importedAt</code>/<code>lastSyncedAt</code>/<code>moduleVersion</code></td><td>Written on the <strong>class</strong> import path (provenance); not by spell/feat/item importers</td><td><span class="tag accurate">accurate</span> (class) / <span class="tag aspir">aspir.</span> (others)</td></tr>
+</table>
+
+<h3>Spell docs</h3>
+<table>
+  <tr><th>Doc &amp; claim</th><th>Reality</th><th>Class</th></tr>
+  <tr><td><code>actor-spell-flag-schema.md</code> &mdash; required spell-item flags <code>schemaVersion</code>, <code>entityKind</code>, <code>sourceId</code>, <code>classIdentifier</code>, <code>listType</code>, <code>favorite</code>, <code>tags</code></td><td>Code writes only <code>entityId</code>, <code>classIdentifier</code>, <code>sheetMode</code>, <code>grantedByAdvancementId</code>. The documented schema is essentially fabricated/unbuilt</td><td><span class="tag aspir">aspirational</span></td></tr>
+  <tr><td><code>actor-spell-flag-schema.md</code> &mdash; favorites live on the spell item (<code>favorite</code> bool)</td><td>Favorites are an actor-level dbId array (<code>flags.spellFavorites</code>)</td><td><span class="tag stale">stale</span></td></tr>
+  <tr><td>Spell docs &mdash; <code>system.prepared = 0/1/2</code> numeric tri-state</td><td>Code uses dnd5e 5.x boolean <code>system.prepared</code> + <code>system.method</code>; docs even contradict themselves</td><td><span class="tag stale">stale</span></td></tr>
+  <tr><td><code>spell-preparation-manager-guide.md</code> &mdash; virtual folders (<code>folderId</code>/<code>folderLabel</code>)</td><td>No folder code exists in the prep app</td><td><span class="tag aspir">aspirational</span></td></tr>
+  <tr><td>Guide / inputs &mdash; long-rest auto-open via <code>dnd5e.restCompleted</code> in the prep app</td><td>Prep app registers no hooks; the rest hook lives in <code>main.js</code> + Feature Manager queue</td><td><span class="tag aspir">aspirational</span></td></tr>
+  <tr><td><code>spell-import-contract.md</code> &mdash; kinds <code>dauligor.item-catalog.v1</code>/<code>item.v1</code> at <code>/api/foundry/spells/*</code></td><td>Code uses <code>spell-item.v1</code>/<code>class-spell-list.v1</code>/<code>source-spell-list.v1</code> at <code>/api/module/*</code></td><td><span class="tag stale">stale</span></td></tr>
+  <tr><td>Guide &mdash; known-caster &ldquo;one swap per long rest&rdquo; framed as future</td><td>Built &amp; enforced in embedded mode</td><td><span class="tag stale">stale</span></td></tr>
+</table>
+
+<h3>Feat / Feature Manager docs &amp; TODO.md</h3>
+<table>
+  <tr><th>Doc / TODO claim</th><th>Reality</th><th>Class</th></tr>
+  <tr><td><code>feat-import-contract.md</code> top &mdash; kinds <code>dauligor.item-catalog.v1</code>/<code>item.v1</code>, feat under <code>payload.item</code></td><td>Code uses <code>source-feat-list.v1</code>/<code>feat-item.v1</code>, feat under <code>payload.feat</code>; the doc's own &ldquo;shipped&rdquo; section is correct, the top is stale</td><td><span class="tag stale">stale</span></td></tr>
+  <tr><td>TODO &mdash; &ldquo;Spells tab: bring Prepare Spells under one shell&rdquo;</td><td>Done (embedded)</td><td><span class="tag accurate">accurate</span> (done)</td></tr>
+  <tr><td>TODO &mdash; ItemChoice <code>replaces</code> semantics; Feats tab ASI retrain; level-up-scope swap routing</td><td>Not started (placeholder tabs / stub queue entry)</td><td><span class="tag aspir">aspirational</span></td></tr>
+  <tr><td>TODO &mdash; long-rest-scope option swap gated on <code>swappable_on_long_rest</code></td><td>Partial: swap exists but applies immediately, no source-flag gate</td><td><span class="tag aspir">partial</span></td></tr>
+</table>
+
+<h3>Reference / item / property / import docs</h3>
+<table>
+  <tr><th>Doc &amp; claim</th><th>Reality</th><th>Class</th></tr>
+  <tr><td><code>property-mapping.md</code> &mdash; &ldquo;module decorates <code>lance</code>/<code>net</code>/<code>improvised-weapons</code>/<code>superHeavy</code> at runtime&rdquo;</td><td>No per-slug interpreter exists anywhere; properties pass through verbatim. Worst single drift</td><td><span class="tag aspir">aspirational</span></td></tr>
+  <tr><td><code>reference-syntax-guide.md</code> &mdash; <code>@source[…]</code>, <code>@class.*.spellcasting-ability</code>, dotted <code>@skill.*</code> supported</td><td>None resolve. (<code>@source</code> matched but hard-disabled; the others not parsed.) Bare-skill-slug form works but is undocumented</td><td><span class="tag aspir">aspirational</span></td></tr>
+  <tr><td><code>reference-syntax-guide.md</code> &amp; <code>class-reference-surface.md</code> &mdash; scalar/scale/entity normalization &amp; <code>@subclass.*.level</code> mapping</td><td>Match the implementation</td><td><span class="tag accurate">accurate</span></td></tr>
+  <tr><td><code>item-folder-export-contract.md</code> / <code>actor-folder-export-contract.md</code> &mdash; emitted shapes</td><td>Match the builders field-for-field</td><td><span class="tag accurate">accurate</span></td></tr>
+  <tr><td><code>actor-import-contract.md</code> / <code>journal-import-contract.md</code> / <code>item-import-contract.md</code> &mdash; catalog+detail import kinds (<code>actor-bundle.v1</code>, <code>journal.v1</code>, <code>item-catalog.v1</code>)</td><td>Not consumed &mdash; import-service is a test harness handling only <code>character.v1</code>/<code>item.v1</code>/bare</td><td><span class="tag aspir">aspirational</span></td></tr>
+</table>
+
+<h2 id="data">Bundled data &amp; README problems</h2>
+<div class="callout">
+  <strong>The README is the single most drifted document.</strong> Its &ldquo;Included files&rdquo;, &ldquo;Current controls&rdquo;, &ldquo;Directory context menus&rdquo;, and &ldquo;Test flow&rdquo; sections describe an earlier module generation.
+</div>
+<ul>
+  <li><strong>&ldquo;Included files&rdquo; omits 8+ real scripts</strong> (feat-browser, foundry-id, importer-base-features, importer-utils, requirements-walker, spell-points-service, update-character, section-filter-panel, constants, utils).</li>
+  <li><strong>Lists data fixtures that do not exist:</strong> <span class="path">data/sample-character.json</span>, <span class="path">data/classes/catalog.json</span>, <span class="path">data/classes/sorcerer-bundle.json</span>, the <span class="path">players-handbook/</span> tree, etc.</li>
+  <li><strong>Actual</strong> <span class="path">data/</span> layout: <span class="path">data/sources/catalog.json</span> + per-source folders (<code>phb, tce, scag, xge, dsotdq, rj, uah, vrgr</code>), plus loose <span class="path">dauligor_artificer_full_export.json</span> and <span class="path">sources.zip</span>. Class JSONs exist only for phb (barbarian/bard/cleric/druid/sorcerer) + tce (artificer).</li>
+  <li><strong>&ldquo;Directory context menus&rdquo; section is entirely unimplemented</strong> &mdash; exports are folder-export <em>toolbar buttons</em>, not per-document context items; no journal export at all.</li>
+  <li><strong>Header-button claims</strong> (Export JSON / Export Research / Import URL / Import Sample) don't match the registered controls.</li>
+  <li><code>docs/corpus/</code> holds only source-side 5etools files (artificer, wizard, fluff) &mdash; no Plutonium or Foundry-native dumps yet, despite the template's three-file pattern.</li>
+</ul>
+
+<h2 id="incoming">Incoming request: backgrounds &amp; races</h2>
+<p>The <code>compendium-editors</code> branch has built two new app-side endpoints and asked this branch to build the module-side importers:</p>
+<table>
+  <tr><th>Endpoint</th><th>Bundle kind</th><th>Foundry item type</th></tr>
+  <tr><td><code>/api/module/backgrounds/&lt;dbId&gt;.json</code></td><td><code>dauligor.background-item.v1</code></td><td><code>background</code></td></tr>
+  <tr><td><code>/api/module/races/&lt;dbId&gt;.json</code></td><td><code>dauligor.race-item.v1</code></td><td><code>race</code></td></tr>
+</table>
+<p>
+  These mirror the existing feat importer (bg/race share the feats table), so the feat-browser path should reuse cleanly with the item <code>type</code> swapped. Type-specific <code>system</code> fields (background equipment, race movement/senses) currently ship as <strong>empty placeholders</strong> until a dedicated bg/race table lands. Creatures/NPCs are deferred (Actor shape). They want: contract confirmation, a round-trip check from <code>export-service.js</code>, and any creature-bundle-shape preferences.
+</p>
+<p><small class="note">This is logged in the branch manifest as an open incoming request. I'd treat it as the natural <em>first build task</em> once you've set direction on the audit above &mdash; but it's not the umbrella task.</small></p>
+
+<h2 id="questions">Open questions on intentions</h2>
+<p>For the ambiguous drifts, the fix direction depends on what you actually want. These are the decisions I need from you before I rewrite any contract docs (or change code to match a doc):</p>
+
+<div class="q"><span class="n">Q1 &mdash; Canonical direction.</span> When code and a doc disagree, what's the default? Most likely: <em>code is canonical, docs get corrected to match</em> &mdash; but some docs (the spell-flag schema, property-mapping behavior, the import contracts) describe targets you may still want the code to grow into. Blanket rule + a list of exceptions?</div>
+
+<div class="q"><span class="n">Q2 &mdash; The aspirational contracts.</span> <code>actor-spell-flag-schema.md</code>, <code>property-mapping.md</code> (runtime slug behavior), and the actor/journal/item-catalog import contracts describe behavior the module <em>doesn't have</em>. Are these <strong>roadmap</strong> (keep as specs, mark clearly as &ldquo;not yet built&rdquo;) or <strong>abandoned</strong> (rewrite to match the simpler reality)?</div>
+
+<div class="q"><span class="n">Q3 &mdash; README rewrite.</span> The README needs a near-total rewrite of its controls/files/test-flow sections. Do you want it rewritten to current facts now, or folded into the broader doc pass after you've answered Q1/Q2? And do you want the <span class="path">constants.js</span> dead paths (<code>SAMPLE_FILE</code>, <code>CLASS_CATALOG_FILE</code>) fixed/removed as part of this?</div>
+
+<div class="q"><span class="n">Q4 &mdash; HTML vs Markdown.</span> The module's contract docs are Markdown (read by agents/importers). You prefer HTML for reading. Should I (a) keep the Markdown contracts as the working source and produce HTML <em>summaries</em> like this one for your review, or (b) migrate the canonical docs to HTML too?</div>
+
+<div class="q"><span class="n">Q5 &mdash; Version pin.</span> Should I pin a concrete dnd5e version (e.g. add it to <code>module.json</code> and align the docs), and what is your actual target &mdash; the docs say <code>5.3.1</code>, the framing says <code>5.x</code>?</div>
+
+<div class="q"><span class="n">Q6 &mdash; First build task.</span> After the doc pass, is the backgrounds/races importer (&sect;Incoming) the next thing to build, or do you have a different priority (e.g. the unbuilt option-group <code>ItemChoice</code> synthesis, the placeholder Feature Manager tabs, the spell-prep host-fetch bug)?</div>
+
+<hr class="section">
+<p><small class="note">Generated by the <code>foundry-module</code> branch on 2026-05-30 from five parallel read-only source surveys. Draft &mdash; nothing in the module was modified. Located at <span class="path">module/dauligor-pairing/docs/_drafts/module-current-state-2026-05-30.html</span>.</small></p>
+
+</div>
+</body>
+</html>

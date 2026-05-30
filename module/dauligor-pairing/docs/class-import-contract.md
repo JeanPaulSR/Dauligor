@@ -20,17 +20,41 @@ Scope for this version:
 
 Out of scope for this version:
 
-- spell lists
 - non-class feats
 - inventory/items
-- subclass bundles
-- equipment and proficiency choice automation that has not yet been verified from a live export
+- starting **equipment** choice automation (the equipment step is a deliberate stub, omitted from the import sequence)
+
+> **Built since this list was first written:** spell-list selection (the spell step is wired —
+> `runSpellSelectionStep` + the class/source spell-list endpoints) and **proficiency choice
+> automation** (skill / tool / trait selection via `runSkillSelectionStep` / `runToolSelectionStep` /
+> `runTraitSelectionStep` + `CharacterUpdater`) are now implemented. Only *starting equipment*
+> remains out of scope.
 
 The goal is simple:
 
 1. Dauligor sends stable, semantic JSON.
-2. The Foundry module resolves that JSON into `dnd5e` `5.3.x` world items.
+2. The Foundry module resolves that JSON into `dnd5e` `5.3.1` world items (the version our games
+   run; broader `5.x` compatibility is welcome but unverified and not a priority).
 3. The app never needs to know Foundry world UUIDs in advance.
+
+## Contents
+
+- [Accepted Detail Payload Families](#accepted-detail-payload-families)
+- [Native Spellcasting Note](#native-spellcasting-note)
+- [Import Targets](#import-targets)
+- [Identity Rule](#identity-rule)
+- [Module-Owned Sync Metadata](#module-owned-sync-metadata)
+- [Description Payloads](#description-payloads)
+- [Feature Type Metadata](#feature-type-metadata)
+- [ASI Behavior](#asi-behavior)
+- [Transport Model](#transport-model)
+- [Catalog Payload](#catalog-payload)
+- [Preferred Detail Payload](#preferred-detail-payload)
+- [Advancement Contract](#advancement-contract)
+- [Import Behavior](#import-behavior)
+- [Actor Import Notes](#actor-import-notes)
+- [Legacy Raw Payloads](#legacy-raw-payloads)
+- [Summary](#summary)
 
 ## Accepted Detail Payload Families
 
@@ -230,7 +254,7 @@ for future sorting and display work.
 
 `AbilityScoreImprovement` rows should still be exported as native advancement entries in the root class advancement tree.
 
-During actor import, when the gained class levels cross one or more ASI rows, the module now opens the native `dnd5e` advancement flow for those ASIs after the class import completes.
+During actor import, when the gained class levels cross one or more ASI rows, the module now opens a **custom Dauligor ability-score-improvement app** (`DauligorAbilityScoreImprovementApp`) for those ASIs after the class import completes — not the native `dnd5e` AdvancementManager. The choice is applied directly to the actor.
 
 ### Embedded Advancement Metadata
 
@@ -521,13 +545,18 @@ Currently supported and expected:
 - `Trait`
 - `ScaleValue`
 - `ItemGrant`
+- `ItemChoice` — author-supplied `ItemChoice` rows are normalized when present in a semantic export.
+  (The module does **not** yet *synthesize* a native `ItemChoice` from option groups — those stay
+  wizard-driven and stored in `flags.dauligor-pairing.optionGroups`. See the TODO.)
+- `AbilityScoreImprovement` — normalized; resolved on actor import via the custom Dauligor ASI app
+  (see the ASI section above).
 
 Not yet part of the contract for production imports:
 
-- `ItemChoice`
-- `AbilityScoreImprovement`
-- subclass selection advancement
-- unverified proficiency/equipment choice structures
+- subclass selection advancement (subclass choice is handled by the importer wizard's subclass
+  step, not a native `Subclass` advancement row)
+- unverified proficiency/equipment choice structures (skill/tool/trait choices *are* handled;
+  *starting equipment* choice structures are not)
 
 ### `HitPoints`
 

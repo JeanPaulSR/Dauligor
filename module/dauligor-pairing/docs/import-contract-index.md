@@ -9,6 +9,13 @@ Use it to answer two questions first:
 
 The goal of this index is to keep the heavy material in a small number of canonical files and keep the rest of the set narrow.
 
+> **Start with the overview.** For a developer-facing snapshot of what the module actually does
+> today vs what is still planned, read
+> [`_drafts/module-current-state-2026-05-30.html`](_drafts/module-current-state-2026-05-30.html)
+> first. As of the 2026-05-30 reconciliation pass, several contracts carry a **status banner** near
+> the top distinguishing *shipped* behavior from *planned* targets — trust the banner over older
+> body text, and treat banner-flagged "planned" sections as specs, not descriptions of shipped code.
+
 ## How The Set Is Organized
 
 The documentation now falls into four layers:

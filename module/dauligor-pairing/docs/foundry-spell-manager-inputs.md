@@ -1,4 +1,4 @@
-# Foundry Inputs Required By Spell Manager
+﻿# Foundry Inputs Required By Spell Manager
 
 This note lists the native Foundry data the Dauligor spell preparation manager needs in order to function correctly.
 
@@ -24,9 +24,9 @@ This note only covers the Foundry side.
 
 ## Related Documents
 
-- [spell-preparation-manager-guide.md](E:/DnD/Professional/Webpage/module/dauligor-pairing/docs/spell-preparation-manager-guide.md)
-- [actor-spell-flag-schema.md](E:/DnD/Professional/Webpage/module/dauligor-pairing/docs/actor-spell-flag-schema.md)
-- [character-class-import-guide.md](E:/DnD/Professional/Webpage/module/dauligor-pairing/docs/character-class-import-guide.md)
+- [spell-preparation-manager-guide.md](spell-preparation-manager-guide.md)
+- [actor-spell-flag-schema.md](actor-spell-flag-schema.md)
+- [character-class-import-guide.md](character-class-import-guide.md)
 
 ## Required Foundry Inputs
 

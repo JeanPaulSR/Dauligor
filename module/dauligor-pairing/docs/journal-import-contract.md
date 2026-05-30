@@ -1,5 +1,10 @@
 # Dauligor Journal Import Contract
 
+> **Status: planned, not built.** No journal importer exists yet (`import-service.js` is a test
+> harness for `dauligor.character.v1` / `dauligor.item.v1` / bare objects). The
+> `dauligor.journal.v1` / `dauligor.journal-catalog.v1` flows below are the target. Tracked in
+> [../TODO.md](../TODO.md).
+
 This document defines the target payload contract for journal imports.
 
 Journals are mechanically lighter than classes or spells, so they make a good early endpoint family after item imports stabilize.

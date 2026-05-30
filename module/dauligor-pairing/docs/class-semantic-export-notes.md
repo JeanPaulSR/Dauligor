@@ -258,7 +258,7 @@ The semantic class parser currently automates:
 - spellcasting-derived cantrip/spell known scales from `spellsKnownScalings`
 - class feature grants
 - subclass feature grants on generated subclass items
-- actor-side ASI prompting through native `dnd5e` advancement flows when imported levels cross `AbilityScoreImprovement` rows
+- actor-side ASI prompting through the custom Dauligor ASI app (`DauligorAbilityScoreImprovementApp`) when imported levels cross `AbilityScoreImprovement` rows (not the native `dnd5e` AdvancementManager)
 
 The parser also preserves semantic spellcasting metadata on imported class or subclass flags, including:
 
@@ -330,10 +330,16 @@ Important:
 It does not yet fully automate:
 
 - subclass selection flows on actors
-- option-choice advancement flows on actors
-- native fighting style / tool-choice advancement generation
-- native skill-choice advancement generation on the class item itself
-- class activities/effects beyond preserving semantic automation metadata on feature flags
+- synthesizing native `ItemChoice` advancement from option groups (option-choice flows stay
+  wizard-driven on actors)
+- native fighting style / tool-choice advancement generation on the class item itself
+
+> **Now built:** class feature **activities and effects are normalized into native
+> `system.activities` / `effects`** (11 supported activity types via
+> `normalizeSemanticActivityCollection`) — the semantic copy is *additionally* preserved in
+> `flags.dauligor-pairing.semanticAutomation`, but the native objects are real. Skill-choice
+> handling is also wired (the importer's skill step + `Trait` advancement). The earlier
+> "preserving metadata only" framing is obsolete.
 
 ## Recommended Endpoint Strategy
 

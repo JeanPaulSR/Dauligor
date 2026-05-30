@@ -1,4 +1,4 @@
-# Dauligor Spell Preparation Manager Guide
+﻿# Dauligor Spell Preparation Manager Guide
 
 This document defines the target behavior for Dauligor's spell preparation and spell list management flow in Foundry.
 
@@ -236,11 +236,11 @@ normalises via `getSemanticSourceId()` in `_classExport.ts`.
 
 Use this guide with:
 
-- [spell-import-contract.md](E:/DnD/Professional/Webpage/module/dauligor-pairing/docs/spell-import-contract.md)
-- [actor-spell-flag-schema.md](E:/DnD/Professional/Webpage/module/dauligor-pairing/docs/actor-spell-flag-schema.md)
-- [character-class-import-guide.md](E:/DnD/Professional/Webpage/module/dauligor-pairing/docs/character-class-import-guide.md)
-- [reference-syntax-guide.md](E:/DnD/Professional/Webpage/module/dauligor-pairing/docs/reference-syntax-guide.md)
-- [dae-midi-character-support.md](E:/DnD/Professional/Webpage/module/dauligor-pairing/docs/dae-midi-character-support.md)
+- [spell-import-contract.md](spell-import-contract.md)
+- [actor-spell-flag-schema.md](actor-spell-flag-schema.md)
+- [character-class-import-guide.md](character-class-import-guide.md)
+- [reference-syntax-guide.md](reference-syntax-guide.md)
+- [dae-midi-character-support.md](dae-midi-character-support.md)
 
 ## Core Rule
 
@@ -281,20 +281,20 @@ The most important runtime state is:
 - `system.sourceItem`
   - which class or subclass granted or owns the spell
 
-## Native Preparation States
+## Native Preparation States (dnd5e 5.x)
 
-Use Foundry's native preparation states:
+Use Foundry's native preparation fields, in the **dnd5e 5.x** shape:
 
-- `0`
-  - unprepared
-- `1`
-  - prepared
-- `2`
-  - always prepared
+- `system.method` — `"spell"` (normal) or `"always"` (always-prepared); also `"atwill"` / `"pact"` / `"ritual"` per native.
+- `system.prepared` — **boolean** (`true` = prepared, `false` = not).
 
-Do not introduce a parallel prepared boolean for actor spell items.
+> The legacy numeric `system.prepared = 0/1/2` tri-state is **not** what dnd5e 5.x uses, and is not
+> what the manager writes. "Always prepared" is `system.method === "always"`, not `prepared === 2`.
 
-If the app needs to represent preparation semantically, it should still normalize into the native `dnd5e` representation on import.
+Preparation stays native. The module's only preparation-adjacent flag is
+`flags.dauligor-pairing.sheetMode` (`prepared`/`spellbook`/`free`) — a cap-accounting bucket, not a
+parallel prepared boolean. If the app represents preparation semantically, it normalizes into the
+native `dnd5e` representation on import. See [actor-spell-flag-schema.md](actor-spell-flag-schema.md).
 
 ## What The Manager Owns
 
@@ -513,7 +513,7 @@ Recommended visible statuses:
 
 The exact actor spell item flag schema is defined in:
 
-- [actor-spell-flag-schema.md](E:/DnD/Professional/Webpage/module/dauligor-pairing/docs/actor-spell-flag-schema.md)
+- [actor-spell-flag-schema.md](actor-spell-flag-schema.md)
 
 This guide assumes that schema and does not redefine it here.
 
@@ -620,18 +620,23 @@ The window should adapt by list type:
 
 ## Folders
 
-Actor embedded spell items do not need real Foundry folders for this system.
+> **Status: not built in the Prepare Spells manager.** The manager groups by class + spell level
+> only. Virtual folders *are* implemented on the **alt character sheet** (`customFolders` /
+> `customFolderId`, actor-level model with add / rename / delete / drag-reorder), not via per-item
+> flags. Bringing folders into the manager (reusing the alt-sheet `customFolders` model) is the
+> target below and is tracked in [../TODO.md](../TODO.md).
 
-Use virtual folders in Dauligor flags instead.
+Actor embedded spell items do not need real Foundry folders for this system; use Dauligor's
+virtual-folder model instead.
 
-Requirements:
+Target requirements (for the manager):
 
-- folder name stored on the spell item
+- folder membership via an actor-level folder model (mirroring the alt sheet's `customFolders`)
 - filter by folder
 - optional group by folder within a class
 - folder editing from the manager
 
-This keeps the feature lightweight and avoids trying to force embedded actor items into the world-folder model.
+This keeps the feature lightweight and avoids forcing embedded actor items into the world-folder model.
 
 ## Favorites
 
@@ -690,26 +695,27 @@ The module-side first implementation should support:
 
 It does not need to replace the stock sheet tab on the first pass.
 
-## Recommended First Implementation Scope
+## Implementation Scope
 
-First implementation:
+Built (first pass shipped):
 
-1. button on actor sheet
+1. button on actor sheet (+ on the native spells tab, + embedded in the Feature Manager)
 2. Dauligor spell manager window
 3. per-class grouping
-4. search and basic filters
-5. import spell
-6. prepare or unprepare spell
-7. favorite spell
-8. virtual folders
-9. optional long-rest reminder
+4. search and rich tri-state filters
+5. import spell (incl. the standalone multi-select Spell Browser)
+6. prepare / unprepare via native fields + `sheetMode` cap accounting
+7. favorite spell (actor-level `spellFavorites`)
+8. known-caster "one swap per long rest" home rule (enforced in embedded mode)
+9. deferred-mutation long-rest queue (commits on the Feature Manager's "Take Long Rest")
 
-Later implementation:
+Not yet built:
 
-- replace or augment the stock sheet spells tab
+- virtual folders **in the manager** (folders exist on the alt sheet — see the Folders section)
+- replace or augment the stock sheet spells tab wholesale
 - Tidy 5e integration
-- richer known-caster replacement workflow
-- per-class drag-and-drop organization
+- per-class drag-and-drop organization in the manager (the alt sheet has drag-drop)
+- long-rest auto-open reminder (the rest hook exists for the commit prompt; auto-open is a TODO)
 
 ## Sheet Integration Direction
 

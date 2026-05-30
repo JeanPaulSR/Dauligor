@@ -24,6 +24,29 @@ For the lower-level question of how an individual advancement row should be cons
 
 - `docs/advancement-construction-guide.md`
 
+## Contents
+
+- [Scope](#scope)
+- [The Core Mental Model](#the-core-mental-model)
+- [Two Import Targets](#two-import-targets)
+- [Description Text Contract](#description-text-contract)
+- [Actor Import Modes](#actor-import-modes)
+- [Current Working Advancement Contract](#current-working-advancement-contract)
+- [Identity Model](#identity-model)
+- [Required Class Item Shape](#required-class-item-shape)
+- [What Each Core Class Field Means](#what-each-core-class-field-means)
+- [Feature Item Typing](#feature-item-typing)
+- [Required Subclass Item Shape](#required-subclass-item-shape)
+- [Class Feature Item Shape](#class-feature-item-shape)
+- [Advancement Model](#advancement-model)
+- [Supported Advancement Types For Current Class Import](#supported-advancement-types-for-current-class-import)
+- [`HitPoints` Advancement](#hitpoints-advancement) · [`Trait`](#trait-advancement) · [`ScaleValue`](#scalevalue-advancement) · [`ItemGrant`](#itemgrant-advancement)
+- [Correct Actor Import Sequence For A Character Creator](#correct-actor-import-sequence-for-a-character-creator)
+- [Correct Class Import Checklist](#correct-class-import-checklist)
+- [What The App Must Provide vs What The Module Must Provide](#what-the-app-must-provide-vs-what-the-module-must-provide)
+- [Practical Recommendation](#practical-recommendation)
+- [Related Documents](#related-documents)
+
 ## Scope
 
 This guide covers:
@@ -37,9 +60,11 @@ This guide covers:
 This guide does not yet finalize:
 
 - starting equipment automation
-- spell selection automation
 - non-class feat importing
 - general item importing
+
+> Spell-selection automation is now built (the importer's spell step + the class/source
+> spell-list endpoints), so it is no longer an open item here.
 
 ## The Core Mental Model
 
@@ -79,7 +104,7 @@ Current working interpretation:
 - the module reads those root advancement rows directly
 - actor import applies resulting trait changes back onto the actor root so proficiencies and saves actually appear on the sheet
 - actor import now distinguishes fresh class import, same-class level-up, and secondary-class multiclass import
-- ability score improvements are surfaced through native `dnd5e` advancement flows after import when the gained levels cross an ASI row
+- ability score improvements are surfaced through a custom Dauligor ASI app (`DauligorAbilityScoreImprovementApp`) after import when the gained levels cross an ASI row — not the native `dnd5e` AdvancementManager
 
 ## Two Import Targets
 
@@ -115,7 +140,7 @@ With the current importer, that actor-side update now explicitly includes:
 - skill selections written onto the class `Trait` advancement and then applied to `actor.system.skills`
 - saving throw trait grants applied to `actor.system.abilities.*.proficient`
 - tool, armor, weapon, and language trait grants applied to the actor root trait fields
-- ASI advancement dialogs opened through native `dnd5e` flows when the imported class levels cross `AbilityScoreImprovement` advancements
+- ASI choices collected through the custom Dauligor ASI app (`DauligorAbilityScoreImprovementApp`) when the imported class levels cross `AbilityScoreImprovement` advancements (not the native `dnd5e` AdvancementManager)
 
 This is the mode the Dauligor character creator should care about most.
 

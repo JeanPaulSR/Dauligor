@@ -1,4 +1,10 @@
-# Dauligor Item Import Contract
+﻿# Dauligor Item Import Contract
+
+> **Status: partially built.** A single `dauligor.item.v1` object can be imported through the
+> `import-service.js` test path, but the full catalog-driven item importer (browser flow like
+> feats/spells, consuming `dauligor.item-catalog.v1`) is **not built yet** — and the
+> `importedAt` / `lastSyncedAt` / `moduleVersion` provenance flags below are written only by the
+> class importer today. Tracked in [../TODO.md](../TODO.md).
 
 This document defines the target payload contract for non-class item imports.
 
@@ -23,10 +29,10 @@ Handled separately:
 
 Use this contract with:
 
-- [class-feature-activity-contract.md](E:/DnD/Professional/Webpage/module/dauligor-pairing/docs/class-feature-activity-contract.md)
-- [reference-syntax-guide.md](E:/DnD/Professional/Webpage/module/dauligor-pairing/docs/reference-syntax-guide.md)
-- [dae-midi-character-support.md](E:/DnD/Professional/Webpage/module/dauligor-pairing/docs/dae-midi-character-support.md)
-- [midi-qol-compatibility.md](E:/DnD/Professional/Webpage/module/dauligor-pairing/docs/midi-qol-compatibility.md)
+- [class-feature-activity-contract.md](class-feature-activity-contract.md)
+- [reference-syntax-guide.md](reference-syntax-guide.md)
+- [dae-midi-character-support.md](dae-midi-character-support.md)
+- [midi-qol-compatibility.md](midi-qol-compatibility.md)
 
 ## Recommended Payload Kinds
 
@@ -200,7 +206,7 @@ That means:
 
 For the supported activity families and their field shapes, use:
 
-- [class-feature-activity-contract.md](E:/DnD/Professional/Webpage/module/dauligor-pairing/docs/class-feature-activity-contract.md)
+- [class-feature-activity-contract.md](class-feature-activity-contract.md)
 
 That document is feature-oriented, but the same native activity families apply to item documents.
 
@@ -231,7 +237,7 @@ For the current Dauligor direction, item support should stay:
 
 Item formulas, effect values, and descriptive text should use the semantic reference language from:
 
-- [reference-syntax-guide.md](E:/DnD/Professional/Webpage/module/dauligor-pairing/docs/reference-syntax-guide.md)
+- [reference-syntax-guide.md](reference-syntax-guide.md)
 
 Examples:
 

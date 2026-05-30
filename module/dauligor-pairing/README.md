@@ -1,336 +1,179 @@
 # Dauligor Pairing
 
-Starter Foundry VTT v13 module for connecting the Dauligor app to `dnd5e` `5.3.1`.
+Foundry VTT **v13** bridge module connecting the Dauligor app to `dnd5e` **5.3.1** (the version our
+games run; broader `5.x` is welcome but unverified and not a priority).
 
-This foundation focuses on five things:
+The module is the **consumer** side of the project: the Dauligor web app builds and serves semantic
+JSON at `/api/module/*`, and this module fetches it and imports it into Foundry (classes,
+subclasses, features, advancements, activities, spells, feats). It also exports Foundry documents
+back out as research bundles for corpus building.
 
-1. Exporting real Foundry documents so you can study their shape.
-2. Exporting a world snapshot containing classes, subclasses, monsters, items, journals, and more.
-3. Importing simple test JSON onto a character sheet.
-4. Browsing and importing bundled class fixtures through a Plutonium-inspired wizard plus class-browser flow.
-5. Documenting the practical data expectations for `dnd5e` and the Dauligor class contract.
+It does five things today:
+
+1. Imports classes & subclasses (world + actor) through a Plutonium-inspired wizard + class browser,
+   building native `dnd5e` advancements and activities.
+2. Imports spells via a standalone Spell Browser (multi-select) and manages preparation through the
+   Prepare Spells manager.
+3. Imports feats via a feat browser; manages post-import option-group swaps + long-rest changes
+   through the Feature Manager.
+4. Ships an opt-in alt character sheet with per-class spell sections + folders.
+5. Exports Foundry documents / world snapshots / research bundles as JSON.
+
+> **Current-state overview:** [`docs/_drafts/module-current-state-2026-05-30.html`](docs/_drafts/module-current-state-2026-05-30.html)
+> is the developer-facing snapshot of what is built vs deferred. The backlog lives in [`TODO.md`](TODO.md).
 
 ## Documentation
 
 Start here:
 
-- `docs/import-contract-index.md`
+- [`docs/import-contract-index.md`](docs/import-contract-index.md) — master map of the doc set.
 
-Canonical docs:
+Canonical contracts & guides:
 
-- `docs/class-import-contract.md`
-- `docs/class-import-and-advancement-guide.md`
-- `docs/advancement-construction-guide.md`
-- `docs/advancement-and-activity-implementation-guide.md`
-- `docs/class-feature-activity-contract.md`
-- `docs/character-class-import-guide.md`
-- `docs/reference-syntax-guide.md`
-- `docs/source-library-contract.md`
-- `docs/item-import-contract.md`
-- `docs/spell-import-contract.md`
-- `docs/spell-preparation-manager-guide.md`
-- `docs/actor-spell-flag-schema.md`
-- `docs/foundry-spell-manager-inputs.md`
-- `docs/feat-import-contract.md`
-- `docs/journal-import-contract.md`
-- `docs/actor-import-contract.md`
-- `docs/dae-midi-character-support.md`
+- `docs/class-import-contract.md`, `docs/class-import-and-advancement-guide.md`,
+  `docs/advancement-construction-guide.md`, `docs/advancement-and-activity-implementation-guide.md`,
+  `docs/class-feature-activity-contract.md`, `docs/character-class-import-guide.md`
+- `docs/spell-import-contract.md`, `docs/spell-preparation-manager-guide.md`,
+  `docs/actor-spell-flag-schema.md`, `docs/foundry-spell-manager-inputs.md`
+- `docs/feat-import-contract.md`, `docs/item-import-contract.md`, `docs/journal-import-contract.md`,
+  `docs/actor-import-contract.md`
+- `docs/reference-syntax-guide.md`, `docs/source-library-contract.md`, `docs/property-mapping.md`,
+  `docs/dae-midi-character-support.md`, `docs/dauligor-character-sheet.md`
 
-Scoped notes:
+Doc convention: **Markdown contracts are the detailed source of truth for agents**; HTML files
+under `docs/_drafts/` are developer overviews. Several contract docs carry a status banner noting
+which parts are shipped vs planned — trust the banner over older body text.
 
-- `docs/class-import-endpoint-notes.md`
-- `docs/class-semantic-export-notes.md`
-- `docs/class-reference-surface.md`
-- `docs/midi-qol-compatibility.md`
-- `docs/where-to-look-guide.md`
+## Scripts (`scripts/`)
 
-Research and corpus:
-
-- `docs/google-doc-synthesis.md`
-- `docs/foundry-dnd5e-reference.md`
-- `docs/schema-crosswalk.md`
-- `docs/feature-activity-corpus-plan.md`
-- `docs/agent-research-playbook.md`
-- `docs/corpus/catalog.md`
-- `docs/corpus/capture-template.md`
-
-App-team notes:
-
-- `notes-for-app-team/index.md`
-
-## Included files
-
-- `scripts/main.js`
-  - hook registration and UI controls
-- `scripts/export-service.js`
-  - document export, research bundle export, and world snapshot export
-- `scripts/import-service.js`
-  - test URL import and item upsert logic
-- `scripts/reference-service.js`
-  - semantic reference normalization for formulas, prose lookups, scales, and UUID links
-- `scripts/class-import-service.js`
-  - class bundle fetch + actor mutation helpers (workflow build, option-pick step, full-spell fetch, reselect-workflow factory)
-- `scripts/importer-app.js`
-  - import wizard shell, class browser window, launch helpers, and the `runOptionGroupStep` picker shared with the Feature Manager re-select flow
-- `scripts/spell-preparation-app.js`
-  - `DauligorSpellPreparationApp` (sheet-side Prepare Spells manager) + `DauligorSpellBrowserApp` (the standalone Spell Browser launched from the wizard's Spells import type — merges every selected source's spells into one pool, supports multi-select bulk import)
-- `scripts/feature-manager-app.js`
-  - post-import "Feature Manager" with Overview / Spells / Features tabs; long-rest commit dialog with deferred-mutation queue
-- `scripts/dauligor-character-sheet.js`
-  - alt character sheet, hosts the per-class spell-list gating for cross-class drag-drops
-- `scripts/gm-app.js`
-  - GM-only console placeholder (scene-controls button + ApplicationV2 window)
-- `data/sample-character.json`
-  - minimal bundled payload for import testing
-- `data/classes/catalog.json`
-  - bundled local class catalog used by the Foundry importer browser
-- `data/sources/catalog.json`
-  - local source-library index used by the import wizard source step
-- `data/classes/sorcerer-bundle.json`
-  - preferred `dauligor.class-bundle.v1` sample payload
-- `data/classes/sorcerer-semantic-export.json`
-  - semantic full-export sample consumed by the generalized class normalizer
-- `data/sources/players-handbook/source.json`
-  - sample source detail document matching the app-style source page
-- `data/sources/players-handbook/classes/catalog.json`
-  - sample source-scoped class catalog for one source
-- `data/sources/players-handbook/classes/sorcerer.json`
-  - sample source-scoped semantic class payload
-- `docs/foundry-dnd5e-reference.md`
-  - schema notes for future Dauligor mapping work
-- `docs/import-contract-index.md`
-  - master map for the documentation set
-- `docs/class-import-contract.md`
-  - canonical class transport contract
-- `docs/class-import-and-advancement-guide.md`
-  - canonical class behavior guide for world import, actor import, level-up, and character creation
-- `docs/advancement-construction-guide.md`
-  - canonical native `dnd5e` advancement guide
-- `docs/advancement-and-activity-implementation-guide.md`
-  - implementation checklist for finishing native advancements and feature activities
-- `docs/class-import-endpoint-notes.md`
-  - short endpoint-only handoff note for class payloads
-- `docs/class-semantic-export-notes.md`
-  - semantic full-export note for the generalized class normalizer
-- `docs/class-feature-activity-contract.md`
-  - canonical feature-item and activity contract
-- `docs/feature-activity-corpus-plan.md`
-  - corpus status and remaining evidence gaps for activity families
-- `docs/source-library-contract.md`
-  - canonical source-library file contract
-- `docs/actor-import-contract.md`
-  - generic actor transport contract
-- `docs/character-class-import-guide.md`
-  - canonical class-driven character import guide
-- `docs/reference-syntax-guide.md`
-  - canonical semantic reference grammar
-- `docs/class-reference-surface.md`
-  - native class and scale reference surface in `dnd5e`
-- `docs/dae-midi-character-support.md`
-  - canonical DAE/Midi support direction
-- `docs/midi-qol-compatibility.md`
-  - narrow Midi-only note
-- `docs/where-to-look-guide.md`
-  - quick route map into the heavier docs
-- `notes-for-app-team/index.md`
-  - app-team note index
-- `docs/item-import-contract.md`
-  - target item contract for weapons, armor, consumables, loot, and related item families
-- `docs/spell-import-contract.md`
-  - target spell contract with behavior-oriented spell data expectations
-- `docs/spell-preparation-manager-guide.md`
-  - canonical spell preparation and spell list management guide
-- `docs/actor-spell-flag-schema.md`
-  - canonical actor spell flag schema for native actor-owned spell items
-- `docs/foundry-spell-manager-inputs.md`
-  - narrow note for the Foundry-side actor, class, spell, and rest data the spell manager reads from
-- `docs/feat-import-contract.md`
-  - target feat contract for general feats and class-feature-style feat items
-- `docs/journal-import-contract.md`
-  - target journal contract for lore and reference entry imports
+| File | Role |
+|---|---|
+| `main.js` | Module entry point (only declared esmodule). Registers all hooks, settings, keybinding, UI controls, the long-rest intercept, and the libWrapper image patch. |
+| `class-import-service.js` | Class normalization + import engine (4 payload families; world + actor; native advancements + activities; custom ASI app; deterministic ids). |
+| `importer-app.js` | Import wizard shell, class browser, subclass preview, the sequenced actor-import flow, and the shared option-group picker. |
+| `importer-base-features.js` | Assembles the 11 base advancement rows (HP/saves/proficiencies); multiclass proficiency overlay. |
+| `importer-utils.js` | Small importer helpers (level clamp, id normalization, slugify, html summarize). |
+| `foundry-id.js` | Deterministic Foundry `_id` from `SHA-256(moduleId:sourceId)` + per-session cache. |
+| `requirements-walker.js` | Evaluates compound requirement trees (`all`/`any`/`one`) against actor state. |
+| `update-character.js` | `CharacterUpdater` — batches actor-root proficiency/trait/HP changes into one update. |
+| `spell-preparation-app.js` | `DauligorSpellPreparationApp` (prep manager) + `DauligorSpellBrowserApp` (multi-select Spell Browser). |
+| `spell-points-service.js` | Optional `dnd5e-spellpoints` compatibility offer. |
+| `feat-browser-app.js` | `DauligorFeatBrowserApp` — feat pool browser + verbatim import. |
+| `feature-manager-app.js` | `DauligorFeatureManagerApp` — Overview / Features / Spells tabs + long-rest deferred-mutation queue. |
+| `dauligor-character-sheet.js` | Opt-in alt character sheet; per-class spell sections + folders + cross-class drag-drop gating. |
+| `export-service.js` | Document / research / world-snapshot / folder exports (Foundry → JSON). |
+| `import-service.js` | Test-harness import (URL / sample) + socketlib handler. |
+| `reference-service.js` | Semantic reference normalization (formulas, prose lookups, scales, UUID links). |
+| `section-filter-panel.js` | Shared tri-state filter UI (port of the web app's panel). |
+| `gm-app.js` | GM console — placeholder shell. |
+| `constants.js`, `utils.js` | Module id / settings keys / paths; logging, downloads, dialogs. |
 
 ## Current controls
 
 ### Import wizard
+Three-column wizard: **Import Type** (`Classes & Subclasses`, `Spells`, `Items` (planned),
+`Feats` (planned)) → **Source Type** (filtered by `supportedImportTypes`) → **Import Options**.
+Bottom-right: `Cancel`, `Open Importer`.
 
-- three-column wizard:
-  - `Import Type` — `Classes & Subclasses`, `Spells`, `Items` (planned), `Feats` (planned)
-  - `Source Type` — sources filtered by `supportedImportTypes` on the active import type
-  - `Import Options`
-- bottom-right actions:
-  - `Cancel`
-  - `Open Importer`
+- **Classes & Subclasses** → dedicated class browser: search, tag filter, class cards with nested
+  subclasses, single-class selection, and (for actor imports) the sequenced options workflow
+  (subclass, HP mode, option groups, spell selection).
+- **Spells** → standalone Spell Browser: merges every selected source's pool, level-banded, with a
+  3-state Select-All chip and an "Add N to Sheet" batch import into the alt sheet's "Other Spells"
+  bucket.
 
-**Classes & Subclasses** launches a dedicated class browser with:
+### Settings
+World settings: `defaultImportUrl`, `defaultClassCatalogUrl`, `defaultClassFolderPath`,
+`apiEndpointMode` (`local` → `localhost:3000` / `production` → `www.dauligor.com`). GM keybinding:
+"Open Dauligor Importer" (unbound by default).
 
-- search
-- tag filter
-- class cards grouped by class
-- nested subclasses
-- single-class radio selection
-- a follow-up class options workflow for actor imports
+### Sheet & directory controls
+- **Actor sheet header menu** (GM): `Dauligor Level Up` (only when the actor has a Dauligor class),
+  `Dauligor Import`, `Dauligor Options`.
+- **Actor sheet rest bar**: Feature Manager button (characters).
+- **Native spells tab**: per-class Prepare button + a global Prepare button.
+- **Settings app header**: Dauligor launcher icon. **Scene controls** (GM): Dauligor GM Console.
+- **Settings config form** (GM): Dauligor Tools → Open Importer / Open Options.
+- **Actor directory sidebar** (GM): Dauligor Import, Export Actor Folder, Open Options.
+- **Item directory sidebar** (GM): Dauligor Import, Export Spell/Feat/Item Folder, Open Options.
+- **Alt sheet context menus**: Move to Section / Move to Folder; section & folder add/rename/delete.
 
-**Spells** launches the standalone Spell Browser (`DauligorSpellBrowserApp`):
+### Launcher & Actor Tools hub
+- Launcher: Import; Actor Tools; Character Creator\*; HP Gain Behavior\*; Spell Points Behavior;
+  Loot Generator\*; Equipment Shop\*.
+- Actor Tools hub: Item Cleaner\*, Prepare Spells, Feature Manager, Polymorpher\*, Show Players\*.
 
-- merges every selected source's spell list into a single pool (no source rail — sources picked in the wizard step compose into one view)
-- favourites pane on the left, level-banded pool in the middle, full spell detail on the right
-- per-row checkbox for multi-select; spells already on the actor render a green ✓ badge instead and are excluded from bulk-add
-- Plutonium-style 3-state Select-All chip in the pool toolbar (none / partial / all of currently-displayed)
-- bottom-right "Add N to Sheet" button — batches the selected dbIds into a single `createEmbeddedDocuments` call and lands each spell in the alt sheet's "Other Spells" (unsorted) bucket, ready to be dragged into a class section
+\* = under-construction placeholder dialog.
 
-### Settings sidebar
+## Bundled data (`data/`)
 
-- `Dauligor Tools`
-  - `Open Importer`
-  - `Open Launcher`
-- launcher action:
-  - `Import Classes`
-  - `Export World Snapshot`
-  - `Export World Research`
+- `data/sources/catalog.json` — source-library index used by the import wizard's source step.
+- `data/sources/<source>/` for `phb`, `tce`, `scag`, `xge`, `dsotdq`, `rj`, `uah`, `vrgr` — each with
+  `source.json` + `{bestiary,classes,items,journals,spells}/catalog.json`. Individual class JSONs
+  exist for `phb` (barbarian, bard, cleric, druid, sorcerer) and `tce` (artificer).
+- `data/dauligor_artificer_full_export.json` — a full semantic class-export sample.
+- `data/sources.zip` — zipped copy of the sources tree.
 
-### Item sheet header
-
-- `Dauligor Import`
-- `Export JSON`
-- `Export Research`
-
-### Actor sheet header
-
-- `Dauligor Level Up`
-- `Dauligor Import`
-- `Dauligor Options`
-- `Export JSON`
-- `Export Research`
-- `Import URL`
-- `Import Sample`
-
-`Dauligor Level Up` appears on character sheets which already contain a Dauligor class. It opens the importer in actor mode, preselects the matching class entry, and targets the next class level. `Dauligor Import` is available on actor sheets generally. `Import URL` and `Import Sample` remain character-only.
-
-### Actor tools hub
-
-- `Prepare Spells`
-  - first-pass manager for current actor spell items
-  - groups spells by class and spell level
-  - supports favorite toggling, folder assignment, and native prepared-state toggling
-- `Item Cleaner`
-  - under construction
-- `Polymorpher`
-  - under construction
-- `Show Players`
-  - under construction
-
-### Actor sheet spells tab
-
-- `Dauligor Prepare Spells`
-  - opens the same first-pass spell manager directly from the native `dnd5e` spells tab
-
-### Sidebar directories
-
-- actors sidebar:
-  - `Dauligor Import`
-  - `Dauligor Launcher`
-- items sidebar:
-  - `Dauligor Import`
-  - `Dauligor Launcher`
-
-### Directory context menus
-
-- actors: `Dauligor: Export Actor JSON`
-- actors: `Dauligor: Export Actor Research`
-- items: `Dauligor: Export Item JSON`
-- items: `Dauligor: Export Item Research`
-- journals: `Dauligor: Export Journal JSON`
-- journals: `Dauligor: Export Journal Research`
+Research corpus lives under `docs/corpus/` (source-side 5etools captures + templates).
 
 ## Install
 
-Copy this folder into your Foundry modules directory as:
-
-`FoundryVTT/Data/modules/dauligor-pairing`
+Copy this folder into your Foundry modules directory as
+`FoundryVTT/Data/modules/dauligor-pairing`.
 
 ### Live development sync (recommended for module work)
 
-If you are actively editing the module, replace the copy with a directory junction (Windows) or symlink (macOS/Linux) so changes to the repo are picked up by Foundry on next reload without re-copying. **Agents working on the module should check whether this junction already exists before copying files** — if it does, editing the repo source is enough.
+Replace the copy with a directory junction (Windows) / symlink (macOS/Linux) so repo edits are
+picked up on reload without re-copying. **Agents: check whether the junction already exists before
+copying** — if it does, editing the repo source is enough.
 
 Windows (PowerShell):
 
 ```powershell
-# Adjust the source path to your repo / worktree root
 $src = "<repo-or-worktree-root>\module\dauligor-pairing"
 $dst = "$env:LOCALAPPDATA\FoundryVTT\Data\modules\dauligor-pairing"
 if (Test-Path $dst) { Rename-Item $dst "$($dst).bak-$(Get-Date -Format yyyyMMdd-HHmmss)" }
 cmd /c mklink /J $dst $src
 ```
 
-To verify what an existing install path points at:
+Verify what an existing install points at:
 
 ```powershell
 Get-Item "$env:LOCALAPPDATA\FoundryVTT\Data\modules\dauligor-pairing" |
   Select-Object FullName, LinkType, Target
 ```
 
-Caveats when the junction targets a git worktree:
+Caveats when the junction targets a git worktree: switching branches in the linked location changes
+what Foundry sees on next reload; removing the worktree leaves the junction dangling (re-point it);
+module settings live in the world's settings DB, so deleting/recreating the junction is safe.
 
-- Switching branches inside the linked location immediately changes what Foundry sees on next reload — useful for testing, surprising if you forget.
-- Removing the underlying worktree (`git worktree remove …`) leaves the junction dangling. Re-point it at the main repo or another worktree before testing again.
-- Module settings persisted by Foundry live in the world's settings DB, not in the module folder, so deleting and re-creating the junction is safe.
+**Required modules:** `lib-wrapper` (verified 1.13.4.0), `socketlib` (verified 1.1.3).
 
 ## Test flow
 
-1. Enable the module.
-2. Open Settings and click `Dauligor`.
-3. Export a world snapshot and inspect the downloaded JSON.
-4. Export a world research snapshot and inspect how activities, advancements, and effects are summarized.
-5. Open the importer from Settings, a character sheet, or the Actor/Item sidebar.
-6. In the wizard, choose `Classes & Subclasses`, `SRD`, and open the class importer.
-7. Import the bundled Sorcerer class from the class browser.
-8. Reopen the class browser and confirm the semantic/full-export-backed Sorcerer data is grouped under the same class card.
-9. Open an item or actor sheet and click `Export Research`.
-10. Open a character sheet and click `Import Sample`.
-11. Open the same character and verify the sample feat and sample loot item were added.
-12. Open a local endpoint and use `Import URL`.
-13. Open a character with an imported Dauligor class and click `Dauligor Level Up`.
+1. Enable the module (and lib-wrapper + socketlib). Set `apiEndpointMode` to `local` for a local app.
+2. Open the importer (Settings → Dauligor launcher, an actor/item sheet header, or a sidebar button).
+3. Choose **Classes & Subclasses** → a class-capable source → Open Importer; import a class from the
+   class browser; confirm advancements + activities on the resulting class item.
+4. On a character, use **Dauligor Import** (then **Dauligor Level Up** on a later level) and walk the
+   sequenced options workflow.
+5. Choose **Spells** → pick sources → multi-select in the Spell Browser → "Add N to Sheet".
+6. Open **Prepare Spells** (Actor Tools hub, the spells-tab button, or embedded in the Feature
+   Manager) and toggle preparation / favorites.
+7. Open the **Feature Manager**, swap an option-group pick, and take a long rest to commit queued
+   spell changes.
+8. From the Item/Actor sidebar, use the **Export … Folder** buttons and inspect the JSON.
 
 ## Local endpoint testing
 
-The module simply uses `fetch(url)`.
-
-Examples:
-
-- `http://127.0.0.1:3000/sample-character.json`
-- `http://localhost:3000/sample-character.json`
-
-Any endpoint should return JSON with one of these shapes:
-
-- `dauligor.character.v1`
-- `dauligor.item.v1`
-- direct Foundry-like item JSON with `type` and `system`
+The module uses `fetch(url)`. Examples: `http://127.0.0.1:3000/sample-character.json`. Any URL used
+with the test-import path should return JSON of kind `dauligor.character.v1`, `dauligor.item.v1`, or
+a bare Foundry-like item (`type` + `system`).
 
 ## Notes
 
-This is intentionally a starter foundation, not a full Plutonium-like importer yet.
-
-The current importer is deliberately conservative:
-
-- it updates actor root data
-- it upserts embedded items by `flags.dauligor-pairing.sourceId`
-- it can now open a reusable import wizard from settings, sheets, and sidebar directories
-- the wizard now separates import type, source type, and import options before opening a specific importer
-- the wizard now reads class-capable sources from `data/sources/catalog.json` instead of a hardcoded SRD row
-- class browsing now happens in a dedicated class browser window with search, tag filtering, and nested subclasses
-- actor-side class imports now open a class options workflow for subclass choice, unique option groups, HP mode, and spell placeholders
-- it can now import class items into the world from a catalog-driven browser
-- it can now normalize Dauligor semantic full class exports into the internal class-bundle flow
-- the semantic/full Dauligor class export is now the preferred class-browser variant when multiple fixtures exist for the same class
-- it preserves stable actor-side advancement identity through `flags.dauligor-pairing.advancementIdMap`
-- it resolves `ItemGrant` references from `sourceId` when using `dauligor.class-bundle.v1`
-- it now uses a Dauligor-driven actor level-up flow rather than relying on native `dnd5e` to fetch external class features
-- it now relinks actor-side granted class features back to `dnd5e` advancement rows after import, following the same general pattern Plutonium uses
-- it now ships a standalone Spell Browser (wizard → `Spells`) with multi-select bulk import — picks land in the alt sheet's "Other Spells" bucket and can be moved into a class section later (gated by class spell-list membership)
-- the Feature Manager handles post-import re-selection of option groups + spell preparation on long rest, with a deferred-mutation queue so changes commit atomically when the player chooses Save
-
-The exporter is now more research-oriented:
-
-- raw JSON export remains available
-- research bundle export adds summaries for activities, advancement, and active effects
-- world research export is meant to support corpus building for future schema work
+This is a maturing module, not yet a full Plutonium-class importer. The class import path is the
+most complete (native advancements + activity normalization + custom ASI flow + deterministic ids +
+multiclass handling). Known gaps live in [`TODO.md`](TODO.md): native `ItemChoice` synthesis from
+option groups, prep-manager virtual folders, the placeholder Feature Manager tabs, real
+item/actor/journal importers, and runtime weapon-property display-name resolution.

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Module Documentation Pass — Completion Report (2026-05-30)</title>
+<style>
+  :root{--parchment:#f5f2e8;--parchment-soft:#faf7ed;--ink:#1a1a1a;--ink-soft:#3a3a3a;--muted:#6b6457;--gold:#c5a059;--gold-deep:#8a6d2f;--blood:#7a1f1f;--leaf:#355c3a;--card:#fbf8ee;--rule:#d8cfb8;--shadow:0 1px 3px rgba(0,0,0,.08),0 4px 10px rgba(0,0,0,.04);}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--parchment);color:var(--ink);font-family:"Inter",-apple-system,"Segoe UI",Roboto,sans-serif;font-size:15px;line-height:1.55;}
+  .wrap{max-width:1060px;margin:0 auto;padding:40px 32px 80px;}
+  header.hero{border-bottom:1px solid var(--rule);padding-bottom:20px;margin-bottom:26px;}
+  header.hero h1{font-family:"Cormorant Garamond","Georgia",serif;font-weight:600;font-size:38px;line-height:1.1;margin:0 0 6px;}
+  header.hero .sub{color:var(--muted);font-size:14px;}
+  header.hero .meta{margin-top:14px;display:flex;flex-wrap:wrap;gap:8px;}
+  .badge{display:inline-block;padding:2px 9px;border-radius:3px;font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;}
+  .badge.gold{background:var(--gold);color:#fff;}.badge.leaf{background:var(--leaf);color:#fff;}.badge.muted{background:#d8cfb8;color:var(--ink-soft);}
+  h2{font-family:"Cormorant Garamond","Georgia",serif;font-size:26px;font-weight:600;margin:40px 0 12px;padding-bottom:6px;border-bottom:2px solid var(--gold);}
+  p{margin:8px 0;} ul{margin:8px 0 8px 22px;padding:0;} li{margin:5px 0;}
+  code{font-family:"JetBrains Mono","Consolas",monospace;font-size:13px;background:rgba(138,109,47,.12);padding:1px 5px;border-radius:3px;}
+  table{border-collapse:collapse;width:100%;margin:14px 0;background:var(--parchment-soft);box-shadow:var(--shadow);border-radius:4px;overflow:hidden;}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--rule);font-size:14px;vertical-align:top;} tr:last-child td{border-bottom:none;}
+  th{background:rgba(138,109,47,.10);font-weight:600;color:var(--gold-deep);text-transform:uppercase;font-size:11px;letter-spacing:.6px;}
+  .callout{background:rgba(53,92,58,.07);border:1px solid rgba(53,92,58,.3);border-radius:4px;padding:12px 16px;margin:14px 0;font-size:14px;}
+  .callout strong{color:var(--leaf);}
+  .callout.gold{background:rgba(138,109,47,.08);border-color:rgba(138,109,47,.35);} .callout.gold strong{color:var(--gold-deep);}
+  .path{font-family:"JetBrains Mono","Consolas",monospace;font-size:13px;color:var(--gold-deep);}
+  .done{color:var(--leaf);font-weight:700;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>Module Documentation Pass &mdash; Completion Report</h1>
+  <div class="sub">branch <code>foundry-module</code> &middot; 2026-05-30 &middot; all edits uncommitted (awaiting your go-ahead)</div>
+  <div class="meta">
+    <span class="badge leaf">pass complete</span>
+    <span class="badge gold">accuracy reconciled</span>
+    <span class="badge gold">links fixed</span>
+    <span class="badge gold">indexes added</span>
+    <span class="badge muted">next: bg/race importer</span>
+  </div>
+</header>
+
+<p>
+  The documentation pass is finished &mdash; accuracy, hygiene, and navigation are all done, so the doc work is fully out of the way
+  before the backgrounds/races build. Nothing is committed yet; on your word I'll land it as clean, separate doc commits (easy to
+  cherry-pick to <code>main</code> per the handoff protocol) and start the importer.
+</p>
+
+<h2>1 &middot; Accuracy reconciled (code is canonical where it's ahead)</h2>
+<table>
+  <tr><th>Doc</th><th>Correction</th></tr>
+  <tr><td><code>class-import-contract.md</code></td><td>spell-lists + proficiency choices moved out of &ldquo;out of scope&rdquo;; ItemChoice/ASI listed as accepted; ASI = custom Dauligor app; <code>5.3.1</code> pin</td></tr>
+  <tr><td><code>class-import-and-advancement-guide.md</code></td><td>spell-selection no longer &ldquo;unfinished&rdquo;; ASI app corrected (twice)</td></tr>
+  <tr><td><code>class-semantic-export-notes.md</code></td><td>activities/effects normalization marked built; ASI app corrected</td></tr>
+  <tr><td><code>advancement-and-activity-implementation-guide.md</code></td><td>top no longer claims activities are unbuilt; remaining gap narrowed to ItemChoice-from-option-groups</td></tr>
+  <tr><td><code>actor-spell-flag-schema.md</code></td><td><strong>full rewrite</strong> &mdash; verified the metadata is endpoint-served; item carries only <code>entityId</code>/<code>dbId</code>/<code>classIdentifier</code>/<code>sheetMode</code>; favorites actor-level; preparation native boolean</td></tr>
+  <tr><td><code>spell-preparation-manager-guide.md</code></td><td>boolean <code>system.prepared</code>+<code>method</code> (not 0/1/2); &ldquo;one swap per long rest&rdquo; marked built; folders status corrected</td></tr>
+  <tr><td><code>spell-import-contract.md</code> / <code>feat-import-contract.md</code></td><td>shipped endpoints &amp; kinds; feat under <code>payload.feat</code></td></tr>
+</table>
+
+<h2>2 &middot; Aspirational docs kept as specs, with status banners</h2>
+<p>Per your Q1/Q2 doctrine &mdash; where the doc describes an improvement the code lacks, the code is behind, so the doc stays as a spec but is clearly flagged:</p>
+<ul>
+  <li><code>property-mapping.md</code> &mdash; runtime display-name resolution is the <em>intended</em> behavior (so new weapon properties surface correctly), not yet built &rarr; banner + TODO.</li>
+  <li><code>reference-syntax-guide.md</code> &mdash; <code>@source</code> / <code>@class.*.spellcasting-ability</code> / dotted <code>@skill.*</code> flagged not-implemented.</li>
+  <li><code>actor-import-contract.md</code>, <code>journal-import-contract.md</code>, <code>item-import-contract.md</code> &mdash; importers are test-harness-only today; banners added.</li>
+</ul>
+
+<h2>3 &middot; Hygiene &amp; navigation</h2>
+<ul>
+  <li><span class="done">Fixed</span> every broken <span class="path">E:/DnD/&hellip;/Webpage/&hellip;</span> cross-reference link across the doc set (5 files); left the external <span class="path">Foundry-JSON/</span> corpus-capture paths intact (they're real provenance).</li>
+  <li><span class="done">Fixed</span> the character-sheet doc's link into the app-docs tree (corrected relative depth).</li>
+  <li><span class="done">Updated</span> <code>import-contract-index.md</code> to point at the current-state overview and to explain the new status banners.</li>
+  <li><span class="done">Added</span> in-doc <strong>Contents</strong> indexes to the four longest contracts (2398 / 1188 / 1094 / 833 lines).</li>
+  <li><span class="done">Rewrote</span> the <code>README.md</code> to the real 20-script list, verified control surface, and actual <span class="path">data/sources/*</span> layout.</li>
+  <li><span class="done">Expanded</span> <code>TODO.md</code> with the bg/race importer (next task) + every deferred item surfaced by the audit.</li>
+</ul>
+
+<div class="callout gold">
+  <strong>One doctrine judgment call (Q4):</strong> for &ldquo;split/modularize long markdowns,&rdquo; I added <em>in-doc Contents indexes</em> rather than physically
+  splitting the four giant contracts into many files. Your phrasing &mdash; &ldquo;indexes to help find information in the current doc&rdquo; &mdash; reads as satisfied
+  by a ToC, and shredding a 2,400-line contract mid-pass risks silently dropping correct content. If you'd rather I physically split them into
+  modular files (e.g. one file per activity family), say so and I'll do that as its own focused, careful pass.
+</div>
+
+<h2>4 &middot; Verification corrections (vs the original audit)</h2>
+<ul>
+  <li><code>importedAt</code>/<code>lastSyncedAt</code>/<code>moduleVersion</code> <strong>are</strong> written &mdash; on the class import path, as provenance (not id inputs; SHA owns IDs). Aspirational for spell/feat/item importers.</li>
+  <li>Virtual folders <strong>exist on the alt character sheet</strong> (add/rename/delete/drag); they're absent only from the prep manager &rarr; that's the TODO.</li>
+</ul>
+
+<div class="callout">
+  <strong>Next:</strong> with docs settled, the backgrounds/races importer (consuming <code>dauligor.background-item.v1</code> / <code>dauligor.race-item.v1</code>,
+  mirroring the feat path) is the first build task &mdash; top of <span class="path">TODO.md</span>. Say the word to commit the doc pass and begin.
+</div>
+
+<p style="margin-top:24px;"><small style="color:var(--muted);">This report: <span class="path">module/dauligor-pairing/docs/_drafts/doc-pass-completion-2026-05-30.html</span>. Companion: <span class="path">module-current-state-2026-05-30.html</span> (the audit, with its resolution banner).</small></p>
+
+</div>
+</body>
+</html>

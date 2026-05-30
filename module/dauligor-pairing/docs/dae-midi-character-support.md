@@ -1,4 +1,4 @@
-# DAE And Midi Character Support Guide
+﻿# DAE And Midi Character Support Guide
 
 This document explains what it means for Dauligor-created characters, items, spells, and features to work well with:
 
@@ -233,7 +233,7 @@ That means character support depends on correct reference normalization.
 
 Dauligor should keep authoring semantic references from:
 
-- [reference-syntax-guide.md](E:/DnD/Professional/Webpage/module/dauligor-pairing/docs/reference-syntax-guide.md)
+- [reference-syntax-guide.md](reference-syntax-guide.md)
 
 Examples:
 
@@ -307,11 +307,11 @@ This is enough to make characters increasingly compatible without designing the 
 
 Use this guide together with:
 
-- [reference-syntax-guide.md](E:/DnD/Professional/Webpage/module/dauligor-pairing/docs/reference-syntax-guide.md)
-- [class-feature-activity-contract.md](E:/DnD/Professional/Webpage/module/dauligor-pairing/docs/class-feature-activity-contract.md)
-- [item-import-contract.md](E:/DnD/Professional/Webpage/module/dauligor-pairing/docs/item-import-contract.md)
-- [spell-import-contract.md](E:/DnD/Professional/Webpage/module/dauligor-pairing/docs/spell-import-contract.md)
-- [midi-qol-compatibility.md](E:/DnD/Professional/Webpage/module/dauligor-pairing/docs/midi-qol-compatibility.md)
+- [reference-syntax-guide.md](reference-syntax-guide.md)
+- [class-feature-activity-contract.md](class-feature-activity-contract.md)
+- [item-import-contract.md](item-import-contract.md)
+- [spell-import-contract.md](spell-import-contract.md)
+- [midi-qol-compatibility.md](midi-qol-compatibility.md)
 
 ## Bottom Line
 

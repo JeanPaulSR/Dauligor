@@ -18,6 +18,27 @@ Use this alongside:
 - `docs/class-feature-activity-contract.md`
 - `docs/character-class-import-guide.md`
 
+## Contents
+
+- [Scope](#scope)
+- [The Core Mental Model](#the-core-mental-model)
+- [Where Advancements Belong](#where-advancements-belong)
+- [General Advancement Object Shape](#general-advancement-object-shape)
+- [What Each Top-Level Field Means](#what-each-top-level-field-means)
+- [`configuration` Versus `value`](#configuration-versus-value)
+- [General Advancement Families](#general-advancement-families) — HitPoints, Trait, ScaleValue, ItemGrant, ItemChoice, AbilityScoreImprovement, Size, Subclass
+- [What A Correct Class Advancement Tree Usually Looks Like](#what-a-correct-class-advancement-tree-usually-looks-like)
+- [Class Features Versus Advancements](#class-features-versus-advancements)
+- [Class Feature Patterns](#class-feature-patterns)
+- [World Items Versus Actor-Embedded Items](#world-items-versus-actor-embedded-items)
+- [Actor Persistence Rules](#actor-persistence-rules)
+- [Recommended Dauligor Semantic Contract For Advancements](#recommended-dauligor-semantic-contract-for-advancements)
+- [Correct Import and Level-Up Sequence](#correct-import-and-level-up-sequence)
+- [Common Pitfalls](#common-pitfalls)
+- [Practical Checklists](#practical-checklists)
+- [Relationship To Character Importing](#relationship-to-character-importing)
+- [Related Documents](#related-documents)
+
 ## Scope
 
 This guide covers:

@@ -194,6 +194,6 @@ needed.
 - [Prepare Spells manager guide](./spell-preparation-manager-guide.md) —
   the dialog that opens from the per-class Prepare buttons and the
   global toolbar icon.
-- [Spell list decoupling architecture](../../docs/features/foundry-export.md)
-  — the live `/api/module/<source>/classes/<class>/spells.json` endpoint the
-  manager fetches from.
+- [Spell list decoupling architecture](../../../docs/features/foundry-export.md)
+  — the app-side doc for the live `/api/module/<source>/classes/<class>/spells.json`
+  endpoint the manager fetches from.

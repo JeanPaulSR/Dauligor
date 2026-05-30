@@ -14,27 +14,22 @@ Handled separately:
 - subclasses
 - spells
 
-## Recommended Payload Kinds
+## Payload Kinds
 
-Catalog:
+> **Shipped reality.** The early "feats ride the generic `dauligor.item-catalog.v1` / `item.v1`
+> envelope with the feat under `payload.item`" design below is **historical**. The feat browser
+> actually fetches dedicated kinds, and the feat document lives under **`payload.feat`** (not
+> `payload.item`). See "Endpoints (shipped)" further down — that section is canonical.
 
-```json
-"dauligor.item-catalog.v1"
-```
+- Pool list: `dauligor.source-feat-list.v1` (from `/api/module/<source>/feats.json`)
+- Full single feat: `dauligor.feat-item.v1` (from `/api/module/feats/<dbId>.json`), feat under `payload.feat`
 
-Detail payload:
+The imported `feat.type` must be `"feat"`. (Backgrounds and races reuse this same path with the
+item `type` swapped to `"background"` / `"race"` — see [../TODO.md](../TODO.md).)
 
-```json
-"dauligor.item.v1"
-```
+## Detail Payload (historical envelope — see "Endpoints (shipped)")
 
-For v1, feats can be transported as item payloads where:
-
-- `item.type` is `"feat"`
-
-## Detail Payload
-
-Expected shape:
+The earlier proposed envelope wrapped the item under `item`:
 
 ```json
 {
@@ -50,6 +45,8 @@ Expected shape:
   "item": {}
 }
 ```
+
+The shipped `dauligor.feat-item.v1` bundle instead exposes the feat under `feat` (documented below).
 
 ## Minimum Feat Fields
 

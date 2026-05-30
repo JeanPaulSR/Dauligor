@@ -32,6 +32,20 @@ Do not use this as the primary contract for:
 
 Those families can also use `system.activities`, but they have extra item-specific rules beyond this contract.
 
+## Contents
+
+- [Core Rule](#core-rule)
+- [What The Sample Proves](#what-the-sample-proves)
+- [Foundry Feature Item Shell](#foundry-feature-item-shell)
+- [Top-Level Feature Fields](#top-level-feature-fields)
+- [Shared Activity Envelope](#shared-activity-envelope)
+- [Damage Part Structure](#damage-part-structure)
+- [Activity Types](#activity-types) — the bulk of the doc; each activity family (attack, save, heal, damage, check, cast, summon, transform, enchant, forward, utility)
+- [Recommended Dauligor Semantic Split](#recommended-dauligor-semantic-split)
+- [Recommended Minimal Semantic Activity Payload](#recommended-minimal-semantic-activity-payload)
+- [Practical Rules For The Importer](#practical-rules-for-the-importer)
+- [Missing Information And Corpus Need](#missing-information-and-corpus-need)
+
 ## Core Rule
 
 Dauligor should send semantic feature behavior.
