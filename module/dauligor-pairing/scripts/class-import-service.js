@@ -610,19 +610,26 @@ export function buildClassImportWorkflow(payload, {
     : false;
   const effectiveSubclassSourceId = includeSubclass ? selectedSubclassSourceId : null;
 
+  // Excluded options (authored per group via the option-group advancement's
+  // `excludedOptionIds`) must never be offered — unlike level-gated options
+  // (shown locked), an exclusion is a permanent block, so we drop them here.
+  const optionExclusions = buildOptionGroupExclusions(payload);
   const optionGroups = normalizeClassOptionGroups(
     classItem.flags?.[MODULE_ID]?.optionGroups,
     classItem.system?.advancement
   )
     .map((group) => {
+      const excludedSet = optionExclusions.get(String(group.sourceId));
       // All options the group owns ship through to the picker — the
       // option-picker UI is responsible for displaying higher-level
       // options as locked rather than hiding them. Players want to
       // see "what's coming next level" alongside what they can pick
       // right now, with the locked entries clearly marked so they
-      // know it's a level-gate not a permanent block.
+      // know it's a level-gate not a permanent block. Excluded options
+      // are the exception: they're filtered out entirely.
       const availableOptions = optionItems
         .filter((item) => (item.flags?.[MODULE_ID]?.groupSourceId ?? null) === group.sourceId)
+        .filter((item) => !excludedSet || !excludedSet.has(String(item.flags?.[MODULE_ID]?.sourceId ?? "")))
         .sort((left, right) => left.name.localeCompare(right.name));
       const maxSelections = getSelectionCountForLevel(group.selectionCountsByLevel, normalizedTargetLevel);
       const preferredSelections = requestedSelections.optionSelections[group.sourceId]?.length
@@ -6308,10 +6315,53 @@ export async function fetchFullSpellItem(classBundleUrl, dbId) {
  * `groupSourceId` at the TOP LEVEL (not nested under flags) — this
  * helper centralises that knowledge so call-sites can't drift.
  */
+/** Advancements ship as either an array or a keyed object; yield the values. */
+function advancementValues(advancements) {
+  if (Array.isArray(advancements)) return advancements;
+  if (advancements && typeof advancements === "object") return Object.values(advancements);
+  return [];
+}
+
+/**
+ * Map of option-group sourceId -> Set of EXCLUDED option-item sourceIds.
+ *
+ * Authoring model: each option-group advancement carries
+ * `configuration.optionGroupId` + `configuration.excludedOptionIds`, and an
+ * excluded option must NOT be offered for that group (e.g. Arcane Warrior is
+ * excluded from a Blood Hunter's Alternate Fighting Style). The semantic
+ * export resolves both fields into sourceId space, so they match the
+ * groups'/options' `sourceId` directly — no remapping needed. Mirrors the
+ * web app's CharacterBuilder, which hides options listed in
+ * `configuration.excludedOptionIds`. Scans class + subclass + feature
+ * advancement configs. Empty map (no-op) when the payload carries none.
+ */
+function buildOptionGroupExclusions(payload) {
+  const map = new Map();
+  const scan = (advancements) => {
+    for (const adv of advancementValues(advancements)) {
+      const cfg = adv?.configuration;
+      const groupSourceId = trimString(cfg?.optionGroupId);
+      if (!groupSourceId) continue;
+      const excluded = ensureArray(cfg?.excludedOptionIds).map((v) => trimString(v)).filter(Boolean);
+      if (!excluded.length) continue;
+      let set = map.get(groupSourceId);
+      if (!set) { set = new Set(); map.set(groupSourceId, set); }
+      for (const id of excluded) set.add(id);
+    }
+  };
+  const classData = getSemanticClassData(payload) ?? {};
+  scan(classData?.advancements);
+  for (const sc of ensureArray(payload?.subclasses)) scan(sc?.advancements);
+  for (const feature of ensureArray(payload?.features)) scan(feature?.advancements);
+  return map;
+}
+
 export function getSemanticOptionsForGroup(payload, groupSourceId) {
   if (!payload || !groupSourceId) return [];
+  const excludedSet = buildOptionGroupExclusions(payload).get(String(groupSourceId));
   return ensureArray(payload?.uniqueOptionItems)
-    .filter((opt) => String(opt?.groupSourceId ?? "") === String(groupSourceId));
+    .filter((opt) => String(opt?.groupSourceId ?? "") === String(groupSourceId))
+    .filter((opt) => !excludedSet || !excludedSet.has(String(opt?.sourceId ?? "")));
 }
 
 /**
@@ -6396,9 +6446,12 @@ export function buildReselectWorkflowFromPayload(payload, actor, classItem) {
 
   const targetLevel = Number(classItem?.system?.levels) || 1;
 
+  const optionExclusions = buildOptionGroupExclusions(payload);
   const optionGroups = uniqueOptionGroups.map((group) => {
+    const excludedSet = optionExclusions.get(String(group.sourceId));
     const availableOptions = worldOptionItems
       .filter((item) => String(item.flags?.[MODULE_ID]?.groupSourceId ?? "") === String(group.sourceId))
+      .filter((item) => !excludedSet || !excludedSet.has(String(item.flags?.[MODULE_ID]?.sourceId ?? "")))
       .sort((left, right) => String(left.name).localeCompare(String(right.name)));
     const maxSelections = getSelectionCountForLevel(group.selectionCountsByLevel, targetLevel);
     return {
