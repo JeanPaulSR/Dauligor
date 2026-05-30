@@ -15,7 +15,7 @@ import { searchSystemPages, searchSystemEntries } from '../../lib/systemPages';
 import CampaignHomeBlocks from './CampaignHomeBlocks';
 import {
   fetchCampaignHomeBlocks, saveCampaignHomeBlocks, makeBlock, defaultHomeBlocks,
-  isContainer, BLOCK_TYPE_META, HOME_BLOCK_TYPES, ENTITY_PICKER_KINDS,
+  isContainer, makePlaceholderRef, BLOCK_TYPE_META, HOME_BLOCK_TYPES, ENTITY_PICKER_KINDS,
   type HomeBlock, type HomeBlockType, type ContainerBlock, type EntityRef,
 } from '../../lib/campaignHome';
 
@@ -496,7 +496,9 @@ function EntityRefPicker({ mode, value, onChange }: {
   const pick = (r: EntityRef) => {
     if (mode === 'single') { onChange(r); setOpen(false); setQuery(''); }
     else {
-      if (list.some((x) => x.kind === r.kind && x.id === r.id)) return;
+      // Dedupe real entities by kind+id; placeholders (id '') are name-only and
+      // may legitimately repeat, so never blocked.
+      if (r.kind !== 'placeholder' && list.some((x) => x.kind === r.kind && x.id === r.id)) return;
       onChange([...list, r]); setQuery('');
     }
   };
@@ -551,14 +553,26 @@ function EntityRefPicker({ mode, value, onChange }: {
         </div>
         {open && (
           <div className="absolute left-0 right-0 top-[calc(100%+2px)] z-30 bg-card border border-gold max-h-56 overflow-y-auto custom-scrollbar shadow-lg">
-            {busy ? <p className="px-3 py-2 text-[11px] text-ink/40 italic">Searching…</p>
-              : results.length === 0 ? <p className="px-3 py-2 text-[11px] text-ink/40 italic">{query ? 'No matches.' : 'Type to search.'}</p>
-              : results.map((r, i) => (
-                <button key={`${r.kind}:${r.id}:${i}`} onClick={() => pick(r)} className="block w-full text-left px-3 py-1.5 text-xs hover:bg-gold/10 transition-colors flex items-center justify-between gap-2">
-                  <span className="truncate font-serif">{r.name || r.id}</span>
-                  <span className="label-text shrink-0">{kindLabel(r.kind)}</span>
-                </button>
-              ))}
+            {busy && <p className="px-3 py-2 text-[11px] text-ink/40 italic">Searching…</p>}
+            {!busy && results.length === 0 && !query.trim() && (
+              <p className="px-3 py-2 text-[11px] text-ink/40 italic">Type to search, or add a placeholder.</p>
+            )}
+            {!busy && results.map((r, i) => (
+              <button key={`${r.kind}:${r.id}:${i}`} onClick={() => pick(r)} className="block w-full text-left px-3 py-1.5 text-xs hover:bg-gold/10 transition-colors flex items-center justify-between gap-2">
+                <span className="truncate font-serif">{r.name || r.id}</span>
+                <span className="label-text shrink-0">{kindLabel(r.kind)}</span>
+              </button>
+            ))}
+            {/* Placeholder affordance — name a card slot without a real entity,
+                exactly like the legacy "(Article not found)" tiles. Always offered
+                once something's typed, even when there are real matches. */}
+            {!busy && query.trim() && (
+              <button onClick={() => pick(makePlaceholderRef(query.trim()))}
+                className="block w-full text-left px-3 py-1.5 text-xs hover:bg-gold/10 transition-colors flex items-center justify-between gap-2 border-t border-gold/10">
+                <span className="truncate font-serif italic text-ink/70">Add “{query.trim()}” as placeholder</span>
+                <span className="label-text shrink-0 text-ink/30">Placeholder</span>
+              </button>
+            )}
           </div>
         )}
       </div>
