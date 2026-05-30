@@ -3,7 +3,7 @@
 Started: `2026-05-28`
 Owner: `Claude`
 Goal: `Own and evolve the content-proposals subsystem — queue/drafts/blocks, cascade engine, review mode, and proposal-mode editor wiring. Specific task per session.`
-Status: `Part D shipped` — block-atomic approve + guard #1 reference-integrity walk landed on `main` (`b35705f`), incl. the AdminProposals Approve-/Reject-block UI. Pure logic unit-tested green **and the live data-layer e2e passed** (19/19) against local D1 through the real worker `env.DB.batch()` — see the log entry below. **R4** (atomic submit flush + fold-race closure) shipped `700f23a`; **F2-leftover** verified already-satisfied in the merged tree. The whole cross-referential-cluster feature is now functionally complete; only the **gated remote entity_type migrations** remain before prod.
+Status: `Part D shipped` — block-atomic approve + guard #1 reference-integrity walk landed on `main` (`b35705f`), incl. the AdminProposals Approve-/Reject-block UI. Pure logic unit-tested green **and the live data-layer e2e passed** (19/19) against local D1 through the real worker `env.DB.batch()` — see the log entry below. **R4** (atomic submit flush + fold-race closure) shipped `700f23a`; **F2-leftover** verified already-satisfied in the merged tree. The whole cross-referential-cluster feature is **functionally complete and live in prod** — the remote `scaling_column` + `feature` entity_type migrations were applied 2026-05-30 (10 rows preserved, both types in the CHECK). Remaining housekeeping only: backfill the remote `d1_migrations` tracking rows for these two (task #39) so a future `migrations apply --remote` won't try to re-run them.
 
 > Lives in the `loving-banach-d76c40` worktree directory (the dir
 > couldn't be renamed to match the branch — Windows locks the active
@@ -61,6 +61,14 @@ Proposal-mode logic lives *inside* these files, but the files themselves are own
 
 Newest at the top. Each entry: date + link to the handoff doc in this same folder.
 
+- `2026-05-30` — **Remote entity_type migrations APPLIED (with go-ahead).** Ran
+  `20260528-1200` (scaling_column) then `20260528-1400` (feature) on remote D1 via
+  `wrangler d1 execute --remote --file=…` (NOT `migrations apply`). Captured a
+  time-travel restore bookmark first (`000000cf-00000002-0000507b-588e9ef29c56c263be8601faa6903cfa`);
+  verified post-state: both types in the `pending_revisions` CHECK, **10 rows
+  preserved** (== pre-count), 6 indexes (5 named + PK autoindex). `scaling_column`
+  + `feature` proposals are now accepted in prod. Applied via execute-file, so the
+  remote `d1_migrations` tracking table still doesn't record them — fold into #39.
 - `2026-05-30` — **Guard #1 gap closed: walks advancement `pool`/`optionalPool`.**
   compendium-editors confirmed those arrays carry same-block draft ids (same
   overlay-merged catalogs as the single-selects), so `collectAdvancementRefs`
