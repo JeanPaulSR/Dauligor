@@ -4,6 +4,7 @@ import { Button } from '../../components/ui/button';
 import { Plus, Search, BookOpen, ChevronRight } from 'lucide-react';
 import { Input } from '../../components/ui/input';
 import { fetchCollection } from '../../lib/d1';
+import { useBlockDraftedList } from '../../hooks/useBlockDraftedList';
 
 export default function UniqueOptionGroupList({ userProfile }: { userProfile: any }) {
   const [groups, setGroups] = useState<any[]>([]);
@@ -39,7 +40,13 @@ export default function UniqueOptionGroupList({ userProfile }: { userProfile: an
       });
   }, []);
 
-  const filteredGroups = groups.filter(g => 
+  // F2: when this list mounts inside a <ProposalEditorWrapper> (the
+  // /proposals/edit/option-groups route), overlay block-draft CREATEs
+  // so a just-queued group is reachable from the list. Outside the
+  // wrapper (admin /compendium/unique-options) this returns `groups`
+  // unchanged, so the admin catalog list is unaffected.
+  const displayGroups = useBlockDraftedList<any>('unique_option_group', groups);
+  const filteredGroups = displayGroups.filter(g =>
     (g.name || "").toLowerCase().includes(search.toLowerCase())
   );
 
@@ -85,6 +92,11 @@ export default function UniqueOptionGroupList({ userProfile }: { userProfile: an
             <p className="text-xs text-ink/60 line-clamp-2 italic">
               {group.description || 'No description provided.'}
             </p>
+            {group.__draft && (
+              <span className="inline-block text-[9px] font-bold uppercase tracking-widest text-gold/80 bg-gold/10 border border-gold/30 px-1.5 py-0.5 rounded">
+                in this block
+              </span>
+            )}
           </Link>
         ))}
         {filteredGroups.length === 0 && !loading && (

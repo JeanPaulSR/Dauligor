@@ -346,7 +346,9 @@ export default function App() {
                       navigation) → per-group editor (wrapped, takes
                       both entity types for the queue). */}
                   <Route path="/proposals/edit/option-groups" element={
-                    <UniqueOptionGroupList userProfile={effectiveProfile} />
+                    <ProposalEditorWrapper entityType={['unique_option_group', 'unique_option_item']}>
+                      <UniqueOptionGroupList userProfile={effectiveProfile} />
+                    </ProposalEditorWrapper>
                   } />
                   <Route path="/proposals/edit/option-groups/new" element={
                     <ProposalEditorWrapper entityType={['unique_option_group', 'unique_option_item']}>
