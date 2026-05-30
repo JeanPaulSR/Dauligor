@@ -21,6 +21,32 @@ intentions. Owner prefers **HTML documents** for display (parchment/gold house s
 drafts under `docs/_drafts/`). The bg/race incoming request (below) is factored in as a
 concrete near-term consumer, not the umbrella task.
 
+## ⚠️ Local Foundry junction — repoint on branch takeover
+
+`foundry-module` is the **designated Foundry branch**, so the local Foundry module junction is
+pointed at *this worktree*:
+
+```
+C:\Users\Jean\AppData\Local\FoundryVTT\Data\modules\dauligor-pairing
+  → E:\DnD\Professional\Dev\Dauligor\.claude\worktrees\nifty-franklin-e09ca2\module\dauligor-pairing
+```
+
+(Repointed from the `main` checkout on 2026-05-30.) Editing the repo source here is picked up by
+Foundry on next reload — no copy step.
+
+**If another agent/worktree takes over this branch, repoint the junction to the new location:**
+
+```powershell
+$dst = "$env:LOCALAPPDATA\FoundryVTT\Data\modules\dauligor-pairing"
+$src = "<new-worktree-root>\module\dauligor-pairing"
+& cmd /c rmdir "$dst"            # removes the junction link only — does NOT delete target contents
+& cmd /c mklink /J "$dst" "$src"
+Get-Item $dst | Select-Object FullName, LinkType, Target   # verify
+```
+
+Verify what it currently points at any time with the `Get-Item … LinkType, Target` line above.
+See also [[project_foundry_module_junction]] in agent memory.
+
 ## Primary files (exclusive)
 
 The Foundry module package — **everything under `module/dauligor-pairing/` EXCEPT the
