@@ -3,7 +3,7 @@
 Started: `2026-05-28`
 Owner: `Claude`
 Goal: `Own and evolve the content-proposals subsystem — queue/drafts/blocks, cascade engine, review mode, and proposal-mode editor wiring. Specific task per session.`
-Status: `paused` — Part D (atomic approve + guard #1) deferred until `compendium-editors` finishes B/C and hands back. See [2026-05-29-partD-paused-awaiting-bc.md](2026-05-29-partD-paused-awaiting-bc.md).
+Status: `Part D shipped` — block-atomic approve + guard #1 reference-integrity walk landed on `main` (`b35705f`), incl. the AdminProposals Approve-/Reject-block UI. Pure logic unit-tested green **and the live data-layer e2e passed** (19/19) against local D1 through the real worker `env.DB.batch()` — see the log entry below. **R4** (atomic submit flush + fold-race closure) shipped `700f23a`; **F2-leftover** verified already-satisfied in the merged tree. The whole cross-referential-cluster feature is now functionally complete; only the **gated remote entity_type migrations** remain before prod.
 
 > Lives in the `loving-banach-d76c40` worktree directory (the dir
 > couldn't be renamed to match the branch — Windows locks the active
@@ -36,7 +36,14 @@ Proposal-mode logic lives *inside* these files, but the files themselves are own
 
 ## Open requests to other branches
 
-- [ ] `(2026-05-28)` **`compendium-editors`: implement Parts B + C — FULL SCOPE.**
+- [~] `(2026-05-28→29)` **`compendium-editors`: implement Parts B + C — FULL SCOPE.**
+  **Handed back `(2026-05-29)`** with the §3 coverage table
+  ([2026-05-29-from-compendium-editors-s3-coverage.md](2026-05-29-from-compendium-editors-s3-coverage.md)):
+  **Part B done** (scaling_column + feature saves route through the accumulator, on `main`),
+  **Part C in progress** (scaling_column L1 + own-list overlays done; remaining L1–L4 overlays
+  ongoing — not blocking Part D). Re-verified against landed code in
+  [2026-05-29-handback-reverified-partD-ready.md](2026-05-29-handback-reverified-partD-ready.md).
+  Still owed by them: rest of Part C; the e2e sample block (deferred to **after** Part D).
   They audited the original handoff and found it under-scoped; owner chose full
   coverage. Decisions + division of labor in the reply:
   **[handoffs/compendium-editors/2026-05-28-proposal-system-reply.md](../compendium-editors/2026-05-28-proposal-system-reply.md)**.
@@ -54,6 +61,54 @@ Proposal-mode logic lives *inside* these files, but the files themselves are own
 
 Newest at the top. Each entry: date + link to the handoff doc in this same folder.
 
+- `2026-05-30` — **Part D live e2e PASSED (19/19).** Drove the real approve path
+  (guard #1 → `orderBlockRevisions` → `buildApprovedStatements` → one
+  `env.DB.batch()`) against a real seeded *Druid + Wild Shape + scaling column +
+  option group + option item + subclass* cluster, through the local wrangler
+  worker into local D1 (FK enforcement ON). Verified: whole cluster lands
+  atomically in FK-safe order (subclass after class, item after group — proves
+  the topo-ordering live); `subclass.preview` round-trips (F3); all revisions
+  flip to approved; guard #1 rejects a dangling parent ref; a bad-statement batch
+  rolls back with nothing applied. Only gap vs a full UI run: the HTTP/admin-auth
+  wrapper + the Approve-block button (admin Firebase login is out of scope for me
+  to drive). Applied `subclass_preview` to local D1 to enable the F3 check.
+  **Footgun spotted:** `worker/migrations/9999_cleanup.sql` is a destructive
+  DROP-ALL helper sitting in `migrations_dir` — `wrangler d1 migrations apply`
+  would run it last and wipe the DB (flagged for a separate fix).
+- `2026-05-29` — **R4 shipped + F2-leftover verified done** (`700f23a` on `main`).
+  R4(a): submit-side flush is now one atomic `env.DB.batch()` (no orphaned
+  staging rows / dup-on-retry). R4(b): `BlockProvider.refresh()` returns the
+  fresh drafts and `ProposalEditorWrapper` serializes flushes + adopts that
+  return into a ref, closing the create→update fold cache-staleness race (which
+  could otherwise double-POST a CREATE and break Part D's atomic approve on a PK
+  clash). F2-leftover: verified the `/proposals/edit/option-groups` list route
+  is already wrapped (`App.tsx:375`) and `UniqueOptionGroupList` already overlays
+  block drafts via `useBlockDraftedList` — the merge resolved it, no change
+  needed. Remaining: the Part D joint e2e (live atomic-batch run; mine to drive).
+- `2026-05-29` — **Part D shipped** (`b35705f` on `main`). Block-atomic approve
+  (`POST /api/admin/proposals/bundle/:id/approve` + `/reject`): guard #1
+  reference-integrity walk → guard #2 per-revision drift → topological order →
+  one atomic `env.DB.batch()` (all-or-nothing). `buildApprovedStatements` split
+  out of `applyApprovedOperation` as the batch seam; `collectReferences` +
+  `orderBlockRevisions` added; AdminProposals gains Approve-/Reject-block UI.
+  Pure logic unit-tested green against the Druid+WildShape+column+group cluster
+  (incl. F3 `preview` round-trip). Handed to compendium-editors for the joint
+  e2e: [../compendium-editors/2026-05-29-partD-shipped.md](../compendium-editors/2026-05-29-partD-shipped.md).
+  Documented guard-#1 boundary: advancement array fields (pool/optionalPool/
+  excludedOptionIds) not walked yet — extend if those overlays land.
+- `2026-05-29` — **Handback received + re-verified; Part D ready to build (held).**
+  compendium-editors handed back the §3 coverage table
+  ([2026-05-29-from-compendium-editors-s3-coverage.md](2026-05-29-from-compendium-editors-s3-coverage.md)).
+  Branch fast-forwarded `7d41e5b → d55fc31` (B/C is on `main`, not branch-local). Re-verified the
+  reference graph against the landed code:
+  [2026-05-29-handback-reverified-partD-ready.md](2026-05-29-handback-reverified-partD-ready.md) —
+  graph matches with reconciliations (advancement refs are 2-level: `advancements[].featureId` +
+  `.configuration.{scalingColumnId,optionScalingColumnId,optionGroupId,usesFeatureId}`;
+  `spell_rule_application` keys are `rule_id`/`applies_to_*`; scaling_column has 4 live parent_types
+  not 6). Found **F3** — `subclass.writableColumns` missing `preview` (migration `20260529-1200` on
+  `main`) → proposed subclass drops its blurb on approval (one-line fix, held with Part D). Confirmed
+  **R4** — submit-side flush is non-atomic (`functions/api/proposals` `handleSubmit` line ~314).
+  Build held pending explicit go-ahead.
 - `2026-05-29` — **Part D paused; handed off to compendium-editors to finish B/C
   first.** [2026-05-29-partD-paused-awaiting-bc.md](2026-05-29-partD-paused-awaiting-bc.md)
   documents the full proposal-system state + the §3 checklist I need back at

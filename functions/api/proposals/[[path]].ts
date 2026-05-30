@@ -306,11 +306,14 @@ async function handleSubmit(request: Request, proposerId: string): Promise<Respo
 
   const insertedIds: string[] = [];
   const statusValue = is_draft ? "draft" : "pending";
-  // We capture the snapshot for each non-create revision by reading
-  // the current entity row at submit time. The shape is whatever the
-  // entity table returns from SELECT * — JSON columns stay as
-  // strings (their on-disk shape), which matches how the conflict
-  // detector compares them.
+
+  // Phase 1 — read snapshots (sequential SELECTs) and build one INSERT per
+  // revision. We capture the snapshot for each non-create revision by reading
+  // the current entity row at submit time. The shape is whatever the entity
+  // table returns from SELECT * — JSON columns stay as strings (their on-disk
+  // shape), which matches how the conflict detector compares them. A missing
+  // target for an update/delete is a hard 404 here, before anything is written.
+  const statements: { sql: string; params: any[] }[] = [];
   for (const rev of revisions) {
     let snapshot: Record<string, any> | null = null;
     if (rev.operation !== "create" && rev.entity_id) {
@@ -324,7 +327,7 @@ async function handleSubmit(request: Request, proposerId: string): Promise<Respo
     }
     const id = `rev-${crypto.randomUUID()}`;
     insertedIds.push(id);
-    await executeD1QueryInternal({
+    statements.push({
       sql: `INSERT INTO pending_revisions (
               id, bundle_id, proposed_by_user_id, status, entity_type, entity_id,
               operation, proposed_payload, snapshot_at_proposal,
@@ -344,6 +347,20 @@ async function handleSubmit(request: Request, proposerId: string): Promise<Respo
         rev.cascade_parent_revision_id,
       ],
     });
+  }
+
+  // Phase 2 — insert every revision as ONE atomic env.DB.batch() (R4). A
+  // failure mid-flush now leaves NOTHING written: no orphaned `pending_revisions`
+  // staging rows, and a retry can't duplicate a partially-written block. (The
+  // old per-row loop left earlier inserts persisted when a later row threw.)
+  if (statements.length > 0) {
+    const result = await executeD1QueryInternal(statements);
+    if (result && result.success === false) {
+      throw new HttpError(
+        500,
+        result.error || "Failed to record the proposal block — nothing was saved.",
+      );
+    }
   }
 
   return Response.json({

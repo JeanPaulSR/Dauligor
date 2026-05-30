@@ -22,6 +22,12 @@
 
 import { executeD1QueryInternal } from "./d1-internal.js";
 import { HttpError } from "./firebase-admin.js";
+import {
+  parseRequirementTree,
+  isLeaf,
+  isGroup,
+  type Requirement,
+} from "./_requirements.js";
 
 /* -------------------------------------------------------------------------- */
 /* Entity + operation allowlists                                              */
@@ -205,7 +211,11 @@ const ENTITY_CONFIGS: Record<EntityType, EntityConfig> = {
     pkColumn: "id",
     writableColumns: new Set([
       "id", "class_id", "name", "identifier", "class_identifier", "source_id",
-      "description", "lore",
+      // `preview` is a short blurb mirroring classes.preview, added by
+      // migration 20260529-1200 and authored in SubclassEditor. Omitting it
+      // dropped a proposed subclass's blurb on approval (same bug class as the
+      // R1 scaling_column gap). (F3 fix.)
+      "description", "lore", "preview",
       "image_url", "image_display", "card_image_url", "card_display",
       "preview_image_url", "preview_display",
       "spellcasting", "advancements",
@@ -396,12 +406,26 @@ export async function loadCurrentEntity(
  * had `entity_id = null` for a create and the payload supplied the
  * id).
  */
-export async function applyApprovedOperation(args: {
+export type D1Statement = { sql: string; params: any[] };
+
+/**
+ * Pure SQL builder for an approved revision — the same INSERT / UPDATE /
+ * DELETE `applyApprovedOperation` runs, but returned as statements instead
+ * of executed. This is the seam Part D's block-atomic approve relies on:
+ * it collects every revision's statements and hands the whole array to
+ * `executeD1QueryInternal([...])`, which the worker runs as one
+ * `env.DB.batch()` (atomic — all-or-nothing). The per-row approve path
+ * keeps calling `applyApprovedOperation`, which just executes the result.
+ *
+ * Returns the resolved entity id (for a create, the payload's `id`) so the
+ * caller can stamp `pending_revisions.entity_id` in the same batch.
+ */
+export function buildApprovedStatements(args: {
   entityType: EntityType;
   operation: Operation;
   entityId: string | null;
   proposedPayload: string | null;
-}): Promise<{ entityId: string }> {
+}): { entityId: string; statements: D1Statement[] } {
   const config = ENTITY_CONFIGS[args.entityType];
   const payload = args.proposedPayload
     ? parseJsonOrThrow(args.proposedPayload, "proposed_payload")
@@ -412,11 +436,15 @@ export async function applyApprovedOperation(args: {
     if (!id) {
       throw new HttpError(400, "delete revisions must carry entity_id.");
     }
-    await executeD1QueryInternal({
-      sql: `DELETE FROM ${config.tableName} WHERE ${config.pkColumn} = ?`,
-      params: [id],
-    });
-    return { entityId: id };
+    return {
+      entityId: id,
+      statements: [
+        {
+          sql: `DELETE FROM ${config.tableName} WHERE ${config.pkColumn} = ?`,
+          params: [id],
+        },
+      ],
+    };
   }
 
   if (!payload || typeof payload !== "object") {
@@ -442,11 +470,15 @@ export async function applyApprovedOperation(args: {
     }
     const placeholders = cols.map(() => "?").join(", ");
     const colSql = cols.map((c) => `"${c}"`).join(", ");
-    await executeD1QueryInternal({
-      sql: `INSERT INTO ${config.tableName} (${colSql}) VALUES (${placeholders})`,
-      params: cols.map((c) => sanitized[c]),
-    });
-    return { entityId: id };
+    return {
+      entityId: id,
+      statements: [
+        {
+          sql: `INSERT INTO ${config.tableName} (${colSql}) VALUES (${placeholders})`,
+          params: cols.map((c) => sanitized[c]),
+        },
+      ],
+    };
   }
 
   // update
@@ -459,16 +491,33 @@ export async function applyApprovedOperation(args: {
   delete sanitized[config.pkColumn];
   const setCols = Object.keys(sanitized);
   if (setCols.length === 0) {
-    return { entityId: id };
+    return { entityId: id, statements: [] };
   }
   const setClause = setCols.map((c) => `"${c}" = ?`).join(", ");
   const params = setCols.map((c) => sanitized[c]);
   params.push(id);
-  await executeD1QueryInternal({
-    sql: `UPDATE ${config.tableName} SET ${setClause} WHERE ${config.pkColumn} = ?`,
-    params,
-  });
-  return { entityId: id };
+  return {
+    entityId: id,
+    statements: [
+      {
+        sql: `UPDATE ${config.tableName} SET ${setClause} WHERE ${config.pkColumn} = ?`,
+        params,
+      },
+    ],
+  };
+}
+
+export async function applyApprovedOperation(args: {
+  entityType: EntityType;
+  operation: Operation;
+  entityId: string | null;
+  proposedPayload: string | null;
+}): Promise<{ entityId: string }> {
+  const { entityId, statements } = buildApprovedStatements(args);
+  for (const stmt of statements) {
+    await executeD1QueryInternal({ sql: stmt.sql, params: stmt.params });
+  }
+  return { entityId };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -725,6 +774,298 @@ export function detectConflict(args: {
   }
 
   return { conflicted: false };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Block-atomic approval: reference integrity (guard #1) + ordering (Part D)  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One draftable id reference found on a revision's payload. `candidateTypes`
+ * is the set of entity types the id may resolve against (polymorphic parents
+ * carry more than one). The reference is satisfied if `id` is either a
+ * same-block draft of one of those types OR an existing live row in one of
+ * those tables. Guard #1 fails approval only when it is neither.
+ */
+export interface EntityReference {
+  field: string;
+  id: string;
+  candidateTypes: EntityType[];
+}
+
+// parent_type discriminator → proposable entity type. Only these four can be
+// authored as same-block drafts (race / background owners are always live —
+// they aren't proposable — so their parent refs are skipped, not validated).
+const PARENT_TYPE_TO_ENTITY: Record<string, EntityType> = {
+  class: "class",
+  subclass: "subclass",
+  feat: "feat",
+  item: "item",
+};
+
+function pushRef(
+  refs: EntityReference[],
+  field: string,
+  id: unknown,
+  candidateTypes: EntityType[],
+): void {
+  if (typeof id !== "string") return;
+  const trimmed = id.trim();
+  // Skip empties and the editor's "no selection" sentinels.
+  if (!trimmed || trimmed === "none" || trimmed === "__none__") return;
+  refs.push({ field, id: trimmed, candidateTypes });
+}
+
+function asArray(raw: unknown): any[] {
+  const v = typeof raw === "string" ? safeParseJson(raw) : raw;
+  return Array.isArray(v) ? v : [];
+}
+
+// `advancements[]` reference fields, shared by class / subclass / feat / item /
+// feature (a feature is an interior node — its advancements re-open the same
+// graph). The grant-feature ref sits at the advancement top level
+// (`featureId`); the rest live under `.configuration.*`. Verified against
+// AdvancementManager.tsx. Bulk/exclusion arrays (pool / optionalPool /
+// excludedOptionIds) are intentionally NOT walked here — they hold live or
+// stale ids as often as block drafts, and the picker overlays that define the
+// authored edge set populate only these single-select fields. Extend if those
+// overlays land.
+function collectAdvancementRefs(
+  raw: unknown,
+  prefix: string,
+  refs: EntityReference[],
+): void {
+  const list = asArray(raw);
+  for (let i = 0; i < list.length; i++) {
+    const adv = list[i];
+    if (!adv || typeof adv !== "object") continue;
+    const at = `${prefix}[${i}]`;
+    pushRef(refs, `${at}.featureId`, (adv as any).featureId, ["feature"]);
+    const cfg = (adv as any).configuration;
+    if (cfg && typeof cfg === "object") {
+      pushRef(refs, `${at}.configuration.scalingColumnId`, cfg.scalingColumnId, ["scaling_column"]);
+      pushRef(refs, `${at}.configuration.optionScalingColumnId`, cfg.optionScalingColumnId, ["scaling_column"]);
+      pushRef(refs, `${at}.configuration.optionGroupId`, cfg.optionGroupId, ["unique_option_group"]);
+      pushRef(refs, `${at}.configuration.usesFeatureId`, cfg.usesFeatureId, ["feature"]);
+    }
+  }
+}
+
+// `requirements_tree` leaves (feat prereqs, option-item cross-references).
+// Leaf shapes from _requirements.ts: class/levelInClass→classId,
+// subclass→subclassId, optionItem→itemId, feature→featureId, spell→spellId,
+// spellRule→spellRuleId. ability/proficiency/level/string carry no entity ref.
+function collectRequirementRefs(
+  raw: unknown,
+  field: string,
+  refs: EntityReference[],
+): void {
+  const tree = parseRequirementTree(raw);
+  if (!tree) return;
+  const walk = (req: Requirement): void => {
+    if (isLeaf(req)) {
+      switch (req.type) {
+        case "class":
+        case "levelInClass":
+          pushRef(refs, `${field}:class`, (req as any).classId, ["class"]);
+          break;
+        case "subclass":
+          pushRef(refs, `${field}:subclass`, (req as any).subclassId, ["subclass"]);
+          break;
+        case "optionItem":
+          pushRef(refs, `${field}:optionItem`, (req as any).itemId, ["unique_option_item"]);
+          break;
+        case "feature":
+          pushRef(refs, `${field}:feature`, (req as any).featureId, ["feature"]);
+          break;
+        case "spell":
+          pushRef(refs, `${field}:spell`, (req as any).spellId, ["spell"]);
+          break;
+        case "spellRule":
+          pushRef(refs, `${field}:spellRule`, (req as any).spellRuleId, ["spell_rule"]);
+          break;
+      }
+      return;
+    }
+    if (isGroup(req)) for (const c of req.children) walk(c);
+  };
+  walk(tree);
+}
+
+function collectPolymorphicParent(
+  payload: Record<string, any>,
+  allowed: EntityType[],
+  refs: EntityReference[],
+): void {
+  const pid = payload.parent_id;
+  if (typeof pid !== "string" || !pid) return;
+  const mapped = PARENT_TYPE_TO_ENTITY[String(payload.parent_type ?? "")];
+  // race/background/unknown parent → can't be a same-block draft; skip.
+  if (!mapped || !allowed.includes(mapped)) return;
+  pushRef(refs, `parent_id (parent_type=${payload.parent_type})`, pid, [mapped]);
+}
+
+/**
+ * Every draftable id reference a revision's payload carries — the input to
+ * guard #1. Covers the cross-reference graph compendium-editors confirmed in
+ * their §3 coverage handback (2026-05-29): direct FK parents, the
+ * `advancements[]` graph, `requirements_tree` leaves, the option-group
+ * feature back-link, and spell-rule application targets. Unknown / opaque
+ * payload shapes yield no refs (guard #1 never blocks on what it can't parse).
+ */
+export function collectReferences(
+  entityType: EntityType,
+  payloadRaw: unknown,
+): EntityReference[] {
+  const payload =
+    typeof payloadRaw === "string" ? safeParseJson(payloadRaw) : payloadRaw;
+  if (!payload || typeof payload !== "object") return [];
+  const p = payload as Record<string, any>;
+  const refs: EntityReference[] = [];
+
+  switch (entityType) {
+    case "subclass":
+      pushRef(refs, "class_id", p.class_id, ["class"]);
+      collectAdvancementRefs(p.advancements, "advancements", refs);
+      break;
+    case "feature":
+      collectPolymorphicParent(p, ["class", "subclass"], refs);
+      collectAdvancementRefs(p.advancements, "advancements", refs);
+      break;
+    case "scaling_column":
+      collectPolymorphicParent(p, ["class", "subclass", "feat", "item"], refs);
+      break;
+    case "unique_option_item":
+      pushRef(refs, "group_id", p.group_id, ["unique_option_group"]);
+      collectAdvancementRefs(p.advancements, "advancements", refs);
+      collectRequirementRefs(p.requirements_tree, "requirements_tree", refs);
+      break;
+    case "unique_option_group":
+      pushRef(refs, "feature_id", p.feature_id, ["feature"]);
+      break;
+    case "class":
+      collectAdvancementRefs(p.advancements, "advancements", refs);
+      break;
+    case "feat":
+      collectAdvancementRefs(p.advancements, "advancements", refs);
+      collectRequirementRefs(p.requirements_tree, "requirements_tree", refs);
+      break;
+    case "item":
+      collectAdvancementRefs(p.advancements, "advancements", refs);
+      break;
+    case "spell_rule_application": {
+      pushRef(refs, "rule_id", p.rule_id, ["spell_rule"]);
+      const t = PARENT_TYPE_TO_ENTITY[String(p.applies_to_type ?? "")];
+      if (t === "class" || t === "subclass") {
+        pushRef(refs, `applies_to_id (${p.applies_to_type})`, p.applies_to_id, [t]);
+      }
+      break;
+    }
+    // spell / spell_rule / tag / tag_group: leaves — no cluster refs.
+    default:
+      break;
+  }
+  return refs;
+}
+
+/**
+ * Minimal revision shape the ordering pass needs.
+ */
+export interface BlockRevisionLite {
+  id: string;
+  entityType: EntityType;
+  operation: Operation;
+  entityId: string | null;
+  payload: any;
+}
+
+// Structural FK parent ids (the edges that constrain INSERT order: a parent row
+// must exist before the child that points at it). Only these — the JSON
+// advancement refs don't constrain order (client-minted ids are valid the
+// moment both rows land in the same atomic batch).
+function structuralParentIds(r: BlockRevisionLite): string[] {
+  const p = r.payload;
+  if (!p || typeof p !== "object") return [];
+  const out: string[] = [];
+  const add = (v: unknown) => {
+    if (typeof v === "string" && v) out.push(v);
+  };
+  switch (r.entityType) {
+    case "subclass":
+      add(p.class_id);
+      break;
+    case "unique_option_item":
+      add(p.group_id);
+      break;
+    case "feature": {
+      const pt = String(p.parent_type ?? "");
+      if (pt === "class" || pt === "subclass") add(p.parent_id);
+      break;
+    }
+    case "scaling_column": {
+      const pt = String(p.parent_type ?? "");
+      if (PARENT_TYPE_TO_ENTITY[pt]) add(p.parent_id);
+      break;
+    }
+  }
+  return out;
+}
+
+/**
+ * Topologically order a block's revisions so an FK parent is applied before
+ * the child that references it (class → subclass, group → option-item, parent
+ * → feature/scaling-column). Within a tier order is arbitrary. Detects a
+ * dependency cycle (returns the offending revision ids) so the approve can
+ * refuse cleanly rather than deadlock — the only author-makeable cycle is the
+ * cross-group option-item requirement edge, which isn't a structural FK so it
+ * won't actually appear here, but the check is generic and cheap.
+ */
+export function orderBlockRevisions(
+  revs: BlockRevisionLite[],
+): { ordered: BlockRevisionLite[]; cycle: string[] | null } {
+  const byEntityId = new Map<string, BlockRevisionLite>();
+  for (const r of revs) if (r.entityId) byEntityId.set(r.entityId, r);
+
+  const deps = new Map<string, Set<string>>();
+  const children = new Map<string, string[]>();
+  for (const r of revs) {
+    deps.set(r.id, new Set());
+    children.set(r.id, []);
+  }
+  for (const r of revs) {
+    if (r.operation === "delete") continue;
+    for (const parentId of structuralParentIds(r)) {
+      const parent = byEntityId.get(parentId);
+      if (parent && parent.id !== r.id && parent.operation !== "delete") {
+        if (!deps.get(r.id)!.has(parent.id)) {
+          deps.get(r.id)!.add(parent.id);
+          children.get(parent.id)!.push(r.id);
+        }
+      }
+    }
+  }
+
+  const indeg = new Map<string, number>();
+  for (const r of revs) indeg.set(r.id, deps.get(r.id)!.size);
+  const queue: string[] = revs.filter((r) => indeg.get(r.id) === 0).map((r) => r.id);
+  const byId = new Map(revs.map((r) => [r.id, r]));
+  const ordered: BlockRevisionLite[] = [];
+  while (queue.length) {
+    const id = queue.shift()!;
+    ordered.push(byId.get(id)!);
+    for (const c of children.get(id)!) {
+      indeg.set(c, indeg.get(c)! - 1);
+      if (indeg.get(c) === 0) queue.push(c);
+    }
+  }
+  if (ordered.length !== revs.length) {
+    const seen = new Set(ordered.map((r) => r.id));
+    return {
+      ordered: revs,
+      cycle: revs.filter((r) => !seen.has(r.id)).map((r) => r.id),
+    };
+  }
+  return { ordered, cycle: null };
 }
 
 /* -------------------------------------------------------------------------- */

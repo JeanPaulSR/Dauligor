@@ -341,7 +341,7 @@ guard lives in the **approval layer**, never as a new FK/CHECK.
 - [x] **Part A** `scaling_column` in `PROPOSABLE_ENTITY_TYPES` + `ENTITY_CONFIGS` + `ProposalEntityType` — *on `main` (`b5237e1`)*
 - [x] **Part A** migration `20260528-1200`: `pending_revisions.entity_type` CHECK — *applied to **local** D1 only; remote pending explicit go-ahead before B+C ship*
 - [x] **Part A** picker-overlay helper — `src/hooks/useProposalDraftOptions.ts`
-- [ ] **Part D** approve-whole-block: atomic `env.DB.batch()` apply + guard #1 reference-integrity validation + guard #2 per-revision drift check + dependency ordering + block-level/cascade reject + block edit-lock
+- [x] **Part D** approve-whole-block: atomic `env.DB.batch()` apply + guard #1 reference-integrity validation + guard #2 per-revision drift check + dependency ordering + block-level/cascade reject + block edit-lock — **shipped `b35705f` (2026-05-29).** Edit-lock was already enforced (submit→`'submitted'`; draft edits require `'open'`). Guard #1 boundary: advancement array fields (pool/optionalPool/excludedOptionIds) deferred. Live atomic-batch run is the joint e2e with compendium-editors.
 - [ ] update `proposal-editor-pattern.md` + `content-proposals.md` (note the
       block-mode auto-promotion removal from `9cdf1c6` while here)
 

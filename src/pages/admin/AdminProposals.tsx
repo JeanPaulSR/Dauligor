@@ -182,7 +182,12 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
     reason: string;
     currentRow: any;
   }>(null);
-  const [rejectDialog, setRejectDialog] = useState<null | { proposal: Proposal; reason: string }>(null);
+  const [rejectDialog, setRejectDialog] = useState<
+    | null
+    | { proposal: Proposal; reason: string }
+    | { bundle: { id: string; name: string }; reason: string }
+  >(null);
+  const [approvingBlockId, setApprovingBlockId] = useState<string | null>(null);
   // Revert-drift modal — server returns 409 + drift payload when the
   // live row has been edited (or re-created) between the approval and
   // the revert. Surfaces side-by-side so the admin can decide whether
@@ -362,29 +367,93 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
     }
   };
 
-  const handleRejectSubmit = async () => {
-    if (!rejectDialog) return;
+  // Block-atomic approve (Part D). Hits the bundle endpoint, which validates
+  // references (guard #1) + per-revision drift, orders by FK dependency, and
+  // applies the whole block as one env.DB.batch() — all-or-nothing. A guard
+  // failure returns { ok:false, stage, failures } with NOTHING applied; we
+  // surface the stage + first offender so the admin knows what to fix.
+  const handleApproveBlock = async (bundleId: string) => {
+    setApprovingBlockId(bundleId);
     try {
       const res = await authedFetch(
-        `/api/admin/proposals/${encodeURIComponent(rejectDialog.proposal.id)}/reject`,
-        {
-          method: 'POST',
-          body: JSON.stringify({ rejection_reason: rejectDialog.reason.trim() || null }),
-        },
+        `/api/admin/proposals/bundle/${encodeURIComponent(bundleId)}/approve`,
+        { method: 'POST' },
       );
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || `Failed to reject (HTTP ${res.status})`);
+      const body = await res.json().catch(() => ({} as any));
+      if (!res.ok || body?.ok === false) {
+        if (body?.stage && Array.isArray(body?.failures)) {
+          const STAGE_LABEL: Record<string, string> = {
+            refs: 'unresolved reference(s)',
+            drift: 'the live row(s) changed since submission',
+            order: 'a dependency cycle',
+            apply: 'a write error (nothing applied)',
+          };
+          const label = STAGE_LABEL[body.stage] ?? body.stage;
+          const first = body.failures[0];
+          const detail = first?.field
+            ? ` — e.g. ${first.entity_type} ${first.field} → ${first.missing_id}`
+            : first?.reason
+              ? ` — ${first.reason}`
+              : '';
+          const more = body.failures.length > 1 ? ` (+${body.failures.length - 1} more)` : '';
+          toast.error(`Block not approved: ${label}${detail}${more}. Nothing was applied.`);
+          return;
+        }
+        throw new Error(body?.error || `Failed to approve block (HTTP ${res.status})`);
       }
-      const body = await res.json();
-      const cascadeCount = Array.isArray(body?.cascaded_revision_ids)
-        ? body.cascaded_revision_ids.length
-        : 0;
+      const appliedCount = Array.isArray(body?.applied) ? body.applied.length : 0;
       toast.success(
-        cascadeCount > 0
-          ? `Rejected. ${cascadeCount} bundle child${cascadeCount === 1 ? '' : 'ren'} also rejected.`
-          : 'Proposal rejected.',
+        `Block approved — ${appliedCount} change${appliedCount === 1 ? '' : 's'} applied atomically.`,
       );
+      setSelected(null);
+      void reloadCurrent();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || 'Failed to approve block.');
+    } finally {
+      setApprovingBlockId(null);
+    }
+  };
+
+  const handleRejectSubmit = async () => {
+    if (!rejectDialog) return;
+    const reason = rejectDialog.reason.trim() || null;
+    try {
+      if ('bundle' in rejectDialog) {
+        // Block-level reject: every pending revision in the block falls
+        // together (an admin can't approve a class but orphan its columns).
+        const res = await authedFetch(
+          `/api/admin/proposals/bundle/${encodeURIComponent(rejectDialog.bundle.id)}/reject`,
+          { method: 'POST', body: JSON.stringify({ rejection_reason: reason }) },
+        );
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || `Failed to reject block (HTTP ${res.status})`);
+        }
+        const body = await res.json().catch(() => ({} as any));
+        const n = Array.isArray(body?.rejected_revision_ids)
+          ? body.rejected_revision_ids.length
+          : 0;
+        toast.success(`Block rejected — ${n} revision${n === 1 ? '' : 's'}.`);
+      } else {
+        const res = await authedFetch(
+          `/api/admin/proposals/${encodeURIComponent(rejectDialog.proposal.id)}/reject`,
+          { method: 'POST', body: JSON.stringify({ rejection_reason: reason }) },
+        );
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || `Failed to reject (HTTP ${res.status})`);
+        }
+        const body = await res.json();
+        const cascadeCount = Array.isArray(body?.cascaded_revision_ids)
+          ? body.cascaded_revision_ids.length
+          : 0;
+        toast.success(
+          cascadeCount > 0
+            ? `Rejected. ${cascadeCount} bundle child${cascadeCount === 1 ? '' : 'ren'} also rejected.`
+            : 'Proposal rejected.',
+        );
+      }
       setRejectDialog(null);
       setSelected(null);
       void reloadCurrent();
@@ -605,6 +674,34 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
                       <> · {activeBundle.withdrawn_count} withdrawn</>
                     )}
                   </p>
+                  {activeBundle.pending_count > 0 && (
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <Button
+                        onClick={() => handleApproveBlock(activeBundle.id)}
+                        disabled={approvingBlockId === activeBundle.id}
+                        className="bg-emerald-700 text-white hover:bg-emerald-800 text-xs px-3 py-1.5 h-auto"
+                      >
+                        {approvingBlockId === activeBundle.id
+                          ? 'Approving…'
+                          : `Approve block (${activeBundle.pending_count})`}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() =>
+                          setRejectDialog({
+                            bundle: { id: activeBundle.id, name: activeBundle.name },
+                            reason: '',
+                          })
+                        }
+                        className="border-blood/40 text-blood hover:bg-blood/5 text-xs px-3 py-1.5 h-auto"
+                      >
+                        Reject block
+                      </Button>
+                      <span className="text-[11px] text-ink/45">
+                        applies all {activeBundle.pending_count} revisions atomically
+                      </span>
+                    </div>
+                  )}
                 </div>
               </CardHeader>
               <CardContent>
@@ -767,9 +864,13 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
       <Dialog open={!!rejectDialog} onOpenChange={(open) => { if (!open) setRejectDialog(null); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Reject proposal</DialogTitle>
+            <DialogTitle>
+              {rejectDialog && 'bundle' in rejectDialog ? 'Reject block' : 'Reject proposal'}
+            </DialogTitle>
             <DialogDescription>
-              An optional reason is included in the proposer's view + cascaded to bundle children.
+              {rejectDialog && 'bundle' in rejectDialog
+                ? 'Rejects every pending revision in this block together. An optional reason is shown to the proposer.'
+                : "An optional reason is included in the proposer's view + cascaded to bundle children."}
             </DialogDescription>
           </DialogHeader>
           <Textarea
