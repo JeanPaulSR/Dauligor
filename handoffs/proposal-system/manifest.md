@@ -61,6 +61,13 @@ Proposal-mode logic lives *inside* these files, but the files themselves are own
 
 Newest at the top. Each entry: date + link to the handoff doc in this same folder.
 
+- `2026-05-30` — **Guard #1 gap closed: walks advancement `pool`/`optionalPool`.**
+  compendium-editors confirmed those arrays carry same-block draft ids (same
+  overlay-merged catalogs as the single-selects), so `collectAdvancementRefs`
+  now walks them keyed by `configuration.choiceType` (feat→feat, feature→
+  feature); item/other flavors are live-only (skipped); `excludedOptionIds`
+  left unwalked (dangling-excluded is a benign no-op). Unit-tested, tsc clean.
+  Reply: [../compendium-editors/2026-05-30-pool-fields-walked.md](../compendium-editors/2026-05-30-pool-fields-walked.md).
 - `2026-05-30` — **Part D live e2e PASSED (19/19).** Drove the real approve path
   (guard #1 → `orderBlockRevisions` → `buildApprovedStatements` → one
   `env.DB.batch()`) against a real seeded *Druid + Wild Shape + scaling column +

@@ -825,11 +825,17 @@ function asArray(raw: unknown): any[] {
 // feature (a feature is an interior node — its advancements re-open the same
 // graph). The grant-feature ref sits at the advancement top level
 // (`featureId`); the rest live under `.configuration.*`. Verified against
-// AdvancementManager.tsx. Bulk/exclusion arrays (pool / optionalPool /
-// excludedOptionIds) are intentionally NOT walked here — they hold live or
-// stale ids as often as block drafts, and the picker overlays that define the
-// authored edge set populate only these single-select fields. Extend if those
-// overlays land.
+// AdvancementManager.tsx + compendium-editors' 2026-05-30 pool-fields handoff.
+//
+// The pool arrays (`configuration.pool` / `optionalPool`) ARE walked: their
+// checkboxes write ids from the same overlay-merged catalogs as the
+// single-selects, so a pooled in-block draft must resolve too. The element
+// kind is keyed by `configuration.choiceType` (feat vs feature) — other
+// flavors (e.g. item pools) aren't block-draftable, so they resolve live-only
+// and are skipped here to avoid false "dangling" failures.
+// `configuration.excludedOptionIds` is intentionally NOT walked: a dangling
+// excluded id is a benign no-op (exclusion just filters; it can't leave a
+// dangling live pointer), so hard-failing approval on it would be over-strict.
 function collectAdvancementRefs(
   raw: unknown,
   prefix: string,
@@ -847,6 +853,20 @@ function collectAdvancementRefs(
       pushRef(refs, `${at}.configuration.optionScalingColumnId`, cfg.optionScalingColumnId, ["scaling_column"]);
       pushRef(refs, `${at}.configuration.optionGroupId`, cfg.optionGroupId, ["unique_option_group"]);
       pushRef(refs, `${at}.configuration.usesFeatureId`, cfg.usesFeatureId, ["feature"]);
+      // pool / optionalPool — element kind depends on choiceType.
+      const choiceType = typeof cfg.choiceType === "string" ? cfg.choiceType : "";
+      const poolType: EntityType | null =
+        choiceType === "feat" ? "feat" : choiceType === "feature" ? "feature" : null;
+      if (poolType) {
+        for (const key of ["pool", "optionalPool"] as const) {
+          const arr = cfg[key];
+          if (Array.isArray(arr)) {
+            for (let j = 0; j < arr.length; j++) {
+              pushRef(refs, `${at}.configuration.${key}[${j}]`, arr[j], [poolType]);
+            }
+          }
+        }
+      }
     }
   }
 }
