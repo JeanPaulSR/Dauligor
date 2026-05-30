@@ -3064,8 +3064,22 @@ async function runBaseClassAdvancementsStep({ workflow, sequence, progress }) {
   progress.markStep(stepId, "active", "Reviewing base class advancements and granted features.");
   progress.setStatus("Waiting for confirmation of base class advancements...");
 
+  // Gate the overview by import mode so it matches what the apply loop
+  // below (PHASE 2) actually grants:
+  //   - first level (fresh primary): existingClassLevel === 0 → show all
+  //     base advancements with content.
+  //   - same-class level-up: existingClassLevel > 0 → base proficiency rows
+  //     were granted at level 1 and are SKIPPED on apply, so don't re-show
+  //     them; only HP (per-level) stays.
+  //   - multiclass: existingClassLevel === 0 (the class is fresh on the
+  //     actor), and baseClassHandler already overlays the reduced
+  //     `multiclassProficiencies` set, so the content filter shows that set.
+  // Mirrors the skip predicate at PHASE 2 (existingClassLevel + adv.adv.level).
+  const existingClassLevel = Number(workflow?.existingClassLevel ?? 0) || 0;
   const visibleAdvancements = baseFeatures.advancements.filter((adv) => {
     if (adv.id === "base-hp") return true;
+    const advLevel = Number(adv?.adv?.level ?? 1) || 1;
+    if (advLevel <= existingClassLevel) return false;
     return (adv.fixed?.length ?? 0) > 0
       || (adv.options?.length ?? 0) > 0
       || (adv.choiceCount ?? 0) > 0;
