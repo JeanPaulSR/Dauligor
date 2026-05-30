@@ -1,4 +1,4 @@
-﻿# DAE And Midi Character Support Guide
+# DAE And Midi Character Support Guide
 
 This document explains what it means for Dauligor-created characters, items, spells, and features to work well with:
 

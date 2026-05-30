@@ -1,4 +1,4 @@
-﻿# Dauligor Item Import Contract
+# Dauligor Item Import Contract
 
 > **Status: partially built.** A single `dauligor.item.v1` object can be imported through the
 > `import-service.js` test path, but the full catalog-driven item importer (browser flow like

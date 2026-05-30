@@ -1,4 +1,4 @@
-﻿# Dauligor Spell Preparation Manager Guide
+# Dauligor Spell Preparation Manager Guide
 
 This document defines the target behavior for Dauligor's spell preparation and spell list management flow in Foundry.
 

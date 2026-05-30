@@ -1,4 +1,4 @@
-﻿# Dauligor Spell Import Contract
+# Dauligor Spell Import Contract
 
 This document defines the target payload contract for spell imports.
 

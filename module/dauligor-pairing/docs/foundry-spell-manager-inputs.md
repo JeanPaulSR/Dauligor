@@ -1,4 +1,4 @@
-﻿# Foundry Inputs Required By Spell Manager
+# Foundry Inputs Required By Spell Manager
 
 This note lists the native Foundry data the Dauligor spell preparation manager needs in order to function correctly.
 
