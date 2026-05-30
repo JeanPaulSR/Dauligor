@@ -48,6 +48,7 @@ Topic-segmented documentation. If you're working on one area, you should not nee
 *One doc per feature. UI work in feature X should not require reading feature Y.*
 
 - [wiki-lore.md](features/wiki-lore.md) — articles, secrets, DM notes, nesting, era/campaign visibility
+- [maps.md](features/maps.md) — interactive era-scoped maps: pins, highlights, submap drill-down, draft-visibility filtering
 - [compendium-classes.md](features/compendium-classes.md) — classes, subclasses, features, advancements
 - [compendium-spells.md](features/compendium-spells.md) — spell index (data layer, summary index, common tasks) → splits into:
   - [compendium-spells-browser.md](features/compendium-spells-browser.md) — public `/compendium/spells` browser (3-pane fullscreen, sort/hide cols, favourites pane)
