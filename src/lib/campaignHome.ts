@@ -18,6 +18,7 @@ export type HomeBlockType =
   | 'image'
   | 'divider'
   | 'recommended'
+  | 'callout'          // a styled call-to-action box (heading + text + optional button)
   | 'entity-row'       // a row/grid of entity cards (articles, classes, items, …)
   | 'entity-feature'   // one large highlighted entity
   | 'group'            // container: a titled card holding children
@@ -103,6 +104,23 @@ export interface EntityRowBlock extends BlockBase {
   columns: 1 | 2 | 3 | 4;
   card: 'image' | 'compact' | 'list';
   excerpt: boolean;
+  /** When true (and columns ≥ 2, card ≠ list), the FIRST card spans 2 columns —
+   *  the asymmetric "feature + grid" look of the default home (World Primer wide,
+   *  then the rest in an even grid). */
+  featureFirst?: boolean;
+}
+
+/** A styled call-to-action box — the "Character Creation · Work in Progress"
+ *  dashed panel on the default home. Heading + body + an optional button. */
+export interface CalloutBlock extends BlockBase {
+  blockType: 'callout';
+  title: string;
+  body: string;
+  /** Optional button label; button only renders when both label + link are set. */
+  buttonLabel: string;
+  buttonLink: string;
+  /** 'soft' = dashed gold panel (default-home look); 'plain' = bordered card. */
+  style: 'soft' | 'plain';
 }
 export interface EntityFeatureBlock extends BlockBase {
   blockType: 'entity-feature';
@@ -131,6 +149,7 @@ export type HomeBlock =
   | ImageBlock
   | DividerBlock
   | RecommendedBlock
+  | CalloutBlock
   | EntityRowBlock
   | EntityFeatureBlock
   | GroupBlock
@@ -153,6 +172,7 @@ export const BLOCK_TYPE_META: Record<
   'entity-row':     { label: 'Entity Row',       icon: 'LayoutGrid', description: 'A row/grid of cards — articles, classes, items, system pages…', group: 'content' },
   'entity-feature': { label: 'Featured',         icon: 'Star',       description: 'One large highlighted entity.',             group: 'content' },
   recommended:      { label: 'Recommended',      icon: 'BookMarked', description: "The campaign's recommended article.",       group: 'content' },
+  callout:          { label: 'Callout',          icon: 'Megaphone',  description: 'A highlighted box with text + an optional button.', group: 'content' },
   text:             { label: 'Text',             icon: 'Type',       description: 'Free BBCode prose.',                        group: 'content' },
   image:            { label: 'Image',            icon: 'ImageIcon',  description: 'A banner image + optional caption.',        group: 'content' },
   divider:          { label: 'Divider',          icon: 'Minus',      description: 'A line, dots, or spacer.',                  group: 'content' },
@@ -193,8 +213,10 @@ export function makeBlock(type: HomeBlockType, id: string): HomeBlock {
       return { id, blockType: 'divider', style: 'line' };
     case 'recommended':
       return { id, blockType: 'recommended', title: '', source: 'auto', ref: null, layout: 'side' };
+    case 'callout':
+      return { id, blockType: 'callout', title: '', body: '', buttonLabel: '', buttonLink: '', style: 'soft' };
     case 'entity-row':
-      return { id, blockType: 'entity-row', title: '', showHeading: true, source: 'manual', refs: [], category: '', count: 3, columns: 3, card: 'image', excerpt: true };
+      return { id, blockType: 'entity-row', title: '', showHeading: true, source: 'manual', refs: [], category: '', count: 3, columns: 3, card: 'image', excerpt: true, featureFirst: false };
     case 'entity-feature':
       return { id, blockType: 'entity-feature', title: '', ref: null, imageSide: 'left', excerpt: true };
     case 'group':
@@ -217,8 +239,13 @@ export function defaultHomeBlocks(): HomeBlock[] {
   hero.title = 'Stories in Dauligor';
   hero.subtitle = 'Your GM has made this website to give you easy access to the lore of the setting of Dauligor, and to the homebrew options they allow.';
 
+  // "The World of Dauligor" — five articles in the asymmetric feature-first grid
+  // (World Primer spans 2 cols, then the rest fill an even 3-col grid), exactly
+  // like the legacy home.
   const row = makeBlock('entity-row', crypto.randomUUID()) as EntityRowBlock;
   row.title = 'The World of Dauligor';
+  row.columns = 3;
+  row.featureFirst = true;
   row.refs = [
     { kind: 'article', id: 'world-primer', name: 'World Primer' },
     { kind: 'article', id: 'world-history', name: 'World History' },
@@ -227,17 +254,17 @@ export function defaultHomeBlocks(): HomeBlock[] {
     { kind: 'article', id: 'magic', name: 'Magic' },
   ];
 
-  // Character Creation — a Group holding a "work in progress" placeholder, the
-  // same stub the legacy home shows until creation tools are built.
-  const charGroup = makeBlock('group', crypto.randomUUID()) as GroupBlock;
-  charGroup.title = 'Character Creation';
-  const charNote = makeBlock('text', crypto.randomUUID()) as TextBlock;
-  charNote.body = '[i]Work in progress — character creation tools are still being built. In the meantime, browse the available [url=/sources]sources[/url].[/i]';
-  charGroup.children = [charNote];
+  // Character Creation — the styled "work in progress" callout, the same CTA the
+  // legacy home shows until creation tools are built.
+  const charCallout = makeBlock('callout', crypto.randomUUID()) as CalloutBlock;
+  charCallout.title = 'Character Creation';
+  charCallout.body = 'Work in progress — character creation tools are still being built. In the meantime, you can browse the available sources.';
+  charCallout.buttonLabel = 'Browse Sources';
+  charCallout.buttonLink = '/sources';
 
   const reco = makeBlock('recommended', crypto.randomUUID()) as RecommendedBlock;
 
-  return [hero, row, charGroup, reco];
+  return [hero, row, charCallout, reco];
 }
 
 function asRef(v: any): EntityRef | null {

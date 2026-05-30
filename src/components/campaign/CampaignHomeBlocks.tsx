@@ -221,10 +221,16 @@ export default function CampaignHomeBlocks({ blocks, recommendedLore, campaignNa
         const colClass = block.card === 'list'
           ? ''
           : { 1: '', 2: 'md:grid-cols-2', 3: 'md:grid-cols-3', 4: 'md:grid-cols-2 lg:grid-cols-4' }[block.columns];
-        const renderCard = (vm: CardVM, i: number) =>
-          'data' in vm
+        // featureFirst: the first card spans 2 columns (the asymmetric default-
+        // home look). Only meaningful for card grids with ≥2 columns.
+        const feature = !!block.featureFirst && block.card !== 'list' && block.columns >= 2;
+        const renderCard = (vm: CardVM, i: number) => {
+          const span = feature && i === 0 ? 'md:col-span-2' : '';
+          const inner = 'data' in vm
             ? <EntityCard key={i} data={vm.data} card={block.card} excerpt={block.card === 'list' ? false : block.excerpt} />
             : <PlaceholderCard key={i} name={vm.placeholder} missing={vm.missing} card={block.card} />;
+          return span ? <div key={i} className={span}>{inner}</div> : inner;
+        };
         return (
           <section key={block.id} className="space-y-8">
             {block.showHeading && block.title && (
@@ -237,6 +243,29 @@ export default function CampaignHomeBlocks({ blocks, recommendedLore, campaignNa
             ) : (
               <p className="description-text">Nothing to show here yet.</p>
             )}
+          </section>
+        );
+      }
+
+      case 'callout': {
+        if (!block.title && !block.body) return null;
+        const hasButton = block.buttonLabel && block.buttonLink;
+        const box = block.style === 'soft'
+          ? 'py-16 px-6 text-center bg-gold/5 border border-dashed border-gold/20'
+          : 'py-10 px-6 text-center bg-card/40 border border-gold/15';
+        return (
+          <section key={block.id} className="space-y-8">
+            <div className={box}>
+              {block.title && <h2 className="h3-title text-ink/50">{block.title}</h2>}
+              {block.body && <p className="description-text mt-2 mb-6 text-ink/40 max-w-2xl mx-auto">{block.body}</p>}
+              {hasButton && (
+                <Link to={block.buttonLink}>
+                  <span className="inline-flex items-center gap-2 border border-gold text-gold hover:bg-gold/5 transition-colors px-4 py-2 text-sm font-medium">
+                    {block.buttonLabel}
+                  </span>
+                </Link>
+              )}
+            </div>
           </section>
         );
       }
