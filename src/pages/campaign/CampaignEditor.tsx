@@ -277,7 +277,12 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => {
+                  // Homepage is its own fullscreen route, not an in-page tab —
+                  // clicking it navigates straight to the layout builder.
+                  if (tab.id === 'homepage') { if (id) navigate(`/campaign/edit/${id}/homepage`); return; }
+                  setActiveTab(tab.id);
+                }}
                 className={`flex items-center gap-3 px-4 py-3 rounded text-xs lg:text-sm font-bold transition-all text-left border ${
                   isActive 
                     ? 'bg-gold/15 text-gold border-gold/30 shadow-sm' 
@@ -479,22 +484,6 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
                 </CardContent>
               </Card>
             </div>
-          )}
-
-          {activeTab === 'homepage' && id && (
-            <Card className="border-gold/10 bg-card/60 shadow-xl backdrop-blur-sm rounded animate-in fade-in duration-300">
-              <CardHeader>
-                <CardTitle className="h2-title flex items-center gap-2">
-                  <HomeIcon className="w-5 h-5 text-gold" /> Homepage
-                </CardTitle>
-                <p className="field-hint mt-1">Design what players see on this campaign's home page — a full-page layout builder with a live preview.</p>
-              </CardHeader>
-              <CardContent>
-                <Button onClick={() => navigate(`/campaign/edit/${id}/homepage`)} className="btn-gold-solid gap-2">
-                  <LayoutGrid className="w-4 h-4" /> Open Homepage Editor
-                </Button>
-              </CardContent>
-            </Card>
           )}
 
           {activeTab === 'characters' && (
