@@ -39,10 +39,29 @@ export type DraftOption = {
   __draft: true;
 };
 
+/**
+ * Optional parent-scope filter, mirroring `useBlockDraftedList`'s options.
+ * For PARENT-OWNED entity types (features, scaling columns) pass the owner
+ * so, e.g., a class's feature picker doesn't surface a sibling subclass's
+ * draft features. Omit for global catalogs (option groups, feats).
+ */
+export interface DraftOptionFilter {
+  /** Restrict to draft CREATEs owned by this parent id. */
+  parentId?: string;
+  /** Parent discriminator (e.g. 'class' | 'subclass' | 'item'). */
+  parentType?: string;
+  /** Payload field holding the parent id. Defaults to `parent_id`. */
+  parentKey?: string;
+}
+
 export function useProposalDraftOptions(
   entityType: ProposalEntityType | null,
+  filter?: DraftOptionFilter,
 ): DraftOption[] {
   const drafts = useProposalEntityDrafts(entityType);
+  const parentId = filter?.parentId;
+  const parentType = filter?.parentType;
+  const parentKey = filter?.parentKey ?? 'parent_id';
   return useMemo(() => {
     const out: DraftOption[] = [];
     // `createdIds` is the set of ids the user is CREATING in the active
@@ -50,6 +69,11 @@ export function useProposalDraftOptions(
     // see. `byId` holds the merged payload for each.
     for (const id of drafts.createdIds) {
       const payload = drafts.byId.get(id);
+      // Parent-scope filter (mirrors useBlockDraftedList): when a parent is
+      // specified, skip draft creates owned by a different parent so a class
+      // picker won't list a subclass's features, and vice-versa.
+      if (parentId !== undefined && String(payload?.[parentKey] ?? '') !== String(parentId)) continue;
+      if (parentType !== undefined && String(payload?.parent_type ?? '') !== String(parentType)) continue;
       const rawName =
         payload && typeof payload.name === 'string' ? payload.name.trim() : '';
       out.push({
@@ -59,5 +83,5 @@ export function useProposalDraftOptions(
       });
     }
     return out;
-  }, [drafts]);
+  }, [drafts, parentId, parentType, parentKey]);
 }

@@ -24,13 +24,14 @@
 // =============================================================================
 
 import { useMemo } from 'react';
-import { useProposalDraftOptions, type DraftOption } from './useProposalDraftOptions';
+import { useProposalDraftOptions, type DraftOption, type DraftOptionFilter } from './useProposalDraftOptions';
 import type { ProposalEntityType } from '../lib/proposalAware';
 
 export function useBlockDraftPickerOptions(
   entityType: ProposalEntityType | null,
+  filter?: DraftOptionFilter,
 ): DraftOption[] {
-  const drafts = useProposalDraftOptions(entityType);
+  const drafts = useProposalDraftOptions(entityType, filter);
   return useMemo(
     () => drafts.map((d) => ({ ...d, name: `${d.name} (in this block)` })),
     [drafts],

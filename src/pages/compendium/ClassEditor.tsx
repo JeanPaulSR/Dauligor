@@ -442,6 +442,12 @@ function normalizeClassSpellcastingForSave(spellcasting: any) {
 }
 
 export default function ClassEditor({ userProfile }: { userProfile: any }) {
+  // PERF: lazily render tab panels. ClassEditor builds the JSX for ALL tab
+  // panels on every render; the two proficiency grids alone are hundreds of
+  // elements each, so every keystroke rebuilt them (dev `jsxDEV` made this the
+  // dominant typing cost: ~291ms/render in dev vs 16ms in prod). Gating each
+  // heavy tab's content on `activeTab` skips constructing inactive tabs.
+  const [activeTab, setActiveTab] = useState('basic');
   // Route param resolves through `useClassRouteId`, which handles both
   // the admin `:slug` form (`sorcerer_phb`) and the proposal `:id` form
   // (primary key, or React Router's stringified `"null"`/`"undefined"`
@@ -629,7 +635,10 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   // "(in this block)" suffix) so they're selectable in the advancement pickers.
   // Empty outside a <ProposalEditorWrapper>; NEVER merged into a save payload.
   const scalingColumnDraftOptions = useBlockDraftPickerOptions('scaling_column');
-  const featureDraftOptions = useBlockDraftPickerOptions('feature');
+  // Parent-scoped: only THIS class's draft features belong in the advancement
+  // feature picker — without the filter a sibling subclass's block-draft
+  // features leaked in. Mirrors the displayFeatures overlay just below.
+  const featureDraftOptions = useBlockDraftPickerOptions('feature', { parentId: effectiveId, parentType: 'class' });
   const optionGroupDraftOptions = useBlockDraftPickerOptions('unique_option_group');
   const optionItemDraftOptions = useBlockDraftPickerOptions('unique_option_item');
   const featDraftOptions = useBlockDraftPickerOptions('feat');
@@ -1674,8 +1683,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
     return (
       <div className="max-w-6xl mx-auto py-20 text-center space-y-4">
         <div className="font-serif italic text-ink/60">No class matches the slug "{slug}".</div>
-        <Button variant="ghost" size="sm" onClick={() => navigate('/compendium/classes')} className="text-ink/40">
-          <ChevronLeft className="w-4 h-4 mr-2" /> Return to Compendium
+        <Button variant="ghost" size="sm" onClick={() => navigate(isProposalRoute ? '/my-proposals' : '/compendium/classes')} className="text-ink/40">
+          <ChevronLeft className="w-4 h-4 mr-2" /> {isProposalRoute ? 'Back to My Proposals' : 'Return to Compendium'}
         </Button>
       </div>
     );
@@ -1712,11 +1721,20 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
       <ProposalAwareEditorHeader
         isProposalMode={isProposalMode}
         backHref={
-          isReviewingThisClass
+          // A class is a TOP-LEVEL block entity (like a unique option
+          // group, unlike a subclass which nests under its parent class),
+          // so in ANY proposal/block context — whether that's signalled by
+          // the writer mode (`isProposalMode`) or the `/proposals/edit/*`
+          // URL (`isProposalRoute`) — Back returns to the proposal
+          // dashboard. Previously the existing-class branch sent you to the
+          // class LIST (`/proposals/edit/classes`), and a block-mode writer
+          // on a non-proposal URL fell through to the literal class VIEW
+          // (`/compendium/classes/view/:slug`) — both flagged as wrong.
+          // Admin direct edits (no proposal context) still land on the
+          // class view / catalog list.
+          (isReviewingThisClass || isProposalMode || isProposalRoute)
             ? '/my-proposals'
-            : isProposalRoute
-              ? (id ? '/proposals/edit/classes' : '/my-proposals')
-              : (slug ? `/compendium/classes/view/${slug}` : '/compendium/classes')
+            : (slug ? `/compendium/classes/view/${slug}` : '/compendium/classes')
         }
         proposalTitle={effectiveId ? (name || 'Untitled Class') : 'New Class'}
         adminContent={
@@ -1764,7 +1782,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
 
       <div className="grid lg:grid-cols-4 gap-6">
         <div className="lg:col-span-3">
-          <Tabs defaultValue="basic" className="w-full">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="w-full h-auto flex flex-col gap-1 bg-transparent border-none p-0 mb-6">
               <div className="w-full grid grid-cols-2 lg:grid-cols-5 gap-1 bg-card/50 border border-gold/10 p-1 rounded-md">
                 <TabsTrigger value="basic">Basic Info</TabsTrigger>
@@ -2059,7 +2077,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
             )}
 
             {/* Proficiencies */}
-            <TabsContent value="proficiencies" className="space-y-6 mt-0">
+            <TabsContent value="proficiencies" className="space-y-6 mt-0">{activeTab === 'proficiencies' && (
               <div className="p-4 border border-gold/20 bg-card/50 space-y-6">
                 <div className="section-header">
                   <h2 className="label-text text-gold">Proficiencies</h2>
@@ -2887,7 +2905,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                   </div>
                 </div>
               </div>
-
+            )}
             </TabsContent>
 
             {/* Spellcasting */}
@@ -3409,7 +3427,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
             </TabsContent>
 
             {/* Multiclass Proficiencies */}
-            <TabsContent value="multiclass-proficiencies" className="space-y-6 mt-0">
+            <TabsContent value="multiclass-proficiencies" className="space-y-6 mt-0">{activeTab === 'multiclass-proficiencies' && (
               <div className="p-4 border border-gold/20 bg-card/50 space-y-6">
                 <div className="section-header">
                   <h2 className="label-text text-gold">Multiclass Proficiencies</h2>
@@ -4237,7 +4255,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                   </div>
                 </div>
               </div>
-
+            )}
             </TabsContent>
 
             {/* Tags */}
@@ -4884,7 +4902,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
               toast.success('Class deleted');
             }
             setInitialDataHash(getCurrentStateHash()); // Prevent dirty check
-            setTimeout(() => navigate(isProposalRoute ? '/my-proposals' : '/compendium/classes'), 0);
+            setTimeout(() => navigate((isProposalMode || isProposalRoute) ? '/my-proposals' : '/compendium/classes'), 0);
           } catch (error) {
             toast.error('Failed to delete class');
             throw error; // keep dialog open
