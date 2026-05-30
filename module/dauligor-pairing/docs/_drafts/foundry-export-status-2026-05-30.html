@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Foundry Export-First Status (2026-05-30)</title>
+<style>
+  :root{--parchment:#f5f2e8;--parchment-soft:#faf7ed;--ink:#1a1a1a;--ink-soft:#3a3a3a;--muted:#6b6457;--gold:#c5a059;--gold-deep:#8a6d2f;--blood:#7a1f1f;--leaf:#355c3a;--card:#fbf8ee;--rule:#d8cfb8;--shadow:0 1px 3px rgba(0,0,0,.08),0 4px 10px rgba(0,0,0,.04);}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--parchment);color:var(--ink);font-family:"Inter",-apple-system,"Segoe UI",Roboto,sans-serif;font-size:15px;line-height:1.55;}
+  .wrap{max-width:1060px;margin:0 auto;padding:40px 32px 80px;}
+  header.hero{border-bottom:1px solid var(--rule);padding-bottom:20px;margin-bottom:26px;}
+  header.hero h1{font-family:"Cormorant Garamond","Georgia",serif;font-weight:600;font-size:38px;line-height:1.1;margin:0 0 6px;}
+  header.hero .sub{color:var(--muted);font-size:14px;}
+  header.hero .meta{margin-top:14px;display:flex;flex-wrap:wrap;gap:8px;}
+  .badge{display:inline-block;padding:2px 9px;border-radius:3px;font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;}
+  .badge.gold{background:var(--gold);color:#fff;}.badge.leaf{background:var(--leaf);color:#fff;}.badge.blood{background:var(--blood);color:#fff;}.badge.muted{background:#d8cfb8;color:var(--ink-soft);}
+  h2{font-family:"Cormorant Garamond","Georgia",serif;font-size:26px;font-weight:600;margin:38px 0 12px;padding-bottom:6px;border-bottom:2px solid var(--gold);}
+  p{margin:8px 0;} ul{margin:8px 0 8px 22px;padding:0;} li{margin:5px 0;}
+  code{font-family:"JetBrains Mono","Consolas",monospace;font-size:13px;background:rgba(138,109,47,.12);padding:1px 5px;border-radius:3px;}
+  table{border-collapse:collapse;width:100%;margin:14px 0;background:var(--parchment-soft);box-shadow:var(--shadow);border-radius:4px;overflow:hidden;}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--rule);font-size:14px;vertical-align:top;} tr:last-child td{border-bottom:none;}
+  th{background:rgba(138,109,47,.10);font-weight:600;color:var(--gold-deep);text-transform:uppercase;font-size:11px;letter-spacing:.6px;}
+  .callout{background:rgba(122,31,31,.06);border:1px solid rgba(122,31,31,.25);border-radius:4px;padding:12px 16px;margin:14px 0;font-size:14px;}
+  .callout strong{color:var(--blood);}
+  .callout.leaf{background:rgba(53,92,58,.07);border-color:rgba(53,92,58,.3);} .callout.leaf strong{color:var(--leaf);}
+  .path{font-family:"JetBrains Mono","Consolas",monospace;font-size:13px;color:var(--gold-deep);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>Foundry Export-First &mdash; Status</h1>
+  <div class="sub">branch <code>foundry-module</code> &middot; 2026-05-30 &middot; committed</div>
+  <div class="meta">
+    <span class="badge leaf">backgrounds ✓</span>
+    <span class="badge leaf">races ✓</span>
+    <span class="badge leaf">creatures ✓</span>
+    <span class="badge muted">round-trip later</span>
+  </div>
+</header>
+
+<p>
+  The plan is <strong>export from Foundry first</strong> so the compendium editor has the real data shapes to design its tables; the import
+  round-trip follows once those tables exist. All three export-first exporters now exist. Backgrounds &amp; races you've confirmed work; creatures
+  is the new one this turn.
+</p>
+
+<h2>What each exporter produces</h2>
+<table>
+  <tr><th>Export (button)</th><th>Where</th><th>Bundle kind</th><th>Captures</th></tr>
+  <tr>
+    <td>Export Background Folder</td><td>Item Directory sidebar</td>
+    <td><code>dauligor.foundry-background-folder-export.v1</code></td>
+    <td>Full <code>sourceDocument</code> + summary: <code>startingEquipment[]</code> (EquipmentEntryData tree), <code>wealth</code>, advancement map</td>
+  </tr>
+  <tr>
+    <td>Export Race Folder</td><td>Item Directory sidebar</td>
+    <td><code>dauligor.foundry-race-folder-export.v1</code></td>
+    <td>Full <code>sourceDocument</code> + summary: <code>movement</code>, <code>senses</code>, <code>type</code> (creature type), advancement map</td>
+  </tr>
+  <tr>
+    <td><strong>Export Creature Folder</strong> (new)</td><td><strong>Actor Directory sidebar</strong></td>
+    <td><code>dauligor.foundry-creature-folder-export.v1</code></td>
+    <td>Full <code>sourceDocument</code> (stat block <strong>+ embedded items + effects</strong>) + rich summary: type, CR, AC/HP, abilities, proficient skills, movement, senses, damage/condition traits, languages, spellcasting, legendary, embedded-type counts</td>
+  </tr>
+</table>
+<p>
+  Every entry carries the <strong>full <code>sourceDocument</code></strong> (the authoritative Foundry shape) plus a typed summary digest. The app team can
+  export a folder and read off exactly what columns each table needs. Contracts:
+  <span class="path">docs/background-race-folder-export-contract.md</span> and <span class="path">docs/creature-folder-export-contract.md</span>.
+</p>
+
+<h2>Why creatures are their own exporter (not the feats table)</h2>
+<p>
+  Backgrounds and races are feat-family <em>Items</em> — they reuse the feat plumbing. <strong>Creatures are Actors</strong> (<code>type:"npc"</code>) with a
+  full stat block <em>and their own embedded items</em> (actions/attacks/spells). That's the concrete evidence for why they can't live in the feats table and
+  need a dedicated creatures table — the export makes that visible. Scoped to <code>npc</code> only; PCs / vehicles / groups stay on the existing generic
+  <em>Export Actor Folder</em>.
+</p>
+
+<h2>The honest caveat</h2>
+<div class="callout">
+  <strong>Not yet runtime-tested in a live Foundry world.</strong> Both files syntax-check clean and the creature exporter mirrors the proven feat/actor
+  exporters, but I can't drive Foundry headlessly — it needs real NPC actors present to verify end-to-end. With the junction now pointed at this branch,
+  reload Foundry, drop a few monsters in a folder, and hit <em>Export Creature Folder</em>; if anything's off in the JSON, tell me and I'll fix it.
+</div>
+
+<h2>What's next (when you want it)</h2>
+<ul>
+  <li>The <strong>import</strong> bundles (<code>dauligor.background-item.v1</code> / <code>race-item.v1</code> built; <code>creature-actor.v1</code> deferred) and the full <strong>round-trip</strong> verification wait until the compendium editor's bg/race/creature tables exist — as planned.</li>
+  <li>Creature import bundle-shape preferences are already on record for <code>compendium-editors</code> in the reply handoff.</li>
+</ul>
+
+<p style="margin-top:22px;"><small style="color:var(--muted);">This report: <span class="path">module/dauligor-pairing/docs/_drafts/foundry-export-status-2026-05-30.html</span>.</small></p>
+
+</div>
+</body>
+</html>
