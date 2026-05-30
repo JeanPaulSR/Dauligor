@@ -219,17 +219,25 @@ function asRefArray(v: any): EntityRef[] {
   if (!Array.isArray(v)) return [];
   return v.map(asRef).filter((r): r is EntityRef => r !== null);
 }
-/** Clamp to 1..4 for entity-row card grids (default 3). */
+// All three clamps share one rule: a PRESENT numeric value is clamped to the
+// nearest bound; only an absent/non-numeric value falls back to the default.
+// (So a stored 99 → max, a stored 0 → min — neither silently resets to default.)
+/** entity-row card grid columns: 1..4, default 3. */
 const clampCols = (v: any): 1 | 2 | 3 | 4 => {
   const n = Math.round(Number(v));
-  if (n >= 1 && n <= 4) return n as 1 | 2 | 3 | 4;
-  return 3;
+  if (!Number.isFinite(n)) return 3;
+  return Math.max(1, Math.min(4, n)) as 1 | 2 | 3 | 4;
 };
-/** Clamp to 2..4 for the Columns container (default 2). */
+/** Columns-container cells: 2..4, default 2. */
 const clampColumnsContainer = (v: any): 2 | 3 | 4 => {
   const n = Math.round(Number(v));
-  if (n >= 2 && n <= 4) return n as 2 | 3 | 4;
-  return 2;
+  if (!Number.isFinite(n)) return 2;
+  return Math.max(2, Math.min(4, n)) as 2 | 3 | 4;
+};
+/** entity-row auto-count: 1..12, default 3. */
+const clampCount = (v: any): number => {
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) ? Math.max(1, Math.min(12, n)) : 3;
 };
 
 /** Parse one `{ id, block_type, config }` D1 row (or a nested config child) into
@@ -262,7 +270,7 @@ export function parseHomeBlock(row: any): HomeBlock | null {
     case 'entity-row':
       return { id, blockType: 'entity-row', title: s(config.title), showHeading: config.showHeading !== false,
         source: config.source === 'auto' ? 'auto' : 'manual', refs: asRefArray(config.refs),
-        category: s(config.category), count: Math.max(1, Math.min(12, Math.round(Number(config.count)) || 3)),
+        category: s(config.category), count: clampCount(config.count),
         columns: clampCols(config.columns), card: ['image', 'compact', 'list'].includes(config.card) ? config.card : 'image',
         excerpt: config.excerpt !== false };
     case 'entity-feature':
