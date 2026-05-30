@@ -59,11 +59,6 @@
   min-height: 0;
 }
 
-.dauligor-option-picker__detail-pane {
-  /* See list above. Independent scroll containers. */
-  overscroll-behavior: contain;
-}
-
 .dauligor-option-picker__level-header {
   display: flex;
   justify-content: space-between;
@@ -197,31 +192,6 @@
   color: rgba(255, 255, 255, 0.7);
 }
 
-/* Detail pane */
-
-.dauligor-option-picker__detail-pane {
-  border: 1px solid var(--dauligor-border);
-  border-radius: 8px;
-  /* Uniform panel-alt — see `.dauligor-option-picker__list`. */
-  background: var(--dauligor-panel-alt);
-  padding: 16px 18px;
-  overflow-y: auto;
-  min-height: 0;
-}
-
-.dauligor-option-picker__detail-empty {
-  color: var(--dauligor-text-muted);
-  font-style: italic;
-  padding: 20px;
-  text-align: center;
-}
-
-.dauligor-option-picker__detail {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
 .dauligor-option-picker__back {
   align-self: flex-start;
   background: rgba(255, 255, 255, 0.08);
@@ -238,35 +208,6 @@
 
 .dauligor-option-picker__back:hover {
   background: rgba(255, 255, 255, 0.2);
-}
-
-.dauligor-option-picker__detail-header {
-  display: grid;
-  grid-template-columns: 64px minmax(0, 1fr);
-  gap: 12px;
-  align-items: center;
-}
-
-.dauligor-option-picker__detail-img {
-  width: 64px;
-  height: 64px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 6px;
-  object-fit: cover;
-  background: rgba(0, 0, 0, 0.3);
-}
-
-.dauligor-option-picker__detail-name {
-  margin: 0;
-  font-size: 22px;
-  color: #f0e8d8;
-}
-
-.dauligor-option-picker__detail-meta {
-  font-size: 11px;
-  color: var(--dauligor-text-muted);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 
 .dauligor-option-picker__banner {
@@ -291,58 +232,6 @@
 .dauligor-option-picker__banner--muted {
   background: rgba(255, 255, 255, 0.04);
   border-color: rgba(255, 255, 255, 0.10);
-  color: var(--dauligor-text-muted);
-}
-
-.dauligor-option-picker__detail-section {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.dauligor-option-picker__detail-section-title {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--dauligor-accent-strong);
-}
-
-.dauligor-option-picker__detail-body {
-  font-size: 13px;
-  line-height: 1.6;
-  color: #d8d4c8;
-}
-
-.dauligor-option-picker__detail-body p {
-  margin: 0 0 0.5em 0;
-}
-
-.dauligor-option-picker__detail-body p:last-child {
-  margin-bottom: 0;
-}
-
-/* Clamp imported `## Heading`-style headings inside option
- * descriptions to a sane size — Foundry's default `<h2>` styles
- * are giant page-headers, which look absurd inside a 13px body. */
-.dauligor-option-picker__detail-body h1,
-.dauligor-option-picker__detail-body h2,
-.dauligor-option-picker__detail-body h3,
-.dauligor-option-picker__detail-body h4 {
-  margin: 12px 0 6px;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--dauligor-accent-strong);
-  border: 0;
-}
-
-.dauligor-option-picker__detail-body strong {
-  color: var(--dauligor-accent-strong);
-}
-
-.dauligor-option-picker__detail-summary {
-  font-size: 11px;
-  font-style: italic;
   color: var(--dauligor-text-muted);
 }
 

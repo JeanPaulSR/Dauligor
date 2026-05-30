@@ -97,3 +97,122 @@
   margin: 0;
   line-height: 1.4;
 }
+
+/* ─── Detail pane (shared) ───────────────────────────────────────────
+ * One detail-pane component shared by the option picker and the subclass
+ * preview (and the Feature Manager's option re-select, which reuses the
+ * picker). Base header is a stacked column (no image); option-picker opts
+ * into `__header--with-image` for its 64px icon grid. Was duplicated as
+ * `.dauligor-{subclass-preview,option-picker}__detail*` before 2026-05-30. */
+.dauligor-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dauligor-detail__pane {
+  border: 1px solid var(--dauligor-border);
+  border-radius: 8px;
+  background: var(--dauligor-panel-alt);
+  padding: 16px 18px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  min-height: 0;
+}
+
+.dauligor-detail__empty {
+  color: var(--dauligor-text-muted);
+  font-style: italic;
+  padding: 20px;
+  text-align: center;
+}
+
+.dauligor-detail__header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--dauligor-border);
+}
+
+/* Option picker: 64px icon beside name/meta, no divider — overrides base. */
+.dauligor-detail__header--with-image {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.dauligor-detail__img {
+  width: 64px;
+  height: 64px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  object-fit: cover;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.dauligor-detail__name {
+  margin: 0;
+  font-size: 22px;
+  color: #f0e8d8;
+}
+
+.dauligor-detail__meta {
+  font-size: 11px;
+  color: var(--dauligor-text-muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.dauligor-detail__summary {
+  font-size: 11px;
+  font-style: italic;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-detail__section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dauligor-detail__section-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dauligor-accent-strong);
+}
+
+.dauligor-detail__body {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--dauligor-text);
+}
+
+.dauligor-detail__body p {
+  margin: 0 0 0.75em;
+}
+
+.dauligor-detail__body p:last-child {
+  margin-bottom: 0;
+}
+
+/* Clamp imported `## Heading`-style headings to a sane size in the 13px body. */
+.dauligor-detail__body h1,
+.dauligor-detail__body h2,
+.dauligor-detail__body h3,
+.dauligor-detail__body h4 {
+  margin: 12px 0 6px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--dauligor-accent-strong);
+  border: 0;
+}
+
+.dauligor-detail__body strong {
+  color: var(--dauligor-accent-strong);
+}

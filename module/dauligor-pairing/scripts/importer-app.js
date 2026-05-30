@@ -2946,22 +2946,22 @@ class DauligorSubclassPreviewApp extends HandlebarsApplicationMixin(ApplicationV
     // were adding visual noise — dropped from the meta line.
     const detailHtml = focusedFeature
       ? `
-        <div class="dauligor-subclass-preview__detail">
-          <div class="dauligor-subclass-preview__detail-header">
-            <h2 class="dauligor-subclass-preview__detail-name">${escapeHTML(focusedFeature.name)}</h2>
-            <div class="dauligor-subclass-preview__detail-meta">
+        <div class="dauligor-detail">
+          <div class="dauligor-detail__header">
+            <h2 class="dauligor-detail__name">${escapeHTML(focusedFeature.name)}</h2>
+            <div class="dauligor-detail__meta">
               ${focusedFeature.level ? `Level ${focusedFeature.level}` : "Always active"}
             </div>
           </div>
-          <div class="dauligor-subclass-preview__detail-section">
-            <div class="dauligor-subclass-preview__detail-section-title">Description</div>
-            <div class="dauligor-subclass-preview__detail-body">
+          <div class="dauligor-detail__section">
+            <div class="dauligor-detail__section-title">Description</div>
+            <div class="dauligor-detail__body">
               ${focusedFeature.description ?? ""}
             </div>
           </div>
         </div>
       `
-      : `<div class="dauligor-subclass-preview__detail-empty">Select a feature to read its description.</div>`;
+      : `<div class="dauligor-detail__empty">Select a feature to read its description.</div>`;
 
     this._bodyRegion.innerHTML = `
       <div class="dauligor-subclass-preview">
@@ -3039,22 +3039,22 @@ class DauligorSubclassPreviewApp extends HandlebarsApplicationMixin(ApplicationV
     const escapeHTML = (s) => foundry.utils.escapeHTML(String(s ?? ""));
     detailCol.innerHTML = focusedFeature
       ? `
-        <div class="dauligor-subclass-preview__detail">
-          <div class="dauligor-subclass-preview__detail-header">
-            <h2 class="dauligor-subclass-preview__detail-name">${escapeHTML(focusedFeature.name)}</h2>
-            <div class="dauligor-subclass-preview__detail-meta">
+        <div class="dauligor-detail">
+          <div class="dauligor-detail__header">
+            <h2 class="dauligor-detail__name">${escapeHTML(focusedFeature.name)}</h2>
+            <div class="dauligor-detail__meta">
               ${focusedFeature.level ? `Level ${focusedFeature.level}` : "Always active"}
             </div>
           </div>
-          <div class="dauligor-subclass-preview__detail-section">
-            <div class="dauligor-subclass-preview__detail-section-title">Description</div>
-            <div class="dauligor-subclass-preview__detail-body">
+          <div class="dauligor-detail__section">
+            <div class="dauligor-detail__section-title">Description</div>
+            <div class="dauligor-detail__body">
               ${focusedFeature.description ?? ""}
             </div>
           </div>
         </div>
       `
-      : `<div class="dauligor-subclass-preview__detail-empty">Select a feature to read its description.</div>`;
+      : `<div class="dauligor-detail__empty">Select a feature to read its description.</div>`;
   }
 }
 
@@ -5536,7 +5536,7 @@ export async function runOptionGroupStep({ workflow, actor, group, sequence, pro
   // prereqs), and the source label.
   const renderDetailPanel = (entry, app, ctx) => {
     if (!entry) {
-      return `<div class="dauligor-option-picker__detail-empty">No option focused. Click a row to see its details.</div>`;
+      return `<div class="dauligor-detail__empty">No option focused. Click a row to see its details.</div>`;
     }
     const selectedSet = new Set([
       ...priorSelections,
@@ -5664,25 +5664,25 @@ export async function runOptionGroupStep({ workflow, actor, group, sequence, pro
       : "";
 
     return `
-      <div class="dauligor-option-picker__detail">
+      <div class="dauligor-detail">
         ${backButton}
-        <div class="dauligor-option-picker__detail-header">
-          <img class="dauligor-option-picker__detail-img" src="${escapeHTML(entry.img)}" alt="" />
+        <div class="dauligor-detail__header dauligor-detail__header--with-image">
+          <img class="dauligor-detail__img" src="${escapeHTML(entry.img)}" alt="" />
           <div>
-            <h3 class="dauligor-option-picker__detail-name">${escapeHTML(entry.item.name)}</h3>
-            ${entry.sourceLabel ? `<div class="dauligor-option-picker__detail-meta">${escapeHTML(entry.sourceLabel)}</div>` : ""}
+            <h3 class="dauligor-detail__name">${escapeHTML(entry.item.name)}</h3>
+            ${entry.sourceLabel ? `<div class="dauligor-detail__meta">${escapeHTML(entry.sourceLabel)}</div>` : ""}
           </div>
         </div>
         ${statusBanner}
         ${pills.length ? `
-          <div class="dauligor-option-picker__detail-section">
-            <div class="dauligor-option-picker__detail-section-title">Prerequisites</div>
+          <div class="dauligor-detail__section">
+            <div class="dauligor-detail__section-title">Prerequisites</div>
             <div class="dauligor-option-picker__pill-row">${pills.join("")}</div>
           </div>
         ` : ""}
-        <div class="dauligor-option-picker__detail-section">
-          <div class="dauligor-option-picker__detail-section-title">Description</div>
-          <div class="dauligor-option-picker__detail-body">
+        <div class="dauligor-detail__section">
+          <div class="dauligor-detail__section-title">Description</div>
+          <div class="dauligor-detail__body">
             ${entry.description || "<p><em>No description authored.</em></p>"}
           </div>
         </div>
@@ -5782,7 +5782,7 @@ export async function runOptionGroupStep({ workflow, actor, group, sequence, pro
               `;
             }).join("")}
           </div>
-          <div class="dauligor-option-picker__detail-pane">
+          <div class="dauligor-detail__pane">
             ${renderDetailPanel(focused, app, ctx)}
           </div>
           ${renderOutOfGroupOverlay(app._state.outOfGroupOverlay)}
@@ -5903,7 +5903,7 @@ export async function runOptionGroupStep({ workflow, actor, group, sequence, pro
           el.classList.add("dauligor-option-picker__row--focused");
 
           // (b) Replace the detail pane content.
-          const detailPane = body.querySelector(".dauligor-option-picker__detail-pane");
+          const detailPane = body.querySelector(".dauligor-detail__pane");
           if (detailPane) {
             const focused = enrichedEntries.find((e) => e.sourceId === sid)
               ?? enrichedEntries[0]
@@ -5928,7 +5928,7 @@ export async function runOptionGroupStep({ workflow, actor, group, sequence, pro
       // Wire the initial detail pane handlers — partial-update path
       // re-wires for itself; this handles the first render after
       // mount.
-      wireDetailPaneHandlers(root.querySelector(".dauligor-option-picker__detail-pane"));
+      wireDetailPaneHandlers(root.querySelector(".dauligor-detail__pane"));
 
       // Checkbox toggle — still uses a full rerender because changing
       // the selection set can cascade through other rows' blocked
@@ -5936,7 +5936,7 @@ export async function runOptionGroupStep({ workflow, actor, group, sequence, pro
       const rerenderPreservingListScroll = () => {
         const list = liveRoot().querySelector(".dauligor-option-picker__list");
         const scrollTop = list?.scrollTop ?? 0;
-        const detailPane = liveRoot().querySelector(".dauligor-option-picker__detail-pane");
+        const detailPane = liveRoot().querySelector(".dauligor-detail__pane");
         const detailScrollTop = detailPane?.scrollTop ?? 0;
         app.rerenderPrompt();
         // Two animation frames so the layout pass has settled
@@ -5949,7 +5949,7 @@ export async function runOptionGroupStep({ workflow, actor, group, sequence, pro
             if (!liveBody) return;
             const nextList = liveBody.querySelector(".dauligor-option-picker__list");
             if (nextList) nextList.scrollTop = scrollTop;
-            const nextDetail = liveBody.querySelector(".dauligor-option-picker__detail-pane");
+            const nextDetail = liveBody.querySelector(".dauligor-detail__pane");
             if (nextDetail) nextDetail.scrollTop = detailScrollTop;
           });
         });

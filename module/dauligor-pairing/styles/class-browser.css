@@ -280,8 +280,7 @@
   padding: 16px 18px;
 }
 
-.dauligor-subclass-preview__empty,
-.dauligor-subclass-preview__detail-empty {
+.dauligor-subclass-preview__empty {
   color: var(--dauligor-text-muted);
   font-style: italic;
   padding: 24px 16px;
@@ -328,83 +327,6 @@
  * lets clicks fall through to the row's handler. */
 .dauligor-subclass-preview__row--subclass .dauligor-option-picker__row-check {
   pointer-events: none;
-}
-
-.dauligor-subclass-preview__detail {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.dauligor-subclass-preview__detail-header {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--dauligor-border);
-}
-
-.dauligor-subclass-preview__detail-name {
-  margin: 0;
-  font-size: 22px;
-  color: #f0e8d8;
-}
-
-.dauligor-subclass-preview__detail-meta {
-  font-size: 11px;
-  color: var(--dauligor-text-muted);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-/* Section block + uppercase label inside the detail pane — mirrors
- * `.dauligor-option-picker__detail-section{,-title}` so the two
- * panes share their information hierarchy (name + meta header, then
- * a labeled DESCRIPTION section below). */
-.dauligor-subclass-preview__detail-section {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.dauligor-subclass-preview__detail-section-title {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--dauligor-accent-strong);
-}
-
-.dauligor-subclass-preview__detail-body {
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--dauligor-text);
-}
-
-.dauligor-subclass-preview__detail-body p {
-  margin: 0 0 12px;
-}
-
-.dauligor-subclass-preview__detail-body p:last-child {
-  margin-bottom: 0;
-}
-
-/* Headings inside imported descriptions — clamp them down to a
- * reasonable size so things like `## Spell Slots` don't render at
- * 32px+ inside a 13px description body. */
-.dauligor-subclass-preview__detail-body h1,
-.dauligor-subclass-preview__detail-body h2,
-.dauligor-subclass-preview__detail-body h3,
-.dauligor-subclass-preview__detail-body h4 {
-  margin: 12px 0 6px;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--dauligor-accent-strong);
-  border: 0;
-}
-
-.dauligor-subclass-preview__detail-body strong {
-  color: var(--dauligor-accent-strong);
 }
 
 .dauligor-class-browser__toolbar .dauligor-class-browser__input,

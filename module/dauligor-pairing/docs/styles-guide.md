@@ -37,7 +37,7 @@ last are the load-order rules that *do* matter.
 | Component block(s) | File | What it is |
 |---|---|---|
 | token definitions (`--dauligor-*`) | `tokens.css` | the palette + button tokens + accent-tint channels; also `.dauligor-section-filter`'s local search-width var |
-| `__button` base, box-sizing reset, `dauligor-chat-spell-change`, `@keyframes`, `.application` / non-`dauligor` base | `base.css` | shared primitives |
+| `__button` base, box-sizing reset, `dauligor-chat-spell-change`, `@keyframes`, `.application` / non-`dauligor` base, **`.dauligor-detail*`** (shared detail pane) | `base.css` | shared primitives |
 | `importer`, `importer-app`, `importer-window`, `wizard`, `sequence`, `class-options` | `importer-wizard.css` | the import wizard window, its chrome + state modifiers, the sequenced actor-import flow, class-options regions |
 | `class-browser`, `subclass-preview` | `class-browser.css` | the class browser + subclass preview popup |
 | `option-picker` | `option-picker.css` | the option-group picker (shared by importer + feature manager) |

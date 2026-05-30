@@ -141,6 +141,13 @@ interpreter**. Build the runtime resolver:
   Content-identical (byte count + brace balance verified). Finder doc: `docs/styles-guide.md`.
   **Needs a live-Foundry eyeball** at narrow widths (responsive.css loads last) + the cross-block
   bridge spots (embedded spell manager, sequence/subclass-preview importer states).
+- **Duplicate-component dedup pass [done 2026-05-30]** (audit: `docs/_drafts/duplicate-components-audit-2026-05-30.html`).
+  Tokenized 38 remaining raw accent tints; folded `wizard__toolbar-button` into the canonical button +
+  merged the section-filter toolbar/footer button pair; **unified the duplicated detail pane into a shared
+  `.dauligor-detail` component** (base.css) consumed by the option picker (via `__header--with-image`) and
+  the subclass preview + feature-manager re-select — renamed the markup in `importer-app.js` +
+  `feature-manager-app.js`, removed the per-block copies, unified body color to the token. Appearance-
+  preserving except the deliberate reconciliations (button heights, body color). **Needs a Foundry eyeball.**
 - **First unification pass [done 2026-05-30]** (audit: `docs/_drafts/ui-consistency-audit-2026-05-30.html`).
   Unified the three near-identical flat-button rules (wizard / class-browser / spell-tab-tools /
   spell-manager) into one canonical `.dauligor-…__button` rule (per-block layout deltas kept;

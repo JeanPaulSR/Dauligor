@@ -1086,7 +1086,7 @@
  *     .dauligor-sequence__body             ← inner wrapper
  *       .dauligor-option-picker            ← grid
  *         .dauligor-option-picker__list    ← scrollable ✓
- *         .dauligor-option-picker__detail-pane ← scrollable ✓
+ *         .dauligor-detail__pane           ← scrollable ✓ (shared, base.css)
  *
  * Override the body-region's `overflow: auto` ONLY when our picker is
  * inside. Other prompts (skills, tools, traits) keep the existing

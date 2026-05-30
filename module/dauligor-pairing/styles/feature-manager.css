@@ -687,7 +687,7 @@
 
 /* Detail-pane actions footer (Swap this pick button) — pinned to
    the bottom of the detail pane via flex auto-margin. The detail
-   pane itself uses `.dauligor-subclass-preview__detail` flex column
+   pane itself uses the shared `.dauligor-detail` flex column (base.css)
    so this slots in below the description naturally. */
 .dauligor-feature-manager__option-detail-actions {
   margin-top: auto;

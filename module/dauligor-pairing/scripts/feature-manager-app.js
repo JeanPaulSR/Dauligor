@@ -681,7 +681,7 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
     // ─── Col 3: focused pick's detail ──────────────────────────────
     const detailHtml = focusedItem
       ? this._renderOptionPickDetail(focusedItem, focusedGroup)
-      : `<div class="dauligor-subclass-preview__detail-empty">Select a pick on the left to see its description.</div>`;
+      : `<div class="dauligor-detail__empty">Select a pick on the left to see its description.</div>`;
 
     this._bodyRegion.innerHTML = `
       <div class="dauligor-feature-manager__option-three-col">
@@ -693,7 +693,7 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
             <span>${escapeHtml(focusedGroup?.groupLabel ?? "Picks")}</span>
             <span class="dauligor-subclass-preview__level-count">${focusedGroup?.items.length ?? 0}</span>
           </header>
-          ${picksHtml || `<div class="dauligor-subclass-preview__detail-empty">No picks for this group yet.</div>`}
+          ${picksHtml || `<div class="dauligor-detail__empty">No picks for this group yet.</div>`}
         </section>
         <section class="dauligor-subclass-preview__col dauligor-subclass-preview__col--detail dauligor-feature-manager__option-col--detail">
           ${detailHtml}
@@ -743,7 +743,7 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
 
   /**
    * Right-column detail for the focused option pick. Mirrors the
-   * subclass preview's `.dauligor-subclass-preview__detail` recipe
+   * subclass preview's `.dauligor-detail` recipe
    * (large title + meta line + labeled DESCRIPTION section) so the
    * FM and the importer share the same detail-pane vocabulary.
    * Adds a "Swap this pick" button at the bottom that opens the
@@ -753,16 +753,16 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
     const groupLabel = group?.groupLabel ?? "Class Option";
     const className = group?.className ?? "";
     return `
-      <div class="dauligor-subclass-preview__detail dauligor-feature-manager__option-detail">
-        <header class="dauligor-subclass-preview__detail-header">
-          <h2 class="dauligor-subclass-preview__detail-name">${escapeHtml(item.name)}</h2>
-          <div class="dauligor-subclass-preview__detail-meta">
+      <div class="dauligor-detail dauligor-feature-manager__option-detail">
+        <header class="dauligor-detail__header">
+          <h2 class="dauligor-detail__name">${escapeHtml(item.name)}</h2>
+          <div class="dauligor-detail__meta">
             ${escapeHtml(groupLabel)}${className ? ` · ${escapeHtml(className)}` : ""}
           </div>
         </header>
-        <div class="dauligor-subclass-preview__detail-section">
-          <div class="dauligor-subclass-preview__detail-section-title">Description</div>
-          <div class="dauligor-subclass-preview__detail-body">
+        <div class="dauligor-detail__section">
+          <div class="dauligor-detail__section-title">Description</div>
+          <div class="dauligor-detail__body">
             ${item.description || `<p><em>No description authored for this option.</em></p>`}
           </div>
         </div>
