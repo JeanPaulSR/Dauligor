@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Module UI Consistency Audit (2026-05-30)</title>
+<style>
+  :root{--parchment:#f5f2e8;--parchment-soft:#faf7ed;--ink:#1a1a1a;--ink-soft:#3a3a3a;--muted:#6b6457;--gold:#c5a059;--gold-deep:#8a6d2f;--blood:#7a1f1f;--leaf:#355c3a;--card:#fbf8ee;--rule:#d8cfb8;--code-bg:#2b2620;--code-ink:#f0e9d2;--shadow:0 1px 3px rgba(0,0,0,.08),0 4px 10px rgba(0,0,0,.04);}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--parchment);color:var(--ink);font-family:"Inter",-apple-system,"Segoe UI",Roboto,sans-serif;font-size:15px;line-height:1.55;}
+  .wrap{max-width:1100px;margin:0 auto;padding:40px 32px 80px;}
+  header.hero{border-bottom:1px solid var(--rule);padding-bottom:20px;margin-bottom:26px;}
+  header.hero h1{font-family:"Cormorant Garamond","Georgia",serif;font-weight:600;font-size:38px;line-height:1.1;margin:0 0 6px;}
+  header.hero .sub{color:var(--muted);font-size:14px;}
+  header.hero .meta{margin-top:14px;display:flex;flex-wrap:wrap;gap:8px;}
+  .badge{display:inline-block;padding:2px 9px;border-radius:3px;font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;}
+  .badge.gold{background:var(--gold);color:#fff;}.badge.blood{background:var(--blood);color:#fff;}.badge.leaf{background:var(--leaf);color:#fff;}.badge.muted{background:#d8cfb8;color:var(--ink-soft);}
+  h2{font-family:"Cormorant Garamond","Georgia",serif;font-size:26px;font-weight:600;margin:38px 0 12px;padding-bottom:6px;border-bottom:2px solid var(--gold);}
+  h3{font-family:"Cormorant Garamond","Georgia",serif;font-size:20px;margin:22px 0 8px;}
+  p{margin:8px 0;} ul{margin:8px 0 8px 22px;padding:0;} li{margin:5px 0;}
+  code{font-family:"JetBrains Mono","Consolas",monospace;font-size:12.5px;background:rgba(138,109,47,.12);padding:1px 5px;border-radius:3px;}
+  pre{background:var(--code-bg);color:var(--code-ink);padding:13px 15px;border-radius:5px;overflow-x:auto;font-family:"JetBrains Mono","Consolas",monospace;font-size:12.5px;line-height:1.5;box-shadow:var(--shadow);}
+  pre code{background:transparent;color:inherit;padding:0;}
+  table{border-collapse:collapse;width:100%;margin:14px 0;background:var(--parchment-soft);box-shadow:var(--shadow);border-radius:4px;overflow:hidden;}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--rule);font-size:14px;vertical-align:top;} tr:last-child td{border-bottom:none;}
+  th{background:rgba(138,109,47,.10);font-weight:600;color:var(--gold-deep);text-transform:uppercase;font-size:11px;letter-spacing:.6px;}
+  .callout{background:rgba(122,31,31,.06);border:1px solid rgba(122,31,31,.25);border-radius:4px;padding:12px 16px;margin:14px 0;font-size:14px;}
+  .callout strong{color:var(--blood);}
+  .callout.leaf{background:rgba(53,92,58,.07);border-color:rgba(53,92,58,.3);} .callout.leaf strong{color:var(--leaf);}
+  .tag{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:1px 7px;border-radius:3px;}
+  .tag.unify{background:rgba(122,31,31,.12);color:var(--blood);}
+  .tag.fix{background:rgba(138,109,47,.16);color:var(--gold-deep);}
+  .tag.leave{background:rgba(53,92,58,.14);color:var(--leaf);}
+  .path{font-family:"JetBrains Mono","Consolas",monospace;font-size:12.5px;color:var(--gold-deep);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>Module UI Consistency Audit</h1>
+  <div class="sub">branch <code>foundry-module</code> &middot; 2026-05-30 &middot; <code>styles/dauligor-importer.css</code> (7,228 lines) + 18 render scripts</div>
+  <div class="meta">
+    <span class="badge gold">read-only audit</span>
+    <span class="badge muted">24 component blocks</span>
+    <span class="badge blood">buttons duplicated ×3</span>
+    <span class="badge blood">5 phantom tokens</span>
+  </div>
+</header>
+
+<p>
+  Goal: use the components/styling we've defined in a <strong>unified</strong> manner — same function, same styling; only differ when the function differs.
+  I surveyed the stylesheet and the render scripts. Good news first: there's a real <strong>design-token system</strong> (21 CSS variables) and inline
+  <code>style="…"</code> is nearly absent (11 total). The inconsistency is at the <strong>component</strong> and <strong>token</strong> layers, described below. Nothing changed yet — this is for you to set direction.
+</p>
+
+<h2>The lay of the land</h2>
+<ul>
+  <li><strong>24 component blocks</strong> (<code>.dauligor-spell-manager</code>, <code>-feature-manager</code>, <code>-class-browser</code>, <code>-wizard</code>, <code>-section-filter</code>, …) and <strong>no shared component primitive</strong> — there's no <code>.dauligor-btn</code> / <code>.dauligor-card</code>. Each app block defines its own.</li>
+  <li>The same primitive suffix is re-defined across many blocks: <code>__button</code> in 5 blocks, <code>__empty</code> in 7, <code>__footer</code> in 7, <code>__toolbar</code> in 8, <code>__row</code> in 6, <code>__badge</code> in 3.</li>
+  <li><strong>But re-defined ≠ duplicated.</strong> Applying your "same function" test, most of these are genuinely different (a footer status-bar vs a 2-column grid footer). The true duplicates are narrower — see below.</li>
+</ul>
+
+<h2>Findings</h2>
+
+<h3><span class="tag unify">unify</span> A. Buttons — three near-identical copies of one flat button</h3>
+<p>There's a clear canonical "Dauligor flat button" (Foundry-token bg/border, <code>border-radius:0</code>, identical 0.12s hover). It's copy-pasted into three places with only a height delta:</p>
+<table>
+  <tr><th>Rule</th><th>Size delta</th><th>Otherwise</th></tr>
+  <tr><td><code>.dauligor-wizard__button</code> + <code>.dauligor-class-browser__button</code> (already shared)</td><td><code>height:34px</code>, pad <code>0 14px</code></td><td>tokens + radius 0 + hover</td></tr>
+  <tr><td><code>.dauligor-spell-tab-tools__button</code></td><td><code>min-height:32px</code>, pad <code>0 12px</code></td><td>same tokens + radius 0 + hover (+ <code>box-shadow:none</code>)</td></tr>
+  <tr><td><code>.dauligor-spell-manager__button</code></td><td><code>min-height:30px</code>, pad <code>0 12px</code></td><td>same tokens + radius 0 + hover (+ <code>box-shadow:none</code>)</td></tr>
+</table>
+<p>These are the same component with cosmetic height drift (34/32/30). <strong>Recommend:</strong> one canonical button rule, all four selectors grouped, normalized to a single height. CSS-only — class names stay, so <em>no script/HTML changes</em>. (<code>.dauligor-directory-tools__button</code> is intentionally different — it sets no bg/border so it blends with Foundry's sidebar action-buttons. Leave it; add a comment saying so.)</p>
+
+<h3><span class="tag fix">fix</span> B. Phantom tokens — referenced everywhere, never defined</h3>
+<p>The token block (defined on 5 roots) defines 21 variables. But a parallel vocabulary is <strong>referenced</strong> and never defined — it only "works" because every reference carries an inline fallback, so the variable name is dead weight and can never be themed:</p>
+<table>
+  <tr><th>Referenced token</th><th>Uses</th><th>Defined?</th><th>Note</th></tr>
+  <tr><td><code>--dauligor-border-soft</code></td><td>23</td><td><strong>no</strong></td><td>heavily used (spell-picker era); always falls back</td></tr>
+  <tr><td><code>--dauligor-surface-muted</code></td><td>8</td><td><strong>no</strong></td><td>always falls back</td></tr>
+  <tr><td><code>--dauligor-muted</code></td><td>2</td><td><strong>no</strong></td><td>almost certainly meant <code>--dauligor-text-muted</code> (which exists)</td></tr>
+  <tr><td><code>--dauligor-accent-soft</code></td><td>2</td><td><strong>no</strong></td><td>always falls back</td></tr>
+  <tr><td><code>--dauligor-surface-hover</code></td><td>1</td><td><strong>no</strong></td><td>always falls back</td></tr>
+</table>
+<p>This is the clearest "not using what we defined" issue. <strong>Two ways to fix</strong> (your call — see questions):</p>
+<ul>
+  <li><strong>Define them</strong> — add the 4 real ones to the canonical token block with their de-facto fallback values, and fix <code>--dauligor-muted</code> → <code>--dauligor-text-muted</code>. Makes them real, single-source, themeable.</li>
+  <li><strong>Collapse them</strong> — replace each reference with the nearest existing token (e.g. <code>border-soft</code> → <code>border</code>, <code>surface-muted</code> → <code>panel-soft</code>), then delete the phantom names.</li>
+</ul>
+
+<h3><span class="tag fix">fix</span> C. Token scope — defined on only 5 roots</h3>
+<p>The token block lives on <code>.dauligor-importer, .dauligor-class-browser, .dauligor-class-options, .dauligor-spell-manager, .dauligor-feature-manager</code>. CSS variables inherit through the DOM, so blocks nested inside those windows are fine — but a <strong>standalone window</strong> whose root isn't in that list (and isn't nested under one) won't inherit the tokens and will silently fall back. Candidates worth verifying: <code>.dauligor-gm-console</code>, <code>.dauligor-subclass-preview</code>, the feat browser. <strong>Recommend:</strong> hoist the token block to cover every top-level window root (one shared selector list), so tokens are guaranteed everywhere.</p>
+
+<h3><span class="tag leave">leave</span> D. Primitives that are correctly distinct (do NOT merge)</h3>
+<p>Applying the "same function" test, these re-defined suffixes are genuinely different and should stay separate:</p>
+<ul>
+  <li><strong><code>__empty</code></strong> — a 11px inline hint (class-browser) vs a centered 30px icon+serif "empty pool" (spell-picker) vs a boxed note (wizard). Different empty-state weights. (Could share the muted-text token only.)</li>
+  <li><strong><code>__footer</code></strong> — a status+actions flex bar (importer) vs 2-column grids (class-options, sequence). Different layouts.</li>
+  <li><strong><code>__badge</code></strong> — a label chip (spell-manager) vs an uppercase status tag (feature-manager) vs a tiny V/S/M indicator with ritual/conc variants (spell-picker). Three different jobs. (Naming is loose — "badge" vs "tag" — but visuals differ by function.)</li>
+  <li><strong><code>__toolbar</code></strong> — mostly flex/grid containers tuned per window. Leave.</li>
+</ul>
+
+<h3><span class="tag fix">fix (low priority)</span> E. Hardcoded colors where tokens exist</h3>
+<p>196 hardcoded hex values total. Most are legitimate (gradients, one-off shades), but some duplicate a token value and should reference it instead — e.g. <code>#242424</code> ≈ <code>--dauligor-panel-alt</code> (<code>#252525</code>), and footer <code>background:#141414</code> is an un-tokenized "deep panel". Low priority; worth a spot-pass once tokens are settled, not a blind find/replace.</p>
+
+<h2>Recommended order</h2>
+<ol>
+  <li><strong>Buttons</strong> (Finding A) — group into one canonical rule, normalize height. CSS-only, no HTML churn, highest "unified feel" payoff.</li>
+  <li><strong>Phantom tokens</strong> (Finding B) — define-or-collapse per your choice. CSS-only.</li>
+  <li><strong>Token scope</strong> (Finding C) — hoist the token block to all window roots. CSS-only.</li>
+  <li><strong>Hardcoded-color spot-pass</strong> (Finding E) — only the clear token-duplicates. Later.</li>
+</ol>
+
+<div class="callout">
+  <strong>Why I'm asking before editing:</strong> these are all CSS-only and I can read-verify them, but I <em>cannot visually test in Foundry</em> (it's not a web-preview target). Normalizing button heights and resolving phantom tokens will slightly change a few pixels by design — exactly the unification you asked for — but I want your call on the token direction and the scope before I touch a 7,228-line stylesheet. After you pick, I'll execute, and you can reload Foundry (junction points here now) to eyeball it.
+</div>
+
+<p style="margin-top:22px;"><small style="color:var(--muted);">This audit: <span class="path">module/dauligor-pairing/docs/_drafts/ui-consistency-audit-2026-05-30.html</span>. Read-only — nothing changed.</small></p>
+
+</div>
+</body>
+</html>
