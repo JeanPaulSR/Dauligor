@@ -477,6 +477,20 @@ function BlockTree(p: TreeProps) {
           </div>
         );
       })}
+      {/* Trailing drop zone — a real target for "move to the very end" of this
+          list. Without it the only after-the-last hit area is the bottom half of
+          the last row, which is easy to miss. Shown only while dragging. */}
+      {p.dragId && blocks.length > 0 && (() => {
+        const lastId = blocks[blocks.length - 1].id;
+        const over = p.dropInfo?.id === lastId && p.dropInfo.pos === 'after';
+        return (
+          <div
+            onDragOver={(e) => { if (!p.dragId) return; e.preventDefault(); e.stopPropagation(); p.onHover({ id: lastId, pos: 'after' }); }}
+            onDrop={(e) => { if (!p.dragId) return; e.preventDefault(); e.stopPropagation(); p.onDrop(lastId, 'after'); }}
+            className={cn('h-7 mt-0.5 border border-dashed transition-colors', over ? 'border-gold bg-gold/10' : 'border-transparent')}
+          />
+        );
+      })()}
     </div>
   );
 }
