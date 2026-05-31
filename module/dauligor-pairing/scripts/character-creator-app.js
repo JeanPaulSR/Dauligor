@@ -415,16 +415,16 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
   _renderStepper() {
     if (!this._stepperRegion) return;
     const items = STEPS.map((s, i) => {
-      const state = i === this._step ? "current" : (i < this._step ? "done" : "ahead");
+      const current = i === this._step ? "dauligor-character-creator__step--current" : "";
       const done = this._isStepComplete(s.id);
       return `
-        <button type="button" class="dauligor-cc-step dauligor-cc-step--${state} ${done ? "is-complete" : ""}"
+        <button type="button" class="dauligor-character-creator__step ${current} ${done ? "is-complete" : ""}"
                 data-action="goto-step" data-step="${i}">
-          <span class="dauligor-cc-step__num">${done ? '<i class="fas fa-check"></i>' : (i + 1)}</span>
-          <span class="dauligor-cc-step__label"><i class="fas ${s.icon}"></i> ${escapeHtml(s.label)}</span>
+          <span class="dauligor-character-creator__step-num">${done ? '<i class="fas fa-check"></i>' : (i + 1)}</span>
+          <span class="dauligor-character-creator__step-label"><i class="fas ${s.icon}"></i> ${escapeHtml(s.label)}</span>
         </button>`;
     }).join("");
-    this._stepperRegion.innerHTML = `<nav class="dauligor-cc-stepper">${items}</nav>`;
+    this._stepperRegion.innerHTML = `<nav class="dauligor-character-creator__steps">${items}</nav>`;
     this._stepperRegion.querySelectorAll(`[data-action="goto-step"]`).forEach((el) => {
       el.addEventListener("click", () => this._goToStep(Number(el.dataset.step)));
     });
@@ -464,16 +464,16 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
   _bodyAbilities() {
     const a = this._choices.abilities;
     const tabs = `
-      <div class="dauligor-cc-mode-tabs">
-        <button type="button" class="dauligor-cc-mode-tab ${a.method === "pointbuy" ? "is-active" : ""}" data-action="ability-mode" data-mode="pointbuy">
+      <div class="dauligor-character-creator__mode-tabs">
+        <button type="button" class="dauligor-character-creator__mode-tab ${a.method === "pointbuy" ? "dauligor-character-creator__mode-tab--active" : ""}" data-action="ability-mode" data-mode="pointbuy">
           <i class="fas fa-calculator"></i> Point Buy
         </button>
-        <button type="button" class="dauligor-cc-mode-tab ${a.method === "pool" ? "is-active" : ""}" data-action="ability-mode" data-mode="pool">
+        <button type="button" class="dauligor-character-creator__mode-tab ${a.method === "pool" ? "dauligor-character-creator__mode-tab--active" : ""}" data-action="ability-mode" data-mode="pool">
           <i class="fas fa-dice"></i> Roll Pool
         </button>
       </div>`;
     const panel = a.method === "pointbuy" ? this._renderPointBuy() : this._renderRollPool();
-    return `<div class="dauligor-cc-abilities">${tabs}${panel}</div>`;
+    return `<div class="dauligor-character-creator__abilities">${tabs}${panel}</div>`;
   }
 
   _renderPointBuy() {
@@ -485,24 +485,24 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
       const v = scores[ab.key];
       const cost = pointBuyCost(v);
       return `
-        <div class="dauligor-cc-ability-row">
-          <span class="dauligor-cc-ability-row__label">${ab.abbr} <small>${escapeHtml(ab.label)}</small></span>
-          <div class="dauligor-cc-stepper-control">
-            <button type="button" class="dauligor-cc-spin" data-action="pb-dec" data-key="${ab.key}" ${v <= POINT_BUY.min ? "disabled" : ""}>&minus;</button>
-            <span class="dauligor-cc-ability-row__value">${v}</span>
-            <button type="button" class="dauligor-cc-spin" data-action="pb-inc" data-key="${ab.key}" ${v >= POINT_BUY.max ? "disabled" : ""}>+</button>
+        <div class="dauligor-character-creator__ability-row">
+          <span class="dauligor-character-creator__ability-label">${ab.abbr} <small>${escapeHtml(ab.label)}</small></span>
+          <div class="dauligor-character-creator__spin-group">
+            <button type="button" class="dauligor-character-creator__spin" data-action="pb-dec" data-key="${ab.key}" ${v <= POINT_BUY.min ? "disabled" : ""}>&minus;</button>
+            <span class="dauligor-character-creator__ability-value">${v}</span>
+            <button type="button" class="dauligor-character-creator__spin" data-action="pb-inc" data-key="${ab.key}" ${v >= POINT_BUY.max ? "disabled" : ""}>+</button>
           </div>
-          <span class="dauligor-cc-ability-row__cost">${cost == null ? "—" : `${cost} pt`}</span>
+          <span class="dauligor-character-creator__ability-cost">${cost == null ? "—" : `${cost} pt`}</span>
         </div>`;
     }).join("");
     return `
-      <div class="dauligor-cc-pointbuy">
-        <div class="dauligor-cc-budget ${over ? "is-over" : ""}">
-          <span class="dauligor-cc-budget__num">${spent} / ${POINT_BUY.budget}</span>
-          <span class="dauligor-cc-budget__label">points spent &middot; ${over ? `over by ${-remaining}` : `${remaining} left`}</span>
+      <div class="dauligor-character-creator__pointbuy">
+        <div class="dauligor-character-creator__budget ${over ? "dauligor-character-creator__budget--over" : ""}">
+          <span class="dauligor-character-creator__budget-num">${spent} / ${POINT_BUY.budget}</span>
+          <span class="dauligor-character-creator__budget-label">points spent &middot; ${over ? `over by ${-remaining}` : `${remaining} left`}</span>
         </div>
-        <div class="dauligor-cc-ability-grid">${rows}</div>
-        <p class="dauligor-cc-hint">Each score is 8–16 before racial bonuses. Budget ${POINT_BUY.budget}; costs ramp +2 per step past 13 (14=7, 15=9, 16=11).</p>
+        <div class="dauligor-character-creator__ability-grid">${rows}</div>
+        <p class="dauligor-character-creator__hint">Each score is 8–16 before racial bonuses. Budget ${POINT_BUY.budget}; costs ramp +2 per step past 13 (14=7, 15=9, 16=11).</p>
       </div>`;
   }
 
@@ -515,42 +515,42 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     const setCards = pool.length
       ? pool.map((set) => {
           const selected = a.pool.selectedSetId === set.id;
-          const dice = set.rolls.map((n) => `<span class="dauligor-cc-die">${n}</span>`).join("");
+          const dice = set.rolls.map((n) => `<span class="dauligor-character-creator__die">${n}</span>`).join("");
           const canRemove = isGm || set.userId === game.user?.id;
           return `
-            <div class="dauligor-cc-rollset ${selected ? "is-selected" : ""}" data-action="pick-set" data-set="${set.id}">
-              <div class="dauligor-cc-rollset__head">
-                <span class="dauligor-cc-rollset__owner">${escapeHtml(set.userName)}${set.source === "manual" ? " · manual" : ""}</span>
-                <span class="dauligor-cc-rollset__total">${set.total}</span>
+            <div class="dauligor-character-creator__rollset ${selected ? "dauligor-character-creator__rollset--selected" : ""}" data-action="pick-set" data-set="${set.id}">
+              <div class="dauligor-character-creator__rollset-head">
+                <span class="dauligor-character-creator__rollset-owner">${escapeHtml(set.userName)}${set.source === "manual" ? " · manual" : ""}</span>
+                <span class="dauligor-character-creator__rollset-total">${set.total}</span>
               </div>
-              <div class="dauligor-cc-rollset__dice">${dice}</div>
-              ${canRemove ? `<button type="button" class="dauligor-cc-rollset__remove" data-action="remove-set" data-set="${set.id}" title="Remove this set"><i class="fas fa-xmark"></i></button>` : ""}
+              <div class="dauligor-character-creator__rollset-dice">${dice}</div>
+              ${canRemove ? `<button type="button" class="dauligor-character-creator__rollset-remove" data-action="remove-set" data-set="${set.id}" title="Remove this set"><i class="fas fa-xmark"></i></button>` : ""}
             </div>`;
         }).join("")
-      : `<p class="dauligor-cc-empty">The pool is empty. Roll a set below — everyone at the table can then pick from it.</p>`;
+      : `<p class="dauligor-character-creator__empty">The pool is empty. Roll a set below — everyone at the table can then pick from it.</p>`;
 
     const rollButton = `
-      <button type="button" class="dauligor-cc-button dauligor-cc-button--primary" data-action="roll-set">
+      <button type="button" class="dauligor-character-creator__button dauligor-character-creator__button--primary" data-action="roll-set">
         <i class="fas fa-dice-d6"></i> ${myRolled ? "Re-roll my set" : "Roll my set (4d6 drop lowest)"}
       </button>`;
 
     const manual = isGm ? `
-      <div class="dauligor-cc-manual">
+      <div class="dauligor-character-creator__manual">
         <label>DM: add a set manually <small>(six numbers, e.g. <code>15 14 13 12 10 8</code>)</small></label>
-        <div class="dauligor-cc-manual__row">
+        <div class="dauligor-character-creator__manual-row">
           <input type="text" data-action="manual-input" value="${escapeHtml(this._ui.manualRolls)}" placeholder="15 14 13 12 10 8" />
-          <button type="button" class="dauligor-cc-button" data-action="add-manual"><i class="fas fa-plus"></i> Add</button>
-          ${pool.length ? `<button type="button" class="dauligor-cc-button dauligor-cc-button--ghost" data-action="clear-pool"><i class="fas fa-trash"></i> Clear pool</button>` : ""}
+          <button type="button" class="dauligor-character-creator__button" data-action="add-manual"><i class="fas fa-plus"></i> Add</button>
+          ${pool.length ? `<button type="button" class="dauligor-character-creator__button dauligor-character-creator__button--ghost" data-action="clear-pool"><i class="fas fa-trash"></i> Clear pool</button>` : ""}
         </div>
       </div>` : "";
 
-    const assign = a.pool.selectedSetId ? this._renderAssignment() : `<p class="dauligor-cc-hint">Pick a set above to assign its six values to your abilities.</p>`;
+    const assign = a.pool.selectedSetId ? this._renderAssignment() : `<p class="dauligor-character-creator__hint">Pick a set above to assign its six values to your abilities.</p>`;
 
     return `
-      <div class="dauligor-cc-rollpool">
-        <div class="dauligor-cc-rollpool__controls">${rollButton}${manual}</div>
-        <div class="dauligor-cc-rollpool__sets">${setCards}</div>
-        <div class="dauligor-cc-rollpool__assign">${assign}</div>
+      <div class="dauligor-character-creator__rollpool">
+        <div class="dauligor-character-creator__rollpool-controls">${rollButton}${manual}</div>
+        <div class="dauligor-character-creator__rollpool-sets">${setCards}</div>
+        <div class="dauligor-character-creator__rollpool-assign">${assign}</div>
       </div>`;
   }
 
@@ -567,12 +567,12 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
         return `<option value="${idx}" ${disabled ? "disabled" : ""} ${sel}>${val}</option>`;
       })).join("");
       return `
-        <div class="dauligor-cc-ability-row">
-          <span class="dauligor-cc-ability-row__label">${ab.abbr} <small>${escapeHtml(ab.label)}</small></span>
-          <select class="dauligor-cc-assign-select" data-action="assign" data-key="${ab.key}">${opts}</select>
+        <div class="dauligor-character-creator__ability-row">
+          <span class="dauligor-character-creator__ability-label">${ab.abbr} <small>${escapeHtml(ab.label)}</small></span>
+          <select class="dauligor-character-creator__assign-select" data-action="assign" data-key="${ab.key}">${opts}</select>
         </div>`;
     }).join("");
-    return `<div class="dauligor-cc-assign-grid"><h4>Assign rolls</h4>${rows}</div>`;
+    return `<div class="dauligor-character-creator__assign-grid"><h4>Assign rolls</h4>${rows}</div>`;
   }
 
   // ---- Steps 2 & 3: background / race ----
@@ -585,53 +585,65 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     const noun = kind === "background" ? "background" : "race";
 
     if (data.status === "loading" || data.status === "idle") {
-      return `<div class="dauligor-cc-loading"><i class="fas fa-spinner fa-spin"></i> Loading ${noun}s…</div>`;
+      return `<div class="dauligor-character-creator__loading"><i class="fas fa-spinner fa-spin"></i> Loading ${noun}s…</div>`;
     }
     if (data.status === "error" || !list.length) {
-      return `<div class="dauligor-cc-empty">No ${noun}s available from the current sources.${chosen ? ` Currently chosen: <strong>${escapeHtml(chosen.name)}</strong>.` : ""}</div>`;
+      return `<div class="dauligor-character-creator__empty">No ${noun}s available from the current sources.${chosen ? ` Currently chosen: <strong>${escapeHtml(chosen.name)}</strong>.` : ""}</div>`;
     }
 
     const q = (this._ui[searchKey] || "").toLowerCase();
     const filtered = q ? list.filter((r) => r.name.toLowerCase().includes(q)) : list;
     const rows = filtered.map((r) => {
-      const sel = chosen?.dbId === r.dbId ? "is-selected" : "";
-      const img = r.img ? `<img src="${escapeHtml(r.img)}" alt="" />` : `<span class="dauligor-cc-row__noimg"><i class="fas fa-circle"></i></span>`;
+      const sel = chosen?.dbId === r.dbId ? "dauligor-character-creator__row--selected" : "";
+      const img = r.img
+        ? `<img class="dauligor-character-creator__row-img" src="${escapeHtml(r.img)}" alt="" />`
+        : `<span class="dauligor-character-creator__row-noimg"><i class="fas fa-circle"></i></span>`;
       return `
-        <button type="button" class="dauligor-cc-row ${sel}" data-action="pick-feat" data-kind="${kind}" data-db="${escapeHtml(r.dbId)}">
+        <button type="button" class="dauligor-character-creator__row ${sel}" data-action="pick-feat" data-kind="${kind}" data-db="${escapeHtml(r.dbId)}">
           ${img}
-          <span class="dauligor-cc-row__name">${escapeHtml(r.name)}</span>
+          <span class="dauligor-character-creator__row-name">${escapeHtml(r.name)}</span>
         </button>`;
     }).join("");
 
-    const detail = chosen ? this._renderFeatDetail(kind, chosen) : `<div class="dauligor-detail dauligor-detail--empty"><p>Select a ${noun} to preview it.</p></div>`;
+    const detail = chosen
+      ? this._renderFeatDetail(kind, chosen)
+      : `<div class="dauligor-detail"><div class="dauligor-detail__pane dauligor-detail__empty">Select a ${noun} to preview it.</div></div>`;
 
     return `
-      <div class="dauligor-cc-picker">
-        <div class="dauligor-cc-picker__list-col">
-          <input type="search" class="dauligor-cc-search" data-action="feat-search" data-kind="${kind}" placeholder="Search ${noun}s…" value="${escapeHtml(this._ui[searchKey])}" />
-          <div class="dauligor-cc-picker__list">${rows || `<p class="dauligor-cc-empty">No matches.</p>`}</div>
+      <div class="dauligor-character-creator__picker">
+        <div class="dauligor-character-creator__picker-list-col">
+          <input type="search" class="dauligor-character-creator__search" data-action="feat-search" data-kind="${kind}" placeholder="Search ${noun}s…" value="${escapeHtml(this._ui[searchKey])}" />
+          <div class="dauligor-character-creator__picker-list">${rows || `<p class="dauligor-character-creator__empty">No matches.</p>`}</div>
         </div>
-        <div class="dauligor-cc-picker__detail">${detail}</div>
+        <div class="dauligor-character-creator__picker-detail">${detail}</div>
       </div>`;
   }
 
   _renderFeatDetail(kind, chosen) {
     const cache = kind === "background" ? this._bgDetailCache : this._raceDetailCache;
     const full = cache.get(chosen.dbId);
-    const img = chosen.img ? `<img src="${escapeHtml(chosen.img)}" alt="" />` : "";
+    const hasImg = !!chosen.img;
     const desc = full
       ? truncate(full?.system?.description?.value ?? "", 900)
       : (chosen.summary ? truncate(chosen.summary, 900) : "Loading details…");
+    const header = hasImg
+      ? `<header class="dauligor-detail__header dauligor-detail__header--with-image">
+           <img class="dauligor-detail__img" src="${escapeHtml(chosen.img)}" alt="" />
+           <div>
+             <h3 class="dauligor-detail__name">${escapeHtml(chosen.name)}</h3>
+             <div class="dauligor-detail__meta">${kind === "background" ? "Background" : "Race"}</div>
+           </div>
+         </header>`
+      : `<header class="dauligor-detail__header">
+           <h3 class="dauligor-detail__name">${escapeHtml(chosen.name)}</h3>
+           <div class="dauligor-detail__meta">${kind === "background" ? "Background" : "Race"}</div>
+         </header>`;
     return `
       <div class="dauligor-detail">
-        <header class="dauligor-detail__header ${img ? "dauligor-detail__header--with-image" : ""}">
-          ${img ? `<div class="dauligor-detail__image">${img}</div>` : ""}
-          <div class="dauligor-detail__heading">
-            <h3 class="dauligor-detail__title">${escapeHtml(chosen.name)}</h3>
-            <p class="dauligor-detail__subtitle">${kind === "background" ? "Background" : "Race"}</p>
-          </div>
-        </header>
-        <div class="dauligor-detail__body">${escapeHtml(desc)}</div>
+        <div class="dauligor-detail__pane">
+          ${header}
+          <div class="dauligor-detail__body"><p>${escapeHtml(desc)}</p></div>
+        </div>
       </div>`;
   }
 
@@ -640,45 +652,49 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
   _bodyClass() {
     const data = this._classes;
     if (data.status === "loading" || data.status === "idle") {
-      return `<div class="dauligor-cc-loading"><i class="fas fa-spinner fa-spin"></i> Loading classes…</div>`;
+      return `<div class="dauligor-character-creator__loading"><i class="fas fa-spinner fa-spin"></i> Loading classes…</div>`;
     }
     if (data.status === "error" || !data.entries.length) {
-      return `<div class="dauligor-cc-empty">No classes available from the current sources.</div>`;
+      return `<div class="dauligor-character-creator__empty">No classes available from the current sources.</div>`;
     }
     const chosen = this._choices.class;
     const q = (this._ui.classSearch || "").toLowerCase();
     const filtered = q ? data.entries.filter((e) => e.name.toLowerCase().includes(q)) : data.entries;
     const rows = filtered.map((e) => {
-      const sel = chosen?.entryId === e.entryId && chosen?.sourceSlug === e.sourceSlug ? "is-selected" : "";
-      const img = e.img ? `<img src="${escapeHtml(e.img)}" alt="" />` : `<span class="dauligor-cc-row__noimg"><i class="fas fa-shield-halved"></i></span>`;
+      const sel = chosen?.entryId === e.entryId && chosen?.sourceSlug === e.sourceSlug ? "dauligor-character-creator__row--selected" : "";
+      const img = e.img
+        ? `<img class="dauligor-character-creator__row-img" src="${escapeHtml(e.img)}" alt="" />`
+        : `<span class="dauligor-character-creator__row-noimg"><i class="fas fa-shield-halved"></i></span>`;
       return `
-        <button type="button" class="dauligor-cc-row ${sel}" data-action="pick-class" data-entry="${escapeHtml(e.entryId)}" data-source="${escapeHtml(e.sourceSlug)}">
+        <button type="button" class="dauligor-character-creator__row ${sel}" data-action="pick-class" data-entry="${escapeHtml(e.entryId)}" data-source="${escapeHtml(e.sourceSlug)}">
           ${img}
-          <span class="dauligor-cc-row__name">${escapeHtml(e.name)}</span>
-          <span class="dauligor-cc-row__tag">${escapeHtml(e.sourceSlug.toUpperCase())}</span>
+          <span class="dauligor-character-creator__row-name">${escapeHtml(e.name)}</span>
+          <span class="dauligor-character-creator__row-tag">${escapeHtml(e.sourceSlug.toUpperCase())}</span>
         </button>`;
     }).join("");
 
     const detail = chosen
       ? `<div class="dauligor-detail">
-           <header class="dauligor-detail__header"><div class="dauligor-detail__heading">
-             <h3 class="dauligor-detail__title">${escapeHtml(chosen.name)}</h3>
-             <p class="dauligor-detail__subtitle">Class · ${escapeHtml(chosen.sourceSlug.toUpperCase())}</p>
-           </div></header>
-           <div class="dauligor-detail__body">
-             ${chosen.summary ? `<p>${escapeHtml(truncate(chosen.summary, 700))}</p>` : ""}
-             <p class="dauligor-cc-hint">At <strong>Finish</strong>, the class builder opens pre-set to <strong>${escapeHtml(chosen.name)}</strong> at level 1 so you can make any skill / option / feature choices in the full importer.</p>
+           <div class="dauligor-detail__pane">
+             <header class="dauligor-detail__header">
+               <h3 class="dauligor-detail__name">${escapeHtml(chosen.name)}</h3>
+               <div class="dauligor-detail__meta">Class · ${escapeHtml(chosen.sourceSlug.toUpperCase())}</div>
+             </header>
+             <div class="dauligor-detail__body">
+               ${chosen.summary ? `<p>${escapeHtml(truncate(chosen.summary, 700))}</p>` : ""}
+               <p class="dauligor-character-creator__hint">At <strong>Finish</strong>, the class builder opens pre-set to <strong>${escapeHtml(chosen.name)}</strong> at level 1 so you can make any skill / option / feature choices in the full importer.</p>
+             </div>
            </div>
          </div>`
-      : `<div class="dauligor-detail dauligor-detail--empty"><p>Select a class to preview it. Creation builds it at level 1.</p></div>`;
+      : `<div class="dauligor-detail"><div class="dauligor-detail__pane dauligor-detail__empty">Select a class to preview it. Creation builds it at level 1.</div></div>`;
 
     return `
-      <div class="dauligor-cc-picker">
-        <div class="dauligor-cc-picker__list-col">
-          <input type="search" class="dauligor-cc-search" data-action="class-search" placeholder="Search classes…" value="${escapeHtml(this._ui.classSearch)}" />
-          <div class="dauligor-cc-picker__list">${rows || `<p class="dauligor-cc-empty">No matches.</p>`}</div>
+      <div class="dauligor-character-creator__picker">
+        <div class="dauligor-character-creator__picker-list-col">
+          <input type="search" class="dauligor-character-creator__search" data-action="class-search" placeholder="Search classes…" value="${escapeHtml(this._ui.classSearch)}" />
+          <div class="dauligor-character-creator__picker-list">${rows || `<p class="dauligor-character-creator__empty">No matches.</p>`}</div>
         </div>
-        <div class="dauligor-cc-picker__detail">${detail}</div>
+        <div class="dauligor-character-creator__picker-detail">${detail}</div>
       </div>`;
   }
 
@@ -686,14 +702,14 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
 
   _bodyItems() {
     return `
-      <div class="dauligor-cc-stub">
+      <div class="dauligor-character-creator__stub">
         <i class="fas fa-sack-dollar"></i>
         <h3>Starting Items — coming soon</h3>
         <p>The starting-equipment picker needs an item-list endpoint and populated
         class/background equipment data, which aren't available yet. This step is a
         placeholder for now; you can skip it and equip your character afterward with
         the Dauligor item importer.</p>
-        <p class="dauligor-cc-hint">When the item catalog lands, this slot becomes the equipment chooser with no change to the rest of the flow.</p>
+        <p class="dauligor-character-creator__hint">When the item catalog lands, this slot becomes the equipment chooser with no change to the rest of the flow.</p>
       </div>`;
   }
 
@@ -702,16 +718,16 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
   _bodyReview() {
     const scores = this._resolveAbilityScores();
     const abilityLine = scores
-      ? ABILITIES.map((ab) => `<span class="dauligor-cc-scorepill">${ab.abbr} ${scores[ab.key]}</span>`).join("")
-      : `<em class="dauligor-cc-warn">Not finished — open the Ability Scores step.</em>`;
+      ? ABILITIES.map((ab) => `<span class="dauligor-character-creator__scorepill">${ab.abbr} ${scores[ab.key]}</span>`).join("")
+      : `<em class="dauligor-character-creator__warn">Not finished — open the Ability Scores step.</em>`;
 
     const card = (idx, title, value, ok) => `
-      <div class="dauligor-cc-review-card ${ok ? "is-ok" : "is-missing"}">
-        <div class="dauligor-cc-review-card__head">
+      <div class="dauligor-character-creator__review-card ${ok ? "dauligor-character-creator__review-card--ok" : "dauligor-character-creator__review-card--missing"}">
+        <div class="dauligor-character-creator__review-head">
           <span>${escapeHtml(title)}</span>
-          <button type="button" class="dauligor-cc-editlink" data-action="goto-step" data-step="${idx}"><i class="fas fa-pen"></i> Edit</button>
+          <button type="button" class="dauligor-character-creator__editlink" data-action="goto-step" data-step="${idx}"><i class="fas fa-pen"></i> Edit</button>
         </div>
-        <div class="dauligor-cc-review-card__body">${value}</div>
+        <div class="dauligor-character-creator__review-body">${value}</div>
       </div>`;
 
     const target = this._actor
@@ -719,14 +735,14 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
       : `Creates a new empty character actor.`;
 
     return `
-      <div class="dauligor-cc-review">
-        <p class="dauligor-cc-review__target"><i class="fas fa-user-plus"></i> ${target}</p>
-        ${card(0, "Ability Scores", `<div class="dauligor-cc-scorepills">${abilityLine}</div>`, !!scores)}
+      <div class="dauligor-character-creator__review">
+        <p class="dauligor-character-creator__review-target"><i class="fas fa-user-plus"></i> ${target}</p>
+        ${card(0, "Ability Scores", `<div class="dauligor-character-creator__scorepills">${abilityLine}</div>`, !!scores)}
         ${card(1, "Background", this._choices.background ? `<strong>${escapeHtml(this._choices.background.name)}</strong>` : `<em>None chosen (optional)</em>`, !!this._choices.background)}
         ${card(2, "Race", this._choices.race ? `<strong>${escapeHtml(this._choices.race.name)}</strong>` : `<em>None chosen (optional)</em>`, !!this._choices.race)}
-        ${card(3, "Class", this._choices.class ? `<strong>${escapeHtml(this._choices.class.name)}</strong> <small>(${escapeHtml(this._choices.class.sourceSlug.toUpperCase())}, level 1)</small>` : `<em class="dauligor-cc-warn">None chosen</em>`, !!this._choices.class)}
+        ${card(3, "Class", this._choices.class ? `<strong>${escapeHtml(this._choices.class.name)}</strong> <small>(${escapeHtml(this._choices.class.sourceSlug.toUpperCase())}, level 1)</small>` : `<em class="dauligor-character-creator__warn">None chosen</em>`, !!this._choices.class)}
         ${card(4, "Starting Items", `<em>Stubbed for now — equip later.</em>`, true)}
-        <p class="dauligor-cc-hint">Finish writes ability scores, embeds the background &amp; race, then opens the class builder at level 1 to complete the class.</p>
+        <p class="dauligor-character-creator__hint">Finish writes ability scores, embeds the background &amp; race, then opens the class builder at level 1 to complete the class.</p>
       </div>`;
   }
 
@@ -868,15 +884,15 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     const isFirst = this._step === 0;
     const isReview = this._stepId() === "review";
     const status = this._ui.status
-      ? `<span class="dauligor-cc-status dauligor-cc-status--${this._ui.statusLevel || "info"}">${escapeHtml(this._ui.status)}</span>`
-      : `<span class="dauligor-cc-status"></span>`;
+      ? `<span class="dauligor-character-creator__status dauligor-character-creator__status--${this._ui.statusLevel || "info"}">${escapeHtml(this._ui.status)}</span>`
+      : `<span class="dauligor-character-creator__status"></span>`;
 
-    const back = `<button type="button" class="dauligor-cc-button dauligor-cc-button--ghost" data-action="back" ${isFirst ? "disabled" : ""}><i class="fas fa-arrow-left"></i> Back</button>`;
+    const back = `<button type="button" class="dauligor-character-creator__button dauligor-character-creator__button--ghost" data-action="back" ${isFirst ? "disabled" : ""}><i class="fas fa-arrow-left"></i> Back</button>`;
     const next = isReview
-      ? `<button type="button" class="dauligor-cc-button dauligor-cc-button--primary" data-action="finish" ${this._ui.busy ? "disabled" : ""}><i class="fas fa-wand-magic-sparkles"></i> Finish &amp; Build</button>`
-      : `<button type="button" class="dauligor-cc-button dauligor-cc-button--primary" data-action="next">Next <i class="fas fa-arrow-right"></i></button>`;
+      ? `<button type="button" class="dauligor-character-creator__button dauligor-character-creator__button--primary" data-action="finish" ${this._ui.busy ? "disabled" : ""}><i class="fas fa-wand-magic-sparkles"></i> Finish &amp; Build</button>`
+      : `<button type="button" class="dauligor-character-creator__button dauligor-character-creator__button--primary" data-action="next">Next <i class="fas fa-arrow-right"></i></button>`;
 
-    this._footerRegion.innerHTML = `${status}<div class="dauligor-cc-footer__actions">${back}${next}</div>`;
+    this._footerRegion.innerHTML = `${status}<div class="dauligor-character-creator__footer-actions">${back}${next}</div>`;
     this._footerRegion.querySelector(`[data-action="back"]`)?.addEventListener("click", () => this._goToStep(this._step - 1));
     this._footerRegion.querySelector(`[data-action="next"]`)?.addEventListener("click", () => this._goToStep(this._step + 1));
     this._footerRegion.querySelector(`[data-action="finish"]`)?.addEventListener("click", () => this._finish());

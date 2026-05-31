@@ -19,7 +19,10 @@
 .dauligor-spell-manager *::after,
 .dauligor-feature-manager *,
 .dauligor-feature-manager *::before,
-.dauligor-feature-manager *::after {
+.dauligor-feature-manager *::after,
+.dauligor-character-creator *,
+.dauligor-character-creator *::before,
+.dauligor-character-creator *::after {
   box-sizing: border-box;
 }
 
@@ -33,7 +36,8 @@
 .dauligor-wizard__toolbar-button,
 .dauligor-class-browser__button,
 .dauligor-spell-tab-tools__button,
-.dauligor-spell-manager__button {
+.dauligor-spell-manager__button,
+.dauligor-character-creator__button {
   min-height: 32px;
   margin: 0;
   padding: 0 12px;
@@ -57,7 +61,9 @@
 .dauligor-spell-tab-tools__button:hover,
 .dauligor-spell-tab-tools__button:focus,
 .dauligor-spell-manager__button:hover,
-.dauligor-spell-manager__button:focus {
+.dauligor-spell-manager__button:focus,
+.dauligor-character-creator__button:hover,
+.dauligor-character-creator__button:focus {
   border-color: var(--dauligor-btn-border-hover);
   background: var(--dauligor-btn-hover-bg);
 }
@@ -66,7 +72,8 @@
 .dauligor-wizard__toolbar-button[disabled],
 .dauligor-class-browser__button[disabled],
 .dauligor-spell-tab-tools__button[disabled],
-.dauligor-spell-manager__button[disabled] {
+.dauligor-spell-manager__button[disabled],
+.dauligor-character-creator__button[disabled] {
   opacity: 0.5;
   cursor: not-allowed;
   pointer-events: none;
