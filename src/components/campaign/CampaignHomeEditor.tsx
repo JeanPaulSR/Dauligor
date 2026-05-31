@@ -624,7 +624,7 @@ function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onA
 
       {block.blockType === 'callout' && (<>
         <Field label="Heading"><Input autoComplete="off" className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="Character Creation" /></Field>
-        <Field label="Body"><textarea autoComplete="off" className="field-input min-h-[70px] py-2 font-serif italic w-full" value={block.body} onChange={(e) => set({ body: e.target.value })} placeholder="A short message…" /></Field>
+        <Field label="Body (BBCode)"><MarkdownEditor value={block.body} onChange={(v) => set({ body: v })} placeholder="A short message…" /></Field>
         <Seg label="Style" value={block.style} options={[['soft', 'Soft (dashed)'], ['plain', 'Plain']]} onChange={(v) => set({ style: v })} />
         <fieldset className="config-fieldset"><legend className="section-label px-1">Button (optional)</legend>
           <Field label="Label"><Input autoComplete="off" className="field-input" value={block.buttonLabel} onChange={(e) => set({ buttonLabel: e.target.value })} placeholder="Browse Sources" /></Field>
@@ -803,8 +803,8 @@ function EntityRefPicker({ mode, value, onChange }: {
                           <Input autoComplete="off" className="field-input text-xs" value={r.title || ''} placeholder={r.name || PLACEHOLDER_TITLE} onChange={(e) => updateAt(idx, { title: e.target.value })} />
                         </div>
                         <div className="space-y-1">
-                          <label className="field-label">Description</label>
-                          <textarea autoComplete="off" className="field-input text-xs min-h-[48px] py-1.5 w-full" value={r.description || ''} placeholder={ph ? PLACEHOLDER_DESCRIPTION : "Uses the entity's own summary"} onChange={(e) => updateAt(idx, { description: e.target.value })} />
+                          <label className="field-label">Description (BBCode)</label>
+                          <MarkdownEditor value={r.description || ''} placeholder={ph ? PLACEHOLDER_DESCRIPTION : "Uses the entity's own summary"} onChange={(v) => updateAt(idx, { description: v })} />
                         </div>
                         <div className="space-y-1">
                           <label className="field-label">Card width (columns)</label>

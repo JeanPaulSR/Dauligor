@@ -108,7 +108,7 @@ function PlaceholderCard({ title, description, card }: { title: string; descript
   return (
     <div className="h-full border border-dashed border-gold/20 bg-card/30 flex flex-col items-center justify-center text-center min-h-[150px] p-6">
       <p className="text-xs font-bold uppercase tracking-widest text-ink/30 font-serif">{title}</p>
-      {description && <p className="text-[10px] text-ink/20 italic mt-1">{description}</p>}
+      {description && <div className="text-[10px] text-ink/20 italic mt-1"><BBCodeRenderer content={description} /></div>}
     </div>
   );
 }
@@ -146,7 +146,7 @@ function EntityCard({ data, card, excerpt, title, description }: { data: RefReso
       </div>
       {excerpt && description && (
         <div className="p-5 pt-0 flex-grow">
-          <p className="description-text line-clamp-3 text-sm">{description}</p>
+          <div className="description-text text-sm line-clamp-3"><BBCodeRenderer content={description} /></div>
         </div>
       )}
     </div>
@@ -304,7 +304,9 @@ export default function CampaignHomeBlocks({ blocks, recommendedLore, campaignNa
           <section key={block.id} className="space-y-8">
             <div className={box}>
               {block.title && <h2 className="h3-title text-ink/50">{block.title}</h2>}
-              {block.body && <p className="description-text mt-2 mb-6 text-ink/40 max-w-2xl mx-auto">{block.body}</p>}
+              {block.body && (
+                <div className="description-text mt-2 mb-6 text-ink/40 max-w-2xl mx-auto"><BBCodeRenderer content={block.body} /></div>
+              )}
               {hasButton && (
                 <Link to={block.buttonLink}>
                   <span className="inline-flex items-center gap-2 border border-gold text-gold hover:bg-gold/5 transition-colors px-4 py-2 text-sm font-medium">
