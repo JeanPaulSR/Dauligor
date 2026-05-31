@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { auth, OperationType, reportClientError, firebaseConfig, usernameToEmail, createUserWithEmailAndPassword, signOut, updateProfile, initializeApp } from '../../lib/firebase';
+import { auth } from '../../lib/firebase';
 import { fetchCollection, upsertDocument, deleteDocument, deleteDocuments } from '../../lib/d1';
 
 
@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../../components/ui/dialog';
 import { UserPlus, Trash2, Shield, User, LayoutGrid, Check, KeyRound, Copy, Link2, ShieldPlus } from 'lucide-react';
 import PermissionsManager from './PermissionsManager';
+import { getSessionToken, isAuthenticated } from "../../lib/auth";
 
 export default function AdminUsers({ userProfile }: { userProfile: any }) {
   // Top-level tab strip: 'users' is the legacy CRUD table; 'permissions'
@@ -61,7 +62,7 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
         // and includes campaign_ids as a server-side JOIN so we no
         // longer need to fetchCollection('campaignMembers') separately.
         // Closes M2 + the second H7-leak path.
-        const idToken = await auth.currentUser?.getIdToken();
+        const idToken = await getSessionToken();
         const usersRes = await fetch('/api/admin/users', {
           headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
         });
@@ -122,7 +123,7 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
       // admin's session, AND the server is the only place writing to
       // the `users` table (the proxy now requires admin for direct
       // users writes, so the old client path would 403 anyway).
-      const idToken = await auth.currentUser?.getIdToken();
+      const idToken = await getSessionToken();
       const createRes = await fetch('/api/admin/users', {
         method: 'POST',
         headers: {
@@ -149,7 +150,7 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
       // Refresh through the per-route endpoint so the new user's
       // (now-existing) row shows up with its column-scoped projection
       // and campaign_ids JOIN.
-      const refreshToken = await auth.currentUser?.getIdToken();
+      const refreshToken = await getSessionToken();
       const refreshRes = await fetch('/api/admin/users', {
         headers: refreshToken ? { Authorization: `Bearer ${refreshToken}` } : {},
       });
@@ -181,7 +182,7 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
         // campaign_members). The old client `deleteDocument('users',
         // id)` path is now blocked at the proxy — `users` writes
         // require admin and the only admin write surface is here.
-        const idToken = await auth.currentUser?.getIdToken();
+        const idToken = await getSessionToken();
         const res = await fetch(`/api/admin/users/${encodeURIComponent(id)}`, {
           method: 'DELETE',
           headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
@@ -224,7 +225,7 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
       // upsertDocument / deleteDocuments calls against campaignMembers
       // — same end result, but the write path is admin-gated and
       // atomic per user.
-      const idToken = await auth.currentUser?.getIdToken();
+      const idToken = await getSessionToken();
       const res = await fetch(`/api/admin/users/${encodeURIComponent(userId)}`, {
         method: 'PATCH',
         headers: {
@@ -274,7 +275,7 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
       // That write path is now blocked at the proxy (users writes
       // require admin) and the only legitimate write surface is
       // here.
-      const idToken = await auth.currentUser?.getIdToken();
+      const idToken = await getSessionToken();
       const res = await fetch(`/api/admin/users/${encodeURIComponent(userId)}`, {
         method: 'PATCH',
         headers: {
@@ -307,14 +308,14 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
   };
 
   const handleGenerateTemporaryPassword = async (userRecord: any) => {
-    if (!auth.currentUser) {
+    if (!isAuthenticated()) {
       toast.error('You must be signed in to generate a temporary password.');
       return;
     }
 
     setPasswordResetUserId(userRecord.id);
     try {
-      const idToken = await auth.currentUser.getIdToken();
+      const idToken = await getSessionToken();
       const response = await fetch(`/api/admin/users/${userRecord.id}/temporary-password`, {
         method: 'POST',
         headers: {
@@ -368,14 +369,14 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
    * explicitly want to invalidate the user's existing password.
    */
   const handleGenerateSignInLink = async (userRecord: any) => {
-    if (!auth.currentUser) {
+    if (!isAuthenticated()) {
       toast.error('You must be signed in to generate a sign-in link.');
       return;
     }
 
     setSignInLinkUserId(userRecord.id);
     try {
-      const idToken = await auth.currentUser.getIdToken();
+      const idToken = await getSessionToken();
       const response = await fetch(`/api/admin/users/${userRecord.id}/sign-in-token`, {
         method: 'POST',
         headers: {
@@ -442,7 +443,7 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
       // usernames surface as 409 from the duplicate-username
       // pre-check; we log+continue so re-running the seed against a
       // partially-populated table doesn't bail.
-      const idToken = await auth.currentUser?.getIdToken();
+      const idToken = await getSessionToken();
       for (const u of testUsers) {
         try {
           const res = await fetch('/api/admin/users', {

@@ -33,6 +33,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Check, Database, CloudOff } from 'lucide-react';
+import { getSessionToken } from "../../lib/auth";
 
 const CATEGORIES = [
   { id: 'generic', label: 'Generic', icon: Library },
@@ -129,7 +130,7 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
         // junction lookup, parent lookup, and mentions lookup. Strips
         // dm_notes / 404s drafts when the viewer isn't staff.
         // Replaces the old fetchDocument + 5+ raw queryD1 sequence.
-        const idToken = await auth.currentUser?.getIdToken();
+        const idToken = await getSessionToken();
         const authHeaders = idToken ? { Authorization: `Bearer ${idToken}` } : {};
         const articleRes = await fetch(`/api/lore/articles/${encodeURIComponent(id)}`, {
           headers: authHeaders,
@@ -185,7 +186,7 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
         // see only their own). The article-visibility logic below
         // matches lookups against the viewer's active campaign id, so
         // a player-filtered list is the right shape.
-        const foundationIdToken = await auth.currentUser?.getIdToken();
+        const foundationIdToken = await getSessionToken();
         const foundationAuth = foundationIdToken ? { Authorization: `Bearer ${foundationIdToken}` } : {};
         const [campRes, erasData] = await Promise.all([
           fetch('/api/campaigns', { headers: foundationAuth }),

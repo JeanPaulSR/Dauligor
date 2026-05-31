@@ -5,7 +5,7 @@
 
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { auth, onAuthStateChanged, User } from './lib/firebase';
+import { onAuthChange, getSessionToken, type Identity } from './lib/auth';
 import { WikiPreviewContext, type WikiPreviewCampaign } from './lib/wikiPreviewContext';
 import { fetchDocument, upsertDocument, fetchCollection, checkFoundationUpdate, clearCache } from './lib/d1';
 import { setCurrentUserRole } from './lib/currentUser';
@@ -101,7 +101,7 @@ function RouteAwareFooter() {
 }
 
 export default function App() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<Identity | null>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [previewMode, setPreviewMode] = useState(false);
@@ -155,7 +155,7 @@ export default function App() {
           setLastFoundationTimestamp(currentTimestamp);
           
           // Optionally refresh the current profile as well if it might be affected
-          if (user) loadProfile(user);
+          if (user) loadProfile();
         } else if (!lastFoundationTimestamp && currentTimestamp) {
           setLastFoundationTimestamp(currentTimestamp);
         }
@@ -167,7 +167,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, [user, lastFoundationTimestamp]);
 
-  const loadProfile = async (firebaseUser: User) => {
+  const loadProfile = async () => {
     try {
       // GET /api/me does all of the work that used to live here:
       //   - the SELECT * FROM users WHERE id = ? lookup
@@ -179,9 +179,9 @@ export default function App() {
       // Server-side because letting the client decide which profile
       // fields to upsert was the H6 role-self-promotion vector. With
       // this migration the client never writes to `users.role` again.
-      const idToken = await firebaseUser.getIdToken();
+      const idToken = await getSessionToken();
       const res = await fetch('/api/me', {
-        headers: { Authorization: `Bearer ${idToken}` },
+        headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
       });
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}));
@@ -198,15 +198,15 @@ export default function App() {
 
   const refreshProfile = async () => {
     if (user) {
-      await loadProfile(user);
+      await loadProfile();
     }
   };
 
   useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
-      setUser(firebaseUser);
-      if (firebaseUser) {
-        loadProfile(firebaseUser);
+    const unsubscribeAuth = onAuthChange((identity) => {
+      setUser(identity);
+      if (identity) {
+        loadProfile();
       } else {
         setUserProfile(null);
         setLoading(false);

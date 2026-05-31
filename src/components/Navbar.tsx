@@ -1,11 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { 
-  auth, 
-  usernameToEmail, 
-  signInWithEmailAndPassword, 
-  signOut 
-} from '../lib/firebase';
+import { login, logout, getSessionToken } from '../lib/auth';
 import { useWikiPreview } from '../lib/wikiPreviewContext';
 
 import { Button } from './ui/button';
@@ -56,7 +51,7 @@ export default function Navbar({
         // the campaigns they're a member of. Replaces the previous
         // pattern that pulled the entire campaigns table + every
         // member row to figure out the same thing client-side.
-        const idToken = await auth.currentUser?.getIdToken();
+        const idToken = await getSessionToken();
         const res = await fetch('/api/campaigns', {
           headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
         });
@@ -83,7 +78,7 @@ export default function Navbar({
       // `{ ..., role: 'admin' }` into the payload and the server had no
       // column allow-list to drop it. Now the server only honors the
       // allow-listed fields and the client cannot reach `role` at all.
-      const idToken = await auth.currentUser?.getIdToken();
+      const idToken = await getSessionToken();
       const res = await fetch('/api/me', {
         method: 'PATCH',
         headers: {
@@ -105,11 +100,10 @@ export default function Navbar({
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    
-    const email = usernameToEmail(authData.username);
 
     try {
-      await signInWithEmailAndPassword(auth, email, authData.password);
+      // Native-first login (Firebase fallback + adopt handled inside auth.login).
+      await login(authData.username, authData.password);
       setIsAuthOpen(false);
       setAuthData({ username: '', password: '' });
     } catch (err: any) {
@@ -125,7 +119,7 @@ export default function Navbar({
   };
 
   const handleLogout = async () => {
-    await signOut(auth);
+    await logout();
     navigate('/');
   };
 

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { auth } from '../../lib/firebase';
 import { Avatar, AvatarFallback, AvatarImage } from '../../components/ui/avatar';
 
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
@@ -8,6 +7,7 @@ import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { UserCircle, MapPin, Calendar, Shield, Book, Bookmark, ChevronLeft, Users, Lock } from 'lucide-react';
 import { motion } from 'motion/react';
+import { getSessionToken } from "../../lib/auth";
 
 export default function Profile({ viewerProfile }: { viewerProfile?: any }) {
   const { username } = useParams<{ username: string }>();
@@ -28,7 +28,7 @@ export default function Profile({ viewerProfile }: { viewerProfile?: any }) {
         // hide_username, active_campaign_id) based on the viewer's role
         // and the target's is_private flag — closes the H1 PII leak and
         // the per-profile slice of H7's campaign_members enumeration.
-        const idToken = await auth.currentUser?.getIdToken();
+        const idToken = await getSessionToken();
         const res = await fetch(`/api/profiles/${encodeURIComponent(username)}`, {
           headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
         });

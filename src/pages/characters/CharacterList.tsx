@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/button';
 import { Plus, User, Shield, Sparkles, BookOpen, Book } from 'lucide-react';
-import { auth } from '../../lib/firebase';
 import {
   Dialog,
   DialogContent,
@@ -11,6 +10,7 @@ import {
   DialogTrigger,
   DialogClose,
 } from '../../components/ui/dialog';
+import { getSessionToken } from "../../lib/auth";
 
 export default function CharacterList({ userProfile }: { userProfile: any }) {
   const [characters, setCharacters] = useState<any[]>([]);
@@ -32,7 +32,7 @@ export default function CharacterList({ userProfile }: { userProfile: any }) {
 
     const loadCharacters = async () => {
       try {
-        const idToken = await auth.currentUser?.getIdToken();
+        const idToken = await getSessionToken();
         const url = isCharacterDM ? '/api/admin/characters' : '/api/me/characters';
         const res = await fetch(url, {
           headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { auth } from '@/lib/firebase';
 import CampaignHomeEditor from '@/components/campaign/CampaignHomeEditor';
+import { getSessionToken } from "../../lib/auth";
 
 /**
  * Fullscreen route host for the campaign homepage layout editor
@@ -22,7 +23,7 @@ export default function CampaignHomeEditorPage({ userProfile }: { userProfile: a
     let cancelled = false;
     (async () => {
       try {
-        const token = await auth.currentUser?.getIdToken();
+        const token = await getSessionToken();
         const res = await fetch(`/api/campaigns/${encodeURIComponent(id)}`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });

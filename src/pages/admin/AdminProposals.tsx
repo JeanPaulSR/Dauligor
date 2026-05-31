@@ -17,7 +17,6 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { toast } from 'sonner';
-import { auth } from '../../lib/firebase';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
@@ -36,6 +35,7 @@ import {
   ENTITY_LABEL,
   describePayloadSummary,
 } from '../../components/proposals/BlockReviewPane';
+import { getSessionToken } from "../../lib/auth";
 
 type EntityType =
   | 'tag'
@@ -188,7 +188,7 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
   const [revertingId, setRevertingId] = useState<string | null>(null);
 
   const authedFetch = useCallback(async (input: string, init?: RequestInit) => {
-    const idToken = await auth.currentUser?.getIdToken();
+    const idToken = await getSessionToken();
     if (!idToken) throw new Error('Not signed in.');
     return fetch(input, {
       ...init,

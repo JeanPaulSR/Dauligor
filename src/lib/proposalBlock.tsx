@@ -47,6 +47,7 @@ import {
 } from 'react';
 import { auth } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
+import { getIdentity, getSessionToken } from "./auth";
 
 const LS_KEY = 'dauligor:active-block-id';
 // The active-block id is persisted PER USER. A global key let one account's
@@ -140,7 +141,7 @@ export function useBlock(): BlockContextValue {
 }
 
 async function authedFetch(input: string, init?: RequestInit): Promise<Response> {
-  const idToken = await auth.currentUser?.getIdToken();
+  const idToken = await getSessionToken();
   if (!idToken) throw new Error('Not signed in.');
   return fetch(input, {
     ...init,
@@ -167,10 +168,10 @@ function hydrateBundle(raw: any): ProposalBundle {
 export function BlockProvider({ children }: { children: ReactNode }) {
   // Signed-in user id — drives per-account scoping of the active block.
   const [currentUid, setCurrentUid] = useState<string | null>(
-    () => auth.currentUser?.uid ?? null,
+    () => getIdentity()?.uid ?? null,
   );
   const [activeBundleId, setActiveBundleId] = useState<string | null>(
-    () => storedBlockId(auth.currentUser?.uid ?? null),
+    () => storedBlockId(getIdentity()?.uid ?? null),
   );
   const [activeBundle, setActiveBundle] = useState<ProposalBundle | null>(null);
   const [drafts, setDrafts] = useState<DraftRevision[]>([]);
@@ -192,7 +193,7 @@ export function BlockProvider({ children }: { children: ReactNode }) {
   const persist = useCallback((id: string | null) => {
     setActiveBundleId(id);
     try {
-      const uid = auth.currentUser?.uid ?? null;
+      const uid = getIdentity()?.uid ?? null;
       if (!uid) return; // no signed-in user → nothing to persist against
       if (id) window.localStorage.setItem(keyFor(uid), id);
       else window.localStorage.removeItem(keyFor(uid));

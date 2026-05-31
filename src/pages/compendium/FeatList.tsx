@@ -24,6 +24,7 @@ import {
   type Requirement,
   type RequirementFormatLookup,
 } from '../../lib/requirements';
+import { getIdentity } from "../../lib/auth";
 
 /**
  * Public feat browser — thin wrapper around `CompendiumBrowserShell`.
@@ -190,7 +191,7 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
   // Auth-aware favorites — feeds the shell with a userId-bound
   // favorites Set. The onAuthStateChanged listener re-runs the hook
   // whenever sign-in / sign-out happens so cloud + local merge.
-  const [authUserId, setAuthUserId] = useState<string | null>(() => auth.currentUser?.uid ?? null);
+  const [authUserId, setAuthUserId] = useState<string | null>(() => getIdentity()?.uid ?? null);
   useEffect(() => {
     const unsub = auth.onAuthStateChanged((u) => setAuthUserId(u?.uid ?? null));
     return unsub;

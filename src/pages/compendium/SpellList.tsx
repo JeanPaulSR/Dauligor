@@ -6,7 +6,6 @@ import { useSpellFavorites } from '../../lib/spellFavorites';
 import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
 import { expandTagsWithAncestors, normalizeTagRow } from '../../lib/tagHierarchy';
 import { fetchCollection, fetchDocument } from '../../lib/d1';
-import { auth } from '../../lib/firebase';
 import { fetchClassSpellIds } from '../../lib/classSpellLists';
 import { buildClassSlug } from '../../lib/useClassRouteId';
 import { SCHOOL_LABELS, formatActivationLabel, formatRangeLabel } from '../../lib/spellImport';
@@ -37,6 +36,7 @@ import {
   matchesSingleAxisFilter,
   matchesMultiAxisFilter,
 } from '../../lib/spellFilters';
+import { getSessionToken } from "../../lib/auth";
 
 /**
  * Public spell browser. Thin wrapper around `CompendiumBrowserShell`,
@@ -140,7 +140,7 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
     if (!userProfile?.id) { setMyCharacters([]); return; }
     (async () => {
       try {
-        const token = await auth.currentUser?.getIdToken();
+        const token = await getSessionToken();
         const res = await fetch('/api/me/characters?fields=id,name', {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });

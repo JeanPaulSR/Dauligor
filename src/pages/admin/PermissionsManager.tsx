@@ -27,7 +27,6 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { toast } from 'sonner';
-import { auth } from '../../lib/firebase';
 import { fetchCollection } from '../../lib/d1';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -35,6 +34,7 @@ import { SearchInput } from '../../components/ui/SearchInput';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Check, KeyRound, Globe2, LayoutGrid, Clock, X, ShieldPlus, Trash2 } from 'lucide-react';
+import { getSessionToken } from "../../lib/auth";
 
 type Scope = {
   worlds?: string[];
@@ -90,7 +90,7 @@ export default function PermissionsManager() {
   const [draftScopes, setDraftScopes] = useState<Record<string, Scope>>({});
 
   const authedFetch = useCallback(async (input: string, init?: RequestInit) => {
-    const idToken = await auth.currentUser?.getIdToken();
+    const idToken = await getSessionToken();
     if (!idToken) throw new Error('Not signed in.');
     return fetch(input, {
       ...init,

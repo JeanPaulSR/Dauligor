@@ -33,7 +33,7 @@
  * cannot ask about another user's favorites.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { auth } from './firebase';
+import { getSessionToken, isAuthenticated } from "./auth";
 
 const LS_KEY = 'dauligor.featFavorites';
 const ENDPOINT = '/api/feat-favorites';
@@ -69,8 +69,8 @@ function writeLocal(ids: Set<string>) {
 // ---------------------------------------------------------------------------
 
 async function authHeaders(): Promise<HeadersInit | null> {
-  if (!auth.currentUser) return null;
-  const token = await auth.currentUser.getIdToken();
+  if (!isAuthenticated()) return null;
+  const token = await getSessionToken();
   return {
     Authorization: `Bearer ${token}`,
     'Content-Type': 'application/json',

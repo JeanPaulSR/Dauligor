@@ -24,7 +24,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchCollection } from '../../lib/d1';
-import { auth } from '../../lib/firebase';
 import { r2List, r2Delete, r2Rename, r2Upload, r2MoveFolder, r2DeleteFolder } from '../../lib/r2';
 import { convertToWebP } from '../../lib/imageUtils';
 import {
@@ -51,6 +50,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
+import { getSessionToken } from "../../lib/auth";
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
@@ -152,7 +152,7 @@ async function fetchNameMap(col: string, nameField: string): Promise<Map<string,
     // empty-map fallback (UI degrades to showing raw ids — acceptable
     // since lore-writer rarely browses user/character avatar folders).
     if (col === 'users') {
-      const token = await auth.currentUser?.getIdToken();
+      const token = await getSessionToken();
       const res = await fetch('/api/admin/users', {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
@@ -168,7 +168,7 @@ async function fetchNameMap(col: string, nameField: string): Promise<Map<string,
     if (col === 'characters') {
       // /api/admin/characters returns a fixed minimal column set
       // (no `?fields=` filter); we only need id + name here.
-      const token = await auth.currentUser?.getIdToken();
+      const token = await getSessionToken();
       const res = await fetch('/api/admin/characters', {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });

@@ -6,7 +6,7 @@ import { Badge } from './badge';
 import { Edit2, Save, X, Image as ImageIcon } from 'lucide-react';
 import { ImageMetadata, saveImageMetadata, getImageMetadataByPath } from '../../lib/imageMetadata';
 import { toast } from 'sonner';
-import { auth } from '../../lib/firebase';
+import { getIdentity } from "../../lib/auth";
 
 export interface ImageMetadataModalProps {
   isOpen: boolean;
@@ -41,7 +41,7 @@ export function ImageMetadataModal({ isOpen, onClose, imageUrl }: ImageMetadataM
   const handleSave = async () => {
     setSaving(true);
     try {
-      const user = auth.currentUser;
+      const user = getIdentity();
       const filename = inferredPath.split('/').pop() || 'image';
       const folder = inferredPath.split('/').slice(0, -1).join('/') + '/';
 
@@ -50,7 +50,7 @@ export function ImageMetadataModal({ isOpen, onClose, imageUrl }: ImageMetadataM
         filename,
         folder,
         uploadedBy: metadata?.uploadedBy || user?.uid,
-        uploadedByName: metadata?.uploadedByName || user?.displayName || 'Unknown',
+        uploadedByName: metadata?.uploadedByName || user?.username || 'Unknown',
         ...editedMeta,
       });
       const refreshed = await getImageMetadataByPath(inferredPath);

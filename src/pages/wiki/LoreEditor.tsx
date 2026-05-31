@@ -31,6 +31,7 @@ import { fetchCollection } from '../../lib/d1';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import MarkdownEditor from '@/components/MarkdownEditor';
+import { getSessionToken } from "../../lib/auth";
 
 const CATEGORIES = [
   { id: 'generic', label: 'Generic', icon: Library, description: 'General world-building articles' },
@@ -144,7 +145,7 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
         // (eras / tagGroups / tags) still hit /api/d1/query while
         // their per-route migrations are pending in later audit
         // batches.
-        const idToken = await auth.currentUser?.getIdToken();
+        const idToken = await getSessionToken();
         const authHeaders = idToken ? { Authorization: `Bearer ${idToken}` } : {};
         const [campRes, erasData, groupsData, tagsData, loreRes] = await Promise.all([
           fetch('/api/campaigns', { headers: authHeaders }),

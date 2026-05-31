@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth } from '../../lib/firebase';
 import { fetchCollection, fetchDocument, upsertDocument, deleteDocument, queryD1 } from '../../lib/d1';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
@@ -8,6 +7,7 @@ import { Badge } from '../../components/ui/badge';
 import { Info, Trash2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
 import { Input } from '../../components/ui/input';
+import { getSessionToken } from "../../lib/auth";
 
 /**
  * Interactive Map (Phase B).
@@ -100,7 +100,7 @@ export default function Map({ userProfile }: { userProfile: any }) {
     if (!activeCampaignId) { setEraId(null); return; }
     (async () => {
       try {
-        const idToken = await auth.currentUser?.getIdToken();
+        const idToken = await getSessionToken();
         const res = await fetch(`/api/campaigns/${encodeURIComponent(activeCampaignId)}`, {
           headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
         });
@@ -152,7 +152,7 @@ export default function Map({ userProfile }: { userProfile: any }) {
         // routes through the per-route gate so drafts / dm_notes never
         // ride along. Was raw `fetchCollection('lore', { select: 'id,
         // title' })` previously.
-        const idToken = await auth.currentUser?.getIdToken();
+        const idToken = await getSessionToken();
         const res = await fetch('/api/lore/articles?fields=id,title&orderBy=title%20ASC', {
           headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
         });

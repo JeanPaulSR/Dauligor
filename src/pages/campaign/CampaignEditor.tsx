@@ -12,6 +12,7 @@ import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, Command
 import { ClassImageEditor } from '@/components/compendium/ClassImageEditor';
 import { ChevronLeft, Save, Sparkles, LayoutGrid, ImageIcon, Calendar, FileText, MapPin, Scroll, Users, History, Check, X, Home as HomeIcon } from 'lucide-react';
 import { ImageUpload } from '@/components/ui/ImageUpload';
+import { getSessionToken } from "../../lib/auth";
 
 export default function CampaignEditor({ userProfile }: { userProfile: any }) {
   const { id } = useParams();
@@ -68,7 +69,7 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
 
         // Per-route endpoint (server strips dm_notes). Staff edit
         // surface, so the article picker shows drafts too.
-        const idToken = await auth.currentUser?.getIdToken();
+        const idToken = await getSessionToken();
         const loreRes = await fetch('/api/lore/articles?orderBy=title%20ASC', {
           headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
         });
@@ -83,7 +84,7 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
         // below needs; closes M2 + the H7-leak path where the legacy
         // fetchCollection('users') returned recovery_email and the
         // full row to every staff visitor of /campaign/edit/:id.
-        const usersIdToken = await auth.currentUser?.getIdToken();
+        const usersIdToken = await getSessionToken();
         const usersRes = await fetch('/api/admin/users', {
           headers: usersIdToken ? { Authorization: `Bearer ${usersIdToken}` } : {},
         });
@@ -96,7 +97,7 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
         // Staff context (this page is gated to admin/co-dm), so the
         // member-or-staff check on the server always admits.
         if (id) {
-          const editIdToken = await auth.currentUser?.getIdToken();
+          const editIdToken = await getSessionToken();
           const authHeaders = editIdToken ? { Authorization: `Bearer ${editIdToken}` } : {};
           const [campRes, membersRes] = await Promise.all([
             fetch(`/api/campaigns/${encodeURIComponent(id)}`, { headers: authHeaders }),
@@ -149,7 +150,7 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
       // Generic proxy refuses direct `campaigns` writes now (audit #8);
       // the per-route handler gates on isCharacterDM (admin + co-dm)
       // and does a real UPDATE so partial payloads work.
-      const saveIdToken = await auth.currentUser?.getIdToken();
+      const saveIdToken = await getSessionToken();
       const campaignRes = await fetch(`/api/campaigns/${encodeURIComponent(id)}`, {
         method: 'PATCH',
         headers: {

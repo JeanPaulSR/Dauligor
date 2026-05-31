@@ -10,7 +10,7 @@
 // that just succeeded. Worst case is the export caches stay stale until
 // another save fires a rebake or someone hits "Bake Now".
 
-import { auth } from './firebase';
+import { getSessionToken, isAuthenticated } from "./auth";
 
 export type ExportEntityKind =
   | 'class'
@@ -31,9 +31,9 @@ export type ExportEntityKind =
   | 'race';
 
 async function authHeaders(): Promise<HeadersInit | null> {
-  if (!auth.currentUser) return null;
+  if (!isAuthenticated()) return null;
   try {
-    const idToken = await auth.currentUser.getIdToken();
+    const idToken = await getSessionToken();
     return {
       Authorization: `Bearer ${idToken}`,
       'Content-Type': 'application/json',

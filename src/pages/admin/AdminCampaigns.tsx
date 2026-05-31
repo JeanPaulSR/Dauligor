@@ -9,6 +9,7 @@ import { Badge } from '../../components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../../components/ui/dialog';
 import { Plus, Trash2, LayoutGrid, Calendar, Users, Sparkles } from 'lucide-react';
 import { ImageUpload } from '../../components/ui/ImageUpload';
+import { getSessionToken } from "../../lib/auth";
 
 export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
   const [campaigns, setCampaigns] = useState<any[]>([]);
@@ -69,7 +70,7 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
         // of H7 leakage on admin pages (and still leaked even on
         // staff-only routes since the network call fires before any
         // role check).
-        const idToken = await auth.currentUser?.getIdToken();
+        const idToken = await getSessionToken();
         const authHeaders = idToken ? { Authorization: `Bearer ${idToken}` } : {};
         const campRes = await fetch('/api/campaigns', { headers: authHeaders });
         if (!campRes.ok) throw new Error(`Failed to load campaigns (HTTP ${campRes.status})`);
@@ -85,7 +86,7 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
         // row already carries campaign_ids joined server-side, so the
         // legacy `fetchCollection('campaignMembers')` enumeration is
         // gone. Closes M2 here.
-        const usersIdToken = await auth.currentUser?.getIdToken();
+        const usersIdToken = await getSessionToken();
         const usersRes = await fetch('/api/admin/users', {
           headers: usersIdToken ? { Authorization: `Bearer ${usersIdToken}` } : {},
         });
@@ -102,7 +103,7 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
         // dm_notes (admin doesn't need it for the recommended-article
         // picker; if they ever do, the dedicated dm-notes route can
         // serve it).
-        const idTokenLore = await auth.currentUser?.getIdToken();
+        const idTokenLore = await getSessionToken();
         const loreRes = await fetch('/api/lore/articles?orderBy=title%20ASC', {
           headers: idTokenLore ? { Authorization: `Bearer ${idTokenLore}` } : {},
         });
@@ -129,7 +130,7 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
       // direct campaigns writes now (audit #8). Server defaults
       // dm_id to the verified token's uid if omitted; we pass the
       // current user's uid explicitly to preserve legacy behavior.
-      const createToken = await auth.currentUser?.getIdToken();
+      const createToken = await getSessionToken();
       const createRes = await fetch('/api/campaigns', {
         method: 'POST',
         headers: {
@@ -155,7 +156,7 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
 
       // Refresh list through the per-route endpoint (server filters
       // by role + emits memberCount, same as the initial load).
-      const refreshIdToken = await auth.currentUser?.getIdToken();
+      const refreshIdToken = await getSessionToken();
       const refreshRes = await fetch('/api/campaigns', {
         headers: refreshIdToken ? { Authorization: `Bearer ${refreshIdToken}` } : {},
       });
@@ -186,7 +187,7 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
       // campaigns dispatcher (audit #9). Generic proxy still admits
       // admin writes to `eras` via PROTECTED_WRITE_TABLES as defense
       // in depth, but the per-route is the documented path.
-      const createToken = await auth.currentUser?.getIdToken();
+      const createToken = await getSessionToken();
       const createRes = await fetch('/api/admin/eras', {
         method: 'POST',
         headers: {
@@ -229,7 +230,7 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
         // DELETE /api/admin/eras/[id] — admin-only via the campaigns
         // dispatcher (audit #9). campaigns.era_id rows are deliberately
         // left dangling (the confirm prompt warns about this).
-        const token = await auth.currentUser?.getIdToken();
+        const token = await getSessionToken();
         const res = await fetch(`/api/admin/eras/${encodeURIComponent(id)}`, {
           method: 'DELETE',
           headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -254,7 +255,7 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
       // upsertDocument path required `name` + `slug` even on a partial
       // patch because its ON CONFLICT DO UPDATE first validated the
       // INSERT-side row).
-      const token = await auth.currentUser?.getIdToken();
+      const token = await getSessionToken();
       const res = await fetch(`/api/campaigns/${encodeURIComponent(campaignId)}`, {
         method: 'PATCH',
         headers: {
@@ -282,7 +283,7 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
         // (the per-route handler does the role recheck server-side).
         // Co-dm can edit but not delete; the button visibility on
         // this page should already gate-check too.
-        const token = await auth.currentUser?.getIdToken();
+        const token = await getSessionToken();
         const res = await fetch(`/api/campaigns/${encodeURIComponent(id)}`, {
           method: 'DELETE',
           headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -304,7 +305,7 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
     try {
       // PATCH /api/campaigns/[id] — partial update via the per-route
       // endpoint (audit #8). Same pattern as handleSetCampaignEra.
-      const token = await auth.currentUser?.getIdToken();
+      const token = await getSessionToken();
       const res = await fetch(`/api/campaigns/${encodeURIComponent(campaignId)}`, {
         method: 'PATCH',
         headers: {
@@ -359,7 +360,7 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
                   // `setSystemMetadata('wiki_settings', next)` path
                   // (which went through the generic /api/d1/query
                   // proxy) would 403. Closes M3.
-                  const token = await auth.currentUser?.getIdToken();
+                  const token = await getSessionToken();
                   const res = await fetch('/api/lore/system-metadata/wiki-settings', {
                     method: 'PUT',
                     headers: {
@@ -453,7 +454,7 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
                                 // admin-only (audit #9). Real UPDATE so we don't
                                 // resupply name + other NOT NULL columns like
                                 // the legacy upsertDocument path did.
-                                const token = await auth.currentUser?.getIdToken();
+                                const token = await getSessionToken();
                                 const res = await fetch(`/api/admin/eras/${encodeURIComponent(era.id)}`, {
                                   method: 'PATCH',
                                   headers: {

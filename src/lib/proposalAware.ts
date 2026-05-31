@@ -18,8 +18,8 @@
 
 import { useMemo } from 'react';
 import { toast } from 'sonner';
-import { auth } from './firebase';
 import { upsertDocument, deleteDocument } from './d1';
+import { getSessionToken } from "./auth";
 
 export type ProposalEntityType =
   | 'tag'
@@ -168,7 +168,7 @@ export function useEntityWriter(
       payload: any | null,
       notes: string | undefined,
     ) => {
-      const idToken = await auth.currentUser?.getIdToken();
+      const idToken = await getSessionToken();
       if (!idToken) throw new Error('Not signed in.');
       const body: Record<string, any> = {
         revisions: [

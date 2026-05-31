@@ -122,6 +122,35 @@ async function handleAdopt(request: Request): Promise<Response> {
   return Response.json({ adopted: true });
 }
 
+async function handleChangePassword(request: Request): Promise<Response> {
+  if (!isNativeAuthConfigured()) {
+    return Response.json(
+      { error: "Native auth is not configured." },
+      { status: 503 },
+    );
+  }
+  const authHeader = request.headers.get("authorization") ?? undefined;
+  const { decoded } = await requireAuthenticatedUser(authHeader);
+  const uid: string = (decoded as any).uid;
+  if (!uid) throw new HttpError(401, "Missing uid in token.");
+
+  const body = await request.json().catch(() => ({}));
+  const newPassword = typeof (body as any).newPassword === "string" ? (body as any).newPassword : "";
+  if (newPassword.length < 6) {
+    return Response.json(
+      { error: "Password must be at least 6 characters." },
+      { status: 400 },
+    );
+  }
+
+  const hash = await hashPassword(newPassword);
+  await executeD1QueryInternal({
+    sql: "UPDATE users SET password_hash = ?, password_updated_at = ? WHERE id = ?",
+    params: [hash, new Date().toISOString(), uid],
+  });
+  return Response.json({ changed: true });
+}
+
 export const onRequest = async (context: any): Promise<Response> => {
   const { request, params } = context;
   try {
@@ -138,6 +167,11 @@ export const onRequest = async (context: any): Promise<Response> => {
 
     if (path.length === 1 && path[0] === "adopt") {
       if (request.method === "POST") return await handleAdopt(request);
+      return Response.json({ error: `Method ${request.method} not allowed.` }, { status: 405 });
+    }
+
+    if (path.length === 1 && path[0] === "change-password") {
+      if (request.method === "POST") return await handleChangePassword(request);
       return Response.json({ error: `Method ${request.method} not allowed.` }, { status: 405 });
     }
 

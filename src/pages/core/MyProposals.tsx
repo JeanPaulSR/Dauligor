@@ -22,7 +22,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { auth } from '../../lib/firebase';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
@@ -47,6 +46,7 @@ import {
 } from '../../components/ui/dialog';
 import { formatSqliteLocal } from '../../lib/sqliteTimestamps';
 import { useNavigate } from 'react-router-dom';
+import { getSessionToken } from "../../lib/auth";
 
 type Status = 'draft' | 'pending' | 'approved' | 'rejected' | 'withdrawn';
 type Operation = 'create' | 'update' | 'delete';
@@ -145,7 +145,7 @@ export default function MyProposals({ userProfile }: { userProfile: any }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const idToken = await auth.currentUser?.getIdToken();
+      const idToken = await getSessionToken();
       const url = new URL('/api/proposals', window.location.origin);
       if (filter !== 'all') url.searchParams.set('status', filter);
       const res = await fetch(url.pathname + url.search, {
@@ -195,7 +195,7 @@ export default function MyProposals({ userProfile }: { userProfile: any }) {
     if (!confirm('Withdraw this proposal? Pending only; admin will no longer see it.')) return;
     setWorking(id);
     try {
-      const idToken = await auth.currentUser?.getIdToken();
+      const idToken = await getSessionToken();
       const res = await fetch(`/api/proposals/${encodeURIComponent(id)}`, {
         method: 'DELETE',
         headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
@@ -913,7 +913,7 @@ function BlockPanel() {
   // "Remove from block". Recoverable by re-authoring; not a submitted change.
   const removeDraft = async (d: DraftRevision) => {
     try {
-      const idToken = await auth.currentUser?.getIdToken();
+      const idToken = await getSessionToken();
       if (!idToken) throw new Error('Not signed in.');
       const res = await fetch(`/api/proposals/${encodeURIComponent(d.id)}`, {
         method: 'DELETE',

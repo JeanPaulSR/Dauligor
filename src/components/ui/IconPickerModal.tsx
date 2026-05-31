@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { r2List, r2Upload } from '../../lib/r2';
 import { useBlock } from '../../lib/proposalBlock';
 import { convertToWebP } from '../../lib/imageUtils';
-import { auth } from '../../lib/firebase';
 import { isAdmin } from '../../lib/currentUser';
 import { Button } from './button';
 import { Input } from './input';
@@ -16,6 +15,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
+import { getIdentity } from "../../lib/auth";
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -97,7 +97,7 @@ const normalizeRelPath = (raw: string) =>
 const FAVORITES_KEY_PREFIX = 'dauligor.iconPicker.favorites.v1.';
 
 const favoritesKeyForCurrentUser = (): string | null => {
-  const uid = auth.currentUser?.uid;
+  const uid = getIdentity()?.uid;
   return uid ? `${FAVORITES_KEY_PREFIX}${uid}` : null;
 };
 

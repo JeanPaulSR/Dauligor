@@ -10,7 +10,7 @@
 // campaigns API (`/api/campaigns/:id/home-blocks`) — reads admit any campaign
 // member, writes are staff-only — so no generic-proxy table grant is needed.
 
-import { auth } from './firebase';
+import { getSessionToken } from "./auth";
 
 export type HomeBlockType =
   | 'hero'
@@ -417,7 +417,7 @@ export function serializeHomeBlock(block: HomeBlock): { id: string; block_type: 
 }
 
 async function authHeaders(): Promise<Record<string, string>> {
-  const token = await auth.currentUser?.getIdToken();
+  const token = await getSessionToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 

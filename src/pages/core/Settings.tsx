@@ -1,6 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { auth, updateProfile, updatePassword, updateEmail, OperationType, reportClientError } from '../../lib/firebase';
-import { usernameToEmail } from '../../lib/firebase';
 import { useSearchParams } from 'react-router-dom';
 import { fetchCollection, upsertDocument, queryD1 } from '../../lib/d1';
 import { useWikiPreview } from '../../lib/wikiPreviewContext';
@@ -12,6 +10,7 @@ import { Badge } from '../../components/ui/badge';
 import { Separator } from '../../components/ui/separator';
 import { ImageUpload } from '../../components/ui/ImageUpload';
 import { User, Shield, Key, Palette, UserCircle, Save, CheckCircle2, AlertCircle, CheckCircle2 as CheckCircle, Palette as PaletteIcon, Key as KeyIcon, UserCircle as UserIcon, Save as SaveIcon, AlertCircle as AlertIcon, Wrench, AlertTriangle, Trash2, RefreshCw } from 'lucide-react';
+import { getIdentity, getSessionToken } from "../../lib/auth";
 
 export default function Settings({ user, userProfile }: { user: any, userProfile: any }) {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -94,23 +93,14 @@ export default function Settings({ user, userProfile }: { user: any, userProfile
     setError('');
 
     try {
-      // Update the Firebase Auth display name + photo URL. These don't
-      // live in D1 — they're convenience metadata Firebase Auth surfaces
-      // to other Firebase services. Email is handled server-side as
-      // part of the PATCH /api/me below (the server owns the Firebase
-      // Admin SDK so it can rename without the client SDK's
-      // "recent login" requirement).
-      if (auth.currentUser) {
-        await updateProfile(auth.currentUser, {
-          displayName,
-          photoURL: avatarUrl,
-        });
-      }
+      // display_name + avatar_url are written straight to D1 via PATCH /api/me
+      // below — D1 is the source of truth. (The former Firebase Auth
+      // updateProfile() call was dropped with the Firebase exit.)
 
       // PATCH /api/me — allow-listed fields only; the server drops any
       // column the client tries to set that isn't in its allow-list
       // (which deliberately excludes `role`). Closes H6.
-      const idToken = await auth.currentUser?.getIdToken();
+      const idToken = await getSessionToken();
       const res = await fetch('/api/me', {
         method: 'PATCH',
         headers: {
@@ -163,19 +153,28 @@ export default function Settings({ user, userProfile }: { user: any, userProfile
     setError('');
 
     try {
-      if (auth.currentUser) {
-        await updatePassword(auth.currentUser, newPassword);
-        setSuccess('Password updated successfully!');
-        setNewPassword('');
-        setConfirmPassword('');
+      // Native change-password — writes the new scrypt hash to D1, authenticated
+      // by the current session (replaces Firebase updatePassword + its
+      // "requires-recent-login" dance).
+      const idToken = await getSessionToken();
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({ newPassword }),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || `Failed to update password (HTTP ${res.status})`);
       }
+      setSuccess('Password updated successfully!');
+      setNewPassword('');
+      setConfirmPassword('');
     } catch (err: any) {
       console.error('Update password error:', err);
-      if (err.code === 'auth/requires-recent-login') {
-        setError('For security, please log out and log back in before changing your password.');
-      } else {
-        setError(err.message || 'Failed to update password');
-      }
+      setError(err.message || 'Failed to update password');
     } finally {
       setLoading(false);
     }

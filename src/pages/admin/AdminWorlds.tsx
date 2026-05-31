@@ -18,7 +18,6 @@
 
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { auth } from '../../lib/firebase';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Textarea } from '../../components/ui/textarea';
@@ -31,6 +30,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from '../../components/ui/dialog';
 import { Globe2, Plus, Trash2, Edit2 } from 'lucide-react';
+import { getSessionToken } from "../../lib/auth";
 
 type World = {
   id: string;
@@ -60,7 +60,7 @@ export default function AdminWorlds({ userProfile }: { userProfile: any }) {
   // so the token is mandatory; surface the omission early rather than
   // letting the server 401.
   const authedFetch = async (input: string, init?: RequestInit) => {
-    const idToken = await auth.currentUser?.getIdToken();
+    const idToken = await getSessionToken();
     if (!idToken) throw new Error('Not signed in.');
     return fetch(input, {
       ...init,

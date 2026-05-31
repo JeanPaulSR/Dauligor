@@ -1,5 +1,5 @@
 import { fetchDocument, upsertDocument, updateDocument, deleteDocument } from './d1';
-import { auth } from './firebase';
+import { getSessionToken } from "./auth";
 
 // ╔══════════════════════════════════════════════════════════════════════════╗
 // ║  ⚠  COORDINATION NOTE FOR THE IMAGE MANAGER BRANCH  ⚠                    ║
@@ -154,7 +154,7 @@ export async function deleteImageMetadata(storagePath: string): Promise<void> {
 // row count.
 
 async function bearerHeaders(): Promise<Record<string, string>> {
-  const token = await auth.currentUser?.getIdToken();
+  const token = await getSessionToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 

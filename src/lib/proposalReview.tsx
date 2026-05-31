@@ -50,7 +50,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useLocation } from 'react-router-dom';
-import { auth } from './firebase';
+import { getSessionToken } from "./auth";
 
 export type ProposalReviewStatus =
   | 'pending'
@@ -203,7 +203,7 @@ export function ProposalReviewProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     (async () => {
       try {
-        const token = await auth.currentUser?.getIdToken();
+        const token = await getSessionToken();
         if (!token) return;
         const res = await fetch(
           `/api/proposals/${encodeURIComponent(proposalId)}`,
