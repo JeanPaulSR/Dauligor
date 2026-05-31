@@ -71,7 +71,31 @@ type Props = {
   // Stays optional + nullable so read-only surfaces (FeatList) don't
   // have to wire it.
   cacheBustKey?: number | string;
+  /** Pre-loaded raw feat row (snake_case, as stored in D1, or a proposal
+   *  draft's proposed_payload — same shape). When provided the panel renders
+   *  from it instead of fetching by id — used by the proposal feat editor to
+   *  preview an in-block draft, which has no persisted live row. */
+  featData?: Record<string, any> | null;
 };
+
+// Map a raw feat row (snake_case / draft payload) into the FeatRecord the panel
+// renders. Shared by the fetch path and the caller-supplied `featData` path so
+// the preview is identical either way.
+function mapRawFeatRow(featId: string, data: any): FeatRecord {
+  return {
+    ...data,
+    id: featId,
+    sourceId: data?.source_id ?? data?.sourceId,
+    imageUrl: data?.image_url ?? data?.imageUrl,
+    featType: data?.feat_type ?? data?.featType,
+    featSubtype: data?.feat_subtype ?? data?.featSubtype ?? '',
+    sourceType: data?.source_type ?? data?.sourceType,
+    repeatable: !!(data?.repeatable ?? data?.is_repeatable ?? data?.isRepeatable),
+    tagIds: Array.isArray(data?.tags) ? data.tags : (Array.isArray(data?.tagIds) ? data.tagIds : []),
+    featCategoryId: data?.feat_category_id ?? data?.featCategoryId ?? '',
+    requirementsTree: parseRequirementTree(data?.requirements_tree ?? data?.requirementsTree),
+  };
+}
 
 export default function FeatDetailPanel({
   featId,
@@ -79,6 +103,7 @@ export default function FeatDetailPanel({
   isFavorite,
   onToggleFavorite,
   cacheBustKey,
+  featData,
 }: Props) {
   const [sources, setSources] = useState<SourceRecord[]>([]);
   const [tags, setTags] = useState<TagRecord[]>([]);
@@ -154,6 +179,9 @@ export default function FeatDetailPanel({
   // preview reflects the just-persisted shape without a page reload).
   useEffect(() => {
     if (!featId) return;
+    // Caller supplied the row (proposal draft — no persisted live row) — render
+    // from it; skip the fetch.
+    if (featData) return;
     const cached = featsById[featId];
     // Cache hit only counts if the entry was fetched under the
     // current bust key — otherwise it's stale and we refetch.
@@ -164,20 +192,10 @@ export default function FeatDetailPanel({
     fetchDocument<any>('feats', featId)
       .then((data) => {
         if (!active || !data) return;
-        const mapped: FeatRecord & { __bustKey?: number | string } = {
-          ...data,
-          sourceId: data.source_id,
-          imageUrl: data.image_url,
-          featType: data.feat_type,
-          featSubtype: data.feat_subtype || '',
-          sourceType: data.source_type,
-          repeatable: !!data.repeatable,
-          tagIds: Array.isArray(data.tags) ? data.tags : [],
-          featCategoryId: data.feat_category_id || '',
-          requirementsTree: parseRequirementTree(data.requirements_tree ?? data.requirementsTree),
-          __bustKey: cacheBustKey,
-        };
-        setFeatsById((prev) => ({ ...prev, [featId]: mapped }));
+        setFeatsById((prev) => ({
+          ...prev,
+          [featId]: { ...mapRawFeatRow(featId, data), __bustKey: cacheBustKey },
+        }));
       })
       .catch((err) => console.error('[FeatDetailPanel] failed to load feat:', err))
       .finally(() => {
@@ -186,18 +204,25 @@ export default function FeatDetailPanel({
     return () => {
       active = false;
     };
-  }, [featId, featsById, cacheBustKey]);
+  }, [featId, featsById, cacheBustKey, featData]);
 
   const sourceById = useMemo(
     () => Object.fromEntries(sources.map((s) => [s.id, s])) as Record<string, SourceRecord>,
     [sources],
   );
 
+  // When the caller supplies a raw row, map it the same way the fetch path does
+  // so the preview renders identically without a server round-trip.
+  const providedFeat = useMemo<FeatRecord | null>(
+    () => (featId && featData ? mapRawFeatRow(featId, featData) : null),
+    [featId, featData],
+  );
+
   if (!featId) {
     return <div className="px-8 py-20 text-center text-ink/45">{emptyMessage}</div>;
   }
 
-  const feat = featsById[featId] || null;
+  const feat = providedFeat || featsById[featId] || null;
 
   if (loading && !feat) {
     return <div className="px-8 py-20 text-center text-ink/45">Loading feat details…</div>;

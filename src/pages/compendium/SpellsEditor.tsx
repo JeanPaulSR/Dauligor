@@ -261,7 +261,15 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
-  const [editingId, setEditingId] = useState<string | null>(null);
+  // Seed from ?editingId so deep links (e.g. "Open in editor" on the My
+  // Proposals block review) focus a specific spell for editing — matching the
+  // FeatsEditor / ItemsEditor convention. A one-shot lazy initializer is enough
+  // here: the editor mounts fresh on navigation into the route.
+  const [editingId, setEditingId] = useState<string | null>(
+    () => (typeof window !== 'undefined'
+      ? new URLSearchParams(window.location.search).get('editingId')
+      : null),
+  );
   // Bumped after every successful save so the right-side <SpellDetailPanel>
   // preview re-reads the now-persisted row. The panel caches by spellId and
   // can't otherwise tell that an in-place UPDATE (same editingId) changed the
@@ -2058,6 +2066,10 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
               spellId={id}
               emptyMessage="Loading preview…"
               refreshKey={previewRefreshKey}
+              // In proposal mode the draft has no persisted live row to fetch
+              // (create) or its live row doesn't yet reflect the edits (update),
+              // so hand the panel the in-block draft's raw row to render from.
+              spellData={proposalContext ? (draftedSpellEntities.byId.get(id) ?? undefined) : undefined}
             />
           ) : (
             <div className="h-full flex items-center justify-center px-6 py-12 text-center">

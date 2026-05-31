@@ -1816,6 +1816,10 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
               featId={id}
               emptyMessage="Loading preview…"
               cacheBustKey={previewBustKey}
+              // In proposal mode a draft has no persisted live row to fetch
+              // (create) or its live row doesn't yet reflect the edits (update),
+              // so hand the panel the in-block draft's raw row to render from.
+              featData={proposalContext ? (draftedFeatEntities.byId.get(id) ?? undefined) : undefined}
             />
           ) : (
             <div className="h-full flex items-center justify-center px-6 py-12 text-center">
