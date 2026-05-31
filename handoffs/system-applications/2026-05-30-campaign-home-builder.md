@@ -83,6 +83,13 @@ After the original builder shipped, the user drove it logged-in and gave several
 5. **entity-row `auto` (by category)** — model/inspector support it but the renderer treats auto as manual-of-whatever-refs-exist; the actual category fetch is a TODO (manual mode covers the "specific entities" ask).
 6. Pre-existing from earlier this session: Foundry inline-roll chips (#7, on roadmap), system-pages remote migration (DONE this session), live-content bridge (deferred branch goal).
 
+## Planned next direction (set 2026-05-30)
+
+1. **Admin pages pass** — next focus is updating certain admin pages (scope defined when we start). Apply the same discipline this builder ended on: survey-first against `docs/ui/style-guide.md`, use the documented helper classes (`.field-label`, `.field-hint`, `.section-label`, `.h3-title`, `.description-text`) rather than hand-rolled utilities, the `admin-page-fullscreen` recipe / `browser-panel` shell where it fits, and theme-token colors verified in parchment / light / dark.
+2. **Articles, using this homepage layout as the baseline** — then return to Articles and apply the block system as the proven baseline. The model is already general (entity rows hold any ref kind; renderer self-contained; `config` JSON type-agnostic). Likely shape: attach a block layout to an article + a route/editor entry point + decide whether article-blocks reuse the `campaign_home_blocks` table or get their own. **Carry the hard-won lessons:** any new block type needs the server allowlist entry AND a `parseHomeBlock` case (error ② class); any new table needs its remote migration applied *with* the code, not after (error ① class).
+
+> A read-aid HTML version of this whole handoff (status banner, the two errors as cards, the block-type audit, commit timeline, next steps) lives at `docs/_drafts/campaign-home-handoff-2026-05-30.html` — local only, per the drafts-stay-local rule.
+
 ## Known issues NOT mine (flag, don't cross-edit)
 
 The 6 standing `tsc` errors are all the Base-UI `asChild`-on-`<Button>` pattern (Radix API; Base UI uses `render`). I fixed the one in CampaignEditor (the campaign "Add Player" popover, was causing a real nested-`<button>` hydration error). The other 5 live in files owned by other branches — **CompendiumBrowserShell.tsx:399** + **SpellList.tsx:779** (compendium-editors) and **LoreEditor.tsx:596/855/912** (wiki). CompendiumBrowserShell wraps a real `<Button>` so it throws the same console error on the Spells browser — worth the owning branch applying the identical `render={<Button/>}` fix. Per shared-files protocol I did not edit them.
