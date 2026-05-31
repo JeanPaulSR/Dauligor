@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Page — Reader Design Concepts</title>
+<style>
+  :root {
+    --parchment:#f5f2e8; --parchment-soft:#faf7ed; --ink:#241f1a; --ink-soft:#4a4239;
+    --muted:#6b6457; --gold:#c5a059; --gold-deep:#8a6d2f; --gold-bright:#e3c987;
+    --blood:#7a1f1f; --leaf:#355c3a; --card:#fbf8ee; --rule:#d8cfb8;
+    --ink-panel:#211d18; --ink-panel-soft:#2c2722; --parch-on-dark:#efe7d2;
+    --shadow:0 1px 3px rgba(0,0,0,.08),0 6px 16px rgba(0,0,0,.06);
+    --shadow-lg:0 10px 34px rgba(40,30,10,.18);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:#ece7d8;color:var(--ink);font-family:"Inter",-apple-system,"Segoe UI",Roboto,sans-serif;font-size:15px;line-height:1.6;}
+  .wrap{max-width:1140px;margin:0 auto;padding:40px 28px 90px;}
+  header.hero{border-bottom:1px solid var(--rule);padding-bottom:22px;margin-bottom:14px;}
+  header.hero .eyebrow{text-transform:uppercase;letter-spacing:1.3px;font-size:11px;color:var(--gold-deep);font-weight:700;margin-bottom:8px;}
+  header.hero h1{font-family:"Cormorant Garamond",Georgia,serif;font-weight:600;font-size:44px;line-height:1.04;margin:0 0 8px;}
+  header.hero .tagline{font-family:"Cormorant Garamond",Georgia,serif;font-style:italic;font-size:19px;color:var(--muted);margin:0;}
+  .lead{font-size:14.5px;color:var(--ink-soft);max-width:760px;margin:18px 0 0;}
+  .concept{margin-top:54px;}
+  .concept > .meta{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:6px;}
+  .concept > .meta h2{font-family:"Cormorant Garamond",Georgia,serif;font-size:29px;font-weight:600;margin:0;}
+  .concept > .meta .num{font-family:"Cormorant Garamond",serif;font-size:15px;color:#fff;background:var(--gold-deep);width:30px;height:30px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;box-shadow:var(--shadow);}
+  .concept > .desc{font-size:14px;color:var(--ink-soft);margin:2px 0 16px;max-width:820px;}
+  .concept > .desc b{color:var(--gold-deep);}
+  .tag{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.4px;padding:2px 9px;border-radius:99px;background:rgba(53,92,58,.16);color:var(--leaf);margin-left:4px;}
+  .tag.alt{background:rgba(138,109,47,.16);color:var(--gold-deep);}
+
+  /* Preview frame — stands in for the app viewport */
+  .frame{border:1px solid var(--rule);border-radius:12px;overflow:hidden;box-shadow:var(--shadow-lg);background:var(--parchment);}
+  .frame .bar{display:flex;align-items:center;gap:7px;padding:9px 13px;background:#e7e0cf;border-bottom:1px solid var(--rule);}
+  .frame .bar i{width:11px;height:11px;border-radius:50%;background:#cdc4ab;display:inline-block;}
+  .frame .bar .url{margin-left:10px;font-family:"JetBrains Mono",monospace;font-size:11.5px;color:var(--muted);}
+  .frame .view{padding:30px 34px;background:radial-gradient(120% 80% at 50% 0%,#fbf8ee 0%,#f3efe1 100%);}
+
+  /* Shared bits */
+  .pg-eyebrow{text-transform:uppercase;letter-spacing:2px;font-size:10.5px;color:var(--gold-deep);font-weight:700;}
+  .pg-title{font-family:"Cormorant Garamond",Georgia,serif;font-weight:600;font-size:38px;margin:4px 0 6px;color:var(--ink);}
+  .pg-intro{color:var(--ink-soft);font-size:13.5px;max-width:62ch;}
+  .medal{flex:0 0 auto;width:42px;height:42px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:radial-gradient(circle at 35% 30%,#fff6e0,#e9d9ad);border:1.5px solid var(--gold);box-shadow:inset 0 0 0 3px rgba(255,255,255,.45),0 2px 5px rgba(0,0,0,.12);color:var(--gold-deep);}
+  .medal svg{width:21px;height:21px;}
+  .ico{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+  .ename{font-family:"Cormorant Garamond",serif;font-weight:600;color:var(--gold-deep);}
+  .ebody{color:var(--ink-soft);font-size:13.5px;}
+  .ref{color:var(--gold-deep);border-bottom:1px dotted var(--gold);cursor:help;font-weight:500;}
+
+  /* C1 — Indexed Codex */
+  .c1{display:grid;grid-template-columns:200px 1fr;gap:30px;}
+  .c1 .idx{position:sticky;top:0;align-self:start;border-right:1px solid var(--rule);padding-right:18px;}
+  .c1 .idx h4{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin:0 0 10px;}
+  .c1 .idx a{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;color:var(--ink-soft);text-decoration:none;font-size:13px;}
+  .c1 .idx a.on,.c1 .idx a:hover{background:rgba(197,160,89,.16);color:var(--gold-deep);font-weight:600;}
+  .c1 .idx a .dot{width:5px;height:5px;border-radius:50%;background:var(--gold);opacity:.5;}
+  .c1 .entry{display:flex;gap:15px;padding:14px 0;border-bottom:1px solid var(--rule);}
+  .c1 .entry:last-child{border-bottom:none;}
+  .c1 .entry h3{margin:0 0 3px;font-size:19px;}
+
+  /* C2 — Card Gallery */
+  .c2 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:18px;}
+  .c2 .ecard{background:var(--card);border:1px solid var(--gold);border-color:rgba(197,160,89,.32);border-radius:10px;padding:16px;box-shadow:var(--shadow);transition:.15s;}
+  .c2 .ecard:hover{border-color:var(--gold);transform:translateY(-2px);box-shadow:var(--shadow-lg);}
+  .c2 .ecard .top{display:flex;align-items:center;gap:11px;margin-bottom:9px;}
+  .c2 .ecard h3{margin:0;font-size:18px;}
+  .c2 .ecard p{margin:0;font-size:12.5px;color:var(--ink-soft);}
+
+  /* C3 — Illuminated Tome */
+  .c3{max-width:660px;margin:0 auto;}
+  .c3 .tome-head{text-align:center;margin-bottom:8px;}
+  .c3 .flourish{color:var(--gold);letter-spacing:6px;font-size:15px;}
+  .c3 .entry{position:relative;padding:22px 0 22px 78px;border-bottom:1px solid var(--rule);}
+  .c3 .entry:last-child{border-bottom:none;}
+  .c3 .entry .medal{position:absolute;left:8px;top:22px;width:54px;height:54px;}
+  .c3 .entry .medal svg{width:26px;height:26px;}
+  .c3 .entry h3{font-family:"Cormorant Garamond",serif;font-size:25px;color:var(--gold-deep);margin:0 0 4px;}
+  .c3 .entry .ebody{font-size:14.5px;line-height:1.7;}
+  .c3 .entry .ebody::first-letter{font-family:"Cormorant Garamond",serif;font-size:38px;font-weight:600;color:var(--gold-deep);float:left;line-height:.8;margin:4px 8px 0 0;}
+  .c3 .divider{text-align:center;color:var(--gold);opacity:.6;margin:4px 0;}
+
+  /* C4 — Master / Detail (dark) */
+  .c4{display:grid;grid-template-columns:230px 1fr;gap:0;background:var(--ink-panel);border-radius:10px;overflow:hidden;color:var(--parch-on-dark);min-height:340px;}
+  .c4 .list{background:var(--ink-panel-soft);border-right:1px solid rgba(197,160,89,.2);padding:14px 10px;}
+  .c4 .list h4{font-size:10px;text-transform:uppercase;letter-spacing:1.4px;color:var(--gold);margin:4px 8px 12px;}
+  .c4 .list a{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:7px;color:#cbbfa6;text-decoration:none;font-size:13.5px;}
+  .c4 .list a .medal{width:26px;height:26px;background:radial-gradient(circle at 35% 30%,#3a342a,#272219);border-color:rgba(197,160,89,.5);color:var(--gold-bright);}
+  .c4 .list a .medal svg{width:14px;height:14px;}
+  .c4 .list a.on{background:rgba(197,160,89,.16);color:var(--gold-bright);font-weight:600;}
+  .c4 .detail{padding:26px 30px;}
+  .c4 .detail .pg-eyebrow{color:var(--gold-bright);}
+  .c4 .detail h3{font-family:"Cormorant Garamond",serif;font-size:30px;color:var(--gold-bright);margin:4px 0 10px;}
+  .c4 .detail .ebody{color:#d7cdb6;font-size:14.5px;}
+  .c4 .detail .ref{color:var(--gold-bright);border-color:var(--gold);}
+  .c4 .detail .chips{margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;}
+  .c4 .detail .chip{font-size:11px;padding:3px 10px;border:1px solid rgba(197,160,89,.4);border-radius:99px;color:var(--gold-bright);}
+
+  .reco{margin-top:60px;background:var(--card);border:1px solid var(--rule);border-left:4px solid var(--gold);border-radius:8px;padding:20px 24px;box-shadow:var(--shadow);}
+  .reco h3{font-family:"Cormorant Garamond",serif;font-size:23px;margin:0 0 8px;}
+  .reco ul{margin:8px 0 0 18px;}
+  .reco li{margin:6px 0;font-size:14px;}
+  code{font-family:"JetBrains Mono",monospace;font-size:12.5px;background:rgba(138,109,47,.12);padding:1px 5px;border-radius:3px;}
+
+  /* Refined direction — General Article + Blocks (system-agnostic, no icons) */
+  .ra{max-width:720px;margin:0 auto;}
+  .ra-head{margin-bottom:14px;}
+  .ra-desc{position:relative;background:var(--card);border:1px solid var(--rule);border-left:3px solid var(--gold);border-radius:8px;padding:15px 20px;margin-bottom:18px;}
+  .ra-desc-tag{display:inline-block;font-size:9.5px;text-transform:uppercase;letter-spacing:1.4px;color:var(--gold-deep);font-weight:700;margin-bottom:6px;}
+  .ra-desc p{margin:0;font-size:14.5px;color:var(--ink-soft);}
+  .ra-contents{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);padding:9px 0;margin-bottom:18px;}
+  .ra-contents-label{text-transform:uppercase;letter-spacing:1px;font-size:9.5px;color:var(--muted);font-weight:700;margin-right:4px;}
+  .ra-contents a{color:var(--gold-deep);text-decoration:none;padding:2px 8px;border-radius:5px;}
+  .ra-contents a:hover,.ra-contents a.on{background:rgba(197,160,89,.16);font-weight:600;}
+  .ra-blocks{display:flex;flex-direction:column;gap:12px;}
+  .ra-block{background:var(--parchment-soft);border:1px solid var(--rule);border-radius:8px;padding:15px 18px;}
+  .ra-block.on{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold),var(--shadow);}
+  .ra-block h3{font-family:"Cormorant Garamond",serif;font-size:21px;color:var(--gold-deep);margin:0 0 5px;display:flex;align-items:baseline;gap:8px;}
+  .ra-block .anchor{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--gold);opacity:.45;}
+  .ra-block .ebody{margin:0;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="eyebrow">Design concepts &middot; 2026-05-29</div>
+  <h1>System Page &mdash; Reader Designs</h1>
+  <p class="tagline">Four ways to make <code style="font-size:14px">/system/&lt;page&gt;</code> worth landing on.</p>
+</header>
+<p class="lead">
+  A system page is where a <span class="ref">&amp;condition[prone]</span> reference takes you &mdash; a
+  canonical glossary a player or DM reads, not just a data dump. The current build renders a flat list;
+  below are four richer treatments using real condition content. Each is a static mockup &mdash; pick one
+  (or a blend) and I'll build it as the real <code>SystemPageGlossary</code>. Sample entries are
+  paraphrased, not full rules text. The <b>refined direction</b> from your feedback is shown first; the four
+  initial explorations follow it for the record.
+</p>
+
+<!-- ============ REFINED DIRECTION ============ -->
+<section class="concept" id="refined">
+  <div class="meta"><span class="num" style="background:var(--leaf)">&#9733;</span><h2>Refined: General Article + Blocks</h2><span class="tag">the build target</span></div>
+  <p class="desc">A <b>general article page</b>: a prominent <b>Description</b> at the top &mdash; the content a
+    page-level <span class="ref">&amp;condition</span> reference shows, when you cite the system itself and not a
+    specific entry &mdash; then each entry as a clean, generic <b>block</b>. <b>No system-specific icons</b>, so
+    the exact same layout serves Conditions, Magic, or Homebrew. Article feel from concept 1, minus the thematic glyphs.</p>
+  <div class="frame">
+    <div class="bar"><i></i><i></i><i></i><span class="url">/system/condition</span></div>
+    <div class="view">
+      <div class="ra">
+        <div class="ra-head">
+          <div class="pg-eyebrow">System Page</div>
+          <div class="pg-title">Conditions</div>
+        </div>
+        <div class="ra-desc">
+          <span class="ra-desc-tag">Description &mdash; shown for a page-level reference</span>
+          <p>Conditions are temporary states &mdash; imposed by spells, attacks, or the environment &mdash; that
+            change what a creature can do until removed. Each entry below lists what it denies and what it allows.</p>
+        </div>
+        <div class="ra-contents">
+          <span class="ra-contents-label">Contents</span>
+          <a>Blinded</a><a>Charmed</a><a>Frightened</a><a class="on">Prone</a><a>Stunned</a>
+        </div>
+        <div class="ra-blocks">
+          <article class="ra-block"><h3>Blinded <span class="anchor">#blinded</span></h3><p class="ebody">Can't see and auto-fails checks needing sight. Attacks against it have advantage; its own attacks have disadvantage.</p></article>
+          <article class="ra-block"><h3>Charmed <span class="anchor">#charmed</span></h3><p class="ebody">Can't attack the charmer or target them with harmful effects; the charmer has advantage on social checks against it.</p></article>
+          <article class="ra-block on"><h3>Prone <span class="anchor">#prone</span></h3><p class="ebody">Can only crawl unless it stands. Disadvantage on attacks; melee attackers have advantage, ranged attackers have disadvantage. See also <span class="ref">&amp;condition[grappled]</span>.</p></article>
+          <article class="ra-block"><h3>Stunned <span class="anchor">#stunned</span></h3><p class="ebody">Incapacitated and can't move; auto-fails STR and DEX saves; attackers have advantage against it.</p></article>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="desc" style="margin-top:16px;">The identical layout on a <b>Homebrew</b> page &mdash; no restyling, no
+    condition-specific chrome &mdash; showing it's system-agnostic:</p>
+  <div class="frame">
+    <div class="bar"><i></i><i></i><i></i><span class="url">/system/homebrew</span></div>
+    <div class="view">
+      <div class="ra">
+        <div class="ra-head"><div class="pg-eyebrow">System Page</div><div class="pg-title">Homebrew Rules</div></div>
+        <div class="ra-desc"><span class="ra-desc-tag">Description &mdash; shown for a page-level reference</span><p>House rules in effect at this table. Cite any of them inline with <span class="ref">&amp;homebrew[flanking]</span>.</p></div>
+        <div class="ra-blocks">
+          <article class="ra-block"><h3>Flanking <span class="anchor">#flanking</span></h3><p class="ebody">A creature with an ally on the opposite side of its target has advantage on melee attacks against it.</p></article>
+          <article class="ra-block"><h3>Gritty Rest <span class="anchor">#gritty-rest</span></h3><p class="ebody">A short rest is 8 hours; a long rest is 7 days. Adventures breathe at a slower, grittier pace.</p></article>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CONCEPT 1 ============ -->
+<section class="concept">
+  <div class="meta"><span class="num">1</span><h2>Indexed Codex</h2><span class="tag">best for big glossaries</span></div>
+  <p class="desc">A sticky left <b>index</b> (jump-links, highlights the section you're in) beside the entries.
+    Fast to scan 20+ conditions, and a <code>&amp;condition[prone]</code> deep-link both scrolls <em>and</em>
+    lights up its index row. Reference-doc clarity, lightly themed.</p>
+  <div class="frame">
+    <div class="bar"><i></i><i></i><i></i><span class="url">/system/condition#prone</span></div>
+    <div class="view">
+      <div class="pg-eyebrow">Rules Glossary</div>
+      <div class="pg-title" style="font-size:30px;margin-bottom:14px;">Conditions</div>
+      <div class="c1">
+        <nav class="idx">
+          <h4>On this page</h4>
+          <a><span class="dot"></span>Blinded</a>
+          <a><span class="dot"></span>Charmed</a>
+          <a><span class="dot"></span>Frightened</a>
+          <a class="on"><span class="dot"></span>Prone</a>
+          <a><span class="dot"></span>Stunned</a>
+        </nav>
+        <div>
+          <div class="entry">
+            <span class="medal"><svg class="ico" viewBox="0 0 24 24"><path d="M2 12s3-6 10-6 10 6 10 6-3 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/><path d="m3 3 18 18"/></svg></span>
+            <div><h3 class="ename">Blinded</h3><p class="ebody">Can't see and auto-fails checks needing sight. Attacks against it have advantage; its own attacks have disadvantage.</p></div>
+          </div>
+          <div class="entry">
+            <span class="medal"><svg class="ico" viewBox="0 0 24 24"><path d="M19 14c1.5-1.5 3-3.5 3-6a4 4 0 0 0-7-2.5A4 4 0 0 0 8 8c0 2.5 1.5 4.5 3 6l4 4Z"/></svg></span>
+            <div><h3 class="ename">Charmed</h3><p class="ebody">Can't attack or target the charmer with harmful effects; the charmer has advantage on social checks against it.</p></div>
+          </div>
+          <div class="entry">
+            <span class="medal"><svg class="ico" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-2-2-3-1.5-5C7 8 6 9.5 6 12a6 6 0 1 0 12 0c0-1.5-.5-3-1.5-4-.5 2 .5 3.5-1 4.5"/></svg></span>
+            <div><h3 class="ename">Frightened</h3><p class="ebody">Disadvantage on checks and attacks while the source of fear is in sight, and it can't willingly move closer to that source.</p></div>
+          </div>
+          <div class="entry" style="background:rgba(197,160,89,.07);margin:0 -10px;padding:14px 10px;border-radius:8px;">
+            <span class="medal"><svg class="ico" viewBox="0 0 24 24"><path d="M4 18h16M6 18l3-9 3 4 3-7 3 12"/></svg></span>
+            <div><h3 class="ename">Prone</h3><p class="ebody">Can only crawl unless it stands. Disadvantage on attacks; melee attackers have advantage, ranged attackers have disadvantage.</p></div>
+          </div>
+          <div class="entry">
+            <span class="medal"><svg class="ico" viewBox="0 0 24 24"><path d="m13 2-3 8h5l-3 8M5 12h2m10 0h2"/></svg></span>
+            <div><h3 class="ename">Stunned</h3><p class="ebody">Incapacitated and can't move; auto-fails STR and DEX saves; attackers have advantage against it.</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CONCEPT 2 ============ -->
+<section class="concept">
+  <div class="meta"><span class="num">2</span><h2>Card Gallery</h2><span class="tag" style="background:rgba(122,31,31,.1);color:var(--blood)">set aside</span></div>
+  <p class="desc">Each entry is a <b>card</b> with its medallion, name, and a one-line summary. Great when the page
+    is something you skim before diving in. A deep-link can highlight or expand the targeted card. Icon-forward
+    and the most "at a glance".</p>
+  <div class="frame">
+    <div class="bar"><i></i><i></i><i></i><span class="url">/system/condition</span></div>
+    <div class="view">
+      <div class="pg-eyebrow">Rules Glossary</div>
+      <div class="pg-title" style="font-size:30px;">Conditions</div>
+      <p class="pg-intro">Temporary states that change what a creature can do. Referenced anywhere as <span class="ref">&amp;condition[…]</span>.</p>
+      <div class="c2">
+        <div class="grid">
+          <div class="ecard"><div class="top"><span class="medal"><svg class="ico" viewBox="0 0 24 24"><path d="M2 12s3-6 10-6 10 6 10 6-3 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/><path d="m3 3 18 18"/></svg></span><h3 class="ename">Blinded</h3></div><p>Can't see; sight checks auto-fail. Attacks against have advantage.</p></div>
+          <div class="ecard"><div class="top"><span class="medal"><svg class="ico" viewBox="0 0 24 24"><path d="M19 14c1.5-1.5 3-3.5 3-6a4 4 0 0 0-7-2.5A4 4 0 0 0 8 8c0 2.5 1.5 4.5 3 6l4 4Z"/></svg></span><h3 class="ename">Charmed</h3></div><p>Can't harm the charmer, who gains social advantage.</p></div>
+          <div class="ecard"><div class="top"><span class="medal"><svg class="ico" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-2-2-3-1.5-5C7 8 6 9.5 6 12a6 6 0 1 0 12 0c0-1.5-.5-3-1.5-4-.5 2 .5 3.5-1 4.5"/></svg></span><h3 class="ename">Frightened</h3></div><p>Disadvantage near the fear source; can't move closer to it.</p></div>
+          <div class="ecard"><div class="top"><span class="medal"><svg class="ico" viewBox="0 0 24 24"><path d="M6 9a6 6 0 0 1 12 0v3l2 4H4l2-4Z"/><path d="M10 19a2 2 0 0 0 4 0"/></svg></span><h3 class="ename">Grappled</h3></div><p>Speed becomes 0; ends if the grappler is moved away.</p></div>
+          <div class="ecard"><div class="top"><span class="medal"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3c3 4 5 6.5 5 9a5 5 0 0 1-10 0c0-2.5 2-5 5-9Z"/></svg></span><h3 class="ename">Poisoned</h3></div><p>Disadvantage on attack rolls and ability checks.</p></div>
+          <div class="ecard" style="border-color:var(--gold);box-shadow:var(--shadow-lg);"><div class="top"><span class="medal"><svg class="ico" viewBox="0 0 24 24"><path d="M4 18h16M6 18l3-9 3 4 3-7 3 12"/></svg></span><h3 class="ename">Prone</h3></div><p>Can only crawl; melee attackers have advantage on it.</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CONCEPT 3 ============ -->
+<section class="concept">
+  <div class="meta"><span class="num">3</span><h2>Illuminated Tome</h2><span class="tag" style="background:rgba(122,31,31,.1);color:var(--blood)">set aside</span></div>
+  <p class="desc">A single manuscript column &mdash; framed medallions, drop-caps, and gold flourishes between entries.
+    Reads like a page out of an in-world rulebook. Beautiful for shorter, prose-heavy pages (rules, lore-rules);
+    heavier to scan than the indexed layouts.</p>
+  <div class="frame">
+    <div class="bar"><i></i><i></i><i></i><span class="url">/system/condition#prone</span></div>
+    <div class="view" style="background:radial-gradient(120% 70% at 50% 0%,#fcf9ef,#efe9d8);">
+      <div class="c3">
+        <div class="tome-head">
+          <div class="flourish">&#10086; &#10087; &#10086;</div>
+          <div class="pg-eyebrow">Of the Body Beset</div>
+          <div class="pg-title" style="font-size:40px;">Conditions</div>
+          <p class="pg-intro" style="margin:0 auto;">The afflictions that may befall any creature, and what each denies them.</p>
+        </div>
+        <div class="divider">&#10070;</div>
+        <div class="entry">
+          <span class="medal"><svg class="ico" viewBox="0 0 24 24"><path d="M2 12s3-6 10-6 10 6 10 6-3 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/><path d="m3 3 18 18"/></svg></span>
+          <h3>Blinded</h3>
+          <p class="ebody">Robbed of sight, the creature fails any check that asks the eye to judge. Foes strike at it with advantage, while its own blows fall wide.</p>
+        </div>
+        <div class="entry">
+          <span class="medal"><svg class="ico" viewBox="0 0 24 24"><path d="M4 18h16M6 18l3-9 3 4 3-7 3 12"/></svg></span>
+          <h3>Prone</h3>
+          <p class="ebody">Brought low, it may only crawl until it rises. Those near enough to reach it gain advantage; those at range find it a poorer mark.</p>
+        </div>
+        <div class="entry">
+          <span class="medal"><svg class="ico" viewBox="0 0 24 24"><path d="m13 2-3 8h5l-3 8M5 12h2m10 0h2"/></svg></span>
+          <h3>Stunned</h3>
+          <p class="ebody">Senseless and reeling, it cannot act or move, and its body will not answer a call for strength or grace. Every attacker presses the advantage.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CONCEPT 4 ============ -->
+<section class="concept">
+  <div class="meta"><span class="num">4</span><h2>Master &amp; Detail</h2><span class="tag alt">best for deep entries</span></div>
+  <p class="desc">A list on the left, the selected entry's full write-up on the right &mdash; like a wiki or inbox.
+    A <code>&amp;condition[prone]</code> deep-link opens straight to that entry. Ideal when entries are long
+    (apply-effects, examples, sub-rules). Shown on the dark theme to demonstrate contrast.</p>
+  <div class="frame">
+    <div class="bar"><i></i><i></i><i></i><span class="url">/system/condition#prone</span></div>
+    <div class="view" style="padding:0;background:none;">
+      <div class="c4">
+        <nav class="list">
+          <h4>Conditions</h4>
+          <a><span class="medal"><svg class="ico" viewBox="0 0 24 24"><path d="M2 12s3-6 10-6 10 6 10 6-3 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/><path d="m3 3 18 18"/></svg></span>Blinded</a>
+          <a><span class="medal"><svg class="ico" viewBox="0 0 24 24"><path d="M19 14c1.5-1.5 3-3.5 3-6a4 4 0 0 0-7-2.5A4 4 0 0 0 8 8c0 2.5 1.5 4.5 3 6Z"/></svg></span>Charmed</a>
+          <a><span class="medal"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3c3 4 5 6.5 5 9a5 5 0 0 1-10 0c0-2.5 2-5 5-9Z"/></svg></span>Poisoned</a>
+          <a class="on"><span class="medal"><svg class="ico" viewBox="0 0 24 24"><path d="M4 18h16M6 18l3-9 3 4 3-7 3 12"/></svg></span>Prone</a>
+          <a><span class="medal"><svg class="ico" viewBox="0 0 24 24"><path d="m13 2-3 8h5l-3 8"/></svg></span>Stunned</a>
+        </nav>
+        <div class="detail">
+          <div class="pg-eyebrow">Condition</div>
+          <h3>Prone</h3>
+          <p class="ebody">A prone creature's only movement option is to crawl, unless it stands up and thereby ends the condition. It has <b>disadvantage</b> on attack rolls.</p>
+          <p class="ebody">An attack roll against the creature has <b>advantage</b> if the attacker is within 5 feet; otherwise the attack roll has <b>disadvantage</b>. Related: <span class="ref">&amp;condition[grappled]</span>.</p>
+          <div class="chips"><span class="chip">Movement: crawl only</span><span class="chip">Stand up: ½ speed</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="reco">
+  <h3>Where this lands</h3>
+  <ul>
+    <li>The <b>refined direction</b> at the top is the build target: a general article page &mdash; a prominent <b>Description</b> section (the page-level reference target) + generic entry <b>blocks</b>, with <b>no system-specific icons</b>.</li>
+    <li><b>Card Gallery (2)</b> and <b>Illuminated Tome (3)</b> are set aside &mdash; too entry-decorative and not article-like.</li>
+    <li>To confirm before I build: keep the inline <b>Contents</b> jump-list (shown), or add a sticky side rail for long pages? And should entries support an optional <code>image_url</code> thumbnail (generic), or stay text-only?</li>
+  </ul>
+</div>
+
+</div>
+</body>
+</html>

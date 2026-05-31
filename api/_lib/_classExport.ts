@@ -647,7 +647,8 @@ function normalizeClassProficiencies(rawProficiencies: any, refs: any) {
     }),
     armorDisplayName: trimString(raw.armorDisplayName),
     weaponsDisplayName: trimString(raw.weaponsDisplayName),
-    toolsDisplayName: trimString(raw.toolsDisplayName)
+    toolsDisplayName: trimString(raw.toolsDisplayName),
+    skillsDisplayName: trimString(raw.skillsDisplayName)
   };
 }
 
@@ -1079,19 +1080,28 @@ export async function exportClassSemantic(
 
   const refs = await loadExportRefs(fetchCollection);
 
-  const sourceCache: { [id: string]: string } = {};
-  const resolveBookId = async (sid: string | undefined) => {
-    if (!sid) return undefined;
+  // Promise cache, not a value cache. resolveBookId is called concurrently
+  // inside the subclasses/features Promise.all maps below — a plain value
+  // cache only populates AFTER the await resolves, so every concurrent call
+  // for the same source id sees an empty cache and fires its own
+  // `SELECT * FROM sources` query (an async cache stampede). Caching the
+  // in-flight PROMISE makes all concurrent callers for one source share a
+  // single query. This collapsed a Bard bake from 43 D1 subrequests to ~19
+  // and prevents the "Too many subrequests by single Worker invocation"
+  // cap on classes with many subclasses/features.
+  const sourceCache: { [id: string]: Promise<string | undefined> } = {};
+  const resolveBookId = (sid: string | undefined): Promise<string | undefined> => {
+    if (!sid) return Promise.resolve(undefined);
+    if (sid.startsWith('source-')) return Promise.resolve(sid);
     if (sourceCache[sid]) return sourceCache[sid];
-    if (sid.startsWith('source-')) return sid;
 
-    const sourceRow = await fetchDocument<any>('sources', sid);
-    const sourceSnap = denormalizeSource(sourceRow);
-    if (sourceSnap) {
-      sourceCache[sid] = getSemanticSourceId(sourceSnap, sid);
-      return sourceCache[sid];
-    }
-    return sid;
+    sourceCache[sid] = (async () => {
+      const sourceRow = await fetchDocument<any>('sources', sid);
+      const sourceSnap = denormalizeSource(sourceRow);
+      if (sourceSnap) return getSemanticSourceId(sourceSnap, sid);
+      return sid;
+    })();
+    return sourceCache[sid];
   };
 
   const classIdentifier = classDataRaw.identifier || slugify(classDataRaw.name);
@@ -1120,6 +1130,40 @@ export async function exportClassSemantic(
   if (allParentIds.length > 0) {
     const scalingData = await fetchCollection<any>('scalingColumns', { where: `parent_id IN (${allParentIds.map(() => '?').join(',')})`, params: allParentIds });
     scalingColumnsRaw = scalingData.map(denormalizeScalingColumnRow);
+  }
+
+  // Batch-prefetch every distinct source referenced by this class's
+  // subclasses + features in ONE query, seeding the resolveBookId cache.
+  // A class whose subclasses/features span many sourcebooks (Bard pulls
+  // from ~12) would otherwise fire one `SELECT * FROM sources` per distinct
+  // book — the promise cache dedupes concurrent hits for the SAME id, but
+  // N distinct ids still mean N point queries. Folding them into a single
+  // `IN (...)` read keeps source resolution at ~1 subrequest regardless of
+  // how many books the class spans, which is what kept big classes under
+  // the Worker subrequest cap. resolveBookId then finds each id already
+  // cached and issues no further queries.
+  {
+    const refSourceIds = uniqueStrings([
+      ...subclassesRaw.map((s: any) => trimString(s.sourceId)),
+      ...featuresRaw.map((f: any) => trimString(f.sourceId)),
+    ].filter((sid) => sid && !sid.startsWith('source-')));
+    if (refSourceIds.length > 0) {
+      const placeholders = refSourceIds.map(() => '?').join(',');
+      const sourceRows = await fetchCollection<any>('sources', {
+        where: `id IN (${placeholders})`,
+        params: refSourceIds,
+      });
+      const sourceById = new Map<string, any>(sourceRows.map((row: any) => [String(row.id), row]));
+      for (const sid of refSourceIds) {
+        const row = sourceById.get(sid);
+        // Resolve to the same value resolveBookId would compute, and seed the
+        // promise cache. Ids with no matching row resolve to the raw id
+        // (mirrors resolveBookId's fallthrough) so a missing source still
+        // short-circuits instead of re-querying.
+        const snap = row ? denormalizeSource(row) : null;
+        sourceCache[sid] = Promise.resolve(snap ? getSemanticSourceId(snap, sid) : sid);
+      }
+    }
   }
 
   const subclasses = await Promise.all(subclassesRaw.map(async (subclass: any) => {

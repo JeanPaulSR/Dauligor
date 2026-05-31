@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Dauligor — System Clarity Overview (2026-05-29)</title>
+<style>
+  :root{
+    --parch-1:#f5edd8; --parch-2:#efe3c6; --parch-3:#fbf7ea;
+    --ink:#2b2118; --ink-soft:#5b4f3d; --ink-faint:#8a7c63;
+    --gold:#a9842f; --gold-deep:#856420; --gold-soft:rgba(169,132,47,.18);
+    --rule:rgba(133,100,32,.30);
+    --card:#fbf7ec; --card-edge:rgba(133,100,32,.22);
+    --hi:#8b2e2e; --med:#b06a1f; --lo:#7a7060; --ok:#4f6f3a;
+    --shadow:0 1px 0 rgba(255,255,255,.6) inset, 0 6px 22px -12px rgba(60,42,16,.45);
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0; color:var(--ink);
+    font-family:"Iowan Old Style","Palatino Linotype","Book Antiqua",Palatino,Georgia,serif;
+    line-height:1.55; font-size:16px;
+    background:
+      radial-gradient(1200px 600px at 12% -8%, #fcf6e6 0%, rgba(252,246,230,0) 60%),
+      radial-gradient(1000px 700px at 110% 0%, #f3e8cc 0%, rgba(243,232,204,0) 55%),
+      linear-gradient(180deg,var(--parch-1),var(--parch-2));
+    background-attachment:fixed;
+  }
+  .wrap{max-width:1080px; margin:0 auto; padding:48px 28px 90px;}
+
+  /* ── Header ───────────────────────────── */
+  header.masthead{ text-align:center; padding-bottom:26px; margin-bottom:34px;
+    border-bottom:3px double var(--rule); position:relative;}
+  .eyebrow{font-size:12px; letter-spacing:.42em; text-transform:uppercase;
+    color:var(--gold-deep); font-family:ui-monospace,"SFMono-Regular",Menlo,monospace;}
+  h1{font-size:40px; margin:.18em 0 .12em; letter-spacing:.01em; font-weight:600;}
+  .sub{color:var(--ink-soft); font-style:italic; font-size:17px;}
+  .meta-strip{margin-top:18px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap;}
+  .chip{font-family:ui-monospace,Menlo,monospace; font-size:11.5px; letter-spacing:.04em;
+    background:var(--gold-soft); border:1px solid var(--card-edge); color:var(--gold-deep);
+    padding:4px 11px; border-radius:999px;}
+
+  /* ── Legend ───────────────────────────── */
+  .legend{display:flex; gap:26px; flex-wrap:wrap; justify-content:center;
+    margin:26px auto 40px; font-size:13px; color:var(--ink-soft);}
+  .legend b{color:var(--ink);}
+  .dot{display:inline-block; width:10px; height:10px; border-radius:50%; vertical-align:baseline; margin-right:6px;}
+  .dot.hi{background:var(--hi);} .dot.med{background:var(--med);} .dot.lo{background:var(--lo);}
+  .pill{display:inline-block; font-family:ui-monospace,Menlo,monospace; font-size:11px;
+    letter-spacing:.08em; text-transform:uppercase; padding:3px 9px; border-radius:5px;
+    border:1px solid transparent; vertical-align:middle;}
+  .pill.shipped{background:rgba(79,111,58,.14); color:var(--ok); border-color:rgba(79,111,58,.35);}
+  .pill.partial{background:rgba(176,106,31,.14); color:var(--med); border-color:rgba(176,106,31,.34);}
+  .pill.stub{background:rgba(122,112,96,.16); color:var(--lo); border-color:rgba(122,112,96,.36);}
+  .pill.decision{background:rgba(73,86,120,.14); color:#4a5678; border-color:rgba(73,86,120,.34);}
+  .pill.polish{background:rgba(169,132,47,.16); color:var(--gold-deep); border-color:var(--card-edge);}
+
+  /* ── Section titles ───────────────────── */
+  h2.section{font-size:14px; letter-spacing:.3em; text-transform:uppercase;
+    color:var(--gold-deep); font-family:ui-monospace,Menlo,monospace; font-weight:600;
+    margin:48px 0 18px; display:flex; align-items:center; gap:14px;}
+  h2.section::after{content:""; flex:1; height:1px; background:var(--rule);}
+
+  /* ── Session recap ────────────────────── */
+  .recap{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px;}
+  .recap .item{background:var(--card); border:1px solid var(--card-edge); border-radius:10px;
+    padding:14px 16px; box-shadow:var(--shadow);}
+  .recap .item h4{margin:0 0 4px; font-size:15px;}
+  .recap .item p{margin:0; font-size:13.5px; color:var(--ink-soft);}
+  .recap code{font-family:ui-monospace,Menlo,monospace; font-size:12px; color:var(--gold-deep);
+    background:var(--gold-soft); padding:1px 5px; border-radius:4px;}
+
+  /* ── Area cards ───────────────────────── */
+  .area{background:var(--card); border:1px solid var(--card-edge); border-radius:14px;
+    padding:0; margin-bottom:22px; box-shadow:var(--shadow); overflow:hidden;}
+  .area > .head{display:flex; align-items:center; gap:14px; padding:18px 22px;
+    border-bottom:1px solid var(--rule); background:linear-gradient(180deg,rgba(169,132,47,.07),transparent);}
+  .mono{flex:0 0 auto; width:42px; height:42px; border-radius:50%;
+    display:grid; place-items:center; font-size:20px; font-weight:600; color:#fff;
+    background:radial-gradient(circle at 30% 25%, #c19a44, var(--gold-deep));
+    box-shadow:0 2px 8px -2px rgba(133,100,32,.6), 0 0 0 4px rgba(169,132,47,.12);
+    font-family:"Iowan Old Style",Georgia,serif;}
+  .head .title{flex:1; min-width:0;}
+  .head .title h3{margin:0; font-size:21px;}
+  .head .title .one{margin:2px 0 0; font-size:14px; color:var(--ink-soft);}
+  .body2{display:grid; grid-template-columns:1fr 1fr; gap:0;}
+  @media(max-width:720px){ .body2{grid-template-columns:1fr;} }
+  .col{padding:16px 22px;}
+  .col.works{border-right:1px solid var(--rule);}
+  @media(max-width:720px){ .col.works{border-right:none; border-bottom:1px solid var(--rule);} }
+  .col h5{margin:0 0 9px; font-size:11px; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--ink-faint); font-family:ui-monospace,Menlo,monospace;}
+  ul.tight{margin:0; padding:0; list-style:none;}
+  ul.tight li{position:relative; padding:3px 0 3px 20px; font-size:14px;}
+  ul.tight.works li::before{content:"›"; position:absolute; left:2px; top:3px; color:var(--gold); font-weight:700;}
+  ul.tight.edges li{padding-left:22px;}
+  ul.tight.edges li .dot{position:absolute; left:2px; top:8px; margin:0;}
+  .area .foot{padding:11px 22px; border-top:1px solid var(--rule); font-size:12.5px;
+    color:var(--ink-faint); background:rgba(169,132,47,.05);}
+  .area .foot code{font-family:ui-monospace,Menlo,monospace; font-size:11.5px; color:var(--gold-deep);}
+  .note{font-style:italic; color:var(--ink-faint); font-size:12.5px;}
+  .tag{font-family:ui-monospace,Menlo,monospace; font-size:10px; letter-spacing:.05em;
+    padding:1px 6px; border-radius:4px; vertical-align:middle; margin-left:7px;}
+  .tag.ver{background:rgba(79,111,58,.14); color:var(--ok);}
+  .tag.rep{background:rgba(122,112,96,.16); color:var(--lo);}
+
+  /* ── Cross-cutting / next ─────────────── */
+  .panel{background:var(--card); border:1px solid var(--card-edge); border-radius:12px;
+    padding:8px 24px; box-shadow:var(--shadow);}
+  .panel li{padding:10px 0; border-bottom:1px solid var(--rule); font-size:14.5px;}
+  .panel li:last-child{border-bottom:none;}
+  .panel li b{color:var(--ink);}
+  .rank{display:inline-block; width:24px; height:24px; border-radius:50%; text-align:center;
+    line-height:24px; font-size:12.5px; font-weight:700; color:#fff; background:var(--gold-deep);
+    margin-right:12px; font-family:ui-monospace,Menlo,monospace; vertical-align:middle;}
+  .verdict{font-size:13px; color:var(--med); font-style:italic; margin-left:36px;}
+
+  footer{margin-top:50px; padding-top:20px; border-top:3px double var(--rule);
+    text-align:center; font-size:12.5px; color:var(--ink-faint);}
+  a{color:var(--gold-deep);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="eyebrow">The Archive · System Survey</div>
+    <h1>Clarity &amp; UI Pass — Landscape</h1>
+    <div class="sub">Where the five target systems stand before the polish round</div>
+    <div class="meta-strip">
+      <span class="chip">branch · system-applications</span>
+      <span class="chip">main @ b4120aa</span>
+      <span class="chip">2026-05-29</span>
+      <span class="chip">5 areas surveyed</span>
+    </div>
+  </header>
+
+  <div class="legend">
+    <span><b>Status:</b></span>
+    <span><span class="pill shipped">shipped</span></span>
+    <span><span class="pill partial">partial</span></span>
+    <span><span class="pill stub">stub</span></span>
+    <span><span class="pill decision">needs decision</span></span>
+    <span><span class="pill polish">polish</span></span>
+    <span style="width:1px;height:18px;background:var(--rule);"></span>
+    <span><b>Severity:</b></span>
+    <span><span class="dot hi"></span>high</span>
+    <span><span class="dot med"></span>medium</span>
+    <span><span class="dot lo"></span>low</span>
+  </div>
+
+  <!-- ════ SESSION RECAP ════ -->
+  <h2 class="section">Shipped this session</h2>
+  <div class="recap">
+    <div class="item">
+      <h4>System-pages migration → remote</h4>
+      <p><code>20260529-1500</code> applied to remote D1; both tables + page-order index verified.</p>
+    </div>
+    <div class="item">
+      <h4>Cross-reference doc</h4>
+      <p>New <code>docs/architecture/cross-references.md</code> — the <code>@</code>/<code>&amp;</code> system, end to end.</p>
+    </div>
+    <div class="item">
+      <h4>Roadmap drift fixed</h4>
+      <p>System pages moved to “Shipped”; false “blocks Phase 2” dependency corrected.</p>
+    </div>
+    <div class="item">
+      <h4>Maps bug-fixes <span class="pill shipped">live</span></h4>
+      <p>Highlight tooltips, broken lore links, picsum placeholder — <code>76962a0</code>.</p>
+    </div>
+  </div>
+
+  <!-- ════ AREAS ════ -->
+  <h2 class="section">The five systems</h2>
+
+  <!-- CAMPAIGN -->
+  <section class="area" id="campaign">
+    <div class="head">
+      <div class="mono">C</div>
+      <div class="title">
+        <h3>Campaign Manager <span class="pill partial">partial</span></h3>
+        <p class="one">Campaigns + eras as containers for players, lore visibility, and characters. The hub the rest of the app scopes to.</p>
+      </div>
+    </div>
+    <div class="body2">
+      <div class="col works">
+        <h5>Works today</h5>
+        <ul class="tight works">
+          <li>Admin CRUD for campaigns &amp; eras (<code>/admin/campaigns</code>)</li>
+          <li>Membership roles in schema: dm / co-dm / player</li>
+          <li>Active-campaign switcher (navbar → <code>users.active_campaign_id</code>)</li>
+          <li>Lore visibility scoping by campaign + era</li>
+          <li>Editor: metadata, images, player assignment</li>
+        </ul>
+      </div>
+      <div class="col edges">
+        <h5>Rough edges <span class="tag rep">reported</span></h5>
+        <ul class="tight edges">
+          <li><span class="dot hi"></span><b>image_display</b> read/written by editor + API but column may not exist in D1 → display settings silently don’t persist</li>
+          <li><span class="dot med"></span>Co-DM role can’t be assigned in the editor UI (schema allows it)</li>
+          <li><span class="dot med"></span>5 stub tabs (Characters, Maps, Sessions, Notes, Timeline) read like “no data” not “not built”</li>
+          <li><span class="dot med"></span>Schema doc stale — 4 image columns from <code>0014</code> undocumented</li>
+          <li><span class="dot lo"></span>snake→camel remap re-implemented per page</li>
+          <li><span class="dot lo"></span>Era delete deliberately leaves <code>era_id</code> dangling</li>
+        </ul>
+      </div>
+    </div>
+    <div class="foot">
+      <code>src/pages/campaign/{CampaignManager,CampaignEditor}.tsx</code> · <code>admin/AdminCampaigns.tsx</code> · <code>functions/api/campaigns/[[path]].ts</code>
+      &nbsp;·&nbsp; <span class="note">survey-verify the image_display claim before acting (per “Survey First”).</span>
+    </div>
+  </section>
+
+  <!-- LORE -->
+  <section class="area" id="lore">
+    <div class="head">
+      <div class="mono">L</div>
+      <div class="title">
+        <h3>Article / Lore Wiki <span class="pill partial">mature</span></h3>
+        <p class="one">Hierarchical world-building articles with BBCode, secrets, metadata, and era/campaign visibility. The most built-out of the five.</p>
+      </div>
+    </div>
+    <div class="body2">
+      <div class="col works">
+        <h5>Works today</h5>
+        <ul class="tight works">
+          <li>Nested articles (<code>parent_id</code>), grid / list / tree views</li>
+          <li>BBCode content + <code>@</code>/<code>&amp;</code> cross-references</li>
+          <li>Secrets / DM notes, server-gated for non-staff</li>
+          <li>Per-category metadata tables (character, location, …)</li>
+          <li>Atomic multi-table saves via <code>batchQueryD1</code></li>
+          <li>Hero / card / preview images</li>
+        </ul>
+      </div>
+      <div class="col edges">
+        <h5>Rough edges <span class="tag rep">reported</span></h5>
+        <ul class="tight edges">
+          <li><span class="dot hi"></span><b>slug + parent_id</b> identity (no <code>identifier</code>) — blocks live-content bridge Phase 2</li>
+          <li><span class="dot med"></span>Category list hardcoded in 3 files; metadata config in 4</li>
+          <li><span class="dot med"></span>Changing category silently discards old metadata</li>
+          <li><span class="dot med"></span>Search is client-side over full bodies — scales poorly</li>
+          <li><span class="dot lo"></span>No unsaved-changes guard in the editor</li>
+          <li><span class="dot lo"></span><code>lore_links</code> only captures markdown, not BBCode refs</li>
+        </ul>
+      </div>
+    </div>
+    <div class="foot">
+      <code>src/pages/wiki/{Wiki,LoreArticle,LoreEditor}.tsx</code> · <code>src/lib/lore.ts</code> · <code>api/_lib/_lore.ts</code>
+      &nbsp;·&nbsp; <span class="note">docs current: <code>features/wiki-lore.md</code>.</span>
+    </div>
+  </section>
+
+  <!-- MAPS -->
+  <section class="area" id="maps">
+    <div class="head">
+      <div class="mono">M</div>
+      <div class="title">
+        <h3>Interactive Maps <span class="pill partial">partial</span> <span class="pill shipped">fixed today</span></h3>
+        <p class="one">Era-scoped maps with clickable pins &amp; region highlights linking to lore and submaps. Viewer + pin authoring work; map authoring doesn’t.</p>
+      </div>
+    </div>
+    <div class="body2">
+      <div class="col works">
+        <h5>Works today</h5>
+        <ul class="tight works">
+          <li>Era-scoped viewer, per-era remembered selection</li>
+          <li>Pins: admin click-to-drop + delete, optional article link</li>
+          <li>Highlights render; submap “travel to” drill-down</li>
+          <li>Draft-article pins hidden from players</li>
+          <li class="note" style="padding-left:20px;color:var(--ok);">✓ tooltips, lore links, placeholder — fixed this session</li>
+        </ul>
+      </div>
+      <div class="col edges">
+        <h5>Rough edges <span class="tag ver">verified</span></h5>
+        <ul class="tight edges">
+          <li><span class="dot hi"></span><b>No map CRUD UI</b> — can’t create a map / set era / upload background in-app (only D1 direct). Feature isn’t usable end-to-end.</li>
+          <li><span class="dot med"></span>No highlight authoring (draw / edit / delete) — display-only</li>
+          <li><span class="dot lo"></span>No marker edit (delete + recreate only)</li>
+          <li><span class="dot lo"></span><code>icon</code> column exists but unexposed</li>
+        </ul>
+      </div>
+    </div>
+    <div class="foot">
+      <code>src/pages/core/Map.tsx</code> · <code>worker/migrations/0017_map_markers.sql</code>
+      &nbsp;·&nbsp; <span class="note">doc added today: <code>features/maps.md</code>. Agent report was ~40% stale — verified against source.</span>
+    </div>
+  </section>
+
+  <!-- TIMELINES -->
+  <section class="area" id="timelines">
+    <div class="head">
+      <div class="mono">T</div>
+      <div class="title">
+        <h3>Timelines <span class="pill stub">stub</span> <span class="pill decision">needs decision</span></h3>
+        <p class="one">Sketched in the UI but with no backend. The clearest “build it or remove it” call of the set.</p>
+      </div>
+    </div>
+    <div class="body2">
+      <div class="col works">
+        <h5>What exists</h5>
+        <ul class="tight works">
+          <li>Sidebar “Time” section links (History / Calendars / Timelines)</li>
+          <li>Campaign “Timeline” tab placeholders (manager + editor)</li>
+          <li>Eras exist — but for <i>visibility scoping</i>, not chronology</li>
+        </ul>
+      </div>
+      <div class="col edges">
+        <h5>Rough edges <span class="tag rep">reported</span></h5>
+        <ul class="tight edges">
+          <li><span class="dot hi"></span>Sidebar links point at <code>?category=timeline|history|calendar</code> — <b>categories that don’t exist</b> → dead links</li>
+          <li><span class="dot med"></span>No <code>timeline_events</code> table, no API, no authoring UI</li>
+          <li><span class="dot med"></span>Era ↔ Timeline ↔ Event relationship undefined</li>
+          <li><span class="dot lo"></span>No docs, no roadmap entry</li>
+        </ul>
+      </div>
+    </div>
+    <div class="foot">
+      <code>src/components/Sidebar.tsx</code> · campaign tabs
+      &nbsp;·&nbsp; <span class="note">Decide scope first: define an events model + scoping, or remove the scaffolding &amp; dead links.</span>
+    </div>
+  </section>
+
+  <!-- HOME -->
+  <section class="area" id="home">
+    <div class="head">
+      <div class="mono">H</div>
+      <div class="title">
+        <h3>Home / Dashboard <span class="pill polish">polish</span></h3>
+        <p class="one">The logged-in landing page. Functional and on-style; a handful of quick, high-visibility wins.</p>
+      </div>
+    </div>
+    <div class="body2">
+      <div class="col works">
+        <h5>Works today</h5>
+        <ul class="tight works">
+          <li>Hero + “World of Dauligor” featured-article grid</li>
+          <li>Recommended-reading card (active campaign’s pick)</li>
+          <li>Follows the style guide; loads lore + campaign data</li>
+        </ul>
+      </div>
+      <div class="col edges">
+        <h5>Rough edges <span class="tag rep">reported</span></h5>
+        <ul class="tight edges">
+          <li><span class="dot med"></span>DM name hardcoded “Jean” in the hero</li>
+          <li><span class="dot med"></span>“Character Creation” section is a dead placeholder (no builder link)</li>
+          <li><span class="dot med"></span>No error state if lore/campaign fetch fails</li>
+          <li><span class="dot lo"></span>Loading skeleton not responsive (3-col on mobile)</li>
+          <li><span class="dot lo"></span>Unused imports to prune</li>
+        </ul>
+      </div>
+    </div>
+    <div class="foot">
+      <code>src/pages/core/Home.tsx</code>
+      &nbsp;·&nbsp; <span class="note">no dedicated doc; mostly static + two data fetches.</span>
+    </div>
+  </section>
+
+  <!-- ════ CROSS-CUTTING ════ -->
+  <h2 class="section">Themes across the systems</h2>
+  <ul class="panel">
+    <li><b>Stub tabs that lie.</b> Campaign &amp; Timelines both show “coming soon / no X yet” placeholders that read as empty data rather than unbuilt features. A single honest pattern (hide, or a clear “not built” banner) would clarify both.</li>
+    <li><b>The lore identity model is the one true blocker.</b> <code>slug + parent_id</code> (vs the <code>identifier + source_id</code> every other table uses) is what gates live-content bridge Phase 2 — not the system-page work, which shipped around it.</li>
+    <li><b>Config duplicated by hand.</b> Category lists, metadata mappings, and snake→camel remaps are copy-pasted across pages (lore ×3–4, campaign per-page). Consolidation removes a whole class of silent drift bugs.</li>
+    <li><b>Authoring half-loops.</b> Maps can place pins but not create maps; highlights render but can’t be drawn. Several features are “readable, not authorable.”</li>
+    <li><b>Verify before fixing.</b> The Maps investigation was ~40% stale against real source. Treat the other four reports as leads to confirm, not facts — consistent with the project’s “Survey First” &amp; “Empirical Verification” rules.</li>
+  </ul>
+
+  <!-- ════ NEXT ════ -->
+  <h2 class="section">Suggested order of attack</h2>
+  <ul class="panel">
+    <li><span class="rank">1</span><b>Home — quick wins</b> <span class="pill polish">polish</span><br>
+      <span class="verdict">Lowest risk, highest visibility. Dynamic DM name, fix/remove the dead CTA, fetch-error state, responsive skeleton, import cleanup. An hour of clean, shippable polish.</span></li>
+    <li><span class="rank">2</span><b>Maps — close the loop</b> <span class="pill partial">build</span><br>
+      <span class="verdict">Add the missing map-CRUD UI (create map · set era · upload background). Turns Maps from “demo” into a usable feature; pins already work on top.</span></li>
+    <li><span class="rank">3</span><b>Campaign — verify &amp; fix</b> <span class="pill partial">verify</span><br>
+      <span class="verdict">Confirm the image_display schema gap, then either migrate or strip it; enable co-DM assignment; resolve the stub tabs; refresh the schema doc.</span></li>
+    <li><span class="rank">4</span><b>Timelines — decide</b> <span class="pill decision">decision</span><br>
+      <span class="verdict">Build-vs-remove call needed before any code. At minimum, kill the dead sidebar links so nothing points at nothing.</span></li>
+    <li><span class="rank">5</span><b>Lore — consolidate</b> <span class="pill partial">refactor</span><br>
+      <span class="verdict">Bigger arc: the identifier unification (unblocks Phase 2) plus category/metadata de-duplication. Worth its own focused session.</span></li>
+  </ul>
+
+  <footer>
+    Local working draft · <code>docs/_drafts/system-clarity-overview-2026-05-29.html</code> · not committed (per convention).<br>
+    Findings synthesized from the area investigations; Maps verified directly against source. Survey-verify the rest before acting.
+  </footer>
+
+</div>
+</body>
+</html>

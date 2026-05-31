@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hover Card — Chosen Design (Feats)</title>
+<style>
+  :root {
+    --parchment: #f5f2e8; --parchment-soft: #faf7ed; --ink: #1a1a1a; --ink-soft: #3a3a3a;
+    --muted: #6b6457; --gold: #c5a059; --gold-deep: #8a6d2f; --blood: #7a1f1f; --leaf: #355c3a;
+    --card: #fbf8ee; --rule: #d8cfb8; --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 10px rgba(0,0,0,0.04);
+    --app-bg: #16161a; --app-panel: #1f1f25; --app-ink: #e7e3d8; --app-muted: #9a948a;
+    --app-accent: #c5a059; --app-rule: rgba(197,160,89,0.25);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--parchment); color: var(--ink);
+    font-family: "Inter", -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 15px; line-height: 1.6; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 40px 32px 80px; }
+  header.hero { border-bottom: 1px solid var(--rule); padding-bottom: 22px; margin-bottom: 28px; }
+  header.hero .eyebrow { text-transform: uppercase; letter-spacing: 1.2px; font-size: 11px; color: var(--gold-deep); font-weight: 600; margin-bottom: 8px; }
+  header.hero h1 { font-family: "Cormorant Garamond", Georgia, serif; font-weight: 600; font-size: 44px; line-height: 1.05; margin: 0 0 8px; }
+  header.hero .tagline { font-family: "Cormorant Garamond", Georgia, serif; font-style: italic; font-size: 19px; color: var(--muted); margin: 0 0 12px; }
+  header.hero .meta { font-size: 13px; color: var(--muted); }
+  h2 { font-family: "Cormorant Garamond", Georgia, serif; font-size: 28px; font-weight: 600; margin: 46px 0 8px; padding-bottom: 8px; border-bottom: 2px solid var(--gold); }
+  p { margin: 9px 0; }
+  code { font-family: "JetBrains Mono", Consolas, monospace; font-size: 13px; background: rgba(138,109,47,0.12); padding: 1px 6px; border-radius: 3px; }
+  .intro-note { background: var(--parchment-soft); border: 1px solid var(--rule); border-left: 4px solid var(--gold); border-radius: 4px; padding: 14px 18px; margin: 16px 0; font-size: 14px; box-shadow: var(--shadow); }
+  .concept-meta { font-size: 13.5px; color: var(--ink-soft); margin: 6px 0 16px; }
+  .icon { width: 14px; height: 14px; display: inline-block; vertical-align: middle; }
+
+  /* simulated in-app surface */
+  .stage { background: var(--app-bg); border: 1px solid #2c2c33; border-radius: 8px; padding: 30px 28px 44px; margin: 14px 0 6px;
+    color: var(--app-ink); position: relative; box-shadow: inset 0 0 40px rgba(0,0,0,0.3); min-height: 360px; }
+  .stage .prose-line { font-size: 14.5px; color: var(--app-ink); max-width: 560px; }
+  .refword { color: var(--app-accent); text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 2px; cursor: pointer; font-weight: 500; }
+  .stage-label { position: absolute; top: 8px; right: 12px; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--app-muted); }
+
+  /* the card — bigger than the first draft (≈380px, taller body) */
+  .hovercard { width: 380px; background: var(--app-panel); border: 1px solid var(--app-rule); border-radius: 7px;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.45); color: var(--app-ink); overflow: hidden; }
+  .hc-head { padding: 11px 14px 9px; border-bottom: 1px solid var(--app-rule); background: linear-gradient(180deg, rgba(197,160,89,0.10), transparent); position: relative; }
+  .hc-title { font-family: "Cormorant Garamond", Georgia, serif; font-size: 21px; font-weight: 600; color: var(--app-accent); line-height: 1.15; padding-right: 26px; }
+  .hc-sub { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+  .hc-badge { font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; padding: 1px 7px; border-radius: 3px; background: rgba(197,160,89,0.18); color: var(--app-accent); font-weight: 600; }
+  .hc-prereq { font-size: 12px; font-style: italic; color: #d8b06a; }
+  .hc-pin { position: absolute; top: 9px; right: 10px; color: var(--app-muted); cursor: pointer; padding: 2px; border-radius: 4px; line-height: 0; }
+  .hc-pin:hover { color: var(--app-accent); background: rgba(197,160,89,0.12); }
+  .hc-body { padding: 11px 14px; font-size: 13px; line-height: 1.5; color: var(--app-ink); max-height: 215px; overflow-y: auto; }
+  .hc-body::-webkit-scrollbar { width: 8px; } .hc-body::-webkit-scrollbar-thumb { background: rgba(197,160,89,0.3); border-radius: 4px; }
+  .hc-body p { margin: 0 0 8px; } .hc-body strong { color: #e9d39b; }
+  .hc-foot { padding: 7px 14px; border-top: 1px solid var(--app-rule); font-size: 11px; color: var(--app-muted); display: flex; justify-content: space-between; align-items: center; }
+  .hc-foot .src { color: var(--app-muted); }
+  /* pinned-only "Go to" row */
+  .hc-goto { padding: 8px 14px; border-top: 1px dashed var(--app-rule); }
+  .hc-goto a { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--app-accent); text-decoration: none; }
+  .hc-goto a:hover { text-decoration: underline; }
+
+  /* pinned (popped-out) window chrome */
+  .hovercard.pinned { box-shadow: 0 14px 42px rgba(0,0,0,0.6); }
+  .hc-titlebar { display: flex; align-items: center; gap: 8px; padding: 5px 8px 5px 12px; background: rgba(255,255,255,0.04); border-bottom: 1px solid var(--app-rule); cursor: grab; }
+  .hc-grip { color: var(--app-muted); letter-spacing: 1px; font-size: 12px; }
+  .hc-titlebar .tb-name { font-size: 11px; color: var(--app-muted); text-transform: uppercase; letter-spacing: 0.6px; }
+  .hc-close { margin-left: auto; color: var(--app-muted); cursor: pointer; font-size: 15px; line-height: 1; padding: 1px 5px; border-radius: 4px; }
+  .hc-close:hover { color: #e88; background: rgba(200,60,60,0.15); }
+  .state-tag { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 99px; background: rgba(197,160,89,0.18); color: var(--gold-deep); font-weight: 600; margin-left: 6px; vertical-align: middle; }
+
+  .open-q { background: var(--card); border: 1px solid var(--rule); border-left: 4px solid var(--blood); border-radius: 4px; padding: 14px 18px; margin: 14px 0; box-shadow: var(--shadow); font-size: 14px; }
+  .open-q.done { border-left-color: var(--leaf); }
+  .open-q .q { font-weight: 600; color: var(--gold-deep); }
+  .pros { color: var(--leaf); } .cons { color: var(--blood); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="eyebrow">Draft &middot; chosen design</div>
+  <h1>Reference Hover Card</h1>
+  <p class="tagline">Concept A, refined — with pin-to-pop-out.</p>
+  <div class="meta">Draft 2026-05-28 &middot; built on a real feat (Ritual Caster) from local D1 &middot; shown on a simulated dark-theme app surface.</div>
+</header>
+
+<div class="intro-note">
+  Picked <strong>Concept A</strong> with your changes: source moved into the footer, the "Open feat &rarr;"
+  arrow removed (the inline link already gets you there), a <strong>pin button</strong> that pops the
+  card out into a draggable, closeable window, and a slightly larger card. Two states below.
+</div>
+
+<h2>Hover state <span class="state-tag">ephemeral</span></h2>
+<p class="concept-meta">Appears on hover, dismisses when you move away. Pin button (top-right) promotes it
+  to the pinned window. Footer carries the type + source; no "go to" arrow.</p>
+<div class="stage">
+  <span class="stage-label">in context · dark theme</span>
+  <p class="prose-line">A scholarly background might grant <span class="refword">Ritual Caster</span>,
+  letting you keep a book of rituals at the ready.</p>
+  <div style="margin-top:16px">
+    <div class="hovercard">
+      <div class="hc-head">
+        <div class="hc-pin" title="Pin — pop out into a movable window">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>
+        </div>
+        <div class="hc-title">Ritual Caster</div>
+        <div class="hc-sub">
+          <span class="hc-badge">Feat</span>
+          <span class="hc-prereq">Prerequisite: Int or Wis 13+</span>
+        </div>
+      </div>
+      <div class="hc-body">
+        <p>You have learned a number of spells that you can cast as rituals. These spells are written
+        in a ritual book, which you must have in hand while casting one of them.</p>
+        <p>When you choose this feat, you acquire a ritual book holding two 1st-level spells of your
+        choice. Choose one of the following classes: bard, cleric, druid, sorcerer, warlock, or wizard.
+        The spells must be from that class's spell list, and they must have the ritual tag.</p>
+        <p>If you come across a spell in written form, you might be able to add it to your ritual book.</p>
+      </div>
+      <div class="hc-foot"><span>Feat</span><span class="src">PHB · p.169</span></div>
+    </div>
+  </div>
+</div>
+
+<h2>Pinned state <span class="state-tag">popped out · draggable</span></h2>
+<p class="concept-meta">Clicking the pin pops the card out: it gains a drag bar (grab it to move the window
+  anywhere) and a close button, and stays until dismissed. Because it's now detached from the inline
+  link, a <strong>"Go to"</strong> row is added below the source so you can still jump to the feat.</p>
+<div class="stage">
+  <span class="stage-label">in context · dark theme</span>
+  <p class="prose-line">A scholarly background might grant <span class="refword">Ritual Caster</span>,
+  letting you keep a book of rituals at the ready.</p>
+  <div style="margin-top:16px; margin-left: 120px;">
+    <div class="hovercard pinned">
+      <div class="hc-titlebar">
+        <span class="hc-grip">⠿</span>
+        <span class="tb-name">drag to move</span>
+        <span class="hc-close" title="Close">&#215;</span>
+      </div>
+      <div class="hc-head">
+        <div class="hc-pin" title="Unpin" style="color:var(--app-accent);background:rgba(197,160,89,0.12)">
+          <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>
+        </div>
+        <div class="hc-title">Ritual Caster</div>
+        <div class="hc-sub">
+          <span class="hc-badge">Feat</span>
+          <span class="hc-prereq">Prerequisite: Int or Wis 13+</span>
+        </div>
+      </div>
+      <div class="hc-body">
+        <p>You have learned a number of spells that you can cast as rituals. These spells are written
+        in a ritual book, which you must have in hand while casting one of them.</p>
+        <p>When you choose this feat, you acquire a ritual book holding two 1st-level spells of your
+        choice. Choose one of the following classes: bard, cleric, druid, sorcerer, warlock, or wizard.
+        The spells must be from that class's spell list, and they must have the ritual tag.</p>
+        <p>If you come across a spell in written form, you might be able to add it to your ritual book.</p>
+      </div>
+      <div class="hc-foot"><span>Feat</span><span class="src">PHB · p.169</span></div>
+      <div class="hc-goto">
+        <a href="#"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg> Go to Ritual Caster</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2>The pin interaction</h2>
+<ol>
+  <li><strong>Hover</strong> a reference → the ephemeral card appears.</li>
+  <li><strong>Click the pin</strong> (top-right) → the card "pops out": it stops being tied to the hover,
+    gains a drag bar + close button, and a <strong>Go to</strong> row.</li>
+  <li><strong>Drag</strong> the bar to move it anywhere on screen; open as many as you like.</li>
+  <li><strong>Close</strong> (× or unpin) any time.</li>
+</ol>
+<p>This lets a DM park several references side-by-side while reading — e.g. pin Ritual Caster, a
+  condition, and a spell while planning an encounter.</p>
+
+<h2>Shared behaviour</h2>
+<ul>
+  <li><strong>Fixed size</strong> — ~380px wide, body capped (~215px), scrolls inside; pinned windows keep the same size.</li>
+  <li><strong>Name</strong> at the top in the accent colour (gold here; in-app it follows the active theme — blue on your dark theme).</li>
+  <li><strong>Click the reference</strong> (hover state) navigates to the feat; in the pinned window, the <strong>Go to</strong> row does that job.</li>
+  <li><strong>Dangling</strong> reference (target missing) → no card, just the unresolved badge.</li>
+</ul>
+
+<h2>Nested pop-ups</h2>
+<p class="concept-meta">A card can spawn a <em>child</em> card without closing itself — so you can drill
+  in without losing your place.</p>
+<div class="stage">
+  <span class="stage-label">prereq overflow · nested</span>
+  <div style="display:flex; align-items:flex-start; gap:0;">
+    <div class="hovercard" style="width:300px;">
+      <div class="hc-head">
+        <div class="hc-title">Sample Feat</div>
+        <div class="hc-sub">
+          <span class="hc-badge">Feat</span>
+          <span class="hc-prereq" style="border-bottom:1px dotted var(--app-accent); cursor:help; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:170px; display:inline-block; vertical-align:bottom;">Prerequisite: Dexterity 13+, proficiency with light armor, Sneak Attack…</span>
+        </div>
+      </div>
+      <div class="hc-body" style="max-height:90px;"><p>A representative feat whose prerequisite line is too long to fit, so it's truncated with an ellipsis.</p></div>
+      <div class="hc-foot"><span>Feat</span><span class="src">PHB · p.200</span></div>
+    </div>
+    <div style="width:230px; margin-top:30px; margin-left:-10px; background:var(--app-panel); border:1px solid var(--app-rule); border-radius:6px; box-shadow:0 8px 24px rgba(0,0,0,0.5); padding:9px 12px; font-size:12.5px; color:var(--app-ink);">
+      <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.6px; color:var(--app-accent); font-weight:600; margin-bottom:5px;">Full prerequisite</div>
+      Dexterity 13 or higher, proficiency with light armor, and the Sneak Attack feature.
+    </div>
+  </div>
+</div>
+<p>First use: the <strong>prerequisite line</strong>. If the combined requirements are too long for the
+  card, the line truncates; hovering it opens a small child pop-up with the full text — and the parent
+  card stays open. This generalises: a reference <em>inside</em> a card's description can open its own
+  child card the same way. <strong>Rule: opening a child never closes its parent</strong> — cards stack,
+  and dismissing a child returns you to the parent.</p>
+
+<h2>Decisions — all settled</h2>
+<div class="open-q done">
+  <p class="q">✓ Layout</p>
+  Concept A, refined: source in footer, no arrow, pin-to-pop-out, larger card, "Go to" row when pinned.
+</div>
+<div class="open-q done">
+  <p class="q">✓ Prerequisite source</p>
+  Use <code>requirements_short_text</code> when present, otherwise the <strong>automated combined
+  requirements</strong> (formatted from the requirements tree). If it's truncated in the card, hovering
+  the prereq opens a nested pop-up with the full text — without closing the original card.
+</div>
+<div class="open-q done">
+  <p class="q">✓ Pin scope</p>
+  Pinned windows <strong>persist</strong> — they stay open and follow you as you navigate the app
+  (within a session).
+</div>
+
+</div>
+</body>
+</html>

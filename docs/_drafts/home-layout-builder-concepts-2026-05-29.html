@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Campaign Homepage Builder — Outline + Preview (theme-accurate)</title>
+<!-- Real app fonts: Cormorant Garamond (serif) + Inter/Geist (sans) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  /* ===== real parchment-theme tokens (from src/index.css) ===== */
+  :root{
+    --ink:#1a1a1a; --gold:#c5a059; --blood:#8b0000;
+    --background:#f5f5f0; --card:#ffffff;
+    --serif:"Cormorant Garamond", Georgia, serif;
+    --sans:"Inter", ui-sans-serif, system-ui, sans-serif;
+    /* derived gold tints used across the app via gold/NN */
+    --gold-05:rgba(197,160,89,.05); --gold-10:rgba(197,160,89,.10);
+    --gold-20:rgba(197,160,89,.20); --gold-30:rgba(197,160,89,.30); --gold-40:rgba(197,160,89,.40);
+    --ink-40:rgba(26,26,26,.40); --ink-60:rgba(26,26,26,.60); --ink-70:rgba(26,26,26,.70);
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; background:var(--background); color:var(--ink); font-family:var(--sans); font-size:14px; line-height:1.5; }
+  svg{width:16px;height:16px;display:block;}
+  /* radius:0 — the real app squares every corner */
+  .wrap{max-width:1320px; margin:0 auto; padding:28px 20px 80px;}
+  .mono{font-family:ui-monospace,"SFMono-Regular",Menlo,monospace;}
+
+  /* typography classes mirrored from index.css */
+  .h1-title{font-family:var(--serif); font-weight:700; font-size:44px; letter-spacing:-.01em; margin:0;}
+  .h2-title{font-family:var(--serif); font-weight:700; font-size:26px; letter-spacing:-.01em; margin:0;}
+  .h3-title{font-family:var(--serif); font-weight:700; font-size:20px; letter-spacing:-.01em; margin:0;}
+  .description-text{font-family:var(--serif); font-style:italic; color:var(--ink-70); line-height:1.6;}
+  .label-text{font-size:10px; text-transform:uppercase; font-weight:700; letter-spacing:.16em; color:var(--gold);}
+  .field-label{font-size:10px; text-transform:uppercase; font-weight:900; letter-spacing:.16em; color:var(--ink-60); display:block;}
+  .section-label{font-size:10px; text-transform:uppercase; font-weight:900; letter-spacing:.16em; color:var(--gold);}
+  .field-hint{font-size:9px; color:var(--ink-40); font-style:italic;}
+
+  /* page masthead (doc chrome only) */
+  header.top{text-align:center; border-bottom:3px double var(--gold-30); padding-bottom:16px; margin-bottom:18px;}
+  .eyebrow{font-size:11px; letter-spacing:.4em; text-transform:uppercase; color:#8a6f2f; font-family:ui-monospace,Menlo,monospace;}
+  .top .sub{color:var(--ink-70); font-style:italic; font-family:var(--serif); font-size:16px; margin-top:4px;}
+
+  /* buttons (mirror .btn-gold / .btn-gold-solid / .btn-danger) */
+  .btn{font-family:var(--sans); font-size:12px; cursor:pointer; border-radius:0; padding:7px 12px; border:1px solid var(--gold-20);
+    background:var(--card); color:var(--ink); transition:all .15s; display:inline-flex; align-items:center; gap:6px; white-space:nowrap;}
+  .btn:hover{background:var(--gold-10);}
+  .btn-gold{background:var(--gold-10); color:var(--gold); border-color:var(--gold-20); font-weight:900; text-transform:uppercase; letter-spacing:.1em;}
+  .btn-gold:hover{background:var(--gold-20);}
+  .btn-gold-solid{background:var(--gold); color:#fff; border-color:var(--gold); font-weight:900; text-transform:uppercase; letter-spacing:.1em;}
+  .btn-gold-solid:hover{background:#b8924a;}
+  .btn.ghost{border-color:transparent; background:transparent; color:var(--ink-60);}
+  .btn.ghost:hover{background:var(--gold-05); color:var(--ink);}
+  .btn.sm{font-size:11px; padding:6px 10px;}
+  .pill{font-family:ui-monospace,Menlo,monospace; font-size:10px; letter-spacing:.05em; text-transform:uppercase;
+    padding:3px 8px; background:var(--gold-10); color:#8a6f2f; border:1px solid var(--gold-20);}
+  .icon-btn{cursor:pointer; border:none; background:transparent; color:var(--ink-40); padding:4px; line-height:0; transition:all .15s;}
+  .icon-btn:hover{color:var(--gold); background:var(--gold-10);}
+  .icon-btn.danger:hover{color:var(--blood); background:rgba(139,0,0,.08);}
+  .icon-btn[disabled]{opacity:.2; pointer-events:none;}
+
+  /* 3-pane builder frame (mirrors browser-panel split, square corners) */
+  .frame{border:1px solid var(--gold-20); background:rgba(245,245,240,.4); overflow:hidden;}
+  .bar{display:flex; align-items:center; gap:10px; padding:11px 14px; border-bottom:1px solid var(--gold-20); background:var(--gold-05);}
+  .bar .ttl{font-family:var(--serif); font-size:18px; font-weight:600; flex:1;}
+  .panes{display:grid; grid-template-columns:248px 1fr 320px; min-height:580px;}
+  @media(max-width:1080px){ .panes{grid-template-columns:1fr;} }
+  .pane{min-width:0;}
+  .pane.tree{border-right:1px solid var(--gold-20); background:var(--gold-05); display:flex; flex-direction:column;}
+  .pane.preview{overflow:auto; background:rgba(245,245,240,.2);}
+  .pane.insp{border-left:1px solid var(--gold-20); background:var(--gold-05); overflow:auto;}
+  .pane-h{font-family:ui-monospace,Menlo,monospace; font-size:9px; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--ink-40); padding:10px 13px 6px; font-weight:700;}
+
+  /* ---- tree (mirrors browser-sidebar / browser-row) ---- */
+  .tree-scroll{flex:1; overflow:auto; padding:2px 7px 7px;}
+  .t-row{display:flex; align-items:center; gap:6px; padding:6px 7px; cursor:pointer; border:1px solid transparent;
+    border-bottom:1px solid var(--gold-05); margin:0; background:transparent; transition:background .1s;}
+  .t-row:hover{background:var(--gold-10);}
+  .t-row.sel{background:var(--gold-20); border-right:3px solid var(--gold); color:#7a5f25; font-weight:600;}
+  .t-row.dragging{opacity:.35;}
+  .t-row.drop-before{box-shadow:inset 0 2px 0 var(--gold);}
+  .t-row.drop-after{box-shadow:inset 0 -2px 0 var(--gold);}
+  .t-row .grip{cursor:grab; color:var(--ink-40); line-height:0; flex:0 0 auto;}
+  .t-row .grip:active{cursor:grabbing;}
+  .t-row .tw{flex:0 0 auto; width:13px; text-align:center; color:var(--ink-40); font-size:9px; cursor:pointer; user-select:none;}
+  .t-row .glyph{flex:0 0 auto; color:var(--gold); font-size:12px; width:15px; text-align:center;}
+  .t-row .lbl{flex:1; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .t-row .ty{font-size:8px; color:var(--ink-40); font-family:ui-monospace,Menlo,monospace; text-transform:uppercase; letter-spacing:.08em;}
+  .t-children{margin-left:15px; border-left:1px dashed var(--gold-20); padding-left:4px;}
+  .t-drop-into{margin:1px 0 3px; padding:5px 8px; font-size:10px; font-style:italic; color:var(--ink-40); border:1px dashed transparent;}
+  .t-children.drop-into > .t-drop-into{border-color:var(--gold); color:#8a6f2f; background:var(--gold-10);}
+  .tree-foot{padding:7px; border-top:1px solid var(--gold-20);}
+
+  /* ---- preview (the actual page look) ---- */
+  .pv-wrap{padding:18px 22px;}
+  .pv-node{border:1px solid transparent; padding:8px; margin:3px 0; cursor:pointer; transition:all .1s; position:relative;}
+  .pv-node:hover{border-color:var(--gold-20);}
+  .pv-node.sel{border-color:var(--gold); box-shadow:0 0 0 1px var(--gold-30);}
+  .pv-tag{position:absolute; top:-8px; left:8px; font-size:8px; letter-spacing:.1em; text-transform:uppercase;
+    background:var(--gold); color:#fff; padding:1px 6px; opacity:0; transition:opacity .12s; font-family:ui-monospace,Menlo,monospace;}
+  .pv-node:hover .pv-tag, .pv-node.sel .pv-tag{opacity:1;}
+
+  .v-hero{text-align:center; padding:26px 14px;}
+  .v-hero.left{text-align:left;}
+  .v-hero h2{font-family:var(--serif); margin:0 0 8px; font-weight:700; letter-spacing:-.01em;}
+  .v-hero.normal h2{font-size:40px;} .v-hero.large h2{font-size:54px;}
+  .v-hero p{font-family:var(--serif); font-style:italic; color:var(--ink-70); max-width:600px; margin:0 auto; font-size:17px; line-height:1.6;}
+  .v-hero.left p{margin:0;}
+  .v-hero.onimg{background:linear-gradient(135deg,var(--gold-30),rgba(26,26,26,.12)); color:var(--ink);}
+
+  .v-sec-label{display:flex; align-items:center; gap:10px; border-bottom:1px solid var(--gold-20); padding-bottom:8px; margin-bottom:14px;}
+  .v-sec-label h3{font-family:var(--serif); font-size:24px; margin:0; font-weight:700;}
+  .v-row{display:grid; gap:14px;}
+  .v-card{border:1px solid var(--gold-20); background:var(--card); overflow:hidden; display:flex; flex-direction:column; transition:border-color .2s;}
+  .v-card:hover{border-color:var(--gold-40);}
+  .v-card .thumb{height:74px; background:linear-gradient(135deg,var(--gold-30),var(--gold-05)); border-bottom:1px solid var(--gold-10);}
+  .v-card .cbody{padding:11px 12px;}
+  .v-card .cn{font-family:var(--serif); font-size:17px; font-weight:700; margin-top:3px; line-height:1.15;}
+  .v-card .cx{font-family:var(--serif); font-style:italic; font-size:12.5px; color:var(--ink-60); margin-top:5px; line-height:1.4;}
+  .v-card.compact .thumb{display:none;}
+  .v-list-item{display:flex; align-items:center; gap:8px; padding:8px 6px; border-bottom:1px solid var(--gold-10); font-family:var(--serif); font-size:15px;}
+  .v-list-item::before{content:"›"; color:var(--gold); font-weight:700;}
+  .v-text{font-family:var(--serif); font-size:16px; color:var(--ink-70); line-height:1.6; padding:4px 2px;}
+  .v-text.narrow{max-width:480px;}
+  .v-image{border:1px dashed var(--gold-20); display:flex; align-items:center; justify-content:center; color:var(--ink-40);
+    background:linear-gradient(135deg,var(--gold-10),transparent); font-size:12px; font-style:italic; font-family:var(--serif);}
+  .v-reco{display:grid; gap:0; border:1px solid var(--gold-20); overflow:hidden; background:var(--gold-05);}
+  .v-reco.side{grid-template-columns:150px 1fr;} .v-reco.stacked{grid-template-columns:1fr;}
+  .v-reco .rthumb{background:linear-gradient(135deg,var(--gold-30),var(--gold-05)); min-height:78px;}
+  .v-reco .rbody{padding:16px;}
+  .v-feat{display:grid; gap:0; border:1px solid var(--gold-20); overflow:hidden;}
+  .v-feat.left{grid-template-columns:180px 1fr;} .v-feat.right{grid-template-columns:1fr 180px;}
+  .v-feat .fthumb{background:linear-gradient(135deg,var(--gold-30),var(--gold-05)); min-height:104px;}
+  .v-feat .fbody{padding:16px;}
+  .badge{display:inline-block; background:var(--gold); color:#fff; font-size:9px; letter-spacing:.1em; padding:3px 8px; text-transform:uppercase; font-weight:900; margin-bottom:8px; font-family:var(--sans);}
+  .v-divider.line{border-top:1px solid var(--gold-20); margin:6px 0;}
+  .v-divider.dots{text-align:center; color:var(--gold); letter-spacing:8px; margin:6px 0;}
+  .v-group{}
+  .v-group.card{border:1px solid var(--gold-20); background:var(--card); padding:16px;}
+  .v-group.bordered{border:1px solid var(--gold-20); padding:16px;}
+  .v-group.plain{padding:4px;}
+  .v-group > .v-gtitle{font-family:var(--serif); font-size:19px; font-weight:700; margin-bottom:12px; padding-bottom:7px; border-bottom:1px solid var(--gold-20);}
+  .v-cols{display:grid; gap:14px;}
+  .v-empty-slot{border:1px dashed var(--gold-20); padding:20px; text-align:center; color:var(--ink-40); font-style:italic; font-size:12px; font-family:var(--serif); background:var(--gold-05);}
+
+  /* ---- inspector ---- */
+  .insp-body{padding:6px 14px 18px;}
+  .insp-empty{padding:34px 14px; text-align:center; color:var(--ink-40); font-style:italic; font-size:13px; font-family:var(--serif);}
+  .insp-title{display:flex; align-items:center; gap:8px; padding:10px 0 12px; border-bottom:1px solid var(--gold-20); margin-bottom:12px;}
+  .insp-title .glyph{color:var(--gold); font-size:16px;}
+  .insp-title .nm{font-family:var(--serif); font-size:17px; font-weight:700; flex:1;}
+  .fld{margin-bottom:13px;}
+  .fld > label{margin-bottom:5px;}
+  .fld input[type=text], .fld textarea, .fld select{width:100%; font-family:var(--sans); font-size:13px; padding:7px 9px;
+    border-radius:0; border:1px solid var(--gold-10); background:rgba(245,245,240,.5); color:var(--ink);}
+  .fld textarea{min-height:64px; resize:vertical; font-family:var(--serif); font-style:italic;}
+  .fld input:focus,.fld textarea:focus,.fld select:focus{outline:none; border-color:var(--gold);}
+  /* config-fieldset mirror */
+  .grp{border:1px solid var(--gold-10); padding:11px 12px 13px; margin-bottom:13px;}
+  .grp > .gh{margin-bottom:10px;}
+  /* segmented control */
+  .seg{display:flex; gap:0; border:1px solid var(--gold-20);}
+  .seg button{flex:1; font-family:var(--sans); font-size:11px; padding:7px 4px; border:none; cursor:pointer; background:var(--card);
+    color:var(--ink-60); transition:all .12s; border-right:1px solid var(--gold-10);}
+  .seg button:last-child{border-right:none;}
+  .seg button:hover{color:var(--ink); background:var(--gold-05);}
+  .seg button.on{background:var(--gold); color:#fff; font-weight:700;}
+  /* toggle */
+  .toggle{display:flex; align-items:center; gap:9px; cursor:pointer;}
+  .toggle .tk{width:34px; height:19px; border-radius:999px; background:rgba(26,26,26,.18); position:relative; transition:background .15s; flex:0 0 auto;}
+  .toggle .tk::after{content:""; position:absolute; top:2px; left:2px; width:15px; height:15px; border-radius:50%; background:#fff; transition:left .15s;}
+  .toggle.on .tk{background:var(--gold);}
+  .toggle.on .tk::after{left:17px;}
+  .toggle .tl{font-size:12.5px;}
+  /* stepper */
+  .stepper{display:inline-flex; align-items:center; border:1px solid var(--gold-20); width:fit-content;}
+  .stepper button{border:none; background:var(--card); cursor:pointer; padding:6px 13px; font-size:15px; color:var(--ink-60);}
+  .stepper button:hover{background:var(--gold-10); color:var(--gold);}
+  .stepper .val{padding:6px 14px; font-size:13px; min-width:36px; text-align:center; border-left:1px solid var(--gold-20); border-right:1px solid var(--gold-20);}
+  /* chips (mirror data-table rows) */
+  .chips{display:flex; flex-direction:column; border:1px solid var(--gold-10); margin-bottom:7px;}
+  .chip{display:flex; align-items:center; gap:7px; padding:6px 8px; font-size:12.5px; border-bottom:1px solid var(--gold-05); background:var(--gold-05);}
+  .chip:last-child{border-bottom:none;}
+  .chip.dragging{opacity:.4;} .chip.over{box-shadow:inset 0 2px 0 var(--gold);}
+  .chip .cgrip{cursor:grab; color:var(--ink-40); line-height:0;}
+  .chip .cnm{flex:1; font-family:var(--serif); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .chip .cx{cursor:pointer; color:var(--ink-40); line-height:0;}
+  .chip .cx:hover{color:var(--blood);}
+  .chips-empty{padding:8px; font-size:11px; color:var(--ink-40); font-style:italic; font-family:var(--serif);}
+  .picker{position:relative;}
+  .picker-pop{position:absolute; left:0; right:0; top:calc(100% + 2px); background:var(--card); border:1px solid var(--gold);
+    box-shadow:0 10px 26px -10px rgba(60,42,16,.5); z-index:20; max-height:220px; overflow:auto;}
+  .picker-pop .pi{padding:7px 10px; font-size:12.5px; cursor:pointer; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--gold-05);}
+  .picker-pop .pi:hover{background:var(--gold-10);}
+  .picker-pop .pi .pc{font-size:9px; color:var(--ink-40); font-family:ui-monospace,Menlo,monospace;}
+  .picker-pop .pi.none{color:var(--ink-40); font-style:italic; cursor:default;}
+  .hint{font-size:11px; color:var(--ink-40); font-style:italic; font-family:var(--serif); margin-top:5px; line-height:1.4;}
+
+  /* add-block popover */
+  .addpop{position:fixed; z-index:60; background:var(--card); border:1px solid var(--gold); box-shadow:0 16px 40px -12px rgba(60,42,16,.5); width:300px; padding:7px; display:none;}
+  .addpop.show{display:block;}
+  .addpop .ah{font-size:9px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-40); padding:6px 8px 7px; font-family:ui-monospace,Menlo,monospace; font-weight:700;}
+  .addpop .ag{font-size:9px; color:#8a6f2f; padding:8px 8px 4px; font-family:ui-monospace,Menlo,monospace; letter-spacing:.1em; font-weight:700;}
+  .addpop .ai{display:flex; align-items:flex-start; gap:9px; padding:8px; cursor:pointer; transition:background .1s;}
+  .addpop .ai:hover{background:var(--gold-10);}
+  .addpop .ai .aglyph{color:var(--gold); font-size:15px; width:18px; text-align:center; flex:0 0 auto; margin-top:1px;}
+  .addpop .ai .anm{font-family:var(--serif); font-size:15px; font-weight:700;}
+  .addpop .ai .ads{font-size:11px; color:var(--ink-40);}
+  .scrim{position:fixed; inset:0; z-index:55; display:none;} .scrim.show{display:block;}
+
+  .toast{position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(80px); background:var(--ink); color:#f5f5f0;
+    padding:10px 20px; font-size:13px; box-shadow:0 8px 24px -8px rgba(0,0,0,.5); transition:transform .3s; z-index:99; pointer-events:none;}
+  .toast.show{transform:translateX(-50%) translateY(0);}
+
+  .notes{margin-top:28px; border:1px solid var(--gold-20); background:var(--card); padding:6px 22px;}
+  .notes li{padding:11px 0; border-bottom:1px solid var(--gold-10); font-size:14px;}
+  .notes li:last-child{border-bottom:none;}
+  .notes b{color:var(--ink);}
+  .tag{font-family:ui-monospace,Menlo,monospace; font-size:10px; padding:2px 7px; background:var(--gold-10); color:#8a6f2f; border:1px solid var(--gold-20); margin-left:6px;}
+  footer{margin-top:32px; padding-top:16px; border-top:3px double var(--gold-30); text-align:center; font-size:12px; color:var(--ink-40);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="eyebrow">Campaign · Homepage Builder</div>
+    <h1 class="h1-title">Outline + Preview Builder</h1>
+    <div class="sub">Theme-accurate mock — real fonts (Cormorant + Inter), real palette, square corners, real class vocabulary.</div>
+  </header>
+
+  <div class="frame">
+    <div class="bar">
+      <span class="pill">B · theme-accurate</span>
+      <span class="ttl">The Shattered Isles — homepage</span>
+      <button class="btn ghost sm" onclick="resetAll()">↺ Reset to default</button>
+      <button class="btn sm" onclick="toast('Opens the player-facing page')">Preview as player</button>
+      <button class="btn btn-gold-solid sm" onclick="toast('Saved — players now see this layout')">Save Layout</button>
+    </div>
+    <div class="panes">
+      <div class="pane tree">
+        <div class="pane-h">Structure</div>
+        <div class="tree-scroll" id="tree"></div>
+        <div class="tree-foot"><button class="btn btn-gold sm" style="width:100%" onclick="openAdd(event, null)">＋ Add block</button></div>
+      </div>
+      <div class="pane preview">
+        <div class="pane-h">Live preview · click any block to edit</div>
+        <div class="pv-wrap" id="preview"></div>
+      </div>
+      <div class="pane insp">
+        <div class="pane-h">Inspector</div>
+        <div id="inspector"></div>
+      </div>
+    </div>
+  </div>
+
+  <ul class="notes">
+    <li><b>Now theme-accurate.</b> Pulled the real tokens from <span class="mono">src/index.css</span> + <span class="mono">docs/ui/style-guide.md</span>: Cormorant Garamond serif, Inter/Geist sans, parchment <span class="mono">#f5f5f0</span> / gold <span class="mono">#c5a059</span> / blood <span class="mono">#8b0000</span>, and <span class="mono">--radius:0</span> (every corner square). Earlier mocks guessed the fonts and used rounded corners — both wrong.</li>
+    <li><b>Maps onto real classes</b> <span class="tag">no guessing</span> — tree = <span class="mono">browser-sidebar/-row</span>; chips/article lists = <span class="mono">data-table-*</span>; settings groups = <span class="mono">config-fieldset</span>+<span class="mono">section-label</span>; buttons = <span class="mono">btn-gold/-solid/-danger</span>; fields = <span class="mono">field-label/-input/-hint</span>; shell = the documented <span class="mono">browser-panel</span> 3-pane recipe (canonical: <span class="mono">TagsExplorer.tsx</span>).</li>
+    <li><b>Real components in the build</b> (not hand-rolled): <span class="mono">SingleSelectSearch</span> for article pickers, <span class="mono">MarkdownEditor</span> for text blocks, <span class="mono">ImageUpload</span> for images, <span class="mono">SearchInput</span>, shadcn <span class="mono">Select</span> (with the null-guard + explicit <span class="mono">SelectValue</span> gotchas), <span class="mono">useUnsavedChangesWarning</span>, <span class="mono">sonner</span> toasts.</li>
+    <li><b>Nesting + deep options unchanged</b> — Group/Columns containers, article-row source/count/columns/card-style, per-type inspectors. The interaction model is the same as the approved mock; only the skin is now correct.</li>
+  </ul>
+
+  <footer>
+    Local interactive draft · <span class="mono">docs/_drafts/home-layout-builder-concepts-2026-05-29.html</span> · not committed.<br>
+    Theme-accurate now. Approve and I'll build <span class="mono">CampaignHomeEditor.tsx</span> with the real classes + shared components.
+  </footer>
+</div>
+
+<div class="scrim" id="scrim" onclick="closeAdd()"></div>
+<div class="addpop" id="addpop"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ===== sample data ===== */
+const ARTICLES=[
+  {t:'World Primer',c:'Lore'},{t:'World History',c:'History'},{t:'The Sundering',c:'History'},
+  {t:'Rules of Magic',c:'Rules'},{t:'Divinity',c:'Lore'},{t:'The Pantheon',c:'Lore'},
+  {t:'Ironhold Keep',c:'Places'},{t:'The Whispering Woods',c:'Places'},{t:'Port Mirran',c:'Places'},
+  {t:'The Cult of Shadows',c:'Factions'},{t:'The Silver Order',c:'Factions'},{t:'House Valen',c:'Factions'},
+];
+const CATEGORIES=['Lore','History','Rules','Places','Factions'];
+const TYPES={
+  hero:{label:'Hero',glyph:'✦',ds:'Big title + intro line'},
+  articleRow:{label:'Article Row',glyph:'▦',ds:'A row/grid of article cards'},
+  articleFeature:{label:'Featured Article',glyph:'◆',ds:'One large highlighted article'},
+  recommended:{label:'Recommended',glyph:'★',ds:"The campaign's recommended pick"},
+  text:{label:'Text',glyph:'¶',ds:'Free prose (BBCode)'},
+  image:{label:'Image',glyph:'▣',ds:'A banner image + caption'},
+  divider:{label:'Divider',glyph:'—',ds:'A line / dots / spacer'},
+  group:{label:'Group',glyph:'▢',ds:'A titled card holding blocks',container:true},
+  columns:{label:'Columns',glyph:'⊞',ds:'A 2–4 column grid of blocks',container:true},
+};
+let _id=0; const uid=()=>'b'+(++_id);
+function fresh(type){const b={id:uid(),type};switch(type){
+  case 'hero':Object.assign(b,{title:'',subtitle:'',align:'center',size:'normal',onImage:false});break;
+  case 'articleRow':Object.assign(b,{title:'',showHeading:true,source:'manual',articles:[],category:'Lore',count:3,columns:3,card:'image',excerpt:true});break;
+  case 'articleFeature':Object.assign(b,{title:'',article:'',imageSide:'left',excerpt:true});break;
+  case 'recommended':Object.assign(b,{title:'',source:'auto',article:'',layout:'side'});break;
+  case 'text':Object.assign(b,{body:'',width:'normal'});break;
+  case 'image':Object.assign(b,{url:'',caption:'',height:'medium',link:''});break;
+  case 'divider':Object.assign(b,{style:'line'});break;
+  case 'group':Object.assign(b,{title:'',showTitle:true,style:'card',children:[]});break;
+  case 'columns':Object.assign(b,{columns:2,gap:'medium',children:[]});break;
+}return b;}
+function defaultModel(){
+  const h=fresh('hero');Object.assign(h,{title:'Stories in Dauligor',subtitle:'Your GM has made this website to give you easy access to the lore of Dauligor and the homebrew options they allow.'});
+  const r=fresh('articleRow');Object.assign(r,{title:'The World of Dauligor',articles:['World Primer','World History','Rules of Magic'],columns:3});
+  return [h,r,fresh('recommended')];
+}
+let MODEL=defaultModel(); let SEL=MODEL[1].id; let drag={id:null};
+
+const ICN={
+  grip:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>',
+  trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>',
+  dup:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="0"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>',
+  up:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 15l-6-6-6 6"/></svg>',
+  down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>',
+  x:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>',
+};
+function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+let _tt; function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(_tt);_tt=setTimeout(()=>t.classList.remove('show'),1800);}
+
+/* ===== recursive model helpers ===== */
+function walk(list,fn){list.forEach(b=>{fn(b);if(b.children)walk(b.children,fn);});}
+function find(id,list=MODEL){let r=null;walk(list,b=>{if(b.id===id)r=b;});return r;}
+function findParentList(id){if(MODEL.findIndex(b=>b.id===id)>=0)return{list:MODEL,index:MODEL.findIndex(b=>b.id===id)};
+  let res=null;walk(MODEL,b=>{if(b.children){const i=b.children.findIndex(c=>c.id===id);if(i>=0)res={list:b.children,index:i};}});return res;}
+function isDesc(anc,id){const a=find(anc);if(!a||!a.children)return false;let f=false;walk(a.children,b=>{if(b.id===id)f=true;});return f;}
+function removeBlock(id){const p=findParentList(id);return p?p.list.splice(p.index,1)[0]:null;}
+
+/* ===== TREE ===== */
+function renderTree(){const root=document.getElementById('tree');root.innerHTML='';root.appendChild(treeList(MODEL));}
+function treeList(list){const frag=document.createElement('div');
+  list.forEach(b=>{
+    const row=document.createElement('div');row.className='t-row'+(b.id===SEL?' sel':'');row.dataset.id=b.id;
+    const isC=!!TYPES[b.type].container;
+    // Tree shows just the component TYPE (glyph kept for at-a-glance scanning),
+    // not the authored title — per design feedback: "Hero" suffices, not
+    // "Stories in Dauligor — Hero".
+    row.innerHTML=`<span class="grip">${ICN.grip}</span><span class="tw">${isC?(b._collapsed?'▸':'▾'):''}</span>
+      <span class="glyph">${TYPES[b.type].glyph}</span><span class="lbl">${TYPES[b.type].label}</span>`;
+    ['lbl','glyph'].forEach(c=>row.querySelector('.'+c).onclick=()=>{SEL=b.id;rerender();});
+    if(isC)row.querySelector('.tw').onclick=e=>{e.stopPropagation();b._collapsed=!b._collapsed;renderTree();};
+    wireRowDrag(row,b);frag.appendChild(row);
+    if(isC&&!b._collapsed){
+      const kids=document.createElement('div');kids.className='t-children';
+      const dz=document.createElement('div');dz.className='t-drop-into';dz.textContent=b.children.length?'drop here to nest':'empty — drop a block here to nest it';
+      kids.appendChild(dz);kids.appendChild(treeList(b.children));wireIntoDrop(kids,b);frag.appendChild(kids);
+    }
+  });return frag;}
+function wireRowDrag(row,b){
+  row.querySelector('.grip').addEventListener('mousedown',()=>row.draggable=true);
+  row.addEventListener('dragstart',e=>{drag.id=b.id;row.classList.add('dragging');e.dataTransfer.effectAllowed='move';e.stopPropagation();});
+  row.addEventListener('dragend',()=>{drag.id=null;row.draggable=false;renderTree();});
+  row.addEventListener('dragover',e=>{if(!drag.id||drag.id===b.id)return;e.preventDefault();e.stopPropagation();
+    const r=row.getBoundingClientRect();const after=(e.clientY-r.top)>r.height/2;row.classList.toggle('drop-after',after);row.classList.toggle('drop-before',!after);});
+  row.addEventListener('dragleave',()=>row.classList.remove('drop-after','drop-before'));
+  row.addEventListener('drop',e=>{if(!drag.id||drag.id===b.id)return;e.preventDefault();e.stopPropagation();row.classList.remove('drop-after','drop-before');
+    if(isDesc(drag.id,b.id)){toast("Can't drop a block into itself");return;}
+    const r=row.getBoundingClientRect();const after=(e.clientY-r.top)>r.height/2;const moved=removeBlock(drag.id);const t=findParentList(b.id);
+    t.list.splice(t.index+(after?1:0),0,moved);SEL=moved.id;drag.id=null;rerender();});
+}
+function wireIntoDrop(kids,b){
+  kids.addEventListener('dragover',e=>{if(!drag.id||drag.id===b.id||isDesc(drag.id,b.id))return;e.preventDefault();kids.classList.add('drop-into');});
+  kids.addEventListener('dragleave',e=>{if(!kids.contains(e.relatedTarget))kids.classList.remove('drop-into');});
+  kids.addEventListener('drop',e=>{if(!drag.id||drag.id===b.id||isDesc(drag.id,b.id))return;e.preventDefault();e.stopPropagation();kids.classList.remove('drop-into');
+    const moved=removeBlock(drag.id);b.children.push(moved);b._collapsed=false;SEL=moved.id;drag.id=null;rerender();});
+}
+
+/* ===== PREVIEW ===== */
+function renderPreview(){const p=document.getElementById('preview');p.innerHTML='';p.appendChild(pvList(MODEL));}
+function pvList(list){const f=document.createElement('div');list.forEach(b=>f.appendChild(pvNode(b)));return f;}
+function pvNode(b){const el=document.createElement('div');el.className='pv-node'+(b.id===SEL?' sel':'');el.onclick=e=>{e.stopPropagation();SEL=b.id;rerender();};
+  el.innerHTML=`<span class="pv-tag">${TYPES[b.type].label}</span>`;
+  const inner=document.createElement('div');inner.innerHTML=visual(b);el.appendChild(inner);
+  if(TYPES[b.type].container){const host=el.querySelector('[data-kids]');
+    if(host){if(b.children.length)host.appendChild(b.type==='columns'?pvCols(b):pvList(b.children));
+      else host.innerHTML='<div class="v-empty-slot">Empty '+TYPES[b.type].label.toLowerCase()+' — add or drag blocks inside</div>';}}
+  return el;}
+function pvCols(b){const w=document.createElement('div');w.className='v-cols';w.style.gridTemplateColumns=`repeat(${b.columns},1fr)`;
+  w.style.gap=b.gap==='small'?'8px':b.gap==='large'?'20px':'14px';b.children.forEach(c=>w.appendChild(pvNode(c)));return w;}
+function cards(b){const list=b.source==='auto'?Array.from({length:b.count},(_,i)=>({t:`Auto #${i+1} · ${b.category}`,c:b.category})):b.articles.map(t=>ARTICLES.find(a=>a.t===t)||{t,c:''});
+  if(!list.length)return '<div style="grid-column:1/-1;color:var(--ink-40);font-style:italic;font-size:12px;padding:6px;font-family:var(--serif)">No articles selected.</div>';
+  if(b.card==='list')return '<div style="grid-column:1/-1">'+list.map(a=>`<div class="v-list-item">${esc(a.t)}</div>`).join('')+'</div>';
+  return list.map(a=>`<div class="v-card ${b.card==='compact'?'compact':''}"><div class="thumb"></div><div class="cbody">
+    <span class="label-text">${esc(a.c||'Featured')}</span><div class="cn">${esc(a.t)}</div>
+    ${b.excerpt?'<div class="cx">A short excerpt from this article to give players a taste of what waits within…</div>':''}</div></div>`).join('');}
+function visual(b){switch(b.type){
+  case 'hero':return `<div class="v-hero ${b.align} ${b.size} ${b.onImage?'onimg':''}"><h2>${esc(b.title)||'Hero title'}</h2><p>${esc(b.subtitle)||'Subtitle / intro line'}</p></div>`;
+  case 'text':return `<div class="v-text ${b.width}">${esc(b.body)||'Campaign text…'}</div>`;
+  case 'image':{const h=b.height==='small'?70:b.height==='large'?190:130;return `<div class="v-image" style="min-height:${h}px">${esc(b.caption)||'Banner image'}</div>`;}
+  case 'divider':return `<div class="v-divider ${b.style}" style="${b.style==='space'?'height:26px':''}">${b.style==='dots'?'• • •':''}</div>`;
+  case 'recommended':return `<div><div class="v-sec-label"><h3>${esc(b.title)||'Recommended for this campaign'}</h3></div>
+    <div class="v-reco ${b.layout}"><div class="rthumb"></div><div class="rbody"><span class="badge">Essential Reading</span>
+    <div style="font-family:var(--serif);font-size:20px;font-weight:700">${b.source==='specific'&&b.article?esc(b.article):"The campaign's recommended article"}</div>
+    <div class="description-text" style="font-size:13px;margin-top:5px">${b.source==='auto'?'Pulled automatically from the campaign’s recommended lore.':'A specific article you chose.'}</div></div></div></div>`;
+  case 'articleFeature':return `<div>${b.title?`<div class="v-sec-label"><h3>${esc(b.title)}</h3></div>`:''}
+    <div class="v-feat ${b.imageSide}"><div class="fthumb"></div><div class="fbody"><span class="badge">Featured</span>
+    <div style="font-family:var(--serif);font-size:21px;font-weight:700">${esc(b.article)||'Pick an article…'}</div>
+    ${b.excerpt?'<div class="description-text" style="font-size:13px;margin-top:6px">A longer excerpt previewing the featured article for your players.</div>':''}</div></div></div>`;
+  case 'articleRow':return `<div>${b.showHeading?`<div class="v-sec-label"><h3>${esc(b.title)||'Section'}</h3></div>`:''}
+    <div class="v-row" style="grid-template-columns:repeat(${b.columns},1fr)">${cards(b)}</div></div>`;
+  case 'group':return `<div class="v-group ${b.style}">${b.showTitle?`<div class="v-gtitle">${esc(b.title)||'Group'}</div>`:''}<div data-kids></div></div>`;
+  case 'columns':return `<div data-kids></div>`;
+}return '';}
+
+/* ===== INSPECTOR ===== */
+function renderInspector(){const ins=document.getElementById('inspector');const b=find(SEL);
+  if(!b){ins.innerHTML='<div class="insp-empty">Select a block in the tree or preview to edit it.</div>';return;}
+  const p=findParentList(b.id);const i=p.index,n=p.list.length;
+  ins.innerHTML=`<div class="insp-body"><div class="insp-title"><span class="nm">${TYPES[b.type].label}</span>
+    <button class="icon-btn" data-act="up" ${i===0?'disabled':''}>${ICN.up}</button>
+    <button class="icon-btn" data-act="down" ${i===n-1?'disabled':''}>${ICN.down}</button>
+    <button class="icon-btn" data-act="dup">${ICN.dup}</button>
+    <button class="icon-btn danger" data-act="del">${ICN.trash}</button></div>${fields(b)}</div>`;
+  ins.querySelectorAll('[data-act]').forEach(btn=>btn.onclick=()=>act(btn.dataset.act,b));wireFields(b);}
+function fields(b){
+  const F={
+    text:(l,f,ph)=>`<div class="fld"><label class="field-label">${l}</label><input type="text" data-f="${f}" value="${esc(b[f])}" placeholder="${ph||''}"></div>`,
+    area:(l,f,ph)=>`<div class="fld"><label class="field-label">${l}</label><textarea data-f="${f}" placeholder="${ph||''}">${esc(b[f])}</textarea></div>`,
+    seg:(l,f,o)=>`<div class="fld"><label class="field-label">${l}</label><div class="seg" data-seg="${f}">${o.map(x=>`<button data-v="${x[0]}" class="${b[f]==x[0]?'on':''}">${x[1]}</button>`).join('')}</div></div>`,
+    tog:(l,f)=>`<div class="fld"><div class="toggle ${b[f]?'on':''}" data-tog="${f}"><span class="tk"></span><span class="tl">${l}</span></div></div>`,
+    step:(l,f,mn,mx)=>`<div class="fld"><label class="field-label">${l}</label><div class="stepper" data-step="${f}" data-min="${mn}" data-max="${mx}"><button data-d="-1">−</button><span class="val">${b[f]}</span><button data-d="1">＋</button></div></div>`,
+    sel:(l,f,o)=>`<div class="fld"><label class="field-label">${l}</label><select data-f="${f}">${o.map(x=>`<option ${b[f]==x?'selected':''}>${x}</option>`).join('')}</select></div>`,
+  };
+  switch(b.type){
+    case 'hero':return F.text('Title','title','Stories in Dauligor')+F.area('Subtitle','subtitle','A welcome line…')
+      +F.seg('Alignment','align',[['center','Center'],['left','Left']])+F.seg('Size','size',[['normal','Normal'],['large','Large']])+F.tog('Show on background image','onImage');
+    case 'text':return F.area('Body (BBCode)','body','Write campaign text…')+F.seg('Width','width',[['narrow','Narrow'],['normal','Normal'],['wide','Wide']]);
+    case 'image':return F.text('Image URL','url','/images/…')+F.text('Caption','caption','Optional caption')
+      +F.seg('Height','height',[['small','S'],['medium','M'],['large','L']])+F.text('Links to (optional)','link','/wiki/article/…');
+    case 'divider':return F.seg('Style','style',[['line','Line'],['dots','Dots'],['space','Space']]);
+    case 'recommended':return F.text('Heading (optional)','title','Recommended for this campaign')
+      +F.seg('Source','source',[['auto','Campaign pick'],['specific','Specific article']])
+      +(b.source==='specific'?single(b,'article','Choose article'):'<div class="hint">Uses the campaign’s recommended lore (set under Campaign Info).</div>')
+      +F.seg('Layout','layout',[['side','Side image'],['stacked','Stacked']]);
+    case 'articleFeature':return F.text('Heading (optional)','title','')+single(b,'article','Choose the featured article')
+      +F.seg('Image side','imageSide',[['left','Left'],['right','Right']])+F.tog('Show excerpt','excerpt');
+    case 'articleRow':return F.text('Heading','title','The World of Dauligor')+F.tog('Show heading','showHeading')
+      +`<div class="grp"><div class="gh"><span class="section-label">Content</span></div>`
+      +F.seg('Source','source',[['manual','Pick manually'],['auto','Auto by category']])
+      +(b.source==='manual'?multi(b):F.sel('Category','category',CATEGORIES)+F.step('How many','count',1,12))+`</div>`
+      +`<div class="grp"><div class="gh"><span class="section-label">Appearance</span></div>`
+      +F.step('Columns','columns',1,4)+F.seg('Card style','card',[['image','Image'],['compact','Compact'],['list','List']])+F.tog('Show excerpts','excerpt')+`</div>`;
+    case 'group':return F.text('Title','title','Section title')+F.tog('Show title','showTitle')
+      +F.seg('Style','style',[['card','Card'],['bordered','Bordered'],['plain','Plain']])+`<div class="hint">Drag blocks onto this group in the tree to nest them inside.</div>`;
+    case 'columns':return F.step('Columns','columns',2,4)+F.seg('Gap','gap',[['small','S'],['medium','M'],['large','L']])
+      +`<div class="hint">Each nested block becomes one column cell, filling left-to-right.</div>`;
+  }return '';}
+function single(b,f,ph){return `<div class="fld"><label class="field-label">Article</label><div class="picker" data-single="${f}"><input type="text" placeholder="${ph}" value="${esc(b[f])}" data-pickinput></div></div>`;}
+function multi(b){return `<div class="fld"><label class="field-label">Articles (drag to reorder)</label>
+  <div class="chips" data-chips>${b.articles.length?b.articles.map((a,i)=>`<div class="chip" draggable="true" data-ci="${i}"><span class="cgrip">${ICN.grip}</span><span class="cnm">${esc(a)}</span><span class="cx" data-rmc="${i}">${ICN.x}</span></div>`).join(''):'<div class="chips-empty">No articles yet — add some below.</div>'}</div>
+  <div class="picker" data-multi><input type="text" placeholder="＋ Search &amp; add article…" data-pickinput></div></div>`;}
+function wireFields(b){const ins=document.getElementById('inspector');
+  ins.querySelectorAll('[data-f]').forEach(inp=>{const f=inp.dataset.f;
+    inp.addEventListener('input',()=>{b[f]=inp.value;renderPreview();});
+    if(inp.tagName==='SELECT')inp.addEventListener('change',()=>{b[f]=inp.value;rerender();});});
+  ins.querySelectorAll('[data-seg]').forEach(seg=>{const f=seg.dataset.seg;seg.querySelectorAll('button').forEach(btn=>btn.onclick=()=>{b[f]=btn.dataset.v;rerender();});});
+  ins.querySelectorAll('[data-tog]').forEach(t=>t.onclick=()=>{b[t.dataset.tog]=!b[t.dataset.tog];rerender();});
+  ins.querySelectorAll('[data-step]').forEach(s=>{const f=s.dataset.step,mn=+s.dataset.min,mx=+s.dataset.max;
+    s.querySelectorAll('button').forEach(btn=>btn.onclick=()=>{b[f]=Math.max(mn,Math.min(mx,(+b[f])+(+btn.dataset.d)));rerender();});});
+  const chips=ins.querySelector('[data-chips]');
+  if(chips){let cd=null;chips.querySelectorAll('.chip').forEach(ch=>{
+    ch.addEventListener('dragstart',()=>{cd=+ch.dataset.ci;ch.classList.add('dragging');});
+    ch.addEventListener('dragend',()=>{cd=null;ch.classList.remove('dragging');});
+    ch.addEventListener('dragover',e=>{e.preventDefault();ch.classList.add('over');});
+    ch.addEventListener('dragleave',()=>ch.classList.remove('over'));
+    ch.addEventListener('drop',e=>{e.preventDefault();ch.classList.remove('over');const to=+ch.dataset.ci;if(cd==null||cd===to)return;const[m]=b.articles.splice(cd,1);b.articles.splice(to,0,m);rerender();});});
+    chips.querySelectorAll('[data-rmc]').forEach(x=>x.onclick=()=>{b.articles.splice(+x.dataset.rmc,1);rerender();});}
+  ins.querySelectorAll('.picker').forEach(pk=>{const input=pk.querySelector('[data-pickinput]');if(!input)return;
+    const isMulti=pk.hasAttribute('data-multi');const single=pk.getAttribute('data-single');
+    const open=()=>{closePops();const q=input.value.toLowerCase();const used=isMulti?b.articles:[];
+      const m=ARTICLES.filter(a=>!used.includes(a.t)&&a.t.toLowerCase().includes(q));const pop=document.createElement('div');pop.className='picker-pop';
+      pop.innerHTML=m.length?m.map(a=>`<div class="pi" data-pick="${esc(a.t)}"><span>${esc(a.t)}</span><span class="pc">${a.c}</span></div>`).join(''):'<div class="pi none">No matches</div>';
+      pk.appendChild(pop);pop.querySelectorAll('[data-pick]').forEach(it=>it.onclick=()=>{if(isMulti)b.articles.push(it.dataset.pick);else b[single]=it.dataset.pick;rerender();});};
+    input.addEventListener('focus',open);input.addEventListener('input',()=>{if(single){b[single]=input.value;renderPreview();}open();});});
+}
+function closePops(){document.querySelectorAll('.picker-pop').forEach(p=>p.remove());}
+document.addEventListener('click',e=>{if(!e.target.closest('.picker'))closePops();});
+function act(a,b){
+  if(a==='del'){removeBlock(b.id);SEL=null;rerender();toast('Block deleted');return;}
+  if(a==='dup'){const c=JSON.parse(JSON.stringify(b));reid(c);const p=findParentList(b.id);p.list.splice(p.index+1,0,c);SEL=c.id;rerender();toast('Duplicated');return;}
+  if(a==='up'||a==='down'){const p=findParentList(b.id);const j=p.index+(a==='up'?-1:1);if(j<0||j>=p.list.length)return;[p.list[p.index],p.list[j]]=[p.list[j],p.list[p.index]];rerender();}}
+function reid(b){b.id=uid();if(b.children)b.children.forEach(reid);}
+
+/* ===== ADD popover ===== */
+let addTarget=null;
+function openAdd(ev,cid){ev.stopPropagation();addTarget=cid;const pop=document.getElementById('addpop');
+  const groups=[['Content',['hero','articleRow','articleFeature','recommended','text','image','divider']],['Containers',['group','columns']]];
+  pop.innerHTML=`<div class="ah">${cid?'Add inside container':'Add block'}</div>`+groups.map(([gn,ts])=>`<div class="ag">${gn}</div>`+ts.map(t=>`<div class="ai" data-add="${t}"><span class="aglyph">${TYPES[t].glyph}</span><div><div class="anm">${TYPES[t].label}</div><div class="ads">${TYPES[t].ds}</div></div></div>`).join('')).join('');
+  pop.querySelectorAll('[data-add]').forEach(it=>it.onclick=()=>{addBlock(it.dataset.add);closeAdd();});
+  const r=ev.currentTarget.getBoundingClientRect();pop.style.left=Math.min(r.left,window.innerWidth-320)+'px';pop.style.top=(r.bottom+6)+'px';
+  pop.classList.add('show');document.getElementById('scrim').classList.add('show');}
+function closeAdd(){document.getElementById('addpop').classList.remove('show');document.getElementById('scrim').classList.remove('show');}
+function addBlock(type){const b=fresh(type);if(addTarget){const c=find(addTarget);c.children.push(b);c._collapsed=false;}else MODEL.push(b);SEL=b.id;rerender();toast(TYPES[type].label+' added');}
+
+function rerender(){renderTree();renderPreview();renderInspector();}
+function resetAll(){MODEL=defaultModel();SEL=MODEL[1].id;rerender();toast('Reset to default');}
+rerender();
+</script>
+</body>
+</html>

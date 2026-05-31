@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reference System — Spec (Draft)</title>
+<style>
+  :root {
+    --parchment: #f5f2e8; --parchment-soft: #faf7ed; --ink: #1a1a1a; --ink-soft: #3a3a3a;
+    --muted: #6b6457; --gold: #c5a059; --gold-deep: #8a6d2f; --blood: #7a1f1f; --leaf: #355c3a;
+    --card: #fbf8ee; --rule: #d8cfb8; --code-bg: #2b2620; --code-ink: #f0e9d2;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 10px rgba(0,0,0,0.04);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--parchment); color: var(--ink);
+    font-family: "Inter", -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 15px; line-height: 1.65; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 40px 32px 80px; }
+  header.hero { border-bottom: 1px solid var(--rule); padding-bottom: 22px; margin-bottom: 30px; }
+  header.hero .eyebrow { text-transform: uppercase; letter-spacing: 1.2px; font-size: 11px; color: var(--gold-deep); font-weight: 600; margin-bottom: 8px; }
+  header.hero h1 { font-family: "Cormorant Garamond", Georgia, serif; font-weight: 600; font-size: 44px; line-height: 1.05; margin: 0 0 8px; }
+  header.hero .tagline { font-family: "Cormorant Garamond", Georgia, serif; font-style: italic; font-size: 19px; color: var(--muted); margin: 0 0 12px; }
+  header.hero .meta { font-size: 13px; color: var(--muted); }
+  h2 { font-family: "Cormorant Garamond", Georgia, serif; font-size: 30px; font-weight: 600; margin: 50px 0 10px; padding-bottom: 8px; border-bottom: 2px solid var(--gold); }
+  h3 { font-family: "Cormorant Garamond", Georgia, serif; font-size: 21px; font-weight: 600; margin: 26px 0 8px; }
+  h4 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.9px; color: var(--gold-deep); margin: 18px 0 6px; font-weight: 700; }
+  p { margin: 9px 0; }
+  ul, ol { margin: 8px 0 8px 22px; padding: 0; }
+  li { margin: 5px 0; }
+  code { font-family: "JetBrains Mono", Consolas, monospace; font-size: 13px; background: rgba(138,109,47,0.12); color: var(--ink); padding: 1px 6px; border-radius: 3px; }
+  pre { background: var(--code-bg); color: var(--code-ink); padding: 14px 16px; border-radius: 5px; overflow-x: auto; font-family: "JetBrains Mono", Consolas, monospace; font-size: 13px; line-height: 1.5; box-shadow: var(--shadow); margin: 14px 0; }
+  pre code { background: transparent; color: inherit; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; background: var(--parchment-soft); box-shadow: var(--shadow); border-radius: 4px; overflow: hidden; }
+  th, td { text-align: left; padding: 9px 13px; border-bottom: 1px solid var(--rule); font-size: 14px; vertical-align: top; }
+  th { background: rgba(138,109,47,0.10); font-weight: 600; color: var(--gold-deep); text-transform: uppercase; font-size: 11px; letter-spacing: 0.6px; }
+  tr:last-child td { border-bottom: none; }
+  .toc { background: var(--parchment-soft); border: 1px solid var(--rule); border-radius: 4px; padding: 16px 22px; margin-bottom: 34px; box-shadow: var(--shadow); }
+  .toc h4 { margin: 0 0 8px; }
+  .toc ol { margin: 0 0 0 20px; columns: 2; column-gap: 32px; }
+  .toc a { color: var(--gold-deep); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; color: var(--blood); }
+  .decision { background: var(--card); border: 1px solid var(--rule); border-left: 4px solid var(--gold); border-radius: 4px; padding: 16px 20px; margin: 16px 0; box-shadow: var(--shadow); }
+  .decision .q { font-weight: 600; color: var(--gold-deep); }
+  .decision.locked { border-left-color: var(--leaf); }
+  .decision.open { border-left-color: var(--blood); }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 99px; font-size: 11px; font-weight: 600; letter-spacing: 0.4px; }
+  .pill.locked { background: rgba(53,92,58,0.18); color: var(--leaf); }
+  .pill.open { background: rgba(122,31,31,0.12); color: var(--blood); }
+  .pill.later { background: rgba(107,100,87,0.18); color: var(--ink-soft); }
+  .callout { background: rgba(122,31,31,0.06); border: 1px solid rgba(122,31,31,0.25); border-radius: 4px; padding: 13px 17px; margin: 15px 0; font-size: 14px; }
+  .callout strong { color: var(--blood); }
+  .note { background: rgba(53,92,58,0.06); border: 1px solid rgba(53,92,58,0.25); border-radius: 4px; padding: 13px 17px; margin: 15px 0; font-size: 14px; }
+  .note strong { color: var(--leaf); }
+  hr.section { border: none; border-top: 1px solid var(--rule); margin: 36px 0; }
+  .chip-demo { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border: 1px dashed var(--gold-deep); border-radius: 10px; background: rgba(197,160,89,0.12); color: var(--gold-deep); font-size: 13px; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="eyebrow">Spec &middot; locked 2026-05-28</div>
+  <h1>The Reference System</h1>
+  <p class="tagline">Linking content to content, by identity — authored like Foundry, rendered like a wiki.</p>
+  <div class="meta">
+    <strong>Locked &mdash; in build.</strong> Branch: <code>system-applications</code> (local, not pushed).
+    Companion: <a href="feat-hover-card-concepts.html">feat-hover-card-concepts.html</a> (card design).
+  </div>
+</header>
+
+<section id="status" style="background: var(--parchment-soft); border: 1px solid var(--rule); border-left: 4px solid var(--leaf); border-radius: 4px; padding: 18px 22px; margin-bottom: 32px; box-shadow: var(--shadow);">
+  <h4 style="margin-top:0;">Where we are &middot; 2026-05-29</h4>
+  <p style="margin: 4px 0 12px;">The reference system is essentially built &mdash; everything below is live on the branch.
+  The latest P5 bits (subclass preview + option-group refs) are <strong>local and uncommitted</strong>.</p>
+  <table>
+    <thead><tr><th>Shipped</th><th style="width:90px;">Status</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>Grammar parser + renderer (<code>@</code>/<code>&amp;</code>, <code>#anchor</code>, editor-keeps-as-text)</td><td><span class="pill locked">shipped</span></td><td>Old <code>[ref|…]</code> removed.</td></tr>
+      <tr><td>Resolve + search helper</td><td><span class="pill locked">shipped</span></td><td>Rides the existing D1 proxy &mdash; no new endpoint.</td></tr>
+      <tr><td>Inline <code>@</code>/<code>&amp;</code> autocomplete</td><td><span class="pill locked">shipped</span></td><td>Batched search (D1's 5-term compound cap) + scroll-anchored dropdown.</td></tr>
+      <tr><td>Hover card &mdash; ephemeral / pin-to-pop-out / nested</td><td><span class="pill locked">shipped</span></td><td>4a + 4b + 4c. Drag, session-persist, "Go to", child-never-closes-parent.</td></tr>
+      <tr><td>Prerequisite resolution</td><td><span class="pill locked">shipped</span></td><td>Line: short&rarr;composite&rarr;free. Hover reveal: free&rarr;composite&rarr;short (+ skill-name lookup).</td></tr>
+      <tr><td>Round-trip stability</td><td><span class="pill locked">shipped</span></td><td><code>htmlToBbcode</code> rebuilds ref-links instead of mangling them to <code>[url]</code>.</td></tr>
+      <tr><td>Preview for complex kinds</td><td><span class="pill locked">shipped</span></td><td>Simple kinds show their description; classes + (new) subclasses use a short <code>preview</code>.</td></tr>
+      <tr><td>Reference: option <em>groups</em></td><td><span class="pill locked">shipped</span></td><td><code>@option-group[battle-cries]{…}</code>, keyed by slugified name (no new column).</td></tr>
+    </tbody>
+  </table>
+  <h4 style="margin:20px 0 6px;">What's next &mdash; your call</h4>
+  <table>
+    <thead><tr><th>Candidate</th><th style="width:90px;">Size</th><th>What it is</th></tr></thead>
+    <tbody>
+      <tr><td>Foundry inline-roll formulas in the reader</td><td><span class="pill open">small</span></td><td><code>[[/r&nbsp;…]]</code>, <code>[[/damage&nbsp;…]]</code> &rarr; readable chips (reader only; export leaves them for Foundry). The thing you flagged on the spell card.</td></tr>
+      <tr><td>Reference: option <em>items</em></td><td><span class="pill open">small</span></td><td>Make the 223 individual options searchable too &mdash; same derived-slug approach as groups.</td></tr>
+      <tr><td>System-page article type</td><td><span class="pill later">medium</span></td><td>Foundry-journal-like pages so <code>&amp;condition</code> / rule refs become <em>clickable</em> (today they hover but don't navigate).</td></tr>
+      <tr><td>Live-content bridge (the original branch goal)</td><td><span class="pill later">large</span></td><td>Phase 1.5 hash-on-upsert &rarr; article-system unification &rarr; read-only Foundry viewer. The big pivot the references were built to feed.</td></tr>
+    </tbody>
+  </table>
+  <p style="margin-bottom:0;"><strong>Notes:</strong> <code>&amp;condition</code> no longer links to admin (awaits the system-page type). Branch dev runs on 3001/8788. The subclass <code>preview</code> migration is <strong>local only</strong> &mdash; remote D1 pending your go-ahead.</p>
+</section>
+
+<div class="toc">
+  <h4>Contents</h4>
+  <ol>
+    <li><a href="#what">What a reference is</a></li>
+    <li><a href="#kinds">Reference kinds</a></li>
+    <li><a href="#sigils">The two sigils: <code>@</code> vs <code>&amp;</code></a></li>
+    <li><a href="#authoring">Authoring &mdash; type, search, insert</a></li>
+    <li><a href="#editing">Editing &amp; the display name</a></li>
+    <li><a href="#syntax">Stored syntax</a></li>
+    <li><a href="#editor">In the editor</a></li>
+    <li><a href="#display">In the reader (hover + click)</a></li>
+    <li><a href="#dynamic">Dynamic references (deferred)</a></li>
+    <li><a href="#scope">Out of scope (for now)</a></li>
+    <li><a href="#open">Open decisions</a></li>
+  </ol>
+</div>
+
+<h2 id="what">1. What a reference is</h2>
+<p>
+  A <strong>reference</strong> is an inline link from one piece of content to another Dauligor
+  entity, stored <em>by identity</em> (a kind + an identifier) rather than as a hardcoded URL.
+  Because it stores identity, it keeps resolving correctly if the target is renamed or
+  re-slugged, and the same reference can render in three surfaces: the in-app reader, the
+  editor, and (later) Foundry.
+</p>
+<p>It replaces the current limited <code>[ref|kind|id]…[/ref]</code> tag, which only handles
+  three kinds, has no authoring UI, and degrades to a plain link when edited in the visual editor.</p>
+
+<h2 id="kinds">2. Reference kinds</h2>
+<p>The finished product references all of these. "Ready now" depends on whether the backing
+  data + a search endpoint exist today.</p>
+<table>
+  <thead><tr><th>Kind</th><th>Sigil</th><th>Target</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td>Spell</td><td><code>@</code></td><td>compendium spell page</td><td><span class="pill locked">ready now</span></td></tr>
+    <tr><td>Class</td><td><code>@</code></td><td>class page</td><td><span class="pill locked">ready now</span></td></tr>
+    <tr><td>Subclass</td><td><code>@</code></td><td>subclass (within its class)</td><td><span class="pill locked">ready now</span></td></tr>
+    <tr><td>Feat</td><td><code>@</code></td><td>feat page</td><td><span class="pill locked">ready now</span></td></tr>
+    <tr><td>Item</td><td><code>@</code></td><td>item page</td><td><span class="pill locked">ready now</span></td></tr>
+    <tr><td>Article</td><td><code>@</code></td><td>wiki article</td><td><span class="pill open">needs identifier revamp</span></td></tr>
+    <tr><td>Condition</td><td><code>&amp;</code></td><td>status / condition glossary</td><td><span class="pill locked">ready now</span></td></tr>
+    <tr><td>Race / Background</td><td><code>@</code></td><td>race / background page</td><td><span class="pill later">when tables exist</span></td></tr>
+  </tbody>
+</table>
+<p class="note"><strong>Note:</strong> Articles can only be referenced unambiguously once the
+  article-system unification lands (stable <code>identifier</code> + source scope) — that's already
+  a tracked prerequisite. References can ship for the other kinds first and add <code>article</code>
+  when articles are addressable.</p>
+
+<h2 id="sigils">3. The two sigils: <code>@</code> vs <code>&amp;</code></h2>
+<p>
+  Foundry uses two different inline triggers, and we'll mirror them because the muscle memory
+  is valuable (and the live-content bridge will eventually map onto them):
+</p>
+<table>
+  <thead><tr><th>Sigil</th><th>Foundry equivalent</th><th>Means</th><th>Dauligor use</th></tr></thead>
+  <tbody>
+    <tr><td><code>@</code></td><td><code>@UUID[…]{label}</code></td><td>Link to a <em>specific document</em></td><td>Entity references — spell, class, subclass, feat, item, article (things with their own page)</td></tr>
+    <tr><td><code>&amp;</code></td><td><code>&amp;Reference[…]</code></td><td>Link to a <em>rules / glossary entry</em></td><td>Rule references — conditions, rules, system-page glossary entries ("look this rule up")</td></tr>
+  </tbody>
+</table>
+<p>
+  Both sigils open the same autocomplete; the sigil just pre-filters which family you're
+  searching. <code>@</code> → "what thing do I want to link to," <code>&amp;</code> → "what rule
+  do I want to cite."
+</p>
+<div class="decision locked">
+  <p class="q"><span class="pill locked">decided</span> Keep the split, go fully Foundry-native.</p>
+  <code>@</code> = entity/document references; <code>&amp;</code> = rule references that
+  <strong>reuse dnd5e's <code>&amp;Reference</code></strong> where it already covers the case —
+  conditions, skills, abilities, damage types, weapon mastery, areas of effect, creature types,
+  spell schools. Dauligor-specific rules (custom conditions, system-page glossary entries) get a
+  custom enricher in the module but keep the same <code>&amp;</code> grammar.
+</div>
+<p>
+  <strong>Deep-linking to a section (your <code>&amp;Condition=Prone</code> idea).</strong> Foundry
+  supports a heading anchor on a link target — <code>@UUID[…JournalEntryPage.xyz#prone]{…}</code>
+  jumps to the <em>Prone</em> section of a page, not just the page. So
+  <code>&amp;condition[prone]</code> (or a section anchor like <code>&amp;rules[conditions]#prone</code>)
+  resolves to the conditions page <em>scrolled to the Prone entry</em>, and clicking does the same
+  in-app. This is exactly the behaviour you described, and it maps onto Foundry's native anchor
+  syntax.
+</p>
+
+<h2 id="authoring">4. Authoring — type, search, insert</h2>
+<p>The Foundry-style inline flow, available anywhere the rich-text editor is used:</p>
+<ol>
+  <li>Type <code>@</code> (or <code>&amp;</code>) in the editor.</li>
+  <li>An inline autocomplete opens. Optionally narrow by kind first (e.g. <em>Conditions</em>),
+    then search by name within it (e.g. <code>prone</code>). Typing a name directly should also work.</li>
+  <li>Pick the entity. A reference is inserted, its display text pre-filled with the entity's name.</li>
+</ol>
+<p>This replaces the current "switch to Source mode and hand-type the markup" reality.</p>
+
+<h2 id="editing">5. Editing &amp; the display name</h2>
+<p>This is the reason we paused to spec, so it's the heart of the design:</p>
+<ul>
+  <li><strong>Re-target / re-open:</strong> selecting an existing reference lets you re-open the
+    picker to change its target or display text — not just delete and retype.</li>
+  <li><strong>Custom display name:</strong> the visible text defaults to the entity's name but can
+    be overridden — e.g. reference <em>Prone</em> but display <code>{prone}</code>, or reference
+    <em>Fire Bolt</em> but display "a bolt of flame." (Braces <code>{…}</code> mirror Foundry's
+    <code>{label}</code> convention.)</li>
+  <li><strong>Display-name policy:</strong> default to the entity's <em>current</em> name at insert
+    time; once overridden, the custom text is preserved verbatim. (We are <em>not</em> auto-rewriting
+    display text on every render — too surprising.)</li>
+</ul>
+
+<h2 id="syntax">6. Stored syntax — Foundry grammar, semantic ids <span class="pill locked">decided</span></h2>
+<div class="callout">
+  <strong>Key finding:</strong> Dauligor <em>already</em> has a Foundry-aligned reference contract
+  — <code>module/dauligor-pairing/docs/reference-syntax-guide.md</code>. It defines exactly the
+  grammar you want. "Go Foundry-native" means <strong>adopt/extend that</strong> app-side and
+  drop the home-grown <code>[ref|kind|id]…[/ref]</code> tag — not invent a third format.
+</div>
+<p>Entity references (links to a Dauligor document):</p>
+<pre><code>@&lt;kind&gt;[&lt;semantic-id&gt;]{&lt;display&gt;}
+
+@spell[spell-fire-bolt]{Fire Bolt}
+@class[class-sorcerer]{Sorcerer}
+@feat[feat-great-weapon-master]{Great Weapon Master}
+@article[deep-shadow-cult]{the Deep Shadow Cult}</code></pre>
+<p>Rule references (reuse dnd5e's <code>&amp;Reference</code> — see §3):</p>
+<pre><code>&amp;condition[prone]                → "Prone", links to the prone rule
+&amp;condition[prone]{knocked prone} → custom display
+&amp;condition[prone]#movement       → deep-link to a section within the rule page</code></pre>
+<div class="callout">
+  <strong>Critical: store SEMANTIC ids, never raw Foundry UUIDs.</strong> Foundry UUIDs
+  (<code>@UUID[Actor.x.Item.y]</code>) are generated <em>per-world at import time</em> — the
+  Dauligor site cannot know them. So app-authored content stores a stable
+  <code>kind[semantic-id]</code>; the Dauligor reader resolves it to an in-app page, and the
+  <strong>Foundry module translates it to a real <code>@UUID</code> / <code>&amp;Reference</code>
+  at import</strong> (that normalizer is already partly built). "Foundry-native" = the same
+  grammar + module-side translation, NOT UUIDs in source text. The reference-syntax-guide
+  already forbids raw UUIDs in authored text, so this stays.
+</div>
+
+<h2 id="editor">7. In the editor <span class="pill locked">decided: text, not chips</span></h2>
+<p>
+  A reference is <strong>plain enricher text</strong> in the editor — you see and edit
+  <code>@spell[spell-fire-bolt]{Fire Bolt}</code> (or <code>&amp;condition[prone]</code>) directly,
+  the same way Foundry's own editor shows enricher syntax. It only renders into a link + hover
+  card in the display (the reader, §8). Your call, and the right one:
+</p>
+<ul>
+  <li><strong>Edit on the fly</strong> — change the id or the <code>{display}</code> by just typing;
+    no modal needed for a tweak.</li>
+  <li><strong>No corruption</strong> — because a reference is text (not a TipTap link mark),
+    nothing strips its <code>kind</code>/<code>id</code> on a Visual↔Source toggle. The earlier
+    degradation bug existed only because the old <code>[ref|…]</code> rendered as a real
+    <code>&lt;a&gt;</code> that TipTap then swallowed; plain text has no such failure mode.</li>
+</ul>
+<p>The <code>@</code>/<code>&amp;</code> <strong>insert buttons / autocomplete</strong> (§4) just
+  drop the correct text in for you — a convenience, not a special object. Once inserted it's
+  ordinary editable text.</p>
+<p class="note"><strong>Trade-off accepted:</strong> in the editor you see the raw reference
+  syntax, not a styled chip. That's the Foundry behaviour and the price of free-text editing —
+  the styled, hover-card rendering happens in the reader.</p>
+
+<h2 id="display">8. In the reader (hover + click)</h2>
+
+<h3>Hover → a summary card</h3>
+<p>Hovering a reference shows a card:</p>
+<ul>
+  <li><strong>Top:</strong> the reference (entity) name.</li>
+  <li><strong>Body:</strong> a kind-appropriate summary. The card is a <strong>fixed size</strong>;
+    if content overflows, the user scrolls <em>within</em> the card while hovered.</li>
+</ul>
+<table>
+  <thead><tr><th>Kind</th><th>Card body source</th></tr></thead>
+  <tbody>
+    <tr><td>Spell, Feat, Item, Condition</td><td>Their description (compact enough to show directly; scroll if long).</td></tr>
+    <tr><td>Class, Subclass</td><td>The "brief description" box already on the class/subclass.</td></tr>
+    <tr><td>Article</td><td>A brief description authored in the article editor (a dedicated short field, distinct from the full body).</td></tr>
+    <tr><td>Race / Background</td><td>Brief description (when those exist).</td></tr>
+  </tbody>
+</table>
+<p class="note"><strong>Implication:</strong> kinds without a short summary field today (notably
+  <strong>articles</strong>) need one added to their editor — a "brief / hover summary" field — so
+  the card has something concise to show instead of dumping the whole body.</p>
+
+<h3>Click → navigate</h3>
+<p>Clicking a reference takes you to that entity's page (in-app route). A reference whose target
+  no longer exists renders as a distinct, non-clickable "unresolved" badge so broken links are
+  visible rather than silently dead.</p>
+
+<h3>Pin &amp; nest</h3>
+<p>The hover card carries a <strong>pin</strong>: clicking it pops the card out into a draggable,
+  closeable window that <strong>persists across navigation</strong> (within a session) — so a DM can
+  park several references side by side. Cards can also <strong>nest</strong>: hovering something inside
+  a card (a truncated prerequisite, or a reference within the description) opens a child card
+  <em>without closing the parent</em> — cards stack. Full visual design + the chosen feat-card layout
+  live in <a href="feat-hover-card-concepts.html"><code>docs/_drafts/feat-hover-card-concepts.html</code></a>.</p>
+
+<h2 id="dynamic">9. Dynamic references <span class="pill later">deferred</span></h2>
+<p>
+  Beyond linking a single entity, a reference could resolve to a <em>filtered set</em> — e.g.
+  "all CR&nbsp;1 creatures" for a Wild Shape rules box, or "all 1st-level Wizard spells." This is
+  a <strong>query reference</strong>: it stores filter criteria instead of one identifier, and
+  renders as a (possibly expandable) list or a link to a pre-filtered browser.
+</p>
+<p>
+  We're <strong>deferring</strong> this, but the design above should leave room for it — e.g. a
+  future <code>@query[…]</code> kind, or a saved-filter entity that itself becomes referenceable.
+  Worth keeping in mind so the single-entity design doesn't paint us into a corner.
+</p>
+
+<h2 id="scope">10. Out of scope (for now)</h2>
+<ul>
+  <li><strong>Foundry-side resolution</strong> — the enrichers + DauligorViewer that make these
+    references work <em>inside Foundry</em>. That's the separate live-content-bridge work; this spec
+    is the app side. (The <code>@</code>/<code>&amp;</code> grammar is chosen to map cleanly onto it later.)</li>
+  <li><strong>Dynamic / query references</strong> — section 9, deferred.</li>
+  <li><strong>Formula references</strong> (<code>@scale.*</code>, <code>@prof</code>, etc.) — a separate
+    system (formula resolution in roll fields), not this cross-link feature. Unchanged.</li>
+</ul>
+
+<h2 id="connect">Connecting references to articles <span class="pill open">new — doesn't exist yet</span></h2>
+<p>
+  Your point 4: a condition (or other rule) should be <em>attachable to a block in an article</em>,
+  so a feature that references the condition can take the reader to the relevant article section
+  for the full write-up. The vision — feature &rarr; condition reference &rarr; the article section
+  that explains it — connects the compendium and the wiki.
+</p>
+<div class="callout">
+  <strong>Reality check:</strong> I looked for an existing "attach an article" control on the
+  proficiency editor (<code>AdminProficiencies.tsx</code>) and the conditions editor
+  (<code>StatusesEditor.tsx</code>) and <strong>could not find one</strong>. So this attachment
+  capability appears <em>not to exist yet</em> — it's new work, not something already wired. If
+  it lives somewhere I didn't check, point me at it.
+</div>
+<p>
+  Once articles are addressable (the article-identifier revamp) and a condition can store an
+  attached <code>article-id</code> + section anchor, <code>&amp;condition[prone]</code> resolves
+  through that link to the article section. That's the systems-connection you're describing; it
+  depends on the article revamp + an attachment field.
+</p>
+
+<h2 id="open">Decisions — settled vs still open</h2>
+<h4>Settled this round</h4>
+<table>
+  <thead><tr><th>Topic</th><th>Decision</th></tr></thead>
+  <tbody>
+    <tr><td>Sigil split</td><td><code>@</code> = entity, <code>&amp;</code> = rule; reuse dnd5e <code>&amp;Reference</code>. Go fully Foundry-native.</td></tr>
+    <tr><td>Stored format</td><td>Foundry grammar <code>@kind[semantic-id]{display}</code> + <code>&amp;…</code>; drop <code>[ref|…]</code>. <strong>Semantic ids, never raw UUIDs.</strong></td></tr>
+    <tr><td>Editor representation</td><td>Plain editable enricher text (no atomic chip).</td></tr>
+    <tr><td>Kinds</td><td>spell, class, subclass, feat, item, condition, article now; race/background when their tables exist.</td></tr>
+    <tr><td>Deep-linking</td><td>Section anchors (<code>#prone</code>) via Foundry's native anchor syntax.</td></tr>
+  </tbody>
+</table>
+<h4>Settled 2026-05-28 (the last open items)</h4>
+<table>
+  <thead><tr><th>Topic</th><th>Decision</th></tr></thead>
+  <tbody>
+    <tr><td>Hover summary field</td><td><strong>Add it.</strong> Articles (and any referenceable kind lacking a short summary) get a brief "summary" field, authored in the editor, that feeds the hover card. Kinds that already have a usable short field (spell/feat/item description, class brief) reuse it.</td></tr>
+    <tr><td>Build order</td><td><strong>Reference authoring first.</strong> The condition↔article attachment (§ "Connecting references to articles") is a separate, later track that depends on the article-identifier revamp.</td></tr>
+    <tr><td>Migrating old refs</td><td><strong>No migration.</strong> The old <code>[ref|…]</code> system was effectively unused (it had no authoring UI), so there's no existing reference content to carry over — the new grammar starts clean.</td></tr>
+  </tbody>
+</table>
+<p style="margin-top:16px"><strong>The spec is locked.</strong> Build sequence follows in the
+  reference-authoring track; see the project roadmap for where it sits.</p>
+
+</div>
+</body>
+</html>
