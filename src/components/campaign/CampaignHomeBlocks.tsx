@@ -343,7 +343,7 @@ export default function CampaignHomeBlocks({ blocks, recommendedLore, campaignNa
               {block.title && <div className="flex items-center gap-3 border-b border-gold/20 pb-4"><h2 className="h2-title">{block.title}</h2></div>}
               <div className="border border-dashed border-gold/20 bg-card/30 flex flex-col items-center justify-center text-center min-h-[120px] p-8">
                 <p className="text-sm font-bold uppercase tracking-widest text-ink/30 font-serif">{name}</p>
-                <p className="text-[10px] text-ink/20 italic mt-1">{ph ? 'Placeholder' : 'Coming soon'}</p>
+                <p className="field-hint mt-1">{ph ? 'Placeholder' : 'Coming soon'}</p>
               </div>
             </section>
           );

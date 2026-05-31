@@ -592,7 +592,7 @@ function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onA
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center gap-1 pb-3 border-b border-gold/20">
-        <span className="font-serif text-lg font-bold flex-1">{meta.label}</span>
+        <span className="h3-title flex-1">{meta.label}</span>
         <button disabled={i === 0} onClick={() => onMove(block.id, -1)} className="p-1.5 text-ink/40 hover:text-gold disabled:opacity-20" aria-label="Move up"><ChevronUp className="w-4 h-4" /></button>
         <button disabled={i === n - 1} onClick={() => onMove(block.id, 1)} className="p-1.5 text-ink/40 hover:text-gold disabled:opacity-20" aria-label="Move down"><ChevronDown className="w-4 h-4" /></button>
         <button onClick={() => onDuplicate(block.id)} className="p-1.5 text-ink/40 hover:text-gold" aria-label="Duplicate"><Copy className="w-4 h-4" /></button>
