@@ -661,7 +661,8 @@ function normalizeClassProficiencies(rawProficiencies: any, refs: any) {
     }),
     armorDisplayName: trimString(raw.armorDisplayName),
     weaponsDisplayName: trimString(raw.weaponsDisplayName),
-    toolsDisplayName: trimString(raw.toolsDisplayName)
+    toolsDisplayName: trimString(raw.toolsDisplayName),
+    skillsDisplayName: trimString(raw.skillsDisplayName)
   };
 }
 

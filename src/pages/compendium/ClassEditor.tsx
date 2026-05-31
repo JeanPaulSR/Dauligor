@@ -204,7 +204,8 @@ function sanitizeProficiencyCollection(raw: any = {}) {
     languages: sanitizeProficiencySelection(raw.languages, { includeCategories: true }),
     armorDisplayName: typeof raw.armorDisplayName === 'string' ? raw.armorDisplayName : '',
     weaponsDisplayName: typeof raw.weaponsDisplayName === 'string' ? raw.weaponsDisplayName : '',
-    toolsDisplayName: typeof raw.toolsDisplayName === 'string' ? raw.toolsDisplayName : ''
+    toolsDisplayName: typeof raw.toolsDisplayName === 'string' ? raw.toolsDisplayName : '',
+    skillsDisplayName: typeof raw.skillsDisplayName === 'string' ? raw.skillsDisplayName : ''
   };
 }
 
@@ -573,7 +574,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
     },
     armorDisplayName: '',
     weaponsDisplayName: '',
-    toolsDisplayName: ''
+    toolsDisplayName: '',
+    skillsDisplayName: ''
   });
   const [startingEquipment, setStartingEquipment] = useState('');
   const [wealth, setWealth] = useState('');
@@ -594,7 +596,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
     savingThrows: { choiceCount: 0, optionIds: [], fixedIds: [] },
     armorDisplayName: '',
     weaponsDisplayName: '',
-    toolsDisplayName: ''
+    toolsDisplayName: '',
+    skillsDisplayName: ''
   });
   const [primaryAbility, setPrimaryAbility] = useState<string[]>([]);
   const [primaryAbilityChoice, setPrimaryAbilityChoice] = useState<string[]>([]);
@@ -960,7 +963,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                 },
               armorDisplayName: rawProf.armorDisplayName || '',
               weaponsDisplayName: rawProf.weaponsDisplayName || '',
-              toolsDisplayName: rawProf.toolsDisplayName || ''
+              toolsDisplayName: rawProf.toolsDisplayName || '',
+              skillsDisplayName: rawProf.skillsDisplayName || ''
             }));
 
             setStartingEquipment(remapped.startingEquipment);
@@ -1019,7 +1023,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                 : { choiceCount: 0, optionIds: [], fixedIds: [], categoryIds: [] },
               armorDisplayName: rawMultiProf.armorDisplayName || '',
               weaponsDisplayName: rawMultiProf.weaponsDisplayName || '',
-              toolsDisplayName: rawMultiProf.toolsDisplayName || ''
+              toolsDisplayName: rawMultiProf.toolsDisplayName || '',
+              skillsDisplayName: rawMultiProf.skillsDisplayName || ''
             }));
 
             const loadedSpellcasting = normalizeClassSpellcastingForEditor(remapped.spellcasting);
@@ -1254,13 +1259,19 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
         ...proficiencies,
         armorDisplayName: proficiencies.armorDisplayName || buildGroupedProficiencyDisplayName(proficiencies.armor, allArmor, allArmorCategories),
         weaponsDisplayName: proficiencies.weaponsDisplayName || buildGroupedProficiencyDisplayName(proficiencies.weapons, allWeapons, allWeaponCategories),
-        toolsDisplayName: proficiencies.toolsDisplayName || buildGroupedProficiencyDisplayName(proficiencies.tools, allTools, allToolCategories)
+        toolsDisplayName: proficiencies.toolsDisplayName || buildGroupedProficiencyDisplayName(proficiencies.tools, allTools, allToolCategories),
+        // Skills have no categories — pass [] so the helper composes the
+        // display string from the selected skill items alone.
+        skillsDisplayName: proficiencies.skillsDisplayName || buildGroupedProficiencyDisplayName(proficiencies.skills, allSkills, [])
       });
       const normalizedMulticlassProficiencies = sanitizeProficiencyCollection({
         ...multiclassProficiencies,
         armorDisplayName: multiclassProficiencies.armorDisplayName || buildGroupedProficiencyDisplayName(multiclassProficiencies.armor, allArmor, allArmorCategories),
         weaponsDisplayName: multiclassProficiencies.weaponsDisplayName || buildGroupedProficiencyDisplayName(multiclassProficiencies.weapons, allWeapons, allWeaponCategories),
-        toolsDisplayName: multiclassProficiencies.toolsDisplayName || buildGroupedProficiencyDisplayName(multiclassProficiencies.tools, allTools, allToolCategories)
+        toolsDisplayName: multiclassProficiencies.toolsDisplayName || buildGroupedProficiencyDisplayName(multiclassProficiencies.tools, allTools, allToolCategories),
+        // Skills have no categories — pass [] so the helper composes the
+        // display string from the selected skill items alone.
+        skillsDisplayName: multiclassProficiencies.skillsDisplayName || buildGroupedProficiencyDisplayName(multiclassProficiencies.skills, allSkills, [])
       });
       const syncedAdvancements = buildCanonicalBaseClassAdvancements({
         advancements,
@@ -1658,8 +1669,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   const syncGroupedDisplayName = (
     collection: any,
     setCollection: (value: any) => void,
-    type: 'armor' | 'weapons' | 'tools',
-    displayKey: 'armorDisplayName' | 'weaponsDisplayName' | 'toolsDisplayName',
+    type: 'armor' | 'weapons' | 'tools' | 'skills',
+    displayKey: 'armorDisplayName' | 'weaponsDisplayName' | 'toolsDisplayName' | 'skillsDisplayName',
     items: any[],
     categories: any[]
   ) => {
@@ -2521,6 +2532,27 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                           })}
                           className="w-12 h-6 text-center text-xs bg-background/50 border-gold/10"
                         />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="label-text">Skills Display Name (e.g. Choose 2 from Arcana, History, Insight)</label>
+                      <div className="flex gap-2">
+                        <Input
+                          value={proficiencies.skillsDisplayName || ''}
+                          onChange={e => setProficiencies({ ...proficiencies, skillsDisplayName: e.target.value })}
+                          placeholder="e.g. 2 skills of your choice from the class list"
+                          className="h-8 text-xs bg-background/50 border-gold/10 focus:border-gold"
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 text-[10px] uppercase font-bold border-gold/20"
+                          onClick={() => syncGroupedDisplayName(proficiencies, setProficiencies, 'skills', 'skillsDisplayName', allSkills, [])}
+                        >
+                          Sync
+                        </Button>
                       </div>
                     </div>
 
@@ -3871,6 +3903,27 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                           })}
                           className="w-12 h-6 text-center text-xs bg-background/50 border-gold/10"
                         />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="label-text">Skills Display Name (e.g. Choose 2 from Arcana, History, Insight)</label>
+                      <div className="flex gap-2">
+                        <Input
+                          value={multiclassProficiencies.skillsDisplayName || ''}
+                          onChange={e => setMulticlassProficiencies({ ...multiclassProficiencies, skillsDisplayName: e.target.value })}
+                          placeholder="e.g. 1 skill of your choice from the class list"
+                          className="h-8 text-xs bg-background/50 border-gold/10 focus:border-gold"
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 text-[10px] uppercase font-bold border-gold/20"
+                          onClick={() => syncGroupedDisplayName(multiclassProficiencies, setMulticlassProficiencies, 'skills', 'skillsDisplayName', allSkills, [])}
+                        >
+                          Sync
+                        </Button>
                       </div>
                     </div>
 
