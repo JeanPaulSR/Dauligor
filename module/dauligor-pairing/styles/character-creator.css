@@ -1,0 +1,409 @@
+/* ────────────────────────────────────────────────────────────────────
+   Character Creator walkthrough.
+
+   A stepper-rail wizard (top), a swappable step body (middle), and a
+   Back/Next/Finish footer (bottom). Reuses the shared tokens + the
+   `.dauligor-detail` component from base.css for the bg/race/class
+   preview panes; everything else is scoped under `.dauligor-cc-*` /
+   `.dauligor-character-creator`.
+
+   See scripts/character-creator-app.js + docs/styles-guide.md.
+   ──────────────────────────────────────────────────────────────────── */
+
+.dauligor-character-creator__shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  color: var(--dauligor-text);
+}
+
+/* ── Stepper rail ─────────────────────────────────────────────────── */
+
+.dauligor-character-creator__stepper {
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--dauligor-border);
+  padding: 8px 10px;
+}
+
+.dauligor-cc-stepper {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dauligor-cc-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--dauligor-btn-bg);
+  border: 1px solid var(--dauligor-btn-border);
+  border-radius: 18px;
+  padding: 5px 12px 5px 6px;
+  color: var(--dauligor-text-muted);
+  font: inherit;
+  cursor: pointer;
+  transition: background-color .12s, border-color .12s, color .12s;
+}
+.dauligor-cc-step:hover { background: var(--dauligor-btn-hover-bg); }
+.dauligor-cc-step--current {
+  color: var(--dauligor-text);
+  border-color: rgba(var(--dauligor-accent-gold), .85);
+  background: rgba(var(--dauligor-accent-tint), .12);
+}
+.dauligor-cc-step.is-complete .dauligor-cc-step__num {
+  background: var(--dauligor-success);
+  color: #15210f;
+}
+
+.dauligor-cc-step__num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(var(--dauligor-accent-tint), .25);
+  color: var(--dauligor-text);
+  font-size: 12px;
+  font-weight: 700;
+}
+.dauligor-cc-step__label { font-size: 13px; white-space: nowrap; }
+.dauligor-cc-step__label i { opacity: .7; margin-right: 3px; }
+
+/* ── Body ─────────────────────────────────────────────────────────── */
+
+.dauligor-character-creator__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 18px;
+}
+
+.dauligor-cc-hint { color: var(--dauligor-text-muted); font-size: 12.5px; margin: 10px 0 0; }
+.dauligor-cc-warn { color: var(--dauligor-danger); font-style: normal; }
+.dauligor-cc-empty,
+.dauligor-cc-loading {
+  color: var(--dauligor-text-muted);
+  padding: 18px;
+  text-align: center;
+}
+.dauligor-cc-loading i { margin-right: 6px; }
+
+/* ── Buttons ──────────────────────────────────────────────────────── */
+
+.dauligor-cc-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--dauligor-btn-bg);
+  border: 1px solid var(--dauligor-btn-border);
+  border-radius: 5px;
+  color: var(--dauligor-text);
+  padding: 6px 14px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color .12s, border-color .12s;
+}
+.dauligor-cc-button:hover:not(:disabled) {
+  background: var(--dauligor-btn-hover-bg);
+  border-color: var(--dauligor-btn-border-hover);
+}
+.dauligor-cc-button:disabled { opacity: .45; cursor: default; }
+.dauligor-cc-button--primary {
+  border-color: rgba(var(--dauligor-accent-gold), .8);
+  background: rgba(var(--dauligor-accent-tint), .16);
+}
+.dauligor-cc-button--ghost { background: transparent; }
+
+/* ── Ability step ─────────────────────────────────────────────────── */
+
+.dauligor-cc-mode-tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+.dauligor-cc-mode-tab {
+  flex: 1 1 0;
+  background: var(--dauligor-btn-bg);
+  border: 1px solid var(--dauligor-btn-border);
+  border-radius: 6px;
+  color: var(--dauligor-text-muted);
+  padding: 10px;
+  font: inherit;
+  cursor: pointer;
+}
+.dauligor-cc-mode-tab i { margin-right: 6px; }
+.dauligor-cc-mode-tab.is-active {
+  color: var(--dauligor-text);
+  border-color: rgba(var(--dauligor-accent-gold), .85);
+  background: rgba(var(--dauligor-accent-tint), .14);
+}
+
+.dauligor-cc-budget {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px;
+  border: 1px solid var(--dauligor-border);
+  border-radius: 6px;
+  background: var(--dauligor-panel-alt);
+  margin-bottom: 12px;
+}
+.dauligor-cc-budget.is-over { border-color: var(--dauligor-danger); }
+.dauligor-cc-budget__num { font-size: 22px; font-weight: 700; color: var(--dauligor-accent-strong); }
+.dauligor-cc-budget.is-over .dauligor-cc-budget__num { color: var(--dauligor-danger); }
+.dauligor-cc-budget__label { font-size: 12px; color: var(--dauligor-text-muted); }
+
+.dauligor-cc-ability-grid,
+.dauligor-cc-assign-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dauligor-cc-assign-grid h4 { margin: 6px 0; color: var(--dauligor-accent-strong); }
+
+.dauligor-cc-ability-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--dauligor-border);
+  border-radius: 5px;
+  background: var(--dauligor-panel-alt);
+}
+.dauligor-cc-ability-row__label { flex: 1 1 auto; font-weight: 600; }
+.dauligor-cc-ability-row__label small { color: var(--dauligor-text-muted); font-weight: 400; margin-left: 4px; }
+.dauligor-cc-ability-row__value { min-width: 26px; text-align: center; font-size: 17px; font-weight: 700; }
+.dauligor-cc-ability-row__cost { min-width: 48px; text-align: right; color: var(--dauligor-text-muted); font-size: 12.5px; }
+
+.dauligor-cc-stepper-control { display: inline-flex; align-items: center; gap: 8px; }
+.dauligor-cc-spin {
+  width: 26px; height: 26px;
+  border: 1px solid var(--dauligor-btn-border);
+  background: var(--dauligor-btn-bg);
+  color: var(--dauligor-text);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+}
+.dauligor-cc-spin:hover:not(:disabled) { background: var(--dauligor-btn-hover-bg); }
+.dauligor-cc-spin:disabled { opacity: .35; cursor: default; }
+
+.dauligor-cc-assign-select {
+  background: var(--dauligor-panel);
+  border: 1px solid var(--dauligor-btn-border);
+  color: var(--dauligor-text);
+  border-radius: 4px;
+  padding: 4px 8px;
+  min-width: 70px;
+}
+
+/* roll pool */
+.dauligor-cc-rollpool__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+.dauligor-cc-manual { flex: 1 1 320px; }
+.dauligor-cc-manual label { display: block; font-size: 12.5px; color: var(--dauligor-text-muted); margin-bottom: 4px; }
+.dauligor-cc-manual__row { display: flex; gap: 6px; }
+.dauligor-cc-manual__row input {
+  flex: 1 1 auto;
+  background: var(--dauligor-panel);
+  border: 1px solid var(--dauligor-btn-border);
+  color: var(--dauligor-text);
+  border-radius: 4px;
+  padding: 5px 8px;
+}
+
+.dauligor-cc-rollpool__sets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.dauligor-cc-rollset {
+  position: relative;
+  border: 1px solid var(--dauligor-border);
+  border-radius: 6px;
+  background: var(--dauligor-panel-alt);
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: border-color .12s, background-color .12s;
+}
+.dauligor-cc-rollset:hover { border-color: var(--dauligor-btn-border-hover); }
+.dauligor-cc-rollset.is-selected {
+  border-color: rgba(var(--dauligor-accent-gold), .9);
+  background: rgba(var(--dauligor-accent-tint), .14);
+}
+.dauligor-cc-rollset__head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.dauligor-cc-rollset__owner { font-size: 12px; color: var(--dauligor-text-muted); }
+.dauligor-cc-rollset__total { font-size: 16px; font-weight: 700; color: var(--dauligor-accent-strong); }
+.dauligor-cc-rollset__dice { display: flex; flex-wrap: wrap; gap: 4px; }
+.dauligor-cc-die {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px; height: 24px;
+  border: 1px solid var(--dauligor-border);
+  border-radius: 4px;
+  background: var(--dauligor-panel);
+  font-size: 13px;
+  font-weight: 600;
+}
+.dauligor-cc-rollset__remove {
+  position: absolute;
+  top: 4px; right: 4px;
+  width: 18px; height: 18px;
+  border: none;
+  background: transparent;
+  color: var(--dauligor-text-muted);
+  cursor: pointer;
+  border-radius: 3px;
+  font-size: 11px;
+}
+.dauligor-cc-rollset__remove:hover { color: var(--dauligor-danger); background: rgba(0,0,0,.2); }
+
+/* ── Picker (background / race / class) ───────────────────────────── */
+
+.dauligor-cc-picker {
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) 1fr;
+  gap: 14px;
+  height: 100%;
+  min-height: 0;
+}
+.dauligor-cc-picker__list-col { display: flex; flex-direction: column; min-height: 0; }
+.dauligor-cc-search {
+  background: var(--dauligor-panel);
+  border: 1px solid var(--dauligor-btn-border);
+  color: var(--dauligor-text);
+  border-radius: 5px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+}
+.dauligor-cc-picker__list {
+  flex: 1 1 auto;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-right: 2px;
+}
+
+.dauligor-cc-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: var(--dauligor-btn-bg);
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--dauligor-text);
+  padding: 6px 10px;
+  font: inherit;
+  cursor: pointer;
+}
+.dauligor-cc-row:hover { background: var(--dauligor-btn-hover-bg); }
+.dauligor-cc-row.is-selected {
+  border-color: rgba(var(--dauligor-accent-gold), .9);
+  background: rgba(var(--dauligor-accent-tint), .14);
+}
+.dauligor-cc-row img,
+.dauligor-cc-row__noimg {
+  width: 28px; height: 28px;
+  flex: 0 0 auto;
+  border-radius: 4px;
+  object-fit: cover;
+  border: 1px solid var(--dauligor-border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dauligor-text-muted);
+  background: var(--dauligor-panel);
+}
+.dauligor-cc-row__name { flex: 1 1 auto; }
+.dauligor-cc-row__tag {
+  font-size: 10.5px;
+  letter-spacing: .5px;
+  color: var(--dauligor-text-muted);
+  border: 1px solid var(--dauligor-border);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+.dauligor-cc-picker__detail { min-height: 0; overflow: auto; }
+
+/* ── Stub (items) ─────────────────────────────────────────────────── */
+
+.dauligor-cc-stub {
+  max-width: 560px;
+  margin: 24px auto;
+  text-align: center;
+  color: var(--dauligor-text-muted);
+}
+.dauligor-cc-stub > i { font-size: 40px; opacity: .5; }
+.dauligor-cc-stub h3 { color: var(--dauligor-text); margin: 12px 0 8px; }
+
+/* ── Review ───────────────────────────────────────────────────────── */
+
+.dauligor-cc-review { display: flex; flex-direction: column; gap: 10px; max-width: 680px; margin: 0 auto; }
+.dauligor-cc-review__target {
+  color: var(--dauligor-text-muted);
+  padding: 8px 12px;
+  border: 1px dashed var(--dauligor-border);
+  border-radius: 6px;
+}
+.dauligor-cc-review-card {
+  border: 1px solid var(--dauligor-border);
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: var(--dauligor-panel-alt);
+  padding: 10px 14px;
+}
+.dauligor-cc-review-card.is-ok { border-left-color: var(--dauligor-success); }
+.dauligor-cc-review-card.is-missing { border-left-color: var(--dauligor-warning); }
+.dauligor-cc-review-card__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.dauligor-cc-editlink {
+  background: none;
+  border: none;
+  color: var(--dauligor-text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+.dauligor-cc-editlink:hover { color: var(--dauligor-accent-strong); }
+.dauligor-cc-scorepills { display: flex; flex-wrap: wrap; gap: 6px; }
+.dauligor-cc-scorepill {
+  border: 1px solid var(--dauligor-border);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-weight: 600;
+  font-size: 13px;
+  background: var(--dauligor-panel);
+}
+
+/* ── Footer ───────────────────────────────────────────────────────── */
+
+.dauligor-character-creator__footer {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--dauligor-border);
+  padding: 10px 14px;
+}
+.dauligor-cc-footer__actions { display: flex; gap: 8px; }
+.dauligor-cc-status { font-size: 12.5px; color: var(--dauligor-text-muted); }
+.dauligor-cc-status--success { color: var(--dauligor-success); }
+.dauligor-cc-status--danger { color: var(--dauligor-danger); }
+.dauligor-cc-status--info { color: var(--dauligor-text-muted); }

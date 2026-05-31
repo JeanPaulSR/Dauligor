@@ -6,6 +6,7 @@ import { openDauligorImporter } from "./importer-app.js";
 import { initializeSocket } from "./import-service.js";
 import { openSpellPreparationManager } from "./spell-preparation-app.js";
 import { openDauligorGmConsole } from "./gm-app.js";
+import { openDauligorCharacterCreator } from "./character-creator-app.js";
 import { log, notifyWarn } from "./utils.js";
 
 Hooks.once("init", () => {
@@ -81,6 +82,20 @@ function registerSettings() {
       "production": "Production (https://www.dauligor.com)"
     },
     default: "local"
+  });
+
+  // Shared ability-score roll pool for the Character Creator. World-scoped
+  // so every client sees the same sets; hidden from the settings UI
+  // (managed entirely from the creator's Ability Scores step). Its
+  // onChange fires on every client when the GM writes the pool, which the
+  // creator listens on (via ability-roll-pool's onRollPoolChanged) to
+  // re-render the ability step live across the table.
+  game.settings.register(MODULE_ID, SETTINGS.abilityRollPool, {
+    scope: "world",
+    config: false,
+    type: Array,
+    default: [],
+    onChange: () => Hooks.callAll(`${MODULE_ID}.rollPoolChanged`)
   });
 }
 
@@ -458,7 +473,7 @@ async function openLauncher({ actor = null } = {}) {
       action: "character-creator",
       label: "Character Creator",
       icon: "fas fa-user-plus",
-      callback: async () => openUnderConstructionDialog("Character Creator")
+      callback: async () => openDauligorCharacterCreator(actorDoc ? { actor: actorDoc } : {})
     },
     {
       action: "hp-gain-behavior",
@@ -497,6 +512,7 @@ async function openLauncher({ actor = null } = {}) {
       <p>Implemented now:</p>
       <ul>
         <li><strong>Import</strong>${actorDoc ? "</li><li><strong>Level Up</strong> from character sheets" : ""}</li>
+        <li><strong>Character Creator</strong> — guided walkthrough${actorDoc ? " (applies to this actor)" : " (builds a new character)"}</li>
       </ul>
       <p>The remaining entries here are placeholders and currently under construction.</p>
     `,

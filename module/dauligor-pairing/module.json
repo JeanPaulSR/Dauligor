@@ -52,6 +52,7 @@
     "styles/character-sheet.css",
     "styles/directory-tools.css",
     "styles/gm-console.css",
+    "styles/character-creator.css",
     "styles/responsive.css"
   ]
 }
