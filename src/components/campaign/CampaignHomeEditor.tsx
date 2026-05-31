@@ -197,6 +197,25 @@ export default function CampaignHomeEditor({ campaignId, campaignName = '', full
     setSelectedId(b.id);
     setAddAt(null);
   };
+  // Sync a Columns block's column count. Growing adds empty columns; shrinking
+  // moves the dropped columns' blocks into the last kept column so nothing is
+  // lost. (Columns are managed here, never added/removed individually.)
+  const setColumnCount = (id: string, n: number) => {
+    const target = Math.max(2, Math.min(4, Math.round(n)));
+    mutate((draft) => {
+      const b = findBlock(draft, id);
+      if (!b || b.blockType !== 'columns') return;
+      b.columns = target as 2 | 3 | 4;
+      const cols = b.children;
+      while (cols.length < target) cols.push(makeBlock('column', crypto.randomUUID()));
+      if (cols.length > target) {
+        const keep = cols.slice(0, target);
+        const last = keep[target - 1];
+        cols.slice(target).forEach((ec) => { if (isContainer(ec) && isContainer(last)) last.children.push(...ec.children); });
+        b.children = keep;
+      }
+    });
+  };
 
   const performDrop = (targetId: string, pos: 'before' | 'after' | 'into') => {
     if (!dragId || dragId === targetId || isDescendant(blocks, dragId, targetId)) { setDragId(null); setDropInfo(null); return; }
@@ -286,6 +305,7 @@ export default function CampaignHomeEditor({ campaignId, campaignName = '', full
             onDragEndAll={() => { setDragId(null); setDropInfo(null); }}
             onHover={setDropInfo}
             onDrop={performDrop}
+            onAddInside={(cid) => setAddAt({ containerId: cid })}
           />
         </div>
         <div className="p-2 border-t border-gold/20">
@@ -326,6 +346,7 @@ export default function CampaignHomeEditor({ campaignId, campaignName = '', full
               onDuplicate={duplicateBlock}
               onRemove={removeBlock}
               onAddInside={(cid) => setAddAt({ containerId: cid })}
+              onColumnCount={setColumnCount}
             />
           ) : (
             <p className="insp-empty">Select a block in the structure tree to edit it.</p>
@@ -418,6 +439,7 @@ interface TreeProps {
   onSelect: (id: string) => void; onDragStart: (id: string) => void; onDragEndAll: () => void;
   onHover: (info: { id: string; pos: 'before' | 'after' | 'into' } | null) => void;
   onDrop: (id: string, pos: 'before' | 'after' | 'into') => void;
+  onAddInside: (containerId: string) => void;
   depth?: number;
 }
 function BlockTree(p: TreeProps) {
@@ -426,6 +448,9 @@ function BlockTree(p: TreeProps) {
   return (
     <div className={depth > 0 ? 'ml-3.5 border-l border-dashed border-gold/20 pl-1' : ''}>
       {blocks.map((b) => {
+        // `column` cells are rendered by their parent `columns` block as labeled
+        // sections (ColumnsSections), never as a generic draggable row.
+        if (b.blockType === 'column') return null;
         const meta = BLOCK_TYPE_META[b.blockType];
         const Icon = ICONS[meta.icon] ?? LayoutGrid;
         const isC = isContainer(b);
@@ -469,7 +494,10 @@ function BlockTree(p: TreeProps) {
               <span className="flex-1 truncate">{meta.label}</span>
             </div>
 
-            {isC && !collapsed[b.id] && (
+            {isC && !collapsed[b.id] && b.blockType === 'columns' && (
+              <ColumnsSections columns={b as ContainerBlock} tree={p} depth={depth} />
+            )}
+            {isC && !collapsed[b.id] && b.blockType !== 'columns' && (
               <NestZone block={b as ContainerBlock} active={p.dragId != null && p.dragId !== b.id && !isDescendant(blocks, p.dragId, b.id)} isOver={di === 'into'} onHover={() => p.onHover({ id: b.id, pos: 'into' })} onDrop={() => p.onDrop(b.id, 'into')}>
                 <BlockTree {...p} blocks={(b as ContainerBlock).children} depth={depth + 1} />
               </NestZone>
@@ -507,6 +535,43 @@ function NestZone({ block, active, isOver, onHover, onDrop, children }: { block:
   );
 }
 
+/** Renders a `columns` block's cells as labeled "Column 1 / 2 / …" sections in
+ *  the tree, so it's unambiguous which column a block lives in. Each section is
+ *  its own drop-into target with a "+ Add" button; its blocks render via a
+ *  nested BlockTree (with before/after reorder + the trailing drop zone). */
+function ColumnsSections({ columns, tree: p, depth }: { columns: ContainerBlock; tree: TreeProps; depth: number }) {
+  return (
+    <div className="ml-3.5 border-l border-dashed border-gold/20 pl-1 space-y-1.5 mt-0.5">
+      {columns.children.map((col, ci) => {
+        const active = p.dragId != null && p.dragId !== col.id && !isDescendant([columns], p.dragId, col.id);
+        const over = p.dropInfo?.id === col.id && p.dropInfo.pos === 'into';
+        const colChildren = isContainer(col) ? col.children : [];
+        return (
+          <div key={col.id}>
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[9px] uppercase tracking-widest font-bold text-gold/70">Column {ci + 1}</span>
+              <button onClick={() => p.onAddInside(col.id)} className="text-[10px] text-ink/40 hover:text-gold">+ Add</button>
+            </div>
+            <div
+              onDragOver={(e) => { if (!active) return; e.preventDefault(); e.stopPropagation(); p.onHover({ id: col.id, pos: 'into' }); }}
+              onDrop={(e) => { if (!active) return; e.preventDefault(); e.stopPropagation(); p.onDrop(col.id, 'into'); }}
+              className={cn('ml-1 border-l border-dashed pl-1', over ? 'border-gold' : 'border-gold/20')}
+            >
+              {colChildren.length === 0 ? (
+                <div className={cn('px-2 py-1 text-[10px] italic border border-dashed', over ? 'border-gold text-gold bg-gold/10' : 'border-transparent text-ink/30')}>
+                  empty — drop or “+ Add” a block
+                </div>
+              ) : (
+                <BlockTree {...p} blocks={colChildren} depth={depth + 1} />
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ════════════════════ Inspector ════════════════════ */
 interface InspectorProps {
   block: HomeBlock;
@@ -516,8 +581,9 @@ interface InspectorProps {
   onDuplicate: (id: string) => void;
   onRemove: (id: string) => void;
   onAddInside: (containerId: string) => void;
+  onColumnCount: (id: string, n: number) => void;
 }
-function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onAddInside }: InspectorProps) {
+function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onAddInside, onColumnCount }: InspectorProps) {
   const meta = BLOCK_TYPE_META[block.blockType];
   const i = parent?.index ?? 0;
   const n = parent?.list.length ?? 1;
@@ -608,10 +674,9 @@ function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onA
       </>)}
 
       {block.blockType === 'columns' && (<>
-        <Stepper label="Columns" value={block.columns} min={2} max={4} onChange={(v) => set({ columns: v })} />
+        <Stepper label="Columns" value={block.columns} min={2} max={4} onChange={(v) => onColumnCount(block.id, v)} />
         <Seg label="Gap" value={block.gap} options={[['small', 'S'], ['medium', 'M'], ['large', 'L']]} onChange={(v) => set({ gap: v })} />
-        <Button onClick={() => onAddInside(block.id)} className="btn-gold w-full h-8 text-xs">Add column block</Button>
-        <p className="field-hint">Each nested block becomes one column cell, left to right.</p>
+        <p className="field-hint">Each column is its own section in the structure tree — open this block there to fill Column 1, Column 2, … separately (add a block or drag one in). Reducing the count merges the last column's blocks into the previous one, so nothing is lost.</p>
       </>)}
     </div>
   );

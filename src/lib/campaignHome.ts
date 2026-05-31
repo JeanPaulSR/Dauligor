@@ -22,7 +22,8 @@ export type HomeBlockType =
   | 'entity-row'       // a row/grid of entity cards (articles, classes, items, …)
   | 'entity-feature'   // one large highlighted entity
   | 'group'            // container: a titled card holding children
-  | 'columns';         // container: a 2–4 column grid of children
+  | 'columns'          // container: a 2–4 column grid; each child is a `column`
+  | 'column';          // a single column cell inside a `columns` block
 
 interface BlockBase {
   /** Stable id (uuid). Generated client-side when a block is added. */
@@ -160,6 +161,16 @@ export interface ColumnsBlock extends BlockBase {
   blockType: 'columns';
   columns: 2 | 3 | 4;
   gap: 'small' | 'medium' | 'large';
+  /** Exactly `columns` child blocks, each a `column`. The editor keeps the count
+   *  in sync; the renderer lays them out as a grid (one grid cell per column). */
+  children: HomeBlock[];
+}
+/** A single column cell inside a `columns` block. Purely structural — no own
+ *  config, just its own vertically-stacked children. Only ever nested directly
+ *  under a `columns` block (the editor manages columns, you never add one
+ *  directly), so it has no add-block-picker entry. */
+export interface ColumnBlock extends BlockBase {
+  blockType: 'column';
   children: HomeBlock[];
 }
 
@@ -173,11 +184,12 @@ export type HomeBlock =
   | EntityRowBlock
   | EntityFeatureBlock
   | GroupBlock
-  | ColumnsBlock;
+  | ColumnsBlock
+  | ColumnBlock;
 
-export type ContainerBlock = GroupBlock | ColumnsBlock;
+export type ContainerBlock = GroupBlock | ColumnsBlock | ColumnBlock;
 export function isContainer(b: HomeBlock): b is ContainerBlock {
-  return b.blockType === 'group' || b.blockType === 'columns';
+  return b.blockType === 'group' || b.blockType === 'columns' || b.blockType === 'column';
 }
 
 /** Display metadata for the block-type picker. `icon` is a lucide icon NAME —
@@ -186,7 +198,7 @@ export function isContainer(b: HomeBlock): b is ContainerBlock {
  *  the add-block menu into Content vs Containers. */
 export const BLOCK_TYPE_META: Record<
   HomeBlockType,
-  { label: string; icon: string; description: string; group: 'content' | 'container' }
+  { label: string; icon: string; description: string; group: 'content' | 'container' | 'cell' }
 > = {
   hero:             { label: 'Header',           icon: 'Sparkles',   description: 'A large title + subtitle banner.',          group: 'content' },
   'entity-row':     { label: 'Entity Row',       icon: 'LayoutGrid', description: 'A row/grid of cards — articles, classes, items, system pages…', group: 'content' },
@@ -197,7 +209,11 @@ export const BLOCK_TYPE_META: Record<
   image:            { label: 'Image',            icon: 'ImageIcon',  description: 'A banner image + optional caption.',        group: 'content' },
   divider:          { label: 'Divider',          icon: 'Minus',      description: 'A line, dots, or spacer.',                  group: 'content' },
   group:            { label: 'Group',            icon: 'Square',     description: 'A titled card that holds other blocks.',    group: 'container' },
-  columns:          { label: 'Columns',          icon: 'Columns3',   description: 'A 2–4 column grid; each child is a cell.',   group: 'container' },
+  columns:          { label: 'Columns',          icon: 'Columns3',   description: 'Side-by-side columns; fill each one separately.', group: 'container' },
+  // `column` is managed by its parent Columns block, never added on its own —
+  // group: 'cell' keeps it out of the add-block picker (which shows content +
+  // container only).
+  column:           { label: 'Column',           icon: 'Square',     description: 'A single column inside a Columns block.',   group: 'cell' },
 };
 
 export const HOME_BLOCK_TYPES = Object.keys(BLOCK_TYPE_META) as HomeBlockType[];
@@ -242,7 +258,10 @@ export function makeBlock(type: HomeBlockType, id: string): HomeBlock {
     case 'group':
       return { id, blockType: 'group', title: '', showTitle: true, style: 'card', children: [] };
     case 'columns':
-      return { id, blockType: 'columns', columns: 2, gap: 'medium', children: [] };
+      return { id, blockType: 'columns', columns: 2, gap: 'medium',
+        children: [makeBlock('column', crypto.randomUUID()), makeBlock('column', crypto.randomUUID())] };
+    case 'column':
+      return { id, blockType: 'column', children: [] };
   }
 }
 
@@ -363,9 +382,20 @@ export function parseHomeBlock(row: any): HomeBlock | null {
       return { id, blockType: 'group', title: s(config.title), showTitle: config.showTitle !== false,
         style: ['card', 'bordered', 'plain'].includes(config.style) ? config.style : 'card',
         children: Array.isArray(config.children) ? config.children.map(parseHomeBlock).filter(Boolean) as HomeBlock[] : [] };
-    case 'columns':
-      return { id, blockType: 'columns', columns: clampColumnsContainer(config.columns),
+    case 'columns': {
+      const parsed = Array.isArray(config.children) ? config.children.map(parseHomeBlock).filter(Boolean) as HomeBlock[] : [];
+      // A columns block holds only `column` cells. Wrap any loose (legacy/flat)
+      // child in its own column so older data still renders; ensure ≥2 columns.
+      const cols: HomeBlock[] = parsed.every((c) => c.blockType === 'column')
+        ? parsed
+        : parsed.map((c) => ({ id: crypto.randomUUID(), blockType: 'column', children: [c] }) as HomeBlock);
+      while (cols.length < 2) cols.push({ id: crypto.randomUUID(), blockType: 'column', children: [] } as HomeBlock);
+      return { id, blockType: 'columns', columns: clampColumnsContainer(cols.length),
         gap: config.gap === 'small' ? 'small' : config.gap === 'large' ? 'large' : 'medium',
+        children: cols };
+    }
+    case 'column':
+      return { id, blockType: 'column',
         children: Array.isArray(config.children) ? config.children.map(parseHomeBlock).filter(Boolean) as HomeBlock[] : [] };
   }
 }

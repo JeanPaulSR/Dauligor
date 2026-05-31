@@ -399,14 +399,20 @@ export default function CampaignHomeBlocks({ blocks, recommendedLore, campaignNa
         );
 
       case 'columns': {
-        const colClass = { 2: 'md:grid-cols-2', 3: 'md:grid-cols-3', 4: 'md:grid-cols-2 lg:grid-cols-4' }[block.columns];
+        // Each child is a `column` cell that stacks its own blocks. Grid column
+        // count follows the actual number of columns (clamped 2–4).
+        const cols = (block.children || []).filter((c) => c.blockType === 'column').slice(0, 4);
+        if (cols.length === 0) return null;
+        const n = Math.max(2, cols.length) as 2 | 3 | 4;
+        const colClass = { 2: 'md:grid-cols-2', 3: 'md:grid-cols-3', 4: 'md:grid-cols-2 lg:grid-cols-4' }[n];
         const gap = block.gap === 'small' ? 'gap-4' : block.gap === 'large' ? 'gap-12' : 'gap-8';
-        return (
-          <section key={block.id} className={`grid ${colClass} ${gap}`}>
-            {block.children.map((c) => <div key={c.id} className="space-y-12">{renderBlock(c)}</div>)}
-          </section>
-        );
+        return <section key={block.id} className={`grid ${colClass} ${gap}`}>{cols.map(renderBlock)}</section>;
       }
+
+      case 'column':
+        // One column cell: its own blocks, stacked. (Rendered only as a child of
+        // a `columns` block; an empty column simply contributes an empty cell.)
+        return <div key={block.id} className="space-y-12">{block.children.map(renderBlock)}</div>;
 
       default:
         return null;

@@ -199,6 +199,7 @@ const ALLOWED_HOME_BLOCK_TYPES = new Set([
   "entity-feature",
   "group",
   "columns",
+  "column",
 ]);
 
 function coerceCampaignValue(value: any): any {
