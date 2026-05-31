@@ -718,8 +718,8 @@ function EntityRefPicker({ mode, value, onChange }: {
                       onDrop={() => reorder(idx)}
                       className="data-table-row grid grid-cols-[auto_1fr_auto_auto_auto] gap-2 items-center">
                       <GripVertical className="w-3.5 h-3.5 text-ink/30 cursor-grab" />
-                      <span className="text-xs font-serif truncate" title={r.title || r.name}>
-                        {r.title || r.name || r.id}
+                      <span className={cn('text-xs font-serif truncate', !(r.title || r.name || r.id) && 'italic text-ink/40')} title={r.title || r.name}>
+                        {r.title || r.name || (ph ? 'Empty card' : r.id)}
                         {!!r.span && r.span > 1 && <span className="label-text ml-1.5 text-gold/70">×{r.span}</span>}
                       </span>
                       <span className="label-text">{kindLabel(r.kind)}</span>
@@ -763,6 +763,13 @@ function EntityRefPicker({ mode, value, onChange }: {
                 })}
               </div>
             </div>
+      )}
+      {mode === 'multi' && (
+        <button
+          onClick={() => onChange([...list, makePlaceholderRef('')])}
+          className="btn-gold w-full h-8 text-xs">
+          + Add empty card
+        </button>
       )}
       {mode === 'single' && single && (
         <div className="data-table"><div className="data-table-row grid grid-cols-[1fr_auto_auto] gap-2 items-center">
