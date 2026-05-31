@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Page — Minimal Layout Concepts (v2)</title>
+<style>
+  :root{
+    --bg:#17171b; --panel:#1e1e23; --panel-soft:#1c1c20; --ink:#dcd7cc; --ink-soft:#a59f94;
+    --muted:#736d62; --accent:#7ba3d6; --accent-bright:#aecaf0; --line:rgba(255,255,255,.07);
+    --line-mid:rgba(255,255,255,.12);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:#0f0f12;color:var(--ink);font-family:"Inter",-apple-system,"Segoe UI",Roboto,sans-serif;font-size:15px;line-height:1.6;}
+  .wrap{max-width:1180px;margin:0 auto;padding:40px 26px 90px;}
+  header.hero{border-bottom:1px solid var(--line-mid);padding-bottom:20px;margin-bottom:10px;}
+  header.hero .eyebrow{text-transform:uppercase;letter-spacing:1.4px;font-size:11px;color:var(--accent);font-weight:700;margin-bottom:8px;}
+  header.hero h1{font-family:"Cormorant Garamond",Georgia,serif;font-weight:600;font-size:43px;line-height:1.05;margin:0 0 8px;color:#f1ece0;}
+  header.hero .tagline{font-family:"Cormorant Garamond",serif;font-style:italic;font-size:19px;color:var(--ink-soft);margin:0;}
+  .lead{font-size:14.5px;color:var(--ink-soft);max-width:780px;margin:16px 0 0;}
+  .concept{margin-top:52px;}
+  .concept > .meta{display:flex;align-items:baseline;gap:13px;flex-wrap:wrap;margin-bottom:5px;}
+  .concept > .meta h2{font-family:"Cormorant Garamond",serif;font-size:28px;font-weight:600;margin:0;color:#f1ece0;}
+  .concept > .meta .num{font-family:"Cormorant Garamond",serif;font-size:14px;color:#0f0f12;background:var(--accent);width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;}
+  .concept > .desc{font-size:13.5px;color:var(--ink-soft);margin:2px 0 15px;max-width:840px;}
+  .concept > .desc b{color:var(--accent-bright);font-weight:600;}
+  .tag{display:inline-block;font-size:10.5px;font-weight:600;letter-spacing:.4px;padding:2px 9px;border-radius:99px;background:rgba(123,163,214,.16);color:var(--accent-bright);}
+
+  .frame{border:1px solid var(--line-mid);border-radius:11px;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,.45);}
+  .frame .bar{display:flex;align-items:center;gap:7px;padding:9px 13px;background:#1a1a1f;border-bottom:1px solid var(--line);}
+  .frame .bar i{width:10px;height:10px;border-radius:50%;background:#33333a;display:inline-block;}
+  .frame .bar .url{margin-left:10px;font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--muted);}
+  .frame .view{padding:40px 46px;background:var(--bg);}
+
+  /* shared page bits */
+  .pg-eyebrow{text-transform:uppercase;letter-spacing:2.4px;font-size:10.5px;color:var(--accent);font-weight:700;}
+  .pg-title{font-family:"Cormorant Garamond",serif;font-weight:600;font-size:46px;line-height:1.02;margin:6px 0 0;color:#f3eee2;}
+  .pg-desc{color:var(--ink-soft);font-size:15px;line-height:1.75;max-width:60ch;}
+  .ename{font-family:"Cormorant Garamond",serif;font-weight:600;color:var(--accent-bright);}
+  .ebody{color:var(--ink-soft);font-size:14px;line-height:1.7;}
+  .ebody b{color:var(--ink);font-weight:600;}
+  .ref{color:var(--accent-bright);border-bottom:1px dotted var(--accent);cursor:help;}
+  .rail{font-size:13px;}
+  .rail .lbl{text-transform:uppercase;letter-spacing:1.6px;font-size:9.5px;color:var(--muted);font-weight:700;margin-bottom:9px;}
+  .rail a{display:block;color:var(--ink-soft);text-decoration:none;padding:3px 0;}
+  .rail a.on{color:var(--accent-bright);}
+  .rail a:hover{color:var(--ink);}
+
+  /* C1 — Lexicon (term gutter) */
+  .c1 .row{display:grid;grid-template-columns:200px 1fr;gap:34px;padding:22px 0;border-top:1px solid var(--line);}
+  .c1 .row:first-of-type{border-top:1px solid var(--line-mid);}
+  .c1 .row .term{text-align:right;}
+  .c1 .row .term h3{font-family:"Cormorant Garamond",serif;font-size:25px;color:var(--accent-bright);margin:0;line-height:1.1;}
+  .c1 .row .term .meta{font-size:11px;color:var(--muted);margin-top:4px;}
+
+  /* C2 — Sticky Sidelabel */
+  .c2 .stage{display:grid;grid-template-columns:1fr 200px;gap:40px;}
+  .c2 .row{display:grid;grid-template-columns:170px 1fr;gap:30px;padding:20px 0;border-top:1px solid var(--line);}
+  .c2 .row .side h3{font-family:"Cormorant Garamond",serif;font-size:22px;color:var(--accent-bright);margin:0;position:sticky;top:10px;}
+  .c2 .row .side .pin{font-size:10px;color:var(--muted);margin-top:3px;}
+
+  /* C3 — Margin numerals */
+  .c3 .row{display:grid;grid-template-columns:84px 1fr;gap:20px;padding:24px 0;border-top:1px solid var(--line);align-items:start;}
+  .c3 .row .nl{font-family:"Cormorant Garamond",serif;font-size:46px;line-height:.9;color:var(--line-mid);font-weight:600;}
+  .c3 .row.on .nl{color:var(--accent);}
+  .c3 .row h3{font-family:"Cormorant Garamond",serif;font-size:24px;color:var(--accent-bright);margin:0 0 5px;}
+
+  /* C4 — Hairline manuscript */
+  .c4{max-width:640px;}
+  .c4 .entry{padding:26px 0;border-top:1px solid var(--line);}
+  .c4 .entry .kicker{text-transform:uppercase;letter-spacing:2.6px;font-size:10px;color:var(--accent);font-weight:700;margin-bottom:4px;}
+  .c4 .entry h3{font-family:"Cormorant Garamond",serif;font-size:27px;color:#f0ebdf;margin:0 0 7px;font-weight:600;}
+
+  .reco{margin-top:58px;background:var(--panel);border:1px solid var(--line-mid);border-left:3px solid var(--accent);border-radius:8px;padding:18px 22px;}
+  .reco h3{font-family:"Cormorant Garamond",serif;font-size:22px;margin:0 0 8px;color:#f1ece0;}
+  .reco li{margin:6px 0;font-size:13.5px;color:var(--ink-soft);}
+  .reco b{color:var(--accent-bright);}
+  code{font-family:"JetBrains Mono",monospace;font-size:12px;background:rgba(123,163,214,.12);color:var(--accent-bright);padding:1px 5px;border-radius:3px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="eyebrow">Layout concepts v2 &middot; 2026-05-29 &middot; dark theme</div>
+  <h1>System Page &mdash; Minimal Layouts</h1>
+  <p class="tagline">Subtler, more distinctive, and using the full width &mdash; entries that read as part of the page, not boxes on it.</p>
+</header>
+<p class="lead">
+  From your notes: drop the boxed cards (let entries <b>blend into the page</b>), use the space better, and lean into a
+  <b>unique, minimal</b> structure. Four directions below, all in the dark palette, all box-free (separation is hairlines +
+  typography + layout). Each handles navigation differently. Pick one and I'll build it as the real reader.
+</p>
+
+<!-- C1 — Lexicon -->
+<section class="concept">
+  <div class="meta"><span class="num">1</span><h2>Lexicon</h2><span class="tag">term-gutter &middot; no separate rail needed</span></div>
+  <p class="desc">A definition-list spine: the entry <b>name lives in a left gutter</b> (right-aligned, so it sits against the
+    body), the text flows in a wide column. The gutter of names <em>is</em> the index, so it doubles as navigation &mdash; no
+    extra rail. Hairlines, not boxes. Reads like a scholarly lexicon and fills the width.</p>
+  <div class="frame"><div class="bar"><i></i><i></i><i></i><span class="url">/system/condition</span></div>
+    <div class="view">
+      <div class="pg-eyebrow">System Page</div>
+      <div class="pg-title" style="margin-bottom:18px;">Conditions</div>
+      <p class="pg-desc" style="margin:0 0 26px;">Temporary states &mdash; imposed by spells, attacks, or the environment &mdash; that change what a creature can do until they end.</p>
+      <div class="c1">
+        <div class="row"><div class="term"><h3>Blinded</h3><div class="meta">#blinded</div></div><div class="ebody">Cannot see and automatically fails any check that needs sight. Attacks against it have <b>advantage</b>; its own attacks have <b>disadvantage</b>.</div></div>
+        <div class="row"><div class="term"><h3>Charmed</h3><div class="meta">#charmed</div></div><div class="ebody">Cannot attack the charmer or target it with harmful effects. The charmer has advantage on social checks against it.</div></div>
+        <div class="row"><div class="term"><h3>Frightened</h3><div class="meta">#frightened</div></div><div class="ebody">Has <b>disadvantage</b> on checks and attacks while the source of its fear is in sight, and cannot willingly move closer to that source.</div></div>
+        <div class="row"><div class="term"><h3>Prone</h3><div class="meta">#prone</div></div><div class="ebody">Can only crawl unless it stands. Disadvantage on attacks; melee attackers have advantage, ranged have disadvantage. Compare <span class="ref">&amp;condition[blinded]</span>.</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- C2 — Sticky Sidelabel -->
+<section class="concept">
+  <div class="meta"><span class="num">2</span><h2>Sticky Sidelabel</h2><span class="tag">name pins beside its body</span></div>
+  <p class="desc">Each entry's <b>name sits in a left column and sticks</b> as you scroll its body &mdash; so the term you're
+    reading is always labelled at your eye line, Tufte-sidenote style. A slim Contents rail on the right. Distinctive, calm,
+    and box-free.</p>
+  <div class="frame"><div class="bar"><i></i><i></i><i></i><span class="url">/system/condition#frightened</span></div>
+    <div class="view">
+      <div class="pg-eyebrow">System Page</div>
+      <div class="pg-title" style="margin-bottom:22px;">Conditions</div>
+      <div class="c2"><div class="stage"><div>
+        <div class="row"><div class="side"><h3>Blinded</h3><div class="pin">&#9679; in view</div></div><div class="ebody">Cannot see and automatically fails any check that needs sight. Attacks against it have advantage; its own attacks have disadvantage.</div></div>
+        <div class="row"><div class="side"><h3>Charmed</h3></div><div class="ebody">Cannot attack the charmer or target it with harmful effects. The charmer has advantage on social ability checks against it.</div></div>
+        <div class="row"><div class="side"><h3>Frightened</h3></div><div class="ebody">Has disadvantage on ability checks and attack rolls while the source of its fear is in sight, and cannot willingly move closer to that source. It remains until the fear subsides.</div></div>
+      </div>
+      <div class="rail"><div class="lbl">Contents</div><a class="on">Blinded</a><a>Charmed</a><a>Frightened</a><a>Prone</a></div>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- C3 — Margin Numerals -->
+<section class="concept">
+  <div class="meta"><span class="num">3</span><h2>Margin Numerals</h2><span class="tag">editorial index</span></div>
+  <p class="desc">Big, faint serif <b>numerals in the margin</b> (01, 02&hellip;) number each entry; the active one lights up.
+    Gives rhythm and a sense of place in a long list without any chrome. Pairs with an optional right rail. Editorial and unmistakably ours.</p>
+  <div class="frame"><div class="bar"><i></i><i></i><i></i><span class="url">/system/condition</span></div>
+    <div class="view">
+      <div class="pg-eyebrow">System Page</div>
+      <div class="pg-title" style="margin-bottom:8px;">Conditions</div>
+      <p class="pg-desc" style="margin:0 0 24px;">Temporary states that change what a creature can do until they end.</p>
+      <div class="c3">
+        <div class="row on"><div class="nl">01</div><div><h3>Blinded</h3><div class="ebody">Cannot see and automatically fails any check that needs sight. Attacks against it have advantage; its own attacks have disadvantage.</div></div></div>
+        <div class="row"><div class="nl">02</div><div><h3>Charmed</h3><div class="ebody">Cannot attack the charmer or target it with harmful effects. The charmer has advantage on social checks against it.</div></div></div>
+        <div class="row"><div class="nl">03</div><div><h3>Frightened</h3><div class="ebody">Has disadvantage on checks and attacks while the source of its fear is in sight, and cannot willingly move closer to it.</div></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- C4 — Hairline Manuscript -->
+<section class="concept">
+  <div class="meta"><span class="num">4</span><h2>Hairline Manuscript</h2><span class="tag">purest minimal</span></div>
+  <p class="desc">A single narrow measure, entries divided only by a <b>hairline</b> and air, each with a tiny letterspaced
+    kicker above a serif name. No columns, no boxes &mdash; just well-set type. The most restrained option; best for shorter,
+    prose pages. (Right rail optional.)</p>
+  <div class="frame"><div class="bar"><i></i><i></i><i></i><span class="url">/system/condition</span></div>
+    <div class="view" style="display:flex;justify-content:center;">
+      <div class="c4">
+        <div class="pg-eyebrow" style="text-align:center;">System Page</div>
+        <div class="pg-title" style="text-align:center;font-size:42px;">Conditions</div>
+        <p class="pg-desc" style="text-align:center;margin:10px auto 6px;">Temporary states that change what a creature can do until they end.</p>
+        <div class="entry"><div class="kicker">Condition</div><h3>Blinded</h3><div class="ebody">A blinded creature cannot see and automatically fails any check that requires sight. Attack rolls against it have advantage, and its own attack rolls have disadvantage.</div></div>
+        <div class="entry"><div class="kicker">Condition</div><h3>Prone</h3><div class="ebody">A prone creature can only crawl unless it stands. It has disadvantage on attacks; melee attackers have advantage against it, while ranged attackers have disadvantage.</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="reco">
+  <h3>My read</h3>
+  <ul>
+    <li><b>Lexicon (1)</b> is my pick: most space-efficient, the name-gutter removes the need for a separate rail, and it reads as one continuous reference page rather than stacked cards. Scales cleanly to long lists.</li>
+    <li><b>Sticky Sidelabel (2)</b> is the most distinctive interaction; <b>Margin Numerals (3)</b> the most editorial. <b>Hairline Manuscript (4)</b> is the most restrained for shorter pages.</li>
+    <li>All four are box-free and theme-adaptive (they'll render gold on the dark/parchment themes, blue on light). The page <b>Description</b> stays as a quiet lead at the top in every one.</li>
+  </ul>
+</div>
+
+</div>
+</body>
+</html>

@@ -52,6 +52,16 @@ correctly point only at live rows and need no walk.
 
 ## The joint e2e (the "ensure we're not missing anything" test)
 
+> **UPDATE 2026-05-30 — I ran this at the data layer myself; it PASSED (19/19).**
+> Seeded the exact cluster below into local D1 and drove the real approve path
+> (guard #1 → ordering → `buildApprovedStatements` → one `env.DB.batch()`) through
+> the local worker. The whole cluster lands atomically in FK-safe order,
+> `subclass.preview` round-trips, all revisions flip to approved, a dangling ref is
+> rejected, and a bad-statement batch rolls back with nothing applied. The only
+> layer not exercised is the **HTTP endpoint + admin Firebase auth + the
+> Approve-block button** (I can't log in as admin). If you want the last-mile UI
+> confirmation, run the click-through below in the app — but the engine is verified.
+
 This is the test that was blocked on Part D. Author the canonical cluster, all referencing each other
 as same-block drafts (client-minted UUIDs):
 

@@ -636,100 +636,16 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
               </CardContent>
             </Card>
           ) : activeBundle ? (
-            <Card className="border-gold/10">
-              <CardHeader>
-                <div className="space-y-2">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    {activeBundle.name}
-                  </CardTitle>
-                  {activeBundle.description && (
-                    <p className="text-sm text-ink/70 leading-relaxed">
-                      {activeBundle.description}
-                    </p>
-                  )}
-                  <p className="text-xs text-ink/55">
-                    <span className="font-medium text-ink/75">
-                      {activeBundle.proposer_display_name ||
-                        activeBundle.proposer_username ||
-                        activeBundle.created_by_user_id ||
-                        'unknown'}
-                    </span>
-                    {activeBundle.first_proposed_at && (
-                      <>
-                        {' · submitted '}
-                        {formatSqliteLocal(activeBundle.first_proposed_at)}
-                      </>
-                    )}
-                    {' · '}
-                    <span className="text-gold/80 font-semibold">
-                      {activeBundle.pending_count} pending
-                    </span>
-                    {activeBundle.approved_count > 0 && (
-                      <> · {activeBundle.approved_count} approved</>
-                    )}
-                    {activeBundle.rejected_count > 0 && (
-                      <> · {activeBundle.rejected_count} rejected</>
-                    )}
-                    {activeBundle.withdrawn_count > 0 && (
-                      <> · {activeBundle.withdrawn_count} withdrawn</>
-                    )}
-                  </p>
-                  {activeBundle.pending_count > 0 && (
-                    <div className="flex flex-wrap items-center gap-2 pt-1">
-                      <Button
-                        onClick={() => handleApproveBlock(activeBundle.id)}
-                        disabled={approvingBlockId === activeBundle.id}
-                        className="bg-emerald-700 text-white hover:bg-emerald-800 text-xs px-3 py-1.5 h-auto"
-                      >
-                        {approvingBlockId === activeBundle.id
-                          ? 'Approving…'
-                          : `Approve block (${activeBundle.pending_count})`}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() =>
-                          setRejectDialog({
-                            bundle: { id: activeBundle.id, name: activeBundle.name },
-                            reason: '',
-                          })
-                        }
-                        className="border-blood/40 text-blood hover:bg-blood/5 text-xs px-3 py-1.5 h-auto"
-                      >
-                        Reject block
-                      </Button>
-                      <span className="text-[11px] text-ink/45">
-                        applies all {activeBundle.pending_count} revisions atomically
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent>
-                {loading ? (
-                  <p className="text-ink/50 italic text-center py-12">Loading…</p>
-                ) : detailProposals.length === 0 ? (
-                  <p className="text-ink/50 italic text-center py-12">
-                    No revisions in this block.
-                  </p>
-                ) : (
-                  <ul className="divide-y divide-gold/5">
-                    {detailProposals.map((p) => (
-                      <ProposalRow
-                        key={p.id}
-                        proposal={p}
-                        onSelect={() => setSelected(p)}
-                        onApprove={() => handleApprove(p)}
-                        onReject={() => setRejectDialog({ proposal: p, reason: '' })}
-                        onRevert={() => handleRevert(p)}
-                        onTogglePin={() => handleTogglePin(p)}
-                        reverting={revertingId === p.id}
-                        cascadeChildCount={cascadeChildCountByParent.get(p.id)}
-                      />
-                    ))}
-                  </ul>
-                )}
-              </CardContent>
-            </Card>
+            <BlockReview
+              bundle={activeBundle}
+              revisions={detailProposals}
+              loading={loading}
+              approvingBlockId={approvingBlockId}
+              onApproveBlock={handleApproveBlock}
+              onRejectBlock={(b) => setRejectDialog({ bundle: b, reason: '' })}
+              onApproveRevision={handleApprove}
+              onRejectRevision={(p) => setRejectDialog({ proposal: p, reason: '' })}
+            />
           ) : (
             <p className="text-ink/50 italic text-center py-12">
               Block not found.
@@ -975,6 +891,266 @@ function BundleRowDisplay({
         <ChevronRight className="w-4 h-4 text-ink/40 flex-shrink-0" />
       </button>
     </li>
+  );
+}
+
+// ── Field-level diff for the split-pane detail (replaces the raw-JSON dump) ──
+const HIDDEN_FIELDS = new Set(['updated_at', 'created_at', 'added_at']);
+function isObjVal(v: any): boolean { return v !== null && typeof v === 'object'; }
+function fmtFieldVal(v: any): string {
+  if (v === null || v === undefined || v === '') return '—';
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  try { return JSON.stringify(v, null, 2); } catch { return String(v); }
+}
+function FieldValue({ value }: { value: any }) {
+  if (isObjVal(value)) {
+    return (
+      <pre className="text-[11px] leading-snug whitespace-pre-wrap break-words font-mono bg-background/40 rounded p-2 max-h-44 overflow-y-auto mt-1">
+        {fmtFieldVal(value)}
+      </pre>
+    );
+  }
+  return <span className="break-words whitespace-pre-wrap">{fmtFieldVal(value)}</span>;
+}
+
+function FieldDiff({ proposal }: { proposal: Proposal }) {
+  const after = isObjVal(proposal.proposed_payload) ? (proposal.proposed_payload as Record<string, any>) : {};
+  const before = isObjVal(proposal.snapshot_at_proposal) ? (proposal.snapshot_at_proposal as Record<string, any>) : null;
+
+  if (proposal.operation === 'delete') {
+    const data = before ?? after;
+    const keys = Object.keys(data).filter((k) => !HIDDEN_FIELDS.has(k));
+    return (
+      <div>
+        <p className="text-sm text-blood/80 mb-3">Approving this <b>deletes</b> the entity below.</p>
+        <dl className="space-y-2">
+          {keys.map((k) => (
+            <div key={k} className="text-sm">
+              <dt className="text-[10px] uppercase tracking-widest text-ink/40">{k}</dt>
+              <dd className="text-ink/70"><FieldValue value={data[k]} /></dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    );
+  }
+
+  const keys = Object.keys(after).filter((k) => !HIDDEN_FIELDS.has(k));
+  const isUpdate = proposal.operation === 'update' && !!before;
+  const changedKeys = keys.filter((k) => !isUpdate || JSON.stringify(after[k]) !== JSON.stringify(before![k]));
+  const sameKeys = isUpdate ? keys.filter((k) => JSON.stringify(after[k]) === JSON.stringify(before![k])) : [];
+
+  return (
+    <div className="space-y-4">
+      <dl className="space-y-2.5">
+        {changedKeys.map((k) => (
+          <div key={k} className={`text-sm rounded p-2.5 ${isUpdate ? 'bg-emerald-700/[0.06] border border-emerald-700/20' : 'border border-gold/10'}`}>
+            <dt className="text-[10px] uppercase tracking-widest text-ink/45 flex items-center gap-2">
+              {k}
+              {isUpdate && <span className="text-[9px] text-emerald-700 font-bold normal-case tracking-normal">changed</span>}
+            </dt>
+            {isUpdate && (
+              <dd className="text-blood/70 line-through opacity-80 mt-1"><FieldValue value={before![k]} /></dd>
+            )}
+            <dd className={`mt-1 ${isUpdate ? 'text-emerald-800' : 'text-ink/80'}`}><FieldValue value={after[k]} /></dd>
+          </div>
+        ))}
+        {isUpdate && changedKeys.length === 0 && (
+          <p className="text-sm text-ink/50 italic">No field changes (only timestamps differ).</p>
+        )}
+      </dl>
+      {sameKeys.length > 0 && (
+        <details className="text-sm">
+          <summary className="cursor-pointer text-xs text-ink/45 hover:text-ink/70">
+            {sameKeys.length} unchanged field{sameKeys.length === 1 ? '' : 's'}
+          </summary>
+          <dl className="space-y-2 mt-2 opacity-60">
+            {sameKeys.map((k) => (
+              <div key={k}>
+                <dt className="text-[10px] uppercase tracking-widest text-ink/40">{k}</dt>
+                <dd className="text-ink/60"><FieldValue value={after[k]} /></dd>
+              </div>
+            ))}
+          </dl>
+        </details>
+      )}
+    </div>
+  );
+}
+
+// ── Split-pane block review (Option C): grouped rail + field-diff detail ──
+function BlockReview({
+  bundle, revisions, loading, approvingBlockId,
+  onApproveBlock, onRejectBlock, onApproveRevision, onRejectRevision,
+}: {
+  bundle: BundleRow;
+  revisions: Proposal[];
+  loading: boolean;
+  approvingBlockId: string | null;
+  onApproveBlock: (bundleId: string) => void;
+  onRejectBlock: (b: { id: string; name: string }) => void;
+  onApproveRevision: (p: Proposal) => void;
+  onRejectRevision: (p: Proposal) => void;
+}) {
+  const [selId, setSelId] = useState<string | null>(null);
+  useEffect(() => {
+    if (revisions.length && !revisions.some((r) => r.id === selId)) setSelId(revisions[0].id);
+    if (!revisions.length) setSelId(null);
+  }, [revisions, selId]);
+
+  const idx = revisions.findIndex((r) => r.id === selId);
+  const sel = idx >= 0 ? revisions[idx] : null;
+  const go = (delta: number) => {
+    const n = idx + delta;
+    if (n >= 0 && n < revisions.length) setSelId(revisions[n].id);
+  };
+
+  // Group the rail by entity type, preserving first-seen order.
+  const groups = useMemo(() => {
+    const m = new Map<EntityType, Proposal[]>();
+    for (const r of revisions) {
+      if (!m.has(r.entity_type)) m.set(r.entity_type, []);
+      m.get(r.entity_type)!.push(r);
+    }
+    return Array.from(m.entries());
+  }, [revisions]);
+
+  return (
+    <Card className="border-gold/10 overflow-hidden">
+      <CardHeader>
+        <div className="space-y-2">
+          <CardTitle className="text-base flex items-center gap-2">{bundle.name}</CardTitle>
+          {bundle.description && (
+            <p className="text-sm text-ink/70 leading-relaxed">{bundle.description}</p>
+          )}
+          <p className="text-xs text-ink/55">
+            <span className="font-medium text-ink/75">
+              {bundle.proposer_display_name || bundle.proposer_username || bundle.created_by_user_id || 'unknown'}
+            </span>
+            {bundle.first_proposed_at && <>{' · submitted '}{formatSqliteLocal(bundle.first_proposed_at)}</>}
+            {' · '}<span className="text-gold/80 font-semibold">{bundle.pending_count} pending</span>
+            {bundle.approved_count > 0 && <> · {bundle.approved_count} approved</>}
+            {bundle.rejected_count > 0 && <> · {bundle.rejected_count} rejected</>}
+            {bundle.withdrawn_count > 0 && <> · {bundle.withdrawn_count} withdrawn</>}
+          </p>
+          {bundle.pending_count > 0 && (
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <Button
+                onClick={() => onApproveBlock(bundle.id)}
+                disabled={approvingBlockId === bundle.id}
+                className="bg-emerald-700 text-white hover:bg-emerald-800 text-xs px-3 py-1.5 h-auto"
+              >
+                {approvingBlockId === bundle.id ? 'Approving…' : `Approve block (${bundle.pending_count})`}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => onRejectBlock({ id: bundle.id, name: bundle.name })}
+                className="border-blood/40 text-blood hover:bg-blood/5 text-xs px-3 py-1.5 h-auto"
+              >
+                Reject block
+              </Button>
+              <span className="text-[11px] text-ink/45">applies all {bundle.pending_count} revisions atomically</span>
+            </div>
+          )}
+        </div>
+      </CardHeader>
+
+      <div className="flex flex-col md:flex-row border-t border-gold/10 min-h-[460px]">
+        {/* Left rail — changes grouped by type */}
+        <div className="md:w-72 shrink-0 border-b md:border-b-0 md:border-r border-gold/10 bg-gold/[0.03] overflow-y-auto max-h-[72vh]">
+          {loading ? (
+            <p className="text-ink/50 italic text-center py-12 text-sm">Loading…</p>
+          ) : revisions.length === 0 ? (
+            <p className="text-ink/50 italic text-center py-12 text-sm">No revisions in this block.</p>
+          ) : (
+            groups.map(([type, items]) => (
+              <div key={type}>
+                <p className="px-3 pt-3 pb-1 text-[10px] uppercase tracking-widest text-gold/70">
+                  {ENTITY_LABEL[type]} · {items.length}
+                </p>
+                {items.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setSelId(p.id)}
+                    className={`w-full text-left px-3 py-2 flex items-center gap-2 border-l-2 transition-colors ${
+                      p.id === selId ? 'bg-gold/10 border-gold' : 'border-transparent hover:bg-gold/5'
+                    }`}
+                  >
+                    <OperationBadge operation={p.operation} />
+                    <span className="text-sm truncate flex-1 min-w-0">{describePayloadSummary(p)}</span>
+                    {p.status !== 'pending' && <StatusBadge status={p.status} />}
+                  </button>
+                ))}
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Right detail — field-level diff of the selected change */}
+        <div className="flex-1 min-w-0 overflow-y-auto max-h-[72vh] p-5">
+          {sel ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 flex-wrap">
+                <OperationBadge operation={sel.operation} />
+                <h3 className="text-base font-medium flex-1 min-w-0 truncate">
+                  {ENTITY_LABEL[sel.entity_type]} · {describePayloadSummary(sel)}
+                </h3>
+                <StatusBadge status={sel.status} />
+                <div className="flex items-center gap-1">
+                  <Button size="xs" variant="outline" onClick={() => go(-1)} disabled={idx <= 0} className="px-2">
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </Button>
+                  <span className="text-[11px] text-ink/50 tabular-nums px-1">{idx + 1} / {revisions.length}</span>
+                  <Button size="xs" variant="outline" onClick={() => go(1)} disabled={idx >= revisions.length - 1} className="px-2">
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </div>
+              <p className="text-xs text-ink/55">
+                by{' '}
+                <span className="font-medium text-ink/75">
+                  {sel.proposer_display_name || sel.proposer_username || sel.proposed_by_user_id}
+                </span>
+                {' · '}{formatSqliteLocal(sel.proposed_at)}
+              </p>
+              {sel.notes_from_proposer && (
+                <div className="p-3 rounded bg-gold/5 border border-gold/10 text-sm">
+                  <p className="text-[10px] uppercase tracking-widest text-gold/70 mb-1">Notes from proposer</p>
+                  <p className="whitespace-pre-wrap">{sel.notes_from_proposer}</p>
+                </div>
+              )}
+              {sel.rejection_reason && (
+                <div className="p-3 rounded bg-blood/5 border border-blood/10 text-sm">
+                  <p className="text-[10px] uppercase tracking-widest text-blood/70 mb-1">Rejection reason</p>
+                  <p className="whitespace-pre-wrap">{sel.rejection_reason}</p>
+                </div>
+              )}
+
+              <FieldDiff proposal={sel} />
+
+              {sel.status === 'pending' && (
+                <div className="flex justify-end gap-2 pt-3 border-t border-gold/10">
+                  <Button
+                    variant="outline"
+                    onClick={() => onRejectRevision(sel)}
+                    className="gap-1.5 border-blood/30 text-blood hover:bg-blood/10"
+                  >
+                    <X className="w-3.5 h-3.5" /> Reject this
+                  </Button>
+                  <Button onClick={() => onApproveRevision(sel)} className="gap-1.5 bg-emerald-700 text-white hover:bg-emerald-800">
+                    <Check className="w-3.5 h-3.5" /> Approve this
+                  </Button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-ink/50 italic text-center py-16">Select a change on the left to review it.</p>
+          )}
+        </div>
+      </div>
+    </Card>
   );
 }
 

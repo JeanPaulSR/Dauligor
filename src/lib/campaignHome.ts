@@ -18,10 +18,12 @@ export type HomeBlockType =
   | 'image'
   | 'divider'
   | 'recommended'
+  | 'callout'          // a styled call-to-action box (heading + text + optional button)
   | 'entity-row'       // a row/grid of entity cards (articles, classes, items, …)
   | 'entity-feature'   // one large highlighted entity
   | 'group'            // container: a titled card holding children
-  | 'columns';         // container: a 2–4 column grid of children
+  | 'columns'          // container: a 2–4 column grid; each child is a `column`
+  | 'column';          // a single column cell inside a `columns` block
 
 interface BlockBase {
   /** Stable id (uuid). Generated client-side when a block is added. */
@@ -31,8 +33,10 @@ interface BlockBase {
 export interface HeroBlock extends BlockBase {
   blockType: 'hero';
   title: string;
+  /** BBCode, rendered via BBCodeRenderer. The seeded default wraps its text in
+   *  [i]…[/i] for the classic italic look, but a GM can use any BBCode now. */
   subtitle: string;
-  align: 'center' | 'left';
+  align: 'center' | 'left' | 'right';
   size: 'normal' | 'large';
 }
 export interface TextBlock extends BlockBase {
@@ -75,9 +79,41 @@ export interface EntityRef {
   kind: string;
   id: string;
   /** Cached display name — lets the editor render chips without a round-trip.
-   *  Display still re-resolves live so renames are reflected. */
+   *  Display still re-resolves live so renames are reflected. For a PLACEHOLDER
+   *  ref (`kind === PLACEHOLDER_KIND`) this is the only meaningful field — it's
+   *  the card title to show. */
   name?: string;
+  /** Per-card heading override ("what it says"). When non-empty it wins over the
+   *  resolved entity name / `name`. Empty → resolved name, then `name`, then the
+   *  PLACEHOLDER_TITLE default. */
+  title?: string;
+  /** Per-card description override ("what its description says"). When non-empty
+   *  it wins over the resolved entity summary. Empty → resolved summary, then the
+   *  PLACEHOLDER_DESCRIPTION default. */
+  description?: string;
+  /** How many grid columns this card spans (1–4, default 1). Lets a GM size any
+   *  card individually (set in the entity picker). Clamped to the row's column
+   *  count at render time. */
+  span?: number;
 }
+
+/** Defaults shown when a card has neither an override nor resolved entity data —
+ *  e.g. a fresh placeholder, or a real ref whose target doesn't exist yet. */
+export const PLACEHOLDER_TITLE = 'Placeholder';
+export const PLACEHOLDER_DESCRIPTION = 'Coming Soon';
+/** A card's column span, clamped 1–4 (default 1). */
+export const clampSpan = (v: any): number => {
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) ? Math.max(1, Math.min(4, n)) : 1;
+};
+
+/** A placeholder ref names a card slot without pointing at a real entity — the
+ *  GM gets a styled "coming soon" card without having to create a fake article.
+ *  Mirrors the legacy Home behaviour where a missing article still rendered a
+ *  card. Renderer + picker special-case this kind. */
+export const PLACEHOLDER_KIND = 'placeholder';
+export const isPlaceholderRef = (r: EntityRef): boolean => r.kind === PLACEHOLDER_KIND;
+export const makePlaceholderRef = (name: string): EntityRef => ({ kind: PLACEHOLDER_KIND, id: '', name });
 
 export interface EntityRowBlock extends BlockBase {
   blockType: 'entity-row';
@@ -93,6 +129,19 @@ export interface EntityRowBlock extends BlockBase {
   columns: 1 | 2 | 3 | 4;
   card: 'image' | 'compact' | 'list';
   excerpt: boolean;
+}
+
+/** A styled call-to-action box — the "Character Creation · Work in Progress"
+ *  dashed panel on the default home. Heading + body + an optional button. */
+export interface CalloutBlock extends BlockBase {
+  blockType: 'callout';
+  title: string;
+  body: string;
+  /** Optional button label; button only renders when both label + link are set. */
+  buttonLabel: string;
+  buttonLink: string;
+  /** 'soft' = dashed gold panel (default-home look); 'plain' = bordered card. */
+  style: 'soft' | 'plain';
 }
 export interface EntityFeatureBlock extends BlockBase {
   blockType: 'entity-feature';
@@ -112,6 +161,16 @@ export interface ColumnsBlock extends BlockBase {
   blockType: 'columns';
   columns: 2 | 3 | 4;
   gap: 'small' | 'medium' | 'large';
+  /** Exactly `columns` child blocks, each a `column`. The editor keeps the count
+   *  in sync; the renderer lays them out as a grid (one grid cell per column). */
+  children: HomeBlock[];
+}
+/** A single column cell inside a `columns` block. Purely structural — no own
+ *  config, just its own vertically-stacked children. Only ever nested directly
+ *  under a `columns` block (the editor manages columns, you never add one
+ *  directly), so it has no add-block-picker entry. */
+export interface ColumnBlock extends BlockBase {
+  blockType: 'column';
   children: HomeBlock[];
 }
 
@@ -121,14 +180,16 @@ export type HomeBlock =
   | ImageBlock
   | DividerBlock
   | RecommendedBlock
+  | CalloutBlock
   | EntityRowBlock
   | EntityFeatureBlock
   | GroupBlock
-  | ColumnsBlock;
+  | ColumnsBlock
+  | ColumnBlock;
 
-export type ContainerBlock = GroupBlock | ColumnsBlock;
+export type ContainerBlock = GroupBlock | ColumnsBlock | ColumnBlock;
 export function isContainer(b: HomeBlock): b is ContainerBlock {
-  return b.blockType === 'group' || b.blockType === 'columns';
+  return b.blockType === 'group' || b.blockType === 'columns' || b.blockType === 'column';
 }
 
 /** Display metadata for the block-type picker. `icon` is a lucide icon NAME —
@@ -137,17 +198,22 @@ export function isContainer(b: HomeBlock): b is ContainerBlock {
  *  the add-block menu into Content vs Containers. */
 export const BLOCK_TYPE_META: Record<
   HomeBlockType,
-  { label: string; icon: string; description: string; group: 'content' | 'container' }
+  { label: string; icon: string; description: string; group: 'content' | 'container' | 'cell' }
 > = {
-  hero:             { label: 'Hero',             icon: 'Sparkles',   description: 'A large title + subtitle banner.',          group: 'content' },
+  hero:             { label: 'Header',           icon: 'Sparkles',   description: 'A large title + subtitle banner.',          group: 'content' },
   'entity-row':     { label: 'Entity Row',       icon: 'LayoutGrid', description: 'A row/grid of cards — articles, classes, items, system pages…', group: 'content' },
   'entity-feature': { label: 'Featured',         icon: 'Star',       description: 'One large highlighted entity.',             group: 'content' },
   recommended:      { label: 'Recommended',      icon: 'BookMarked', description: "The campaign's recommended article.",       group: 'content' },
+  callout:          { label: 'Callout',          icon: 'Megaphone',  description: 'A highlighted box with text + an optional button.', group: 'content' },
   text:             { label: 'Text',             icon: 'Type',       description: 'Free BBCode prose.',                        group: 'content' },
   image:            { label: 'Image',            icon: 'ImageIcon',  description: 'A banner image + optional caption.',        group: 'content' },
   divider:          { label: 'Divider',          icon: 'Minus',      description: 'A line, dots, or spacer.',                  group: 'content' },
   group:            { label: 'Group',            icon: 'Square',     description: 'A titled card that holds other blocks.',    group: 'container' },
-  columns:          { label: 'Columns',          icon: 'Columns3',   description: 'A 2–4 column grid; each child is a cell.',   group: 'container' },
+  columns:          { label: 'Columns',          icon: 'Columns3',   description: 'Side-by-side columns; fill each one separately.', group: 'container' },
+  // `column` is managed by its parent Columns block, never added on its own —
+  // group: 'cell' keeps it out of the add-block picker (which shows content +
+  // container only).
+  column:           { label: 'Column',           icon: 'Square',     description: 'A single column inside a Columns block.',   group: 'cell' },
 };
 
 export const HOME_BLOCK_TYPES = Object.keys(BLOCK_TYPE_META) as HomeBlockType[];
@@ -183,6 +249,8 @@ export function makeBlock(type: HomeBlockType, id: string): HomeBlock {
       return { id, blockType: 'divider', style: 'line' };
     case 'recommended':
       return { id, blockType: 'recommended', title: '', source: 'auto', ref: null, layout: 'side' };
+    case 'callout':
+      return { id, blockType: 'callout', title: '', body: '', buttonLabel: '', buttonLink: '', style: 'soft' };
     case 'entity-row':
       return { id, blockType: 'entity-row', title: '', showHeading: true, source: 'manual', refs: [], category: '', count: 3, columns: 3, card: 'image', excerpt: true };
     case 'entity-feature':
@@ -190,7 +258,10 @@ export function makeBlock(type: HomeBlockType, id: string): HomeBlock {
     case 'group':
       return { id, blockType: 'group', title: '', showTitle: true, style: 'card', children: [] };
     case 'columns':
-      return { id, blockType: 'columns', columns: 2, gap: 'medium', children: [] };
+      return { id, blockType: 'columns', columns: 2, gap: 'medium',
+        children: [makeBlock('column', crypto.randomUUID()), makeBlock('column', crypto.randomUUID())] };
+    case 'column':
+      return { id, blockType: 'column', children: [] };
   }
 }
 
@@ -198,22 +269,52 @@ export function makeBlock(type: HomeBlockType, id: string): HomeBlock {
  *  the structural skeleton of the default site home. Lets a GM customize the
  *  basic style instead of an empty page. */
 export function defaultHomeBlocks(): HomeBlock[] {
+  // Faithful to the legacy Home layout (src/pages/core/Home.tsx): the four
+  // sections a fresh campaign starts from. The World row is seeded with the same
+  // five entries by ARTICLE SLUG; any that don't exist in this world render as a
+  // graceful placeholder card (just like the old "(Article not found)" tile), so
+  // the GM never has to create fake content to start customizing.
   const hero = makeBlock('hero', crypto.randomUUID()) as HeroBlock;
   hero.title = 'Stories in Dauligor';
-  hero.subtitle = 'Your GM has made this website to give you easy access to the lore of the setting of Dauligor, and to the homebrew options they allow.';
+  hero.subtitle = '[i]Your GM has made this website to give you easy access to the lore of the setting of Dauligor, and to the homebrew options they allow.[/i]';
 
+  // "The World of Dauligor" — five articles in the asymmetric grid (World Primer
+  // spans 2 cols via its per-card span, then the rest fill an even 3-col grid),
+  // exactly like the legacy home. Span is round-tripped through save/load (unlike
+  // the removed row-level featureFirst flag, which parse never read back).
   const row = makeBlock('entity-row', crypto.randomUUID()) as EntityRowBlock;
   row.title = 'The World of Dauligor';
+  row.columns = 3;
+  row.refs = [
+    { kind: 'article', id: 'world-primer', name: 'World Primer', span: 2 },
+    { kind: 'article', id: 'world-history', name: 'World History' },
+    { kind: 'article', id: 'rules', name: 'Rules' },
+    { kind: 'article', id: 'divinity', name: 'Divinity' },
+    { kind: 'article', id: 'magic', name: 'Magic' },
+  ];
+
+  // Character Creation — the styled "work in progress" callout, the same CTA the
+  // legacy home shows until creation tools are built.
+  const charCallout = makeBlock('callout', crypto.randomUUID()) as CalloutBlock;
+  charCallout.title = 'Character Creation';
+  charCallout.body = 'Work in progress — character creation tools are still being built. In the meantime, you can browse the available sources.';
+  charCallout.buttonLabel = 'Browse Sources';
+  charCallout.buttonLink = '/sources';
 
   const reco = makeBlock('recommended', crypto.randomUUID()) as RecommendedBlock;
 
-  return [hero, row, reco];
+  return [hero, row, charCallout, reco];
 }
 
 function asRef(v: any): EntityRef | null {
   // id may legitimately be '' (a page-level system ref), so check kind only.
   if (!v || typeof v !== 'object' || !v.kind) return null;
-  return { kind: String(v.kind), id: String(v.id ?? ''), name: v.name ? String(v.name) : undefined };
+  const ref: EntityRef = { kind: String(v.kind), id: String(v.id ?? '') };
+  if (v.name) ref.name = String(v.name);
+  if (v.title) ref.title = String(v.title);
+  if (v.description) ref.description = String(v.description);
+  if (v.span != null) ref.span = clampSpan(v.span);
+  return ref;
 }
 function asRefArray(v: any): EntityRef[] {
   if (!Array.isArray(v)) return [];
@@ -254,7 +355,8 @@ export function parseHomeBlock(row: any): HomeBlock | null {
   switch (type) {
     case 'hero':
       return { id, blockType: 'hero', title: s(config.title), subtitle: s(config.subtitle),
-        align: config.align === 'left' ? 'left' : 'center', size: config.size === 'large' ? 'large' : 'normal' };
+        align: config.align === 'left' ? 'left' : config.align === 'right' ? 'right' : 'center',
+        size: config.size === 'large' ? 'large' : 'normal' };
     case 'text':
       return { id, blockType: 'text', body: s(config.body),
         width: config.width === 'narrow' ? 'narrow' : config.width === 'wide' ? 'wide' : 'normal' };
@@ -280,9 +382,20 @@ export function parseHomeBlock(row: any): HomeBlock | null {
       return { id, blockType: 'group', title: s(config.title), showTitle: config.showTitle !== false,
         style: ['card', 'bordered', 'plain'].includes(config.style) ? config.style : 'card',
         children: Array.isArray(config.children) ? config.children.map(parseHomeBlock).filter(Boolean) as HomeBlock[] : [] };
-    case 'columns':
-      return { id, blockType: 'columns', columns: clampColumnsContainer(config.columns),
+    case 'columns': {
+      const parsed = Array.isArray(config.children) ? config.children.map(parseHomeBlock).filter(Boolean) as HomeBlock[] : [];
+      // A columns block holds only `column` cells. Wrap any loose (legacy/flat)
+      // child in its own column so older data still renders; ensure ≥2 columns.
+      const cols: HomeBlock[] = parsed.every((c) => c.blockType === 'column')
+        ? parsed
+        : parsed.map((c) => ({ id: crypto.randomUUID(), blockType: 'column', children: [c] }) as HomeBlock);
+      while (cols.length < 2) cols.push({ id: crypto.randomUUID(), blockType: 'column', children: [] } as HomeBlock);
+      return { id, blockType: 'columns', columns: clampColumnsContainer(cols.length),
         gap: config.gap === 'small' ? 'small' : config.gap === 'large' ? 'large' : 'medium',
+        children: cols };
+    }
+    case 'column':
+      return { id, blockType: 'column',
         children: Array.isArray(config.children) ? config.children.map(parseHomeBlock).filter(Boolean) as HomeBlock[] : [] };
   }
 }

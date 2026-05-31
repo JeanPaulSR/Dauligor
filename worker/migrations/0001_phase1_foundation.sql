@@ -1,6 +1,8 @@
 -- Phase 1: Foundation & Taxonomy
 -- Canonical schema for all Phase 1 tables.
--- Run 9999_cleanup.sql first for a fresh start on an existing database.
+-- For a LOCAL fresh start, the destructive drop-all helper now lives at
+-- worker/scripts/9999_cleanup.sql (deliberately OUTSIDE migrations/ so
+-- `wrangler d1 migrations apply` can never run it). NEVER run it on remote.
 
 -- ============================================================
 -- 1. Sources Registry

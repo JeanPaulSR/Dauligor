@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Foundry Reference Enrichers — Deep Dive &amp; Verdict</title>
+<style>
+  :root {
+    --parchment: #f5f2e8;
+    --parchment-soft: #faf7ed;
+    --ink: #1a1a1a;
+    --ink-soft: #3a3a3a;
+    --muted: #6b6457;
+    --gold: #c5a059;
+    --gold-deep: #8a6d2f;
+    --blood: #7a1f1f;
+    --leaf: #355c3a;
+    --card: #fbf8ee;
+    --rule: #d8cfb8;
+    --code-bg: #2b2620;
+    --code-ink: #f0e9d2;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 10px rgba(0,0,0,0.04);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--parchment);
+    color: var(--ink);
+    font-family: "Inter", -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+  }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 40px 32px 80px;
+  }
+  header.hero {
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 20px;
+    margin-bottom: 30px;
+  }
+  header.hero h1 {
+    font-family: "Cormorant Garamond", "Georgia", serif;
+    font-weight: 600;
+    font-size: 40px;
+    line-height: 1.1;
+    margin: 0 0 6px;
+    color: var(--ink);
+  }
+  header.hero .sub {
+    color: var(--muted);
+    font-size: 14px;
+  }
+  header.hero .badge {
+    display: inline-block;
+    background: var(--gold);
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-right: 8px;
+  }
+  h2 {
+    font-family: "Cormorant Garamond", "Georgia", serif;
+    font-size: 28px;
+    font-weight: 600;
+    margin: 48px 0 14px;
+    padding-bottom: 6px;
+    border-bottom: 2px solid var(--gold);
+    color: var(--ink);
+  }
+  h3 {
+    font-family: "Cormorant Garamond", "Georgia", serif;
+    font-size: 21px;
+    font-weight: 600;
+    margin: 28px 0 10px;
+    color: var(--ink);
+  }
+  h4 {
+    font-size: 14px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 18px 0 6px;
+    color: var(--gold-deep);
+  }
+  p { margin: 0 0 12px; }
+  a { color: var(--gold-deep); text-decoration: none; border-bottom: 1px dotted var(--gold-deep); }
+  a:hover { color: var(--blood); border-bottom-style: solid; }
+  code, pre {
+    font-family: "Fira Code", "Consolas", "Menlo", monospace;
+    font-size: 13px;
+  }
+  p code, li code, td code {
+    background: rgba(197, 160, 89, 0.16);
+    border: 1px solid rgba(138, 109, 47, 0.25);
+    color: var(--ink);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 12.5px;
+  }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    padding: 14px 16px;
+    border-radius: 4px;
+    overflow-x: auto;
+    margin: 8px 0 16px;
+    line-height: 1.5;
+  }
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: inherit;
+    font-size: 13px;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 10px 0 18px;
+    background: var(--card);
+    box-shadow: var(--shadow);
+  }
+  th, td {
+    text-align: left;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  th {
+    background: rgba(197, 160, 89, 0.18);
+    font-weight: 600;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: var(--gold-deep);
+  }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: rgba(197, 160, 89, 0.06); }
+
+  /* Verdict color codes */
+  .verdict {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #fff;
+  }
+  .verdict.extend { background: var(--leaf); }
+  .verdict.reuse  { background: var(--gold-deep); }
+  .verdict.build  { background: var(--blood); }
+  .verdict.avoid  { background: #555; }
+
+  /* Cards */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-left: 4px solid var(--gold);
+    padding: 18px 20px;
+    margin: 18px 0;
+    box-shadow: var(--shadow);
+  }
+  .card.tldr {
+    border-left-color: var(--blood);
+    background: linear-gradient(180deg, #fdf6f6 0%, var(--card) 100%);
+  }
+  .card.verdict-box {
+    border-left-color: var(--leaf);
+    background: linear-gradient(180deg, #f4f8f4 0%, var(--card) 100%);
+  }
+  .card.warn {
+    border-left-color: var(--blood);
+    background: linear-gradient(180deg, #fdf6f6 0%, var(--card) 100%);
+  }
+
+  /* Two-column grid for use cases */
+  .uc-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 24px;
+    margin: 16px 0 30px;
+  }
+  .uc {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-left: 5px solid var(--gold);
+    padding: 18px 22px;
+    box-shadow: var(--shadow);
+  }
+  .uc header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .uc h3 {
+    margin: 0;
+    font-size: 22px;
+  }
+  .uc .request {
+    font-style: italic;
+    color: var(--muted);
+    margin-bottom: 14px;
+    border-left: 3px solid var(--rule);
+    padding-left: 12px;
+  }
+  .uc-cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    margin: 8px 0 12px;
+  }
+  .uc-col h5 {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin: 0 0 6px;
+    color: var(--gold-deep);
+  }
+  .uc-col ul { margin: 0; padding-left: 18px; }
+  .uc-col li { margin-bottom: 4px; }
+
+  details {
+    background: var(--parchment-soft);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 0;
+    margin: 8px 0 12px;
+  }
+  details summary {
+    cursor: pointer;
+    padding: 10px 14px;
+    font-weight: 600;
+    color: var(--ink);
+    background: rgba(197, 160, 89, 0.08);
+    border-radius: 3px;
+  }
+  details summary:hover { background: rgba(197, 160, 89, 0.15); }
+  details[open] summary { border-bottom: 1px solid var(--rule); }
+  details > div { padding: 12px 14px 4px; }
+
+  /* TOC */
+  nav.toc {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    padding: 16px 20px;
+    margin: 16px 0 32px;
+    box-shadow: var(--shadow);
+    columns: 2;
+    column-gap: 32px;
+  }
+  nav.toc ol {
+    margin: 0;
+    padding-left: 22px;
+    list-style: decimal;
+  }
+  nav.toc li { margin: 3px 0; break-inside: avoid; }
+  nav.toc a { border-bottom: none; }
+
+  .pill {
+    display: inline-block;
+    background: rgba(53, 92, 58, 0.15);
+    color: var(--leaf);
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-right: 4px;
+  }
+  .pill.warn { background: rgba(122, 31, 31, 0.12); color: var(--blood); }
+  .pill.info { background: rgba(197, 160, 89, 0.2); color: var(--gold-deep); }
+
+  .grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin: 12px 0 20px;
+  }
+  .grid-3 .mini {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    padding: 12px 14px;
+    border-radius: 3px;
+  }
+  .grid-3 .mini h5 {
+    margin: 0 0 4px;
+    color: var(--gold-deep);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .grid-3 .mini code { display: block; margin: 4px 0; word-break: break-word; }
+
+  /* Pipeline diagram */
+  .pipeline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    padding: 16px;
+    margin: 12px 0 22px;
+    overflow-x: auto;
+  }
+  .pipeline .step {
+    background: linear-gradient(180deg, var(--parchment-soft), #ebe5d4);
+    border: 1px solid var(--gold);
+    padding: 8px 12px;
+    border-radius: 3px;
+    font-size: 12px;
+    text-align: center;
+    min-width: 110px;
+    flex: 1;
+  }
+  .pipeline .step strong { display: block; font-size: 13px; }
+  .pipeline .step small { color: var(--muted); }
+  .pipeline .arrow {
+    color: var(--gold-deep);
+    font-weight: 700;
+    font-size: 18px;
+  }
+
+  footer.footnote {
+    margin-top: 60px;
+    padding-top: 20px;
+    border-top: 1px solid var(--rule);
+    color: var(--muted);
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <span class="badge">Temporary</span>
+  <h1>Foundry Reference Enrichers — Deep Dive &amp; Verdict</h1>
+  <div class="sub">
+    Research notes for the Dauligor reference system. Authored 2026-05-26. Safe to delete after the design decisions land in canonical docs.<br>
+    Grounded in <strong>Foundry 13.351</strong> core + <strong>dnd5e 5.3.1</strong> source.
+  </div>
+</header>
+
+<div class="card tldr">
+  <h4 style="margin-top:0">TL;DR</h4>
+  <p>Foundry's text-enricher system is one of its best-designed extension points. <strong>Do not overwrite it.</strong> Instead, layer Dauligor's semantic references on top:</p>
+  <ul>
+    <li>Use <code>@UUID[&hellip;]</code> as the rendering substrate for every cross-document link &mdash; Foundry already gives us tooltip + click + drag-and-drop for free.</li>
+    <li>Register Dauligor-flavoured enrichers via <code>CONFIG.TextEditor.enrichers.push(&hellip;)</code> for any syntax we want to expose (e.g. <code>@article[slug]</code>, <code>@condition[prone]</code>).</li>
+    <li>Reuse dnd5e's <code>&amp;Reference[&hellip;]</code> wherever it already covers the case (conditions, skills, abilities, damage types, weapon mastery, area-of-effect, creature types, spell schools).</li>
+    <li>App-side: extend <code>src/lib/referenceSyntax.ts</code> and BBCodeRenderer to recognise the same syntax and render hover-chips.</li>
+  </ul>
+  <p>All four of the requested features are <strong>extensions of existing systems</strong>. None require overwriting Foundry behaviour. The deepest piece of new work is a "system page" article type on the app side.</p>
+</div>
+
+<nav class="toc">
+  <ol>
+    <li><a href="#pipeline">The Enrichment Pipeline</a></li>
+    <li><a href="#cheatsheet">Cheat Sheet &mdash; Every Enricher in One Table</a></li>
+    <li><a href="#core">Foundry Core Enrichers</a></li>
+    <li><a href="#dnd5e">dnd5e System Enrichers</a></li>
+    <li><a href="#usecases">Your Four Use Cases &mdash; Verdicts</a></li>
+    <li><a href="#recommendation">Overall Recommendation</a></li>
+    <li><a href="#gotchas">Footnotes &amp; Gotchas</a></li>
+  </ol>
+</nav>
+
+<!-- ───────────────────────────── PIPELINE ───────────────────────────── -->
+<h2 id="pipeline">1. The Enrichment Pipeline</h2>
+
+<p><code>TextEditor.enrichHTML(html, options)</code> walks the text nodes of an HTML fragment and applies replacement passes in a fixed order. First match wins, because each pass only operates on the un-replaced text that survived the previous pass.</p>
+
+<div class="pipeline">
+  <div class="step"><strong>1. Content Links</strong><small>@UUID[&hellip;]<br>core</small></div>
+  <div class="arrow">&rarr;</div>
+  <div class="step"><strong>2. Hyperlinks</strong><small>bare URLs<br>core</small></div>
+  <div class="arrow">&rarr;</div>
+  <div class="step"><strong>3. Inline Rolls</strong><small>[[/r &hellip;]]<br>core</small></div>
+  <div class="arrow">&rarr;</div>
+  <div class="step"><strong>4. Embeds</strong><small>@Embed[&hellip;]<br>core</small></div>
+  <div class="arrow">&rarr;</div>
+  <div class="step"><strong>5. Custom</strong><small>CONFIG.TextEditor.enrichers<br>dnd5e + modules</small></div>
+</div>
+
+<h4>Key options on the entry point</h4>
+<table>
+  <thead><tr><th>Option</th><th>Default</th><th>Use</th></tr></thead>
+  <tbody>
+    <tr><td><code>relativeTo</code></td><td>&mdash;</td><td>The document this text belongs to. Used to resolve <code>.relative</code> UUIDs and to <strong>auto-find a default activity</strong> when an enricher needs one. The single most load-bearing option.</td></tr>
+    <tr><td><code>rollData</code></td><td>&mdash;</td><td>The roll data context used by <code>[[/&hellip;]]</code> and <code>[[lookup]]</code>. Can be an object or a function returning one.</td></tr>
+    <tr><td><code>secrets</code></td><td><code>false</code></td><td>Whether to retain GM-only <code>&lt;section class="secret"&gt;</code> blocks.</td></tr>
+    <tr><td><code>documents / links / rolls / embeds / custom</code></td><td><code>true</code></td><td>Toggle individual passes. Setting any to <code>false</code> short-circuits that stage.</td></tr>
+    <tr><td><code>_embedDepth</code></td><td><code>0</code></td><td>Auto-incremented per nested embed. Cap is <code>CONST.TEXT_ENRICH_EMBED_MAX_DEPTH</code> (5).</td></tr>
+  </tbody>
+</table>
+
+<!-- ───────────────────────────── CHEAT SHEET ───────────────────────────── -->
+<h2 id="cheatsheet">2. Cheat Sheet &mdash; Every Enricher in One Table</h2>
+
+<table>
+  <thead>
+    <tr><th>Syntax</th><th>Owner</th><th>What it produces</th><th>Pulls from a feature/spell?</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>@UUID[uuid#hash]{Label}</code></td><td>core</td><td>Content link &mdash; hover tooltip + click opens doc</td><td><span class="pill">Yes &mdash; any doc</span></td></tr>
+    <tr><td><code>@Embed[uuid &hellip;]{Caption}</code></td><td>core</td><td>Renders entire content of another doc inline</td><td><span class="pill">Yes &mdash; pulls description, statblock, or spell list</span></td></tr>
+    <tr><td><code>[[/r 1d20+5]]{Label}</code></td><td>core</td><td>Deferred inline roll (clickable)</td><td><span class="pill warn">No</span></td></tr>
+    <tr><td><code>[[1d6+3]]</code></td><td>core</td><td>Eager inline roll &mdash; computed at enrichment time</td><td><span class="pill warn">No</span></td></tr>
+    <tr><td><code>[[/attack +8 attackMode=thrown]]</code></td><td>dnd5e</td><td>Pre-set attack chip OR pulls from <code>activity=</code></td><td><span class="pill">Yes &mdash; activity-aware</span></td></tr>
+    <tr><td><code>[[/save dc=15 ability=dex]]</code></td><td>dnd5e</td><td>Saving-throw prompt with apply-to-targets</td><td><span class="pill">Yes</span></td></tr>
+    <tr><td><code>[[/concentration 10]]</code></td><td>dnd5e</td><td>Concentration save prompt (sugar for /save)</td><td><span class="pill">Yes</span></td></tr>
+    <tr><td><code>[[/check skill=acr dc=20]]</code></td><td>dnd5e</td><td>Ability/skill/tool check prompt</td><td><span class="pill">Yes</span></td></tr>
+    <tr><td><code>[[/skill acrobatics 15]]</code></td><td>dnd5e</td><td>Alias for /check with skill</td><td><span class="pill">Yes</span></td></tr>
+    <tr><td><code>[[/tool thief int]]</code></td><td>dnd5e</td><td>Tool check</td><td><span class="pill">Yes</span></td></tr>
+    <tr><td><code>[[/damage 2d6 fire]]</code></td><td>dnd5e</td><td>Damage chip with optional average display</td><td><span class="pill">Yes</span></td></tr>
+    <tr><td><code>[[/heal 2d4 + @mod]]</code></td><td>dnd5e</td><td>Healing chip (alias for /damage with healing type)</td><td><span class="pill">Yes</span></td></tr>
+    <tr><td><code>[[/item "Heavy Crossbow" activity=Poison]]</code></td><td>dnd5e</td><td>Use a specific activity on a specific item</td><td><span class="pill">Yes &mdash; cross-item</span></td></tr>
+    <tr><td><code>[[/award 100gp 50sp]]</code></td><td>dnd5e</td><td>Currency / XP grant chip</td><td><span class="pill warn">No</span></td></tr>
+    <tr><td><code>[[lookup @name capitalize]]{fallback}</code></td><td>dnd5e</td><td>Read a roll-data path as live text in prose</td><td><span class="pill">Yes</span></td></tr>
+    <tr><td><code>[[language deep]]{Deep Speech}</code></td><td>dnd5e</td><td>Cosmetic language tag</td><td><span class="pill warn">No</span></td></tr>
+    <tr><td><code>&amp;Reference[condition=prone]{Knocked Down}</code></td><td>dnd5e</td><td>Glossary link with optional apply-status button</td><td><span class="pill">Yes &mdash; this is the closest analogue to your "system page" idea</span></td></tr>
+  </tbody>
+</table>
+
+<!-- ───────────────────────────── CORE ───────────────────────────── -->
+<h2 id="core">3. Foundry Core Enrichers</h2>
+
+<h3 id="core-uuid">3.1 <code>@UUID[uuid#hash]{Label}</code> &mdash; Content Link</h3>
+<p>The bread-and-butter cross-document reference. Output is an <code>&lt;a class="content-link"&gt;</code> that:</p>
+<ul>
+  <li>Shows a tooltip on hover with the document type label.</li>
+  <li>Opens the document sheet on click.</li>
+  <li>Is draggable onto sheets / hotbar / scenes.</li>
+  <li>Renders broken with a strike-through icon if the UUID doesn't resolve.</li>
+</ul>
+<p>The <code>#hash</code> suffix targets a page anchor or table-of-contents heading inside a Journal Entry &mdash; the basis for sub-section addressing.</p>
+
+<details>
+<div>
+<pre><code>@UUID[Compendium.dnd5e.classes.Item.RnpHCwlNzjmcZdcb]{Sorcerer}
+@UUID[Item.ovD7tcXrAKbazG3T#font-of-magic]
+@UUID[.Activity.dnd5eactivity000]{relative activity ref}</code></pre>
+<p>Relative UUIDs (<code>.foo</code>, <code>..bar</code>) resolve against <code>options.relativeTo</code>. Dauligor's existing entity refs (<code>@feature[id]</code>, <code>@option[id]</code>, etc.) all compile down to <code>@UUID[&hellip;]</code> at module-import time.</p>
+</div>
+</details>
+
+<h3 id="core-embed">3.2 <code>@Embed[config]{Caption}</code> &mdash; Document Embed</h3>
+<p>Pulls the rendered content of another document into the current text. The most powerful enricher for the "include the full thing" use case &mdash; spells embedded inside class features, statblocks inside adventure prose, journal pages inside other journal pages.</p>
+
+<h4>Config parameters</h4>
+<table>
+  <thead><tr><th>Key</th><th>Default</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>uuid=</code> or bare first positional</td><td>required</td><td>Document to embed.</td></tr>
+    <tr><td><code>classes="foo bar"</code></td><td>&mdash;</td><td>CSS classes on the wrapper element.</td></tr>
+    <tr><td><code>inline</code> (bare flag)</td><td><code>false</code></td><td>Render as <code>&lt;section&gt;</code> in main flow instead of <code>&lt;figure&gt;</code> with caption.</td></tr>
+    <tr><td><code>cite=true|false</code></td><td><code>true</code></td><td>Include the back-link to the source as <code>&lt;cite&gt;</code>.</td></tr>
+    <tr><td><code>caption=true|false</code></td><td><code>true</code></td><td>Include the caption (<code>&lt;strong class="embed-caption"&gt;</code>).</td></tr>
+    <tr><td><code>captionPosition="top|bottom"</code></td><td><code>"bottom"</code></td><td>Where the caption sits.</td></tr>
+    <tr><td><code>{Caption Text}</code></td><td>doc name</td><td>Caption override.</td></tr>
+  </tbody>
+</table>
+
+<h4>Per-document extras (handled in each type's <code>toEmbed</code>)</h4>
+<table>
+  <thead><tr><th>Doc type</th><th>Extra flag</th><th>Effect</th></tr></thead>
+  <tbody>
+    <tr><td>Item (any)</td><td>&mdash;</td><td>Embeds <code>system.description.value</code> recursively enriched.</td></tr>
+    <tr><td>Spell item</td><td><code>details</code></td><td>Adds a tag line ("3rd-level evocation") and dl of casting time/range/components/duration above the description.</td></tr>
+    <tr><td>NPC actor</td><td><code>statblock</code></td><td>Renders the full 2014/2024 stat-block template instead of just description.</td></tr>
+    <tr><td>JournalEntryPage text</td><td>&mdash;</td><td>Embeds the page's text content.</td></tr>
+    <tr><td>JournalEntryPage image</td><td>&mdash;</td><td>Embeds the image; caption auto-fills from <code>image.caption</code>.</td></tr>
+    <tr><td>Spell-list page</td><td><code>table</code>, <code>grouping=level|school|alphabetical|none</code></td><td>Renders the page sheet either as flat list or table.</td></tr>
+  </tbody>
+</table>
+
+<details>
+<summary>Examples</summary>
+<div>
+<pre><code>@Embed[Compendium.dnd5e.spells.Item.fireballID]
+@Embed[Item.ovD7tcX details]{Font of Magic Summary}
+@Embed[Actor.bbeg statblock inline]
+@Embed[JournalEntry.foo.JournalEntryPage.bar inline cite=false]
+@Embed[JournalEntry.spellLists.JournalEntryPage.wiz table grouping=school]</code></pre>
+<p><strong>Recursion cap:</strong> 5 levels deep. Beyond that the inner embed renders as a broken-link warning.</p>
+</div>
+</details>
+
+<h3 id="core-rolls">3.3 <code>[[/cmd formula]]{Label}</code> &mdash; Inline Rolls</h3>
+<p>Foundry core only handles the generic-roll family: <code>roll</code>/<code>r</code>, <code>gmroll</code>/<code>gmr</code>, <code>blindroll</code>/<code>blindr</code>, <code>selfroll</code>/<code>selfr</code>, <code>publicroll</code>/<code>publicr</code>. The <code>[[/attack]]</code> / <code>[[/save]]</code> family is dnd5e &mdash; see §4.</p>
+
+<table>
+  <thead><tr><th>Shape</th><th>Behaviour</th></tr></thead>
+  <tbody>
+    <tr><td><code>[[1d20 + @prof]]</code></td><td><em>Eager</em> &mdash; evaluated at enrichment time. Result is baked in.</td></tr>
+    <tr><td><code>[[/r 1d20 + @prof]]{Save}</code></td><td><em>Deferred</em> &mdash; clickable, rolled at click against the sheet's <code>getRollData()</code>.</td></tr>
+    <tr><td><code>[[/r 1d6 + 2]]]</code></td><td>Triple <code>]</code> escapes a literal <code>]</code> inside the formula.</td></tr>
+    <tr><td><code>[[/gmr 1d100]]</code></td><td>GM-only roll mode.</td></tr>
+  </tbody>
+</table>
+
+<!-- ───────────────────────────── DND5E ───────────────────────────── -->
+<h2 id="dnd5e">4. dnd5e System Enrichers</h2>
+
+<p>Registered via three patterns at <code>dnd5e.mjs:20126</code>:</p>
+<pre><code>(a) /\[\[\/(?&lt;type&gt;attack|award|check|concentration|damage|heal|healing|item|save|skill|tool)
+       (?&lt;config&gt; .*?)?]](?!])(?:{(?&lt;label&gt;[^}]+)})?/gi
+(b) /\[\[(?&lt;type&gt;language|lookup) (?&lt;config&gt;[^\]]+)]](?:{(?&lt;label&gt;[^}]+)})?/gi
+(c) /&amp;(?&lt;type&gt;Reference)\[(?&lt;config&gt;[^\]]+)](?:{(?&lt;label&gt;[^}]+)})?/gi</code></pre>
+
+<p>Config is space-separated <code>key=value</code> with <code>"quoted strings"</code> supported. Bare positional values land in <code>config.values</code> and each enricher applies its own heuristic to interpret them. Numerics and <code>true</code>/<code>false</code> auto-coerce. Every config carries <code>_input</code> (the raw match) for diagnostic warnings.</p>
+
+<p><strong>The killer feature is <code>activity=&lt;id&gt;</code> with implicit fallback.</strong> Every action enricher will auto-find the first activity of the matching type on <code>options.relativeTo</code> when no args are passed. So <code>[[/attack]]</code> inside a longsword feature description pulls the longsword's first attack activity. This is the "pull info from within features or spells" mechanic in its purest form.</p>
+
+<h3 id="dnd5e-attack">4.1 <code>[[/attack &hellip;]]</code></h3>
+<table>
+  <thead><tr><th>Key</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>formula=</code> or positional dice</td><td>Fixed to-hit. Mutex with <code>activity=</code>.</td></tr>
+    <tr><td><code>attackMode=oneHanded|twoHanded|offhand|ranged|thrown|thrownOffhand|siege|improvised</code></td><td>Restrict to a specific mode.</td></tr>
+    <tr><td><code>activity=&lt;id&gt;</code></td><td>Pull formula + scaling from a specific attack activity.</td></tr>
+    <tr><td><code>extended</code> or <code>format=extended</code></td><td>Renders "Melee Attack Roll: +8, reach 15 ft." full line.</td></tr>
+  </tbody>
+</table>
+
+<h3 id="dnd5e-savecheck">4.2 <code>[[/save &hellip;]]</code>, <code>[[/concentration &hellip;]]</code>, <code>[[/check &hellip;]]</code>, <code>[[/skill &hellip;]]</code>, <code>[[/tool &hellip;]]</code></h3>
+<table>
+  <thead><tr><th>Key</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>ability=str/dex</code> (slash or pipe)</td><td>Multi-ability saves render "Str or Dex" with one chip each.</td></tr>
+    <tr><td><code>skill=acr/ath</code> (slash or pipe)</td><td>Multi-skill checks.</td></tr>
+    <tr><td><code>tool=thief</code></td><td>Tool check or skill-using-tool.</td></tr>
+    <tr><td><code>dc=&lt;n&gt;</code> or <code>dc=&lt;formula&gt;</code></td><td>Formula resolved against rollData at enrichment time, so <code>dc=8+@prof+@abilities.cha.mod</code> works.</td></tr>
+    <tr><td><code>passive</code> (bare)</td><td>Renders static "Passive Perception 12" tag, no roll button.</td></tr>
+    <tr><td><code>hideDC</code></td><td>Hide DC visually but keep the data attribute.</td></tr>
+    <tr><td><code>format=long|short</code></td><td>"DC 15 Dexterity saving throw" vs "DC 15 Dex".</td></tr>
+    <tr><td><code>activity=</code></td><td>Pull abilities + DC from a specific activity.</td></tr>
+  </tbody>
+</table>
+<p><strong>2024 rules special case:</strong> <code>[[/check skill=slt tool=thief]]</code> renders "Sleight of Hand check using Thieves' Tools" &mdash; skill USING tool, not a tool check.</p>
+
+<h3 id="dnd5e-damage">4.3 <code>[[/damage &hellip;]]</code>, <code>[[/heal &hellip;]]</code></h3>
+<p>Multiple damage parts in one tag separated by <code>&amp;</code>:</p>
+<pre><code>[[/damage 1d6 fire &amp; 1d6 cold]]
+[[/damage 2d6 type=bludgeoning average=true]]
+[[/heal 2d4 + @mod]]</code></pre>
+
+<table>
+  <thead><tr><th>Per-part key</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>formula=</code> or positional</td><td>Damage dice.</td></tr>
+    <tr><td><code>type=fire/cold</code></td><td>Multi-type renders "X or Y".</td></tr>
+    <tr><td><code>average</code> or <code>average=true|&lt;n&gt;</code></td><td>Shows expected damage. <code>true</code> auto-computes from min/max rolls; literal <code>666</code> sets the displayed value directly.</td></tr>
+    <tr><td><code>extended</code> or <code>format=extended</code></td><td>"Hit: 7 (2d6) bludgeoning damage." statblock line.</td></tr>
+    <tr><td><code>temp</code> (bare)</td><td>Adds temphp damage type &mdash; for temp-HP healing.</td></tr>
+    <tr><td><code>activity=</code></td><td>Pull formulas from activity's <code>getDamageConfig()</code>.</td></tr>
+    <tr><td><code>scaling=&lt;n&gt;</code></td><td>Spell-level scaling carried from activity.</td></tr>
+  </tbody>
+</table>
+
+<h3 id="dnd5e-item">4.4 <code>[[/item &lt;ref&gt; activity=&lt;ref&gt;]]</code></h3>
+<p>Cross-item activity prompt &mdash; the literal "pull info from another feature/spell" use case. Resolution order for <code>&lt;ref&gt;</code>:</p>
+<ol>
+  <li>Parses as a UUID? &rarr; resolve directly.</li>
+  <li>Matches an item ID on <code>options.relativeTo.parent.items</code>? &rarr; use that.</li>
+  <li>Fall back to item name lookup at click time on the speaker's actor.</li>
+</ol>
+<pre><code>[[/item "Heavy Crossbow" activity=Poison]]
+[[/item Compendium.dnd5e.items.Item.crossbowId]
+[[/item .Item.xxx]                                 # relative</code></pre>
+
+<h3 id="dnd5e-misc">4.5 <code>[[/award]]</code>, <code>[[lookup]]</code>, <code>[[language]]</code></h3>
+
+<table>
+  <thead><tr><th>Tag</th><th>Behaviour</th></tr></thead>
+  <tbody>
+    <tr><td><code>[[/award 100gp 50sp 20XP each]]</code></td><td>Currency/XP grant chip with trophy icon and click-to-award action. <code>each</code> multiplies per-token.</td></tr>
+    <tr><td><code>[[lookup @path]]{fallback}</code></td><td>Reads roll-data path as live text in prose. Style modifiers: <code>capitalize</code>, <code>lowercase</code>, <code>uppercase</code>. <code>activity=&lt;id&gt;</code> switches context to that activity's rollData.</td></tr>
+    <tr><td><code>[[language deep]]{Deep Speech}</code></td><td>Cosmetic language tag &mdash; doesn't fetch a document.</td></tr>
+  </tbody>
+</table>
+
+<h3 id="dnd5e-reference">4.6 <code>&amp;Reference[type=key flags]{Label}</code> &mdash; the Glossary Enricher</h3>
+<p><strong>Read this carefully &mdash; this is the closest existing analogue to your "system page" idea.</strong></p>
+
+<p>Resolves through <code>CONFIG.DND5E.ruleTypes</code>. Each type has a registry of UUIDs pointing into compendium journal pages (dnd5e's "rules" compendium, conditions glossary, etc.). On hover the link shows a rich tooltip; on click it opens the journal page.</p>
+
+<table>
+  <thead><tr><th>Type</th><th>Key vocabulary</th><th>Backed by</th></tr></thead>
+  <tbody>
+    <tr><td><code>rule</code></td><td><code>inspiration</code>, <code>cover</code>, <code>push</code>, <code>drag</code>, <code>lift</code>, <code>crit</code>, &hellip;</td><td><code>CONFIG.DND5E.rules</code></td></tr>
+    <tr><td><code>condition</code></td><td><code>unconscious</code>, <code>prone</code>, <code>grappled</code>, &hellip;</td><td><code>conditionTypes</code></td></tr>
+    <tr><td><code>ability</code></td><td><code>str</code>/<code>dex</code>/&hellip;</td><td><code>enrichmentLookup.abilities</code></td></tr>
+    <tr><td><code>skill</code></td><td><code>acr</code>/<code>ath</code>/&hellip;</td><td><code>enrichmentLookup.skills</code></td></tr>
+    <tr><td><code>damage</code></td><td><code>fire</code>/<code>cold</code>/&hellip;</td><td><code>damageTypes</code></td></tr>
+    <tr><td><code>spellSchool</code></td><td><code>evo</code>/<code>abj</code>/&hellip;</td><td><code>enrichmentLookup.spellSchools</code></td></tr>
+    <tr><td><code>spellComponent</code> / <code>spellTag</code></td><td><code>vocal</code>/<code>somatic</code>/<code>material</code>/&hellip;</td><td><code>itemProperties</code></td></tr>
+    <tr><td><code>areaOfEffect</code></td><td><code>cone</code>/<code>sphere</code>/<code>line</code>/&hellip;</td><td><code>areaTargetTypes</code></td></tr>
+    <tr><td><code>creatureType</code></td><td><code>aberration</code>/<code>beast</code>/&hellip;</td><td><code>creatureTypes</code></td></tr>
+    <tr><td><code>weaponMastery</code></td><td><code>cleave</code>/<code>flex</code>/<code>graze</code>/&hellip;</td><td><code>weaponMasteries</code></td></tr>
+  </tbody>
+</table>
+
+<h4>Flags</h4>
+<ul>
+  <li><code>apply=false</code> &mdash; suppress the apply-status button on conditions.</li>
+  <li>Bare value with no <code>type=</code> &rarr; autodiscovers across all types (e.g. <code>&amp;Reference[unconscious]</code> finds it as a condition).</li>
+</ul>
+
+<p><strong>Why this matters for use case #3:</strong> the implementation is one parent JournalEntry per system (Conditions, Rules, Weapon Masteries) with one JournalEntryPage per subsection (Prone, Stunned, etc.), and a flat <code>{ slug: uuid }</code> lookup table at <code>CONFIG.DND5E.&lt;system&gt;Types</code>. The slug becomes the addressable key.</p>
+
+<!-- ───────────────────────────── USE CASES ───────────────────────────── -->
+<h2 id="usecases">5. Your Four Use Cases &mdash; Verdicts</h2>
+
+<div class="card verdict-box">
+  <p><strong>Legend:</strong>
+    <span class="verdict reuse">Reuse</span> use Foundry/dnd5e as-is &middot;
+    <span class="verdict extend">Extend</span> register a new custom enricher / new entity kind &middot;
+    <span class="verdict build">Build</span> net-new app-side construction (no Foundry analogue) &middot;
+    <span class="verdict avoid">Overwrite</span> replace Foundry behaviour (avoid)
+  </p>
+</div>
+
+<div class="uc-grid">
+
+  <!-- UC1 -->
+  <div class="uc">
+    <header>
+      <h3>UC #1 &mdash; Article cross-references with hover preview + click-to-open</h3>
+      <div>
+        <span class="verdict extend">Extend</span>
+        <span class="verdict build">Build (app)</span>
+      </div>
+    </header>
+    <div class="request">
+      "Being able to reference articles from other articles with good UI pop-ups that have a small description when hovered, and the ability to open the full article when clicked. In both app and Foundry as a window."
+    </div>
+    <div class="uc-cols">
+      <div class="uc-col">
+        <h5>What Foundry already gives us</h5>
+        <ul>
+          <li><code>@UUID[JournalEntryPage.xxx]{Label}</code> renders a content link with built-in hover tooltip + click-to-open journal sheet.</li>
+          <li>The tooltip is generic by default (just the document type label), but Foundry v13 supports rich HTML tooltips via the <code>data-tooltip-html</code> attribute &mdash; <code>RuleJournalPageData.richTooltip()</code> at <code>dnd5e.mjs:77098</code> is a working example.</li>
+          <li>Drag-and-drop onto sheets and the hotbar works for free.</li>
+        </ul>
+      </div>
+      <div class="uc-col">
+        <h5>What we need to build</h5>
+        <ul>
+          <li><strong>App side:</strong> new BBCode tag (or extend <code>@article[slug]{label}</code> in the existing entity-ref grammar). Renderer attaches an <code>onMouseEnter</code> handler that fetches a short summary and shows a hover card. Click navigates to <code>/wiki/&lt;slug&gt;</code>.</li>
+          <li><strong>Module side:</strong> add <code>article</code> to the entity kinds in <code>reference-service.js</code>'s <code>ENTITY_REFERENCE_PATTERN</code>. Compile to <code>@UUID[JournalEntryPage&hellip;]</code>. Optionally enhance the rendered anchor with a <code>data-tooltip-html</code> attribute carrying the summary so the Foundry hover matches the app's.</li>
+        </ul>
+      </div>
+    </div>
+    <p><strong>Recommendation:</strong> extend, don't overwrite. Foundry's <code>@UUID</code> rendering pipeline gives us 80% of the work for free. The hover-with-summary part is purely additive &mdash; we set a custom <code>data-tooltip-html</code> when we render the link. App side gets a parallel hover-card component.</p>
+  </div>
+
+  <!-- UC2 -->
+  <div class="uc">
+    <header>
+      <h3>UC #2 &mdash; Reference items from anywhere</h3>
+      <div><span class="verdict extend">Extend</span></div>
+    </header>
+    <div class="request">
+      "Being able to reference items from anywhere in our application, or features, classes, spells, etc."
+    </div>
+    <div class="uc-cols">
+      <div class="uc-col">
+        <h5>Where we already are</h5>
+        <ul>
+          <li>Dauligor's entity-reference grammar already covers <code>@class</code>, <code>@subclass</code>, <code>@feature</code>, <code>@option</code>, <code>@source</code> (see <code>src/lib/referenceSyntax.ts</code> + <code>module/dauligor-pairing/scripts/reference-service.js</code>).</li>
+          <li>Each compiles to <code>@UUID[&hellip;]</code> at module import time via <code>findEntityDocument()</code>.</li>
+          <li>Foundry's <code>@UUID</code> + <code>fromUuid()</code> handles every document type universally on its end.</li>
+        </ul>
+      </div>
+      <div class="uc-col">
+        <h5>What's missing</h5>
+        <ul>
+          <li>New entity kinds to add: <code>@spell</code>, <code>@feat</code>, <code>@item</code>, <code>@weapon</code>, <code>@armor</code>, <code>@tool</code>, <code>@race</code>, <code>@background</code>.</li>
+          <li><code>matchesEntityKind()</code> needs branches for each new kind. <code>findEntityDocument()</code> already works generically &mdash; it keys off <code>flags.dauligor-pairing.sourceId</code>.</li>
+          <li>App side: extend <code>ENTITY_REFERENCE_PATTERN</code> in <code>referenceSyntax.ts</code> with the new kinds.</li>
+        </ul>
+      </div>
+    </div>
+    <p><strong>Recommendation:</strong> this is ~90% built. Each new entity kind is one new resolver case on the module side and one new entry in the reference sheet vocabulary on the app side. Same architecture, no Foundry override.</p>
+  </div>
+
+  <!-- UC3 -->
+  <div class="uc">
+    <header>
+      <h3>UC #3 &mdash; Articles with addressable subsections (system pages)</h3>
+      <div>
+        <span class="verdict reuse">Reuse</span>
+        <span class="verdict extend">Extend</span>
+        <span class="verdict build">Build (app)</span>
+      </div>
+    </header>
+    <div class="request">
+      "Being able to create an article, and then being able to create small subsections in that article that can be referenced. For example <code>&amp;Reference[condition=prone]</code> could have a condition page with all of the conditions referencable from that page. Probably with a unique System page."
+    </div>
+    <div class="uc-cols">
+      <div class="uc-col">
+        <h5>How dnd5e already does this</h5>
+        <ul>
+          <li>One JournalEntry = one "system" (e.g. <em>Conditions</em>).</li>
+          <li>One JournalEntryPage per subsection (Prone, Stunned, &hellip;).</li>
+          <li>Each subsection has a stable slug.</li>
+          <li><code>CONFIG.DND5E.conditionTypes.prone</code> = <code>"Compendium.dnd5e.rules.JournalEntry.&hellip;.JournalEntryPage.&hellip;"</code>.</li>
+          <li><code>&amp;Reference[condition=prone]</code> looks up that UUID &rarr; renders link to that exact page &rarr; for conditions, also stamps an "apply status" action button.</li>
+        </ul>
+      </div>
+      <div class="uc-col">
+        <h5>What we'd add</h5>
+        <ul>
+          <li><strong>App side:</strong> a "System Page" article type. Pattern: a parent article (e.g. <em>Conditions</em>) with each subsection as a child article. The parent renders a glossary view (all children listed in one scrollable page). Each child has a stable slug addressable from elsewhere.</li>
+          <li><strong>App side:</strong> new entity-reference forms keyed by system: <code>@condition[prone]</code>, <code>@rule[cover]</code>, <code>@area-effect[cone]</code>, etc.</li>
+          <li><strong>Module side:</strong> for systems Foundry already covers (conditions, skills, abilities, damage types, weapon masteries, area-of-effect, creature types), <code>@condition[prone]</code> compiles to <code>&amp;Reference[condition=prone]</code> &mdash; we ride dnd5e's existing glossary entirely.</li>
+          <li><strong>Module side:</strong> for Dauligor-specific systems (custom rules, homebrew conditions), compile to <code>@UUID[&hellip;]</code> pointing at the user's authored system pages exported as JournalEntry+JournalEntryPages.</li>
+        </ul>
+      </div>
+    </div>
+    <p><strong>Recommendation:</strong> Foundry already has the exact architecture you want &mdash; one parent doc + many addressable children + a slug-to-UUID lookup table. The work is (a) replicate the structure on the app side as a "system page" wiki article type, and (b) extend the module resolver so our semantic refs compile to <code>&amp;Reference[&hellip;]</code> when Foundry has the system, and <code>@UUID[&hellip;]</code> otherwise. No overwrite.</p>
+  </div>
+
+  <!-- UC4 -->
+  <div class="uc">
+    <header>
+      <h3>UC #4 &mdash; Admin proficiency hover + click &rarr; system page</h3>
+      <div>
+        <span class="verdict reuse">Reuse</span>
+        <span class="verdict extend">Extend</span>
+      </div>
+    </header>
+    <div class="request">
+      "Being able to hover an admin proficiency, but when clicked being pushed towards its system page where it can be explained in detail what that skill is used for."
+    </div>
+    <div class="uc-cols">
+      <div class="uc-col">
+        <h5>What Foundry already gives us</h5>
+        <ul>
+          <li><code>&amp;Reference[skill=acr]</code> already does this for all 18 5e skills &mdash; renders a link to the Acrobatics journal page in the dnd5e rules pack.</li>
+          <li>Same for abilities (<code>ability=str</code>), damage types, conditions, area-of-effect, etc. (see §4.6).</li>
+          <li>Hover tooltip is built in.</li>
+        </ul>
+      </div>
+      <div class="uc-col">
+        <h5>What's missing</h5>
+        <ul>
+          <li><strong>App side:</strong> a second mode for the bare-name shortcuts. Currently <code>@stealth</code> resolves to the <em>formula</em> path <code>@skills.ste.total</code>. We need an <em>entity</em> form &mdash; <code>@skill[stealth]{Stealth}</code> &mdash; that resolves to a link to the Stealth system page on the app side and to <code>&amp;Reference[skill=ste]</code> on the Foundry side.</li>
+          <li>App-side: when the cursor sits on an admin-proficiencies row, the click handler navigates to the system page (the Skills system article).</li>
+          <li>For homebrew tools / weapons / armor not in the 5e SRD, we extend <code>CONFIG.DND5E.enrichmentLookup.tools</code> at module init time with the UUIDs of our own system pages.</li>
+        </ul>
+      </div>
+    </div>
+    <p><strong>Recommendation:</strong> nothing to overwrite &mdash; we add the entity-form variant on the app side and lean on dnd5e's existing <code>&amp;Reference</code> on the Foundry side. For homebrew proficiencies the module just adds entries to <code>enrichmentLookup</code> at <code>init</code> time pointing at our authored system pages.</p>
+  </div>
+
+</div>
+
+<!-- ───────────────────────────── RECOMMENDATION ───────────────────────────── -->
+<h2 id="recommendation">6. Overall Recommendation</h2>
+
+<div class="card verdict-box">
+  <h4 style="margin-top:0">Strategy: layer, don't replace</h4>
+  <p>Across all four use cases:</p>
+  <ul>
+    <li><span class="verdict reuse">Reuse</span> <strong>4 places</strong> &mdash; existing Foundry / dnd5e behaviour covers the case.</li>
+    <li><span class="verdict extend">Extend</span> <strong>4 places</strong> &mdash; one new resolver branch, one new compendium pack entry, or one new entity kind.</li>
+    <li><span class="verdict build">Build (app)</span> <strong>3 places</strong> &mdash; net-new app-side work (hover-card component, "system page" article type, entity-mode variant of proficiency shortcuts).</li>
+    <li><span class="verdict avoid">Overwrite</span> <strong>0 places</strong>. Avoid replacing Foundry's enricher pipeline &mdash; it would break interop with dnd5e and any other module.</li>
+  </ul>
+</div>
+
+<h3>Architectural shape</h3>
+<div class="grid-3">
+  <div class="mini">
+    <h5>App side</h5>
+    <p style="margin:0">Extend <code>referenceSyntax.ts</code> with new entity kinds + the entity-mode variant of bare shortcuts. Add a "system page" wiki article type. Render every reference as a hover-card chip.</p>
+  </div>
+  <div class="mini">
+    <h5>Module side</h5>
+    <p style="margin:0">Extend <code>reference-service.js</code>'s <code>findEntityDocument()</code> + <code>matchesEntityKind()</code> with the new kinds. For systems Foundry already handles, compile to <code>&amp;Reference[&hellip;]</code>. For Dauligor-only systems, compile to <code>@UUID[&hellip;]</code> at our authored journal pages.</p>
+  </div>
+  <div class="mini">
+    <h5>Foundry side</h5>
+    <p style="margin:0">No core changes. We benefit from the entire enricher pipeline (content links, embeds, inline rolls, tooltips, drag-and-drop) for free. For homebrew proficiencies we extend <code>CONFIG.DND5E.enrichmentLookup.*</code> at <code>init</code>.</p>
+  </div>
+</div>
+
+<h3>Where the "system page" model fits</h3>
+<p>The user-authored "system pages" on the app side map cleanly to Foundry's <em>JournalEntry with many JournalEntryPages</em> pattern. Each subsection (one Condition, one Skill, one Damage Type) is a separately-addressable child. We export the parent + children together when we sync the world's content, and the slug-to-UUID table becomes our extension of <code>CONFIG.DND5E.enrichmentLookup</code>.</p>
+
+<h3>What we don't do</h3>
+<div class="card warn">
+  <ul style="margin:0">
+    <li><strong>Don't override <code>TextEditor.enrichHTML</code> or its pipeline stages.</strong> Modules that do this conflict with each other and with dnd5e itself.</li>
+    <li><strong>Don't reinvent <code>@UUID</code>.</strong> Every Foundry document already has a stable UUID; the renderer already handles tooltip + click + drag for free.</li>
+    <li><strong>Don't write a parallel reference resolver inside Foundry.</strong> Continue using <code>reference-service.js</code> as the bridge &mdash; Dauligor semantic refs in, Foundry-native paths/links out.</li>
+  </ul>
+</div>
+
+<!-- ───────────────────────────── FOOTNOTES ───────────────────────────── -->
+<h2 id="gotchas">7. Footnotes &amp; Gotchas</h2>
+
+<details>
+<summary>The "<code>@</code>-paths" naming collision &mdash; <code>@abilities.cha.mod</code> is not an enricher</summary>
+<div>
+  <p>Inside a formula field, <code>@abilities.cha.mod</code> is <em>roll data substitution</em> &mdash; handled by <code>Roll.replaceFormulaData</code>, not the text enricher. Inside a prose field, the same value renders only if wrapped: <code>[[lookup @abilities.cha.mod]]</code>. Dauligor's existing dual output mode (formula vs text) already handles this distinction.</p>
+</div>
+</details>
+
+<details>
+<summary>Module enricher ordering &mdash; first match wins per pass</summary>
+<div>
+  <p>If two custom enrichers register patterns that match the same substring, the order they were pushed to <code>CONFIG.TextEditor.enrichers</code> determines who wins. dnd5e pushes its three patterns at <code>init</code> time. Any module that loads later and registers a colliding pattern will be silently shadowed. Practical implication: namespace any Dauligor enricher with a unique prefix (<code>@dauligor:&hellip;</code> or similar) to avoid collisions.</p>
+</div>
+</details>
+
+<details>
+<summary>The <code>relativeTo</code> option carries virtually all context</summary>
+<div>
+  <p>Every action enricher's "auto-find an activity" behaviour, every relative UUID resolution, every <code>getRollData()</code> fallback &mdash; all of these go through <code>options.relativeTo</code>. When we render Dauligor content in our own sheets we should always set this. When Foundry renders journal pages and item descriptions natively, it sets it for us.</p>
+</div>
+</details>
+
+<details>
+<summary>Drag-and-drop is free &mdash; but only on real <code>@UUID</code> links</summary>
+<div>
+  <p>The <code>draggable="true"</code> + <code>data-link</code> attributes on a content link wire it up to Foundry's drag handlers. If we render our own enriched output as a plain <code>&lt;a&gt;</code>, drag won't work. Easiest fix: always compose Dauligor references down to a real <code>doc.toAnchor()</code> call so we inherit the standard wiring.</p>
+</div>
+</details>
+
+<details>
+<summary>Tooltip flavours: simple vs rich HTML vs custom</summary>
+<div>
+  <p>Foundry v13 supports three flavours:</p>
+  <ul>
+    <li><code>data-tooltip="plain text"</code> &mdash; default tooltip behaviour, plain text only.</li>
+    <li><code>data-tooltip-html="&lt;p&gt;&hellip;&lt;/p&gt;"</code> &mdash; rich HTML tooltip rendered inside the standard tooltip frame.</li>
+    <li>Custom tooltip via the TooltipManager API &mdash; full control over content and lifecycle. dnd5e uses this for spell item-tooltips and rule rich-tooltips.</li>
+  </ul>
+  <p>For UC #1 the simplest path is to set <code>data-tooltip-html</code> on the rendered anchor with a short HTML summary. We can author the summary on the app side and ship it with the export.</p>
+</div>
+</details>
+
+<details>
+<summary>Inline rolls and the prosemirror editor</summary>
+<div>
+  <p>The ProseMirror editor (default in v13, replacing TinyMCE in v14) understands content links, embeds, and inline rolls when they're authored in a journal page. Custom enrichers display correctly in read-only rendered output but the editor renders them as plain text while editing. This is fine for Dauligor &mdash; authoring happens on the web app, not inside Foundry's editor.</p>
+</div>
+</details>
+
+<details>
+<summary>The "what about <code>@Embed</code> for cross-feature inclusion?" question</summary>
+<div>
+  <p><code>@Embed</code> is powerful but easy to abuse. When a feature description embeds another feature, the rendered HTML grows quickly and the recursion cap (5 levels) becomes load-bearing. Recommended uses for Dauligor:</p>
+  <ul>
+    <li>Embedding a spell's description inside a class feature that grants it ("You learn @Embed[Item.fireball details]").</li>
+    <li>Embedding a system-page subsection inline ("see @Embed[JournalEntryPage.prone inline]").</li>
+    <li>NOT embedding entire characters or large NPCs &mdash; use <code>@UUID</code> there.</li>
+  </ul>
+</div>
+</details>
+
+<footer class="footnote">
+  <p>File: <code>docs/_drafts/foundry-enricher-deep-dive-2026-05-26.html</code> &middot; safe to delete after the design decisions land in <code>docs/architecture/reference-syntax.md</code> or a dedicated <code>docs/features/system-pages.md</code>.</p>
+  <p>Source citations: <code>C:\Users\Jean\AppData\Local\FoundryVTT\Data\systems\dnd5e\dnd5e.mjs</code> (line refs in body), <code>C:\Program Files\Foundry Virtual Tabletop\resources\app\client\applications\ux\text-editor.mjs</code>.</p>
+</footer>
+
+</div>
+</body>
+</html>

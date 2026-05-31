@@ -3,7 +3,7 @@
 Started: `2026-05-28`
 Owner: `Claude`
 Goal: `Own and evolve the content-proposals subsystem — queue/drafts/blocks, cascade engine, review mode, and proposal-mode editor wiring. Specific task per session.`
-Status: `Part D shipped` — block-atomic approve + guard #1 reference-integrity walk landed on `main` (`b35705f`), incl. the AdminProposals Approve-/Reject-block UI. Pure logic unit-tested green; the live atomic-batch run is the **joint e2e** with compendium-editors (handed over in [../compendium-editors/2026-05-29-partD-shipped.md](../compendium-editors/2026-05-29-partD-shipped.md)). Remaining on this branch: **R4** (atomic submit flush) + **F2-leftover** (wrap option-groups route), both tracked. Remote entity_type migrations still gated.
+Status: `feature complete + block UX redesign in progress` — **RESUME VIA [2026-05-30-session-resume.md](2026-05-30-session-resume.md)** (read it first post-compaction). The cross-referential-cluster feature (Part D atomic approve + guard #1, R4, F3, F2, remote entity_type migrations) is **functionally complete and live in prod**. Current work: a **UX redesign of the block experience** — admin review **Option C split-pane shipped** (`9f610e8`, owner testing on the :3002 dev stack); **authoring-side mocked up** (`docs/_drafts/authoring-block-redesign.html`, 3 surfaces) and **awaiting the owner's pick** before building. Branch == `main` == `6be599a`. Housekeeping: backfill remote `d1_migrations` (#39).
 
 > Lives in the `loving-banach-d76c40` worktree directory (the dir
 > couldn't be renamed to match the branch — Windows locks the active
@@ -61,6 +61,69 @@ Proposal-mode logic lives *inside* these files, but the files themselves are own
 
 Newest at the top. Each entry: date + link to the handoff doc in this same folder.
 
+- `2026-05-30` — **Block UX redesign in progress; session resume point written.**
+  Admin review **Option C split-pane shipped** (`9f610e8`) — `BlockReview`/`FieldDiff`
+  in AdminProposals (grouped rail + field-level diff, replaces the flat list +
+  retires the broken review nav). **Authoring side mocked up** (3 surfaces:
+  picker/switcher, block bar + drawer, Review&Submit) at
+  `docs/_drafts/authoring-block-redesign.html` — **awaiting owner's pick**, no
+  code yet. Plus the dev image proxy (`worker/index.js` `/images` serve route +
+  `dev-proposal.mjs` R2_PUBLIC_URL override) so uploads render in dev. Full
+  resume context: [2026-05-30-session-resume.md](2026-05-30-session-resume.md).
+- `2026-05-30` — **Live-testing bug pass (4 reported).** **#1 block isolation**
+  (`bf7e53b`): active-block id was a global localStorage key → bled across
+  accounts in one browser; now per-uid + reset on auth change. **#4 option
+  overlay** (`868fbce`): `useProposalDraftOptions` dropped `group_id`, so
+  in-block option items were filtered out of their group's advancement picker;
+  now carries `groupId`/`parentId`/`parentType`. **#2 image upload** (`5e213df`):
+  staff-gated → 403 for content-creators; now allowed when the caller owns the
+  active OPEN block (x-proposal-bundle-id header + server ownership check). **#3
+  child-sections-locked-until-refresh**: investigated — Class/Subclass/
+  UniqueOptionGroup editors are ALL already correctly wired via
+  `useProposalSingleWorkId` (`effectiveId = routeId ?? pendingCreateId`,
+  `recordCreate` on first create, child panels gated on `effectiveId`), so no
+  reload should be needed in current `main`. Points at a stale deployed bundle;
+  awaiting the user's env/repro to confirm vs. a real gap. Follow-up: non-staff
+  uploads still take a client-chosen R2 key (proposal-scoped prefix would harden).
+- `2026-05-30` — **Remote entity_type migrations APPLIED (with go-ahead).** Ran
+  `20260528-1200` (scaling_column) then `20260528-1400` (feature) on remote D1 via
+  `wrangler d1 execute --remote --file=…` (NOT `migrations apply`). Captured a
+  time-travel restore bookmark first (`000000cf-00000002-0000507b-588e9ef29c56c263be8601faa6903cfa`);
+  verified post-state: both types in the `pending_revisions` CHECK, **10 rows
+  preserved** (== pre-count), 6 indexes (5 named + PK autoindex). `scaling_column`
+  + `feature` proposals are now accepted in prod. Applied via execute-file, so the
+  remote `d1_migrations` tracking table still doesn't record them — fold into #39.
+- `2026-05-30` — **Guard #1 gap closed: walks advancement `pool`/`optionalPool`.**
+  compendium-editors confirmed those arrays carry same-block draft ids (same
+  overlay-merged catalogs as the single-selects), so `collectAdvancementRefs`
+  now walks them keyed by `configuration.choiceType` (feat→feat, feature→
+  feature); item/other flavors are live-only (skipped); `excludedOptionIds`
+  left unwalked (dangling-excluded is a benign no-op). Unit-tested, tsc clean.
+  Reply: [../compendium-editors/2026-05-30-pool-fields-walked.md](../compendium-editors/2026-05-30-pool-fields-walked.md).
+- `2026-05-30` — **Part D live e2e PASSED (19/19).** Drove the real approve path
+  (guard #1 → `orderBlockRevisions` → `buildApprovedStatements` → one
+  `env.DB.batch()`) against a real seeded *Druid + Wild Shape + scaling column +
+  option group + option item + subclass* cluster, through the local wrangler
+  worker into local D1 (FK enforcement ON). Verified: whole cluster lands
+  atomically in FK-safe order (subclass after class, item after group — proves
+  the topo-ordering live); `subclass.preview` round-trips (F3); all revisions
+  flip to approved; guard #1 rejects a dangling parent ref; a bad-statement batch
+  rolls back with nothing applied. Only gap vs a full UI run: the HTTP/admin-auth
+  wrapper + the Approve-block button (admin Firebase login is out of scope for me
+  to drive). Applied `subclass_preview` to local D1 to enable the F3 check.
+  **Footgun spotted:** `worker/migrations/9999_cleanup.sql` is a destructive
+  DROP-ALL helper sitting in `migrations_dir` — `wrangler d1 migrations apply`
+  would run it last and wipe the DB (flagged for a separate fix).
+- `2026-05-29` — **R4 shipped + F2-leftover verified done** (`700f23a` on `main`).
+  R4(a): submit-side flush is now one atomic `env.DB.batch()` (no orphaned
+  staging rows / dup-on-retry). R4(b): `BlockProvider.refresh()` returns the
+  fresh drafts and `ProposalEditorWrapper` serializes flushes + adopts that
+  return into a ref, closing the create→update fold cache-staleness race (which
+  could otherwise double-POST a CREATE and break Part D's atomic approve on a PK
+  clash). F2-leftover: verified the `/proposals/edit/option-groups` list route
+  is already wrapped (`App.tsx:375`) and `UniqueOptionGroupList` already overlays
+  block drafts via `useBlockDraftedList` — the merge resolved it, no change
+  needed. Remaining: the Part D joint e2e (live atomic-batch run; mine to drive).
 - `2026-05-29` — **Part D shipped** (`b35705f` on `main`). Block-atomic approve
   (`POST /api/admin/proposals/bundle/:id/approve` + `/reject`): guard #1
   reference-integrity walk → guard #2 per-revision drift → topological order →

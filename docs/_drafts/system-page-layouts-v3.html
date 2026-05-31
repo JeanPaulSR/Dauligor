@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Page — Subtle Block Layouts (v3)</title>
+<style>
+  :root{
+    --bg:#17171b; --ink:#dcd7cc; --ink-soft:#a59f94; --muted:#6f6a5f;
+    --accent:#7ba3d6; --accent-bright:#aecaf0; --accent-dim:rgba(123,163,214,.5);
+    --line:rgba(255,255,255,.07); --line-mid:rgba(255,255,255,.12);
+    --fill:rgba(255,255,255,.025); --fill-hi:rgba(255,255,255,.045);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:#0f0f12;color:var(--ink);font-family:"Inter",-apple-system,"Segoe UI",Roboto,sans-serif;font-size:15px;line-height:1.6;}
+  .wrap{max-width:1180px;margin:0 auto;padding:40px 26px 90px;}
+  header.hero{border-bottom:1px solid var(--line-mid);padding-bottom:20px;margin-bottom:10px;}
+  header.hero .eyebrow{text-transform:uppercase;letter-spacing:1.4px;font-size:11px;color:var(--accent);font-weight:700;margin-bottom:8px;}
+  header.hero h1{font-family:"Cormorant Garamond",Georgia,serif;font-weight:600;font-size:43px;line-height:1.05;margin:0 0 8px;color:#f1ece0;}
+  header.hero .tagline{font-family:"Cormorant Garamond",serif;font-style:italic;font-size:19px;color:var(--ink-soft);margin:0;}
+  .lead{font-size:14.5px;color:var(--ink-soft);max-width:800px;margin:16px 0 0;}
+  .lead b{color:var(--accent-bright);}
+  .concept{margin-top:52px;}
+  .concept > .meta{display:flex;align-items:baseline;gap:13px;flex-wrap:wrap;margin-bottom:5px;}
+  .concept > .meta h2{font-family:"Cormorant Garamond",serif;font-size:28px;font-weight:600;margin:0;color:#f1ece0;}
+  .concept > .meta .num{font-family:"Cormorant Garamond",serif;font-size:14px;color:#0f0f12;background:var(--accent);width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;}
+  .concept > .desc{font-size:13.5px;color:var(--ink-soft);margin:2px 0 15px;max-width:850px;}
+  .concept > .desc b{color:var(--accent-bright);font-weight:600;}
+  .tag{display:inline-block;font-size:10.5px;font-weight:600;letter-spacing:.4px;padding:2px 9px;border-radius:99px;background:rgba(123,163,214,.16);color:var(--accent-bright);}
+
+  .frame{border:1px solid var(--line-mid);border-radius:11px;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,.45);}
+  .frame .bar{display:flex;align-items:center;gap:7px;padding:9px 13px;background:#1a1a1f;border-bottom:1px solid var(--line);}
+  .frame .bar i{width:10px;height:10px;border-radius:50%;background:#33333a;display:inline-block;}
+  .frame .bar .url{margin-left:10px;font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--muted);}
+  .frame .view{padding:40px 46px;background:var(--bg);}
+
+  /* shared page chrome */
+  .stage{display:grid;grid-template-columns:minmax(0,1fr) 190px;gap:46px;align-items:start;}
+  .pg-eyebrow{text-transform:uppercase;letter-spacing:2.4px;font-size:10.5px;color:var(--accent);font-weight:700;}
+  .pg-title{font-family:"Cormorant Garamond",serif;font-weight:600;font-size:46px;line-height:1.02;margin:6px 0 0;color:#f3eee2;}
+  .pg-desc{color:var(--ink-soft);font-size:15.5px;line-height:1.75;}
+  .ebody{color:var(--ink-soft);font-size:14px;line-height:1.72;}
+  .ebody b{color:var(--ink);font-weight:600;}
+  .ename{font-family:"Cormorant Garamond",serif;font-weight:600;color:var(--accent-bright);}
+  .ref{color:var(--accent-bright);border-bottom:1px dotted var(--accent);cursor:help;}
+  .rail{font-size:13px;position:sticky;top:14px;}
+  .rail .lbl{text-transform:uppercase;letter-spacing:1.6px;font-size:9.5px;color:var(--muted);font-weight:700;margin-bottom:9px;}
+  .rail a{display:block;color:var(--ink-soft);text-decoration:none;padding:3px 0;border-left:2px solid transparent;padding-left:11px;margin-left:-2px;}
+  .rail a.on{color:var(--accent-bright);border-left-color:var(--accent);}
+  .rail a:hover{color:var(--ink);}
+
+  /* description lead — a quiet rule, not a box */
+  .lead-desc{border-top:1px solid var(--line-mid);border-bottom:1px solid var(--line);padding:16px 0;margin:22px 0 30px;max-width:64ch;}
+  .lead-desc p{margin:0;font-size:15px;color:var(--ink-soft);font-style:italic;font-family:"Cormorant Garamond",serif;font-size:18px;line-height:1.6;}
+
+  /* C1 — Soft Inset */
+  .c1 .blk{background:var(--fill);border-radius:12px;padding:20px 24px;margin-bottom:12px;transition:background .15s;}
+  .c1 .blk:hover{background:var(--fill-hi);}
+  .c1 .blk h3{font-size:21px;margin:0 0 6px;}
+
+  /* C2 — Accent Spine */
+  .c2 .spine{border-left:1px solid var(--line-mid);padding-left:0;}
+  .c2 .blk{position:relative;padding:6px 0 26px 26px;}
+  .c2 .blk::before{content:"";position:absolute;left:-4px;top:13px;width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px var(--bg);}
+  .c2 .blk h3{font-size:21px;margin:0 0 6px;}
+
+  /* C3 — Ruled Header */
+  .c3 .blk{margin-bottom:30px;}
+  .c3 .blk h3{font-size:22px;margin:0 0 9px;padding-bottom:7px;position:relative;}
+  .c3 .blk h3::after{content:"";position:absolute;left:0;bottom:0;width:46px;height:2px;background:var(--accent);}
+
+  /* C4 — Quiet Focus */
+  .c4 .blk{padding:16px 20px;border-radius:10px;border:1px solid transparent;border-left:2px solid transparent;transition:.15s;}
+  .c4 .blk:hover{background:var(--fill);}
+  .c4 .blk.on{background:var(--fill);border-left-color:var(--accent);}
+  .c4 .blk h3{font-size:21px;margin:0 0 6px;}
+  .c4 .blk .anchor{font-family:"JetBrains Mono",monospace;font-size:10.5px;color:var(--accent-dim);margin-left:8px;}
+
+  .reco{margin-top:58px;background:#1e1e23;border:1px solid var(--line-mid);border-left:3px solid var(--accent);border-radius:8px;padding:18px 22px;}
+  .reco h3{font-family:"Cormorant Garamond",serif;font-size:22px;margin:0 0 8px;color:#f1ece0;}
+  .reco li{margin:6px 0;font-size:13.5px;color:var(--ink-soft);}
+  .reco b{color:var(--accent-bright);}
+  code{font-family:"JetBrains Mono",monospace;font-size:12px;background:rgba(123,163,214,.12);color:var(--accent-bright);padding:1px 5px;border-radius:3px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="eyebrow">Layout concepts v3 &middot; 2026-05-29 &middot; dark theme</div>
+  <h1>System Page &mdash; Subtle Blocks</h1>
+  <p class="tagline">Entries as blocks again &mdash; but quiet ones that belong to the page, not cards sitting on top of it.</p>
+</header>
+<p class="lead">
+  v2 dissolved the entries into a list; you want <b>blocks</b>, just subtle. So v3 keeps a block per entry &mdash; each is
+  still a distinct zone you can anchor to &mdash; while removing the hard card edges. The page reads as one article: a quiet
+  italic <b>description</b> lead at the top, then blocks set off by soft fills, a spine, or a rule instead of borders. All
+  dark-theme, all use the width, slim right rail for jumping.
+</p>
+
+<!-- C1 — Soft Inset -->
+<section class="concept">
+  <div class="meta"><span class="num">1</span><h2>Soft Inset</h2><span class="tag">blocks, no edges</span></div>
+  <p class="desc">Each entry is a <b>softly-filled zone</b> &mdash; a faint wash a touch lighter than the page, rounded, roomy
+    &mdash; with <b>no border</b>. Present as a block, but it melts into the page; brightens slightly on hover. The most
+    literal read of "make the blocks subtle."</p>
+  <div class="frame"><div class="bar"><i></i><i></i><i></i><span class="url">/system/condition</span></div>
+    <div class="view"><div class="stage"><div>
+      <div class="pg-eyebrow">System Page</div>
+      <div class="pg-title">Conditions</div>
+      <div class="lead-desc"><p>Temporary states &mdash; imposed by spells, attacks, or the environment &mdash; that change what a creature can do until they end.</p></div>
+      <div class="c1">
+        <div class="blk"><h3 class="ename">Blinded</h3><p class="ebody">Cannot see and automatically fails any check that needs sight. Attacks against it have <b>advantage</b>; its own attacks have <b>disadvantage</b>.</p></div>
+        <div class="blk"><h3 class="ename">Charmed</h3><p class="ebody">Cannot attack the charmer or target it with harmful effects. The charmer has advantage on social ability checks against it.</p></div>
+        <div class="blk"><h3 class="ename">Frightened</h3><p class="ebody">Has <b>disadvantage</b> on checks and attacks while the source of its fear is in sight, and cannot willingly move closer to that source.</p></div>
+        <div class="blk"><h3 class="ename">Prone</h3><p class="ebody">Can only crawl unless it stands. Disadvantage on attacks; melee attackers have advantage, ranged have disadvantage. Compare <span class="ref">&amp;condition[blinded]</span>.</p></div>
+      </div>
+    </div>
+    <div class="rail"><div class="lbl">Contents</div><a class="on">Blinded</a><a>Charmed</a><a>Frightened</a><a>Prone</a></div>
+    </div></div>
+  </div>
+</section>
+
+<!-- C2 — Accent Spine -->
+<section class="concept">
+  <div class="meta"><span class="num">2</span><h2>Accent Spine</h2><span class="tag">threaded, no fills</span></div>
+  <p class="desc">A single hairline runs down the left; every block <b>hangs off it</b> with a small accent node at its name.
+    No fills, no boxes &mdash; the spine is what groups them, so it stays airy while clearly being a sequence of blocks.</p>
+  <div class="frame"><div class="bar"><i></i><i></i><i></i><span class="url">/system/condition</span></div>
+    <div class="view"><div class="stage"><div>
+      <div class="pg-eyebrow">System Page</div>
+      <div class="pg-title">Conditions</div>
+      <div class="lead-desc"><p>Temporary states that change what a creature can do until they end.</p></div>
+      <div class="c2"><div class="spine">
+        <div class="blk"><h3 class="ename">Blinded</h3><p class="ebody">Cannot see and automatically fails any check that needs sight. Attacks against it have advantage; its own attacks have disadvantage.</p></div>
+        <div class="blk"><h3 class="ename">Charmed</h3><p class="ebody">Cannot attack the charmer or target it with harmful effects. The charmer has advantage on social checks against it.</p></div>
+        <div class="blk"><h3 class="ename">Frightened</h3><p class="ebody">Has disadvantage on checks and attacks while the source of its fear is in sight, and cannot willingly move closer to that source.</p></div>
+      </div></div>
+    </div>
+    <div class="rail"><div class="lbl">Contents</div><a class="on">Blinded</a><a>Charmed</a><a>Frightened</a><a>Prone</a></div>
+    </div></div>
+  </div>
+</section>
+
+<!-- C3 — Ruled Header -->
+<section class="concept">
+  <div class="meta"><span class="num">3</span><h2>Ruled Header</h2><span class="tag">article sections</span></div>
+  <p class="desc">No block container at all &mdash; each entry is a <b>section</b> whose name carries a short accent underline,
+    separated by whitespace. The "block" is implied by the heading + space. Reads exactly like a well-set article; the most
+    minimal while still feeling sectioned.</p>
+  <div class="frame"><div class="bar"><i></i><i></i><i></i><span class="url">/system/condition</span></div>
+    <div class="view"><div class="stage"><div>
+      <div class="pg-eyebrow">System Page</div>
+      <div class="pg-title">Conditions</div>
+      <div class="lead-desc"><p>Temporary states that change what a creature can do until they end.</p></div>
+      <div class="c3">
+        <div class="blk"><h3 class="ename">Blinded</h3><p class="ebody">Cannot see and automatically fails any check that needs sight. Attacks against it have advantage; its own attacks have disadvantage.</p></div>
+        <div class="blk"><h3 class="ename">Charmed</h3><p class="ebody">Cannot attack the charmer or target it with harmful effects. The charmer has advantage on social ability checks against it.</p></div>
+        <div class="blk"><h3 class="ename">Frightened</h3><p class="ebody">Has disadvantage on checks and attacks while the source of its fear is in sight, and cannot willingly move closer to that source.</p></div>
+      </div>
+    </div>
+    <div class="rail"><div class="lbl">Contents</div><a class="on">Blinded</a><a>Charmed</a><a>Frightened</a><a>Prone</a></div>
+    </div></div>
+  </div>
+</section>
+
+<!-- C4 — Quiet Focus -->
+<section class="concept">
+  <div class="meta"><span class="num">4</span><h2>Quiet Focus</h2><span class="tag">chrome only on focus</span></div>
+  <p class="desc">Blocks are <b>flat by default</b> &mdash; just a name and body with breathing room. A soft fill + left accent
+    appears only on <b>hover or when targeted</b> (so a <span class="ref">&amp;condition[prone]</span> deep-link lights its
+    block up on arrival). Calmest at rest, with a clear "you are here". Prone below is shown active.</p>
+  <div class="frame"><div class="bar"><i></i><i></i><i></i><span class="url">/system/condition#prone</span></div>
+    <div class="view"><div class="stage"><div>
+      <div class="pg-eyebrow">System Page</div>
+      <div class="pg-title">Conditions</div>
+      <div class="lead-desc"><p>Temporary states that change what a creature can do until they end.</p></div>
+      <div class="c4">
+        <div class="blk"><h3 class="ename">Blinded</h3><p class="ebody">Cannot see and automatically fails any check that needs sight. Attacks against it have advantage; its own attacks have disadvantage.</p></div>
+        <div class="blk"><h3 class="ename">Charmed</h3><p class="ebody">Cannot attack the charmer or target it with harmful effects. The charmer has advantage on social checks against it.</p></div>
+        <div class="blk on"><h3 class="ename">Prone <span class="anchor">#prone</span></h3><p class="ebody">Can only crawl unless it stands. Disadvantage on attacks; melee attackers have advantage, ranged have disadvantage.</p></div>
+      </div>
+    </div>
+    <div class="rail"><div class="lbl">Contents</div><a>Blinded</a><a>Charmed</a><a class="on">Prone</a></div>
+    </div></div>
+  </div>
+</section>
+
+<div class="reco">
+  <h3>My read</h3>
+  <ul>
+    <li><b>Soft Inset (1)</b> is the most direct answer to your note &mdash; clearly blocks, clearly subtle (fill, no edges).</li>
+    <li><b>Quiet Focus (4)</b> is the same idea but even quieter, lighting up only the entry you land on &mdash; great with deep-links.</li>
+    <li><b>Accent Spine (2)</b> threads them without any fill; <b>Ruled Header (3)</b> is the most article-pure (sections, not containers).</li>
+    <li>All keep the quiet italic <b>Description</b> lead and the slim right rail, and adapt to gold (dark/parchment) / blue (light).</li>
+  </ul>
+</div>
+
+</div>
+</body>
+</html>

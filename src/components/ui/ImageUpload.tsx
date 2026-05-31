@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { r2Upload } from '../../lib/r2';
+import { useBlock } from '../../lib/proposalBlock';
 import { convertToWebP } from '../../lib/imageUtils';
 import { IconPickerModal } from './IconPickerModal';
 import { Button } from './button';
@@ -53,6 +54,9 @@ export function ImageUpload({
   const [selectedType, setSelectedType] = useState<ImageType>('standard');
   const [pickerOpen, setPickerOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // When authoring inside a proposal block, let a content-creator upload into
+  // their own block (the server allows it for the active bundle's owner).
+  const { activeBundleId } = useBlock();
 
   const effectiveType: ImageType = imageType ?? selectedType;
   const canUsePicker = imageType === 'icon' || imageType === 'token';
@@ -82,7 +86,7 @@ export function ImageUpload({
         : `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
       const filePath = `${storagePath.endsWith('/') ? storagePath : storagePath + '/'}${baseName}.webp`;
 
-      const { url } = await r2Upload(converted, filePath, (pct) => setProgress(pct));
+      const { url } = await r2Upload(converted, filePath, (pct) => setProgress(pct), activeBundleId);
       onUpload(url);
       setUploading(false);
       setProgress(0);

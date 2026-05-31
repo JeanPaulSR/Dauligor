@@ -168,9 +168,19 @@ async function startServer() {
     void handleR2MoveFolder(req, res);
   });
 
-  app.post("/api/r2/upload", (req, res) => {
-    void handleR2Upload(req, res);
-  });
+  // Buffer the raw multipart body so the proxy forwards it to the worker
+  // intact. The global express.json() above skips non-JSON bodies and leaves
+  // req.body = {}, which the worker's request.formData() can't parse ("No
+  // initial boundary string"). Prod's Pages adapter pre-reads the body as
+  // bytes; this is the dev-server equivalent. `type: () => true` captures the
+  // multipart payload regardless of the boundary in its Content-Type.
+  app.post(
+    "/api/r2/upload",
+    express.raw({ type: () => true, limit: "50mb" }),
+    (req, res) => {
+      void handleR2Upload(req, res);
+    },
+  );
 
   // D1 Proxy
   app.post("/api/d1/query", handleD1Query);

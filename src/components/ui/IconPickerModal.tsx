@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { r2List, r2Upload } from '../../lib/r2';
+import { useBlock } from '../../lib/proposalBlock';
 import { convertToWebP } from '../../lib/imageUtils';
 import { auth } from '../../lib/firebase';
 import { isAdmin } from '../../lib/currentUser';
@@ -136,6 +137,9 @@ export function IconPickerModal({
   const [folders, setFolders] = useState<BrowseFolder[]>([]);
   const [icons, setIcons] = useState<BrowseIcon[]>([]);
   const [loading, setLoading] = useState(false);
+  // Active proposal block (if any) — lets a content-creator upload an icon
+  // into their own open block; the server validates ownership.
+  const { activeBundleId } = useBlock();
 
   const [pathInput, setPathInput] = useState('');
 
@@ -313,7 +317,7 @@ export function IconPickerModal({
         setUploadQueue((prev) =>
           prev.map((q) => q.id === queueId ? { ...q, progress: pct } : q),
         );
-      });
+      }, activeBundleId);
       setUploadQueue((prev) =>
         prev.map((q) => q.id === queueId ? { ...q, status: 'done', progress: 100 } : q),
       );

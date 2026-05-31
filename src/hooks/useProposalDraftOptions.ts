@@ -37,6 +37,16 @@ export type DraftOption = {
   name: string;
   /** Marker so the picker can render an "in this block" affordance. */
   __draft: true;
+  /**
+   * Parent linkage carried from the draft payload so a consumer can filter
+   * these drafts the same way it filters live rows. Notably `AdvancementManager`
+   * scopes option items by `groupId` — without it, an in-block option item is
+   * filtered out of its group's advancement picker (it shows live options but
+   * not same-block drafts). `undefined` when the payload doesn't carry it.
+   */
+  groupId?: string;
+  parentId?: string;
+  parentType?: string;
 };
 
 /**
@@ -76,10 +86,19 @@ export function useProposalDraftOptions(
       if (parentType !== undefined && String(payload?.parent_type ?? '') !== String(parentType)) continue;
       const rawName =
         payload && typeof payload.name === 'string' ? payload.name.trim() : '';
+      // Carry parent linkage (snake_case as queued, camelCase as a fallback)
+      // so consumers can scope drafts like live rows — e.g. option items by
+      // groupId in the advancement picker (#4).
+      const groupId = payload?.group_id ?? payload?.groupId;
+      const ownerId = payload?.parent_id ?? payload?.parentId;
+      const ownerType = payload?.parent_type ?? payload?.parentType;
       out.push({
         id,
         name: rawName || '(unnamed draft)',
         __draft: true,
+        ...(typeof groupId === 'string' && groupId ? { groupId } : {}),
+        ...(typeof ownerId === 'string' && ownerId ? { parentId: ownerId } : {}),
+        ...(typeof ownerType === 'string' && ownerType ? { parentType: ownerType } : {}),
       });
     }
     return out;

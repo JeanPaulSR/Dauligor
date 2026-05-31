@@ -90,12 +90,29 @@ async function handleRequest(request, env) {
     return new Response(null, { status: 204, headers: corsHeaders() });
   }
 
+  const url = new URL(request.url);
+
+  // Public image serve (NO auth) — GET /images/<key> streams the R2 object.
+  // In prod, images.dauligor.com serves R2 directly so this is never hit; in
+  // local dev the worker IS the image host (the dev launcher sets
+  // R2_PUBLIC_URL to this worker), so uploaded images can actually render
+  // instead of 404-ing against the prod host. Read-only and scoped to the
+  // already-public `images/` prefix — exposes nothing that isn't public.
+  if (request.method === 'GET' && url.pathname.startsWith('/images/')) {
+    const key = decodeURIComponent(url.pathname.slice(1));
+    const obj = await env.BUCKET.get(key);
+    if (!obj) return jsonResponse({ error: 'Not found' }, 404);
+    const headers = new Headers(corsHeaders());
+    if (obj.httpMetadata?.contentType) headers.set('Content-Type', obj.httpMetadata.contentType);
+    headers.set('Cache-Control', obj.httpMetadata?.cacheControl ?? 'public, max-age=3600');
+    if (obj.httpEtag) headers.set('ETag', obj.httpEtag);
+    return new Response(obj.body, { headers });
+  }
+
   const auth = request.headers.get('Authorization');
   if (!env.API_SECRET || auth !== `Bearer ${env.API_SECRET}`) {
     return jsonResponse({ error: 'Unauthorized' }, 401);
   }
-
-  const url = new URL(request.url);
 
   if (url.pathname === '/upload' && request.method === 'POST') {
     const form = await request.formData();

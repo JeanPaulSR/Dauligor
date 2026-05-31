@@ -1,5 +1,10 @@
 import type { IncomingMessage } from "node:http";
-import { HttpError, getCredentialErrorMessage, requireImageManagerAccess } from "./firebase-admin.js";
+import {
+  HttpError,
+  getCredentialErrorMessage,
+  requireImageManagerAccess,
+  requireAuthenticatedUser,
+} from "./firebase-admin.js";
 import { executeD1QueryInternal } from "./d1-internal.js";
 
 type NodeLikeRequest = IncomingMessage & {
@@ -166,9 +171,36 @@ export async function handleR2MoveFolder(req: NodeLikeRequest, res: NodeLikeResp
   }
 }
 
-export async function handleR2Upload(req: NodeLikeRequest, res: NodeLikeResponse) {
+// Image uploads are staff-gated, with ONE exception: a content-creator
+// authoring a proposal may upload INTO their own OPEN block. The client sends
+// the active block id in `x-proposal-bundle-id`; we allow a non-staff upload
+// only when the caller owns an `open` proposal_bundles row with that id. No
+// header, a non-open block, or someone else's block → the staff gate stands.
+// (Per owner decision 2026-05-30: "allow only inside a block.")
+async function authorizeUpload(req: NodeLikeRequest): Promise<void> {
   try {
     await requireImageManagerAccess(req.headers.authorization);
+    return; // staff — always allowed
+  } catch (staffErr) {
+    const raw = req.headers["x-proposal-bundle-id"];
+    const bundleId = Array.isArray(raw) ? raw[0] : raw;
+    if (!bundleId || typeof bundleId !== "string") throw staffErr;
+    // Must be a signed-in user who owns this block, and it must still be open.
+    const { decoded } = await requireAuthenticatedUser(req.headers.authorization);
+    const result = await executeD1QueryInternal({
+      sql: `SELECT 1 AS ok FROM proposal_bundles
+              WHERE id = ? AND created_by_user_id = ? AND status = 'open'
+              LIMIT 1`,
+      params: [bundleId, String(decoded.uid)],
+    });
+    const rows = Array.isArray(result?.results) ? result.results : [];
+    if (rows.length === 0) throw staffErr; // not the caller's open block
+  }
+}
+
+export async function handleR2Upload(req: NodeLikeRequest, res: NodeLikeResponse) {
+  try {
+    await authorizeUpload(req);
     const { apiSecret } = getWorkerConfig();
     const contentType = req.headers["content-type"];
     // The Pages adapter pre-reads the body as Uint8Array for non-JSON

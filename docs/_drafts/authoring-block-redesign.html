@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Authoring-side Block — Redesign Mockups</title>
+<style>
+  :root{
+    --parch:#f5ecd6; --parch2:#efe3c4; --ink:#3a2f1e; --ink2:#6b5d44;
+    --gold:#b88a2e; --gold-d:#8a6618; --line:#d8c79b;
+    --add:#3f7d4e; --del:#a23b3b; --upd:#2f6f8f; --card:#fbf5e4;
+    --shadow:0 1px 3px rgba(80,60,20,.18);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--parch);color:var(--ink);
+    font-family:'Iowan Old Style','Palatino Linotype',Georgia,serif;line-height:1.5}
+  .wrap{max-width:1120px;margin:0 auto;padding:32px 24px 80px}
+  h1{font-size:30px;margin:0 0 4px}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:2px;color:var(--gold-d);
+    border-bottom:1px solid var(--line);padding-bottom:6px;margin:48px 0 16px}
+  h3{margin:0;font-size:16px}
+  .sub{color:var(--ink2);font-size:14px;margin:0 0 10px}
+  .lede{background:var(--parch2);border:1px solid var(--line);border-left:4px solid var(--gold);
+    border-radius:8px;padding:14px 18px;margin:18px 0;font-size:14px}
+  .lede b{color:var(--gold-d)}
+  .pain{font-size:13px;color:var(--ink2);margin:6px 0 0;padding-left:18px}
+  .pain li{margin:3px 0}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);overflow:hidden}
+  .note{font-size:12px;color:var(--ink2);font-style:italic;margin:8px 2px 0}
+  .tag{display:inline-block;font-size:10px;text-transform:uppercase;letter-spacing:1px;
+    padding:2px 8px;border-radius:999px;border:1px solid var(--line);background:#fff8e7;color:var(--ink2)}
+  .op{display:inline-block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
+    padding:2px 7px;border-radius:4px;color:#fff}
+  .op.create{background:var(--add)} .op.update{background:var(--upd)} .op.delete{background:var(--del)}
+  .btn{font-family:inherit;font-size:13px;border-radius:6px;padding:7px 14px;border:1px solid var(--line);
+    background:#fff8e7;color:var(--ink);cursor:default;display:inline-flex;align-items:center;gap:6px}
+  .btn.gold{background:var(--gold);color:#fff;border-color:var(--gold-d)}
+  .btn.go{background:var(--add);color:#fff;border-color:var(--add)}
+  .btn.ghost{background:transparent;border-color:transparent;color:var(--gold-d)}
+  .btn.sm{font-size:12px;padding:4px 10px}
+  .x{color:var(--del);cursor:default;font-weight:700;opacity:.7}
+  .pill{font-size:11px;padding:2px 9px;border-radius:999px;border:1px solid var(--line);background:#fff8e7;color:var(--ink2)}
+  .pill.open{background:#eaf3f8;color:var(--upd);border-color:#cfe2ee}
+  .ref{font-size:11px;color:var(--upd);background:#eaf3f8;border:1px solid #cfe2ee;border-radius:4px;padding:1px 6px}
+  .muted{color:var(--ink2);font-size:12px}
+  /* block BAR */
+  .bar{display:flex;align-items:center;gap:12px;padding:10px 16px;
+    background:linear-gradient(180deg,#fbf3df,#f1e4c2);border-bottom:1px solid var(--line)}
+  .bar .name{font-weight:700;font-size:15px}
+  .switch{font-size:12px;color:var(--gold-d);border:1px solid var(--line);border-radius:6px;padding:3px 9px;background:#fff8e7}
+  .spacer{flex:1}
+  /* drawer layout */
+  .work{display:flex;min-height:380px}
+  .canvas{flex:1;padding:22px;color:var(--ink2);font-style:italic;
+    background:repeating-linear-gradient(45deg,transparent,transparent 12px,rgba(184,138,46,.04) 12px,rgba(184,138,46,.04) 24px)}
+  .drawer{width:330px;border-left:1px solid var(--line);background:#faf2dc;display:flex;flex-direction:column}
+  .drawer h4{margin:0;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--gold-d);
+    padding:12px 14px 6px}
+  .drawer .grp{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--ink2);padding:8px 14px 2px}
+  .ditem{display:flex;align-items:center;gap:8px;padding:7px 14px;font-size:13px;border-left:3px solid transparent}
+  .ditem:hover{background:#fff8e7;border-left-color:var(--gold)}
+  .ditem .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .drawer .foot{margin-top:auto;border-top:1px solid var(--line);padding:12px 14px;display:flex;flex-direction:column;gap:8px;background:#f3e7c6}
+  /* picker cards */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;padding:18px}
+  .bcard{border:1px solid var(--line);border-radius:9px;background:#fff8e7;padding:14px;display:flex;flex-direction:column;gap:8px}
+  .bcard.new{align-items:center;justify-content:center;color:var(--gold-d);border-style:dashed;min-height:120px;font-size:15px}
+  .bcard .chips{display:flex;flex-wrap:wrap;gap:5px}
+  .bcard .peek{font-size:12px;color:var(--ink2)}
+  /* split review */
+  .split{display:flex;min-height:340px}
+  .rail{width:280px;border-right:1px solid var(--line);background:#faf2dc;overflow:auto}
+  .rail .grp{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--gold-d);padding:10px 14px 4px}
+  .rail .item{display:flex;align-items:center;gap:8px;padding:8px 14px;font-size:13px;border-left:3px solid transparent}
+  .rail .item.sel{background:#fff8e7;border-left-color:var(--gold)}
+  .detail{flex:1;padding:18px 22px}
+  .field{color:var(--ink2);font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+  .preview{background:#fff;border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin-top:10px}
+  footer{margin-top:56px;font-size:13px;color:var(--ink2);border-top:1px solid var(--line);padding-top:16px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Authoring-side Block — redesign mockups</h1>
+  <p class="sub">What a content-creator sees while building a block (the counterpart to the admin review). Static mockups — react / pick a direction, then I build it, reusing the review components from the admin side.</p>
+
+  <div class="lede">
+    <b>Today the authoring side is thin and scattered.</b> You get a slim header strip (block name + a queue count + Save Progress), the block's actual contents only show as "(in this block)" markers inside each separate editor, and there's no single place to see, manage, or review your whole block before submitting.
+    <ul class="pain">
+      <li><b>No whole-block view</b> — you build pieces across editors and submit blind.</li>
+      <li><b>No managing</b> — can't see/remove a queued change from one place; Save vs Submit is unclear.</li>
+      <li><b>Weak picker / switching</b> — the block chooser is a forced dialog with no context, and switching the active block is clumsy.</li>
+    </ul>
+    Three surfaces below address each. Sample throughout: a creator mid-build on a <b>Druid class pack</b> (class + Wild Shape + CR column + Animal Forms group → Wolf + Circle of the Land subclass).
+  </div>
+
+  <!-- ============================================================ -->
+  <h2>Surface 1 — Block picker / switcher</h2>
+  <p class="sub">Replaces the forced, context-free dialog. Your open blocks as cards (name · #changes · types · last edited) + create new. The active block also gets a switcher in the bar (Surface 2).</p>
+  <div class="panel">
+    <div style="padding:14px 18px 0"><h3>Choose a block to work in</h3><p class="muted">Everything you author goes into the chosen block and is reviewed + approved together.</p></div>
+    <div class="grid">
+      <div class="bcard" style="border-color:var(--gold);box-shadow:0 0 0 2px rgba(184,138,46,.2)">
+        <div style="display:flex;align-items:center;gap:8px"><strong>Druid class pack</strong><span class="pill open">open · active</span></div>
+        <div class="peek">5 changes · edited 2 min ago</div>
+        <div class="chips"><span class="tag">class</span><span class="tag">feature</span><span class="tag">column</span><span class="tag">option group</span><span class="tag">subclass</span></div>
+        <button class="btn gold sm" style="align-self:flex-start">Continue</button>
+      </div>
+      <div class="bcard">
+        <div style="display:flex;align-items:center;gap:8px"><strong>Goblin bestiary</strong><span class="pill open">open</span></div>
+        <div class="peek">2 changes · edited yesterday</div>
+        <div class="chips"><span class="tag">feat</span><span class="tag">item</span></div>
+        <button class="btn sm" style="align-self:flex-start">Open</button>
+      </div>
+      <div class="bcard new">+ New block</div>
+    </div>
+  </div>
+  <p class="note">Submitted/approved blocks are hidden here (they live in My Proposals). The active block is highlighted; "New block" inline so you never hit a dead-end modal. Build cost: low.</p>
+
+  <!-- ============================================================ -->
+  <h2>Surface 2 — Block bar + "Your block" workspace (the main change)</h2>
+  <p class="sub">While authoring in <em>any</em> editor, a persistent bar shows the active block + a right-side drawer always lists what's in it — so you see your whole block as you build, remove pieces, and Save / Review&nbsp;&amp;&nbsp;Submit from one place. Replaces the thin strip.</p>
+  <div class="panel">
+    <div class="bar">
+      <span class="name">Druid class pack</span>
+      <span class="switch">switch block ▾</span>
+      <span class="pill open">open · 5 changes</span>
+      <span class="spacer"></span>
+      <span class="muted">saved 30s ago ✓</span>
+      <button class="btn sm">Save Progress</button>
+      <button class="btn go sm">Review &amp; Submit →</button>
+    </div>
+    <div class="work">
+      <div class="canvas">↞ the editor you're working in (Class editor, feature modal, etc.) renders here, unchanged</div>
+      <aside class="drawer">
+        <h4>Your block — 5 changes</h4>
+        <div class="grp">Class</div>
+        <div class="ditem"><span class="op create">c</span><span class="nm">Druid</span><span class="x">remove</span></div>
+        <div class="grp">Features &amp; scaling</div>
+        <div class="ditem"><span class="op create">c</span><span class="nm">Wild Shape</span><span class="x">remove</span></div>
+        <div class="ditem"><span class="op create">c</span><span class="nm">CR (column)</span><span class="x">remove</span></div>
+        <div class="grp">Options</div>
+        <div class="ditem"><span class="op create">c</span><span class="nm">Animal Forms → Wolf</span><span class="x">remove</span></div>
+        <div class="grp">Subclass</div>
+        <div class="ditem"><span class="op update">u</span><span class="nm">Circle of the Land</span><span class="x">remove</span></div>
+        <div class="foot">
+          <button class="btn">Save Progress</button>
+          <button class="btn go">Review &amp; Submit (5)</button>
+          <span class="muted" style="text-align:center">drawer collapses ▸ to give the editor full width</span>
+        </div>
+      </aside>
+    </div>
+  </div>
+  <p class="note">Clicking a drawer item jumps you to that entity (opens its editor / scrolls to it). "remove" un-proposes a queued draft in one click (no more hunting through editors). The bar's "switch block ▾" is the Surface-1 switcher inline. Build cost: medium — the drawer reuses the block's drafts the wrapper already tracks; remove = the existing draft-drop path.</p>
+
+  <!-- ============================================================ -->
+  <h2>Surface 3 — Review &amp; Submit (your block, before sending)</h2>
+  <p class="sub">"Review &amp; Submit" opens the creator's own Option-C review of the whole block — the <em>same</em> split-pane the admin uses, so you see exactly what they'll see. Remove anything, then submit the lot for review.</p>
+  <div class="panel">
+    <div class="bar">
+      <span class="name">Review your block — Druid class pack</span>
+      <span class="spacer"></span>
+      <button class="btn sm">Keep editing</button>
+      <button class="btn go sm">Submit 5 changes for review →</button>
+    </div>
+    <div class="split">
+      <div class="rail">
+        <div class="grp">Class</div>
+        <div class="item sel"><span class="op create">c</span> Druid</div>
+        <div class="grp">Features &amp; scaling</div>
+        <div class="item"><span class="op create">c</span> Wild Shape</div>
+        <div class="item"><span class="op create">c</span> CR (column)</div>
+        <div class="grp">Options</div>
+        <div class="item"><span class="op create">c</span> Animal Forms</div>
+        <div class="item"><span class="op create">c</span> Wolf</div>
+        <div class="grp">Subclass</div>
+        <div class="item"><span class="op update">u</span> Circle of the Land</div>
+      </div>
+      <div class="detail">
+        <div style="display:flex;align-items:center;gap:10px"><span class="op create">create</span><h3>Druid</h3><span class="tag">class</span><span class="spacer"></span><button class="btn sm" style="color:var(--del);border-color:rgba(162,59,59,.4)">Remove from block</button></div>
+        <div class="preview">
+          <div><span class="field">name</span> Druid &nbsp; <span class="field">hit die</span> d8 &nbsp; <span class="field">primary</span> Wisdom</div>
+          <div style="margin-top:8px"><span class="field">advancements</span></div>
+          <div style="font-size:13px;border-left:2px solid var(--line);padding-left:10px;margin-top:4px">
+            <div>L2 — grant feature <span class="ref">↳ Wild Shape</span></div>
+            <div>L2 — scale via <span class="ref">↳ CR column</span></div>
+            <div>L2 — grant options from <span class="ref">↳ Animal Forms</span></div>
+          </div>
+          <div style="margin-top:8px"><span class="field">preview (rendered)</span><br/><em>Masters of nature magic who draw on the primal forces of the wild.</em></div>
+        </div>
+        <p class="muted" style="margin-top:10px">✓ every cross-reference resolves inside this block — it'll approve as one unit.</p>
+      </div>
+    </div>
+  </div>
+  <p class="note">This is the admin's <code>BlockReview</code>/<code>FieldDiff</code> components reused, with "Remove from block" + "Submit" instead of Approve/Reject — so creator-self-review and admin-review stay identical and the build is cheap. It also shows the same in-block ref resolution, giving the creator early warning before submitting.</p>
+
+  <footer>
+    <b>My lean:</b> all three, since they're one flow — <b>Surface 2 (bar + drawer)</b> is the everyday win (always see/manage your block while authoring), <b>Surface 3</b> is the confident send-off (reuses the admin review), and <b>Surface 1</b> is the clean entry/switch. Build order: 2 → 3 → 1.
+    <br/><br/>
+    Reuse: Surface 3 is literally the admin <code>BlockReview</code> with different footer actions; the drawer reads the block drafts the wrapper already tracks; "remove" uses the existing draft-drop path. Styling is the same kit as the admin mockups + the live app.
+    <br/><br/>
+    Tell me which surfaces (or all) and any tweaks, and I'll build them into <code>ProposalEditorWrapper</code> + the shared review components.
+  </footer>
+
+</div>
+</body>
+</html>

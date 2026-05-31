@@ -1039,7 +1039,12 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
         // debounced queue path is more appropriate for expensive
         // multi-bundle rebakes (classes/subclasses fan out to many
         // R2 keys); feats only touch the one catalog.
-        void rebakeNow('feat', entryId);
+        //
+        // Backgrounds + races share this editor (via `scopeFeatType`)
+        // and the same feats table, but export as their own Foundry
+        // Item kinds — rebake under the scope-appropriate kind so the
+        // catalog's per-type counts/supportedImportTypes stay in sync.
+        void rebakeNow(scopeFeatType ?? 'feat', entryId);
         if (!opts.silent) {
           // Stay on the just-saved feat rather than resetting back to
           // a fresh form — the editor previously jumped the user

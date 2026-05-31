@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
-  Sparkles, LayoutGrid, Star, BookMarked, Type, ImageIcon, Minus, Square, Columns3,
-  ChevronUp, ChevronDown, Trash2, Copy, Plus, Save, X, GripVertical, Search,
+  Sparkles, LayoutGrid, Star, BookMarked, Type, ImageIcon, Minus, Square, Columns3, Megaphone,
+  ChevronUp, ChevronDown, Trash2, Copy, X, GripVertical, Search, ChevronLeft,
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -15,14 +15,42 @@ import { searchSystemPages, searchSystemEntries } from '../../lib/systemPages';
 import CampaignHomeBlocks from './CampaignHomeBlocks';
 import {
   fetchCampaignHomeBlocks, saveCampaignHomeBlocks, makeBlock, defaultHomeBlocks,
-  isContainer, BLOCK_TYPE_META, HOME_BLOCK_TYPES, ENTITY_PICKER_KINDS,
+  isContainer, makePlaceholderRef, BLOCK_TYPE_META, HOME_BLOCK_TYPES, ENTITY_PICKER_KINDS,
+  PLACEHOLDER_TITLE, PLACEHOLDER_DESCRIPTION,
   type HomeBlock, type HomeBlockType, type ContainerBlock, type EntityRef,
 } from '../../lib/campaignHome';
 
-const ICONS: Record<string, any> = { Sparkles, LayoutGrid, Star, BookMarked, Type, ImageIcon, Minus, Square, Columns3 };
+const ICONS: Record<string, any> = { Sparkles, LayoutGrid, Star, BookMarked, Type, ImageIcon, Minus, Square, Columns3, Megaphone };
 const PREVIEW_RECO = { id: 'preview', title: 'Recommended article', excerpt: 'Shown here from the campaign’s recommended lore setting.' };
 
-interface Props { campaignId: string; campaignName?: string; }
+interface Props {
+  campaignId: string;
+  campaignName?: string;
+  /** Fullscreen route mode: mounts the admin-page-fullscreen body class, shows a
+   *  "Back to Campaign Editor" header, locks to the viewport, and enables the
+   *  draggable pane resizers. Off (default) = the old in-tab boxed layout. */
+  fullscreen?: boolean;
+  /** Called by the Back button in fullscreen mode. */
+  onBack?: () => void;
+}
+
+/* Pane widths (px) for the resizable Structure | Preview | Inspector layout —
+   only the side panes are sized; the preview is flex-1. Persisted per browser. */
+const PANE_KEY = 'dauligor:campaignHomeEditor:panes:v1';
+const TREE_MIN = 180, TREE_MAX = 420, TREE_DEFAULT = 248;
+const INSP_MIN = 260, INSP_MAX = 520, INSP_DEFAULT = 320;
+function loadPaneWidths(): { tree: number; insp: number } {
+  try {
+    const raw = localStorage.getItem(PANE_KEY);
+    if (raw) {
+      const p = JSON.parse(raw);
+      const tree = Math.min(TREE_MAX, Math.max(TREE_MIN, Number(p.tree) || TREE_DEFAULT));
+      const insp = Math.min(INSP_MAX, Math.max(INSP_MIN, Number(p.insp) || INSP_DEFAULT));
+      return { tree, insp };
+    }
+  } catch { /* ignore */ }
+  return { tree: TREE_DEFAULT, insp: INSP_DEFAULT };
+}
 
 /* ── tree mutation helpers (operate on a deep clone, return new tree) ── */
 const clone = (blocks: HomeBlock[]): HomeBlock[] => JSON.parse(JSON.stringify(blocks));
@@ -47,7 +75,7 @@ function isDescendant(blocks: HomeBlock[], ancestorId: string, id: string): bool
   return findBlock(a.children, id) !== null;
 }
 
-export default function CampaignHomeEditor({ campaignId, campaignName = '' }: Props) {
+export default function CampaignHomeEditor({ campaignId, campaignName = '', fullscreen = false, onBack }: Props) {
   const [blocks, setBlocks] = useState<HomeBlock[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -57,8 +85,27 @@ export default function CampaignHomeEditor({ campaignId, campaignName = '' }: Pr
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropInfo, setDropInfo] = useState<{ id: string; pos: 'before' | 'after' | 'into' } | null>(null);
   const [addAt, setAddAt] = useState<{ containerId: string | null } | null>(null);
+  // Resizable pane widths (fullscreen mode only).
+  const [paneW, setPaneW] = useState<{ tree: number; insp: number }>(() => loadPaneWidths());
 
   useUnsavedChangesWarning(dirty);
+
+  // Fullscreen mode: strip the global <main> padding + hide footer + lock body
+  // scroll, per the documented admin-page-fullscreen recipe (components.md).
+  useEffect(() => {
+    if (!fullscreen) return;
+    document.documentElement.classList.add('admin-page-fullscreen');
+    document.body.classList.add('admin-page-fullscreen');
+    return () => {
+      document.documentElement.classList.remove('admin-page-fullscreen');
+      document.body.classList.remove('admin-page-fullscreen');
+    };
+  }, [fullscreen]);
+
+  // Persist pane widths.
+  useEffect(() => {
+    try { localStorage.setItem(PANE_KEY, JSON.stringify(paneW)); } catch { /* ignore */ }
+  }, [paneW]);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,6 +129,31 @@ export default function CampaignHomeEditor({ campaignId, campaignName = '' }: Pr
     })();
     return () => { cancelled = true; };
   }, [campaignId]);
+
+  // Drag-to-resize a side pane. `which` = which pane the handle controls; the
+  // tree handle grows rightward, the inspector handle grows leftward.
+  const startResize = useCallback((which: 'tree' | 'insp', e: React.PointerEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = which === 'tree' ? paneW.tree : paneW.insp;
+    const min = which === 'tree' ? TREE_MIN : INSP_MIN;
+    const max = which === 'tree' ? TREE_MAX : INSP_MAX;
+    const onMove = (ev: PointerEvent) => {
+      const delta = which === 'tree' ? ev.clientX - startX : startX - ev.clientX;
+      const next = Math.min(max, Math.max(min, startW + delta));
+      setPaneW((p) => ({ ...p, [which]: next }));
+    };
+    const onUp = () => {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, [paneW.tree, paneW.insp]);
 
   const selected = useMemo(() => (selectedId ? findBlock(blocks, selectedId) : null), [blocks, selectedId]);
   const canSave = dirty || seededFromDefault;
@@ -125,6 +197,25 @@ export default function CampaignHomeEditor({ campaignId, campaignName = '' }: Pr
     setSelectedId(b.id);
     setAddAt(null);
   };
+  // Sync a Columns block's column count. Growing adds empty columns; shrinking
+  // moves the dropped columns' blocks into the last kept column so nothing is
+  // lost. (Columns are managed here, never added/removed individually.)
+  const setColumnCount = (id: string, n: number) => {
+    const target = Math.max(2, Math.min(4, Math.round(n)));
+    mutate((draft) => {
+      const b = findBlock(draft, id);
+      if (!b || b.blockType !== 'columns') return;
+      b.columns = target as 2 | 3 | 4;
+      const cols = b.children;
+      while (cols.length < target) cols.push(makeBlock('column', crypto.randomUUID()));
+      if (cols.length > target) {
+        const keep = cols.slice(0, target);
+        const last = keep[target - 1];
+        cols.slice(target).forEach((ec) => { if (isContainer(ec) && isContainer(last)) last.children.push(...ec.children); });
+        b.children = keep;
+      }
+    });
+  };
 
   const performDrop = (targetId: string, pos: 'before' | 'after' | 'into') => {
     if (!dragId || dragId === targetId || isDescendant(blocks, dragId, targetId)) { setDragId(null); setDropInfo(null); return; }
@@ -159,6 +250,18 @@ export default function CampaignHomeEditor({ campaignId, campaignName = '' }: Pr
     }
   };
 
+  // Restore the seeded default layout. Destructive (replaces the current blocks),
+  // so confirm first. Leaves the result DIRTY + flagged as seeded so the GM can
+  // Save it (or navigate away to keep their existing saved layout untouched).
+  const handleRestoreDefault = () => {
+    if (!window.confirm('Replace the current homepage layout with the default? This discards your unsaved changes to the layout — you can still Save or leave without saving.')) return;
+    setBlocks(defaultHomeBlocks());
+    setSelectedId(null);
+    setSeededFromDefault(true);
+    setDirty(true);
+    toast('Default layout restored — Save to apply');
+  };
+
   // Ctrl/Cmd+S
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -174,95 +277,160 @@ export default function CampaignHomeEditor({ campaignId, campaignName = '' }: Pr
 
   if (loading) return <p className="description-text py-6">Loading homepage layout…</p>;
 
+  const actions = (
+    <div className="flex items-center gap-2 shrink-0">
+      <Button onClick={handleRestoreDefault} disabled={saving} variant="outline" className="border-gold/20 text-ink/70 hover:text-gold">
+        Restore Default
+      </Button>
+      <Button onClick={handleSave} disabled={saving || !canSave} className="btn-gold-solid">
+        {saving ? 'Saving…' : canSave ? 'Save Layout' : 'Saved'}
+      </Button>
+    </div>
+  );
+
+  // The three panes + their drag handles. Side-pane widths come from `paneW` in
+  // fullscreen (resizable); in boxed mode they're the fixed defaults.
+  const treeWidth = fullscreen ? paneW.tree : TREE_DEFAULT;
+  const inspWidth = fullscreen ? paneW.insp : INSP_DEFAULT;
+  const panes = (
+    <div className={`browser-panel ${fullscreen ? 'flex-1 min-h-0' : 'h-[calc(100vh-15rem)] min-h-[540px]'}`}>
+      {/* Structure tree */}
+      <div className="browser-sidebar shrink-0" style={{ width: treeWidth }}>
+        <div className="pane-head">Structure</div>
+        <div className="flex-grow overflow-y-auto custom-scrollbar p-2">
+          <BlockTree
+            blocks={blocks} selectedId={selectedId} dragId={dragId} dropInfo={dropInfo}
+            onSelect={setSelectedId}
+            onDragStart={setDragId}
+            onDragEndAll={() => { setDragId(null); setDropInfo(null); }}
+            onHover={setDropInfo}
+            onDrop={performDrop}
+            onAddInside={(cid) => setAddAt({ containerId: cid })}
+          />
+        </div>
+        <div className="p-2 border-t border-gold/20">
+          <Button onClick={() => setAddAt({ containerId: null })} className="btn-gold w-full h-8 text-xs">Add block</Button>
+        </div>
+      </div>
+
+      {fullscreen && <ResizeHandle onPointerDown={(e) => startResize('tree', e)} />}
+
+      {/* Live preview */}
+      <div className="flex-1 min-w-0 flex flex-col bg-background/10">
+        <div className="pane-head">Live preview · what players see</div>
+        <div className="flex-grow overflow-y-auto custom-scrollbar p-4">
+          {blocks.length === 0 ? (
+            <div className="empty-state h-full"><p className="description-text">No blocks — players see the default home page.</p><p className="label-text text-gold/40 mt-1">Add a block, or save to keep the default</p></div>
+          ) : (
+            // Clicks are swallowed so preview links don't navigate away mid-edit.
+            <div onClickCapture={(e) => e.preventDefault()}>
+              <CampaignHomeBlocks blocks={blocks} recommendedLore={PREVIEW_RECO} campaignName={campaignName || 'this campaign'} />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {fullscreen && <ResizeHandle onPointerDown={(e) => startResize('insp', e)} />}
+
+      {/* Inspector */}
+      <div className="border-l border-gold/20 bg-gold/5 flex flex-col shrink-0" style={{ width: inspWidth }}>
+        <div className="pane-head">Inspector</div>
+        <div className="flex-grow overflow-y-auto custom-scrollbar">
+          {selected ? (
+            <Inspector
+              key={selected.id}
+              block={selected}
+              parent={findParentList(blocks, selected.id)}
+              onUpdate={updateBlock}
+              onMove={moveByArrow}
+              onDuplicate={duplicateBlock}
+              onRemove={removeBlock}
+              onAddInside={(cid) => setAddAt({ containerId: cid })}
+              onColumnCount={setColumnCount}
+            />
+          ) : (
+            <p className="insp-empty">Select a block in the structure tree to edit it.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  const seedBanner = seededFromDefault && !dirty && (
+    <div className="px-3 py-2.5 border border-gold/20 bg-gold/5 shrink-0">
+      <p className="text-[12px] text-ink/70 leading-snug">
+        This is the <strong className="text-ink">default layout</strong>. Customize the blocks below, then <strong className="text-ink">Save</strong> to make it this campaign's homepage.
+      </p>
+    </div>
+  );
+
+  const pickerModal = addAt && <AddBlockPicker containerId={addAt.containerId} onPick={(t) => addBlock(t, addAt.containerId)} onClose={() => setAddAt(null)} />;
+
+  // ── Fullscreen route mode: edge-to-edge, back header, resizable panes ──
+  if (fullscreen) {
+    return (
+      <div className="h-[calc(100vh-4rem)] flex flex-col w-full px-3 sm:px-4 py-2 lg:py-3 gap-2">
+        <div className="flex items-center gap-3 shrink-0 pb-2 border-b border-gold/20">
+          <Button variant="ghost" onClick={() => onBack?.()} className="text-ink/60 hover:text-gold gap-2 px-2">
+            <ChevronLeft className="w-4 h-4" /> Back to Campaign Editor
+          </Button>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-lg font-serif font-bold text-ink truncate">
+              Homepage Layout{campaignName ? <span className="text-ink/40 font-normal">· {campaignName}</span> : null}
+            </h2>
+          </div>
+          {actions}
+        </div>
+        {seedBanner}
+        {panes}
+        {pickerModal}
+        {EDITOR_STYLE}
+      </div>
+    );
+  }
+
+  // ── Boxed in-tab mode (legacy fallback) ──
   return (
     <div className="space-y-3">
-      {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="h2-title flex items-center gap-2"><LayoutGrid className="w-5 h-5 text-gold shrink-0" /> Homepage Layout</h2>
+          <h2 className="h2-title">Homepage Layout</h2>
           <p className="field-hint mt-1">Build what players see on this campaign's home page — drag to reorder &amp; nest, fill each block, then save. Delete every block and save to fall back to the default site home.</p>
         </div>
-        <Button onClick={handleSave} disabled={saving || !canSave} className="btn-gold-solid gap-2 shrink-0">
-          <Save className="w-4 h-4" /> {saving ? 'Saving…' : canSave ? 'Save Layout' : 'Saved'}
-        </Button>
+        {actions}
       </div>
-
-      {seededFromDefault && !dirty && (
-        <div className="flex items-start gap-2 px-3 py-2.5 border border-gold/20 bg-gold/5">
-          <Sparkles className="w-4 h-4 text-gold shrink-0 mt-0.5" />
-          <p className="text-[12px] text-ink/70 leading-snug">
-            This is the <strong className="text-ink">default layout</strong>. Customize the blocks below, then <strong className="text-ink">Save</strong> to make it this campaign's homepage.
-          </p>
-        </div>
-      )}
-
-      {/* 3-pane builder */}
-      <div className="browser-panel h-[calc(100vh-15rem)] min-h-[540px]">
-        {/* Structure tree */}
-        <div className="w-[248px] browser-sidebar">
-          <div className="pane-head">Structure</div>
-          <div className="flex-grow overflow-y-auto custom-scrollbar p-2">
-            <BlockTree
-              blocks={blocks} selectedId={selectedId} dragId={dragId} dropInfo={dropInfo}
-              onSelect={setSelectedId}
-              onDragStart={setDragId}
-              onDragEndAll={() => { setDragId(null); setDropInfo(null); }}
-              onHover={setDropInfo}
-              onDrop={performDrop}
-            />
-          </div>
-          <div className="p-2 border-t border-gold/20">
-            <Button onClick={() => setAddAt({ containerId: null })} className="btn-gold w-full gap-2 h-8 text-xs"><Plus className="w-3.5 h-3.5" /> Add block</Button>
-          </div>
-        </div>
-
-        {/* Live preview */}
-        <div className="flex-1 min-w-0 flex flex-col bg-background/10">
-          <div className="pane-head">Live preview · what players see</div>
-          <div className="flex-grow overflow-y-auto custom-scrollbar p-4">
-            {blocks.length === 0 ? (
-              <div className="empty-state h-full"><LayoutGrid className="w-8 h-8 text-gold/20 mb-3" /><p className="description-text">No blocks — players see the default home page.</p><p className="label-text text-gold/40 mt-1">Add a block, or save to keep the default</p></div>
-            ) : (
-              // Clicks are swallowed so preview links don't navigate away mid-edit.
-              <div onClickCapture={(e) => e.preventDefault()}>
-                <CampaignHomeBlocks blocks={blocks} recommendedLore={PREVIEW_RECO} campaignName={campaignName || 'this campaign'} />
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Inspector */}
-        <div className="w-[320px] border-l border-gold/20 bg-gold/5 flex flex-col">
-          <div className="pane-head">Inspector</div>
-          <div className="flex-grow overflow-y-auto custom-scrollbar">
-            {selected ? (
-              <Inspector
-                key={selected.id}
-                block={selected}
-                parent={findParentList(blocks, selected.id)}
-                onUpdate={updateBlock}
-                onMove={moveByArrow}
-                onDuplicate={duplicateBlock}
-                onRemove={removeBlock}
-                onAddInside={(cid) => setAddAt({ containerId: cid })}
-              />
-            ) : (
-              <p className="insp-empty">Select a block in the structure tree to edit it.</p>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {addAt && <AddBlockPicker containerId={addAt.containerId} onPick={(t) => addBlock(t, addAt.containerId)} onClose={() => setAddAt(null)} />}
-
-      <style>{`
-        .pane-head{font-family:ui-monospace,Menlo,monospace;font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:rgba(26,26,26,.4);padding:10px 12px 6px;font-weight:700;}
-        .dark .pane-head{color:rgba(255,255,255,.4);}
-        .insp-empty{padding:30px 16px;text-align:center;color:var(--muted-foreground);font-style:italic;font-family:var(--font-serif);font-size:13px;}
-      `}</style>
+      {seedBanner}
+      {panes}
+      {pickerModal}
+      {EDITOR_STYLE}
     </div>
   );
 }
+
+/** A vertical drag handle between two panes (fullscreen resizable layout). */
+function ResizeHandle({ onPointerDown }: { onPointerDown: (e: React.PointerEvent) => void }) {
+  return (
+    <div
+      onPointerDown={onPointerDown}
+      role="separator"
+      aria-orientation="vertical"
+      className="group relative w-1.5 shrink-0 cursor-col-resize bg-gold/10 hover:bg-gold/30 transition-colors"
+      title="Drag to resize"
+    >
+      {/* Wider invisible hit-area + a centered grip dot-line on hover. */}
+      <span className="absolute inset-y-0 -left-1 -right-1" />
+      <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-8 w-0.5 rounded bg-gold/40 opacity-0 group-hover:opacity-100 transition-opacity" />
+    </div>
+  );
+}
+
+const EDITOR_STYLE = (
+  <style>{`
+    .pane-head{font-family:ui-monospace,Menlo,monospace;font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:rgba(26,26,26,.4);padding:10px 12px 6px;font-weight:700;}
+    .dark .pane-head{color:rgba(255,255,255,.4);}
+    .insp-empty{padding:30px 16px;text-align:center;color:var(--muted-foreground);font-style:italic;font-family:var(--font-serif);font-size:13px;}
+  `}</style>
+);
 
 /* ════════════════════ Structure tree ════════════════════ */
 interface TreeProps {
@@ -271,6 +439,7 @@ interface TreeProps {
   onSelect: (id: string) => void; onDragStart: (id: string) => void; onDragEndAll: () => void;
   onHover: (info: { id: string; pos: 'before' | 'after' | 'into' } | null) => void;
   onDrop: (id: string, pos: 'before' | 'after' | 'into') => void;
+  onAddInside: (containerId: string) => void;
   depth?: number;
 }
 function BlockTree(p: TreeProps) {
@@ -279,6 +448,9 @@ function BlockTree(p: TreeProps) {
   return (
     <div className={depth > 0 ? 'ml-3.5 border-l border-dashed border-gold/20 pl-1' : ''}>
       {blocks.map((b) => {
+        // `column` cells are rendered by their parent `columns` block as labeled
+        // sections (ColumnsSections), never as a generic draggable row.
+        if (b.blockType === 'column') return null;
         const meta = BLOCK_TYPE_META[b.blockType];
         const Icon = ICONS[meta.icon] ?? LayoutGrid;
         const isC = isContainer(b);
@@ -322,7 +494,10 @@ function BlockTree(p: TreeProps) {
               <span className="flex-1 truncate">{meta.label}</span>
             </div>
 
-            {isC && !collapsed[b.id] && (
+            {isC && !collapsed[b.id] && b.blockType === 'columns' && (
+              <ColumnsSections columns={b as ContainerBlock} tree={p} depth={depth} />
+            )}
+            {isC && !collapsed[b.id] && b.blockType !== 'columns' && (
               <NestZone block={b as ContainerBlock} active={p.dragId != null && p.dragId !== b.id && !isDescendant(blocks, p.dragId, b.id)} isOver={di === 'into'} onHover={() => p.onHover({ id: b.id, pos: 'into' })} onDrop={() => p.onDrop(b.id, 'into')}>
                 <BlockTree {...p} blocks={(b as ContainerBlock).children} depth={depth + 1} />
               </NestZone>
@@ -330,6 +505,20 @@ function BlockTree(p: TreeProps) {
           </div>
         );
       })}
+      {/* Trailing drop zone — a real target for "move to the very end" of this
+          list. Without it the only after-the-last hit area is the bottom half of
+          the last row, which is easy to miss. Shown only while dragging. */}
+      {p.dragId && blocks.length > 0 && (() => {
+        const lastId = blocks[blocks.length - 1].id;
+        const over = p.dropInfo?.id === lastId && p.dropInfo.pos === 'after';
+        return (
+          <div
+            onDragOver={(e) => { if (!p.dragId) return; e.preventDefault(); e.stopPropagation(); p.onHover({ id: lastId, pos: 'after' }); }}
+            onDrop={(e) => { if (!p.dragId) return; e.preventDefault(); e.stopPropagation(); p.onDrop(lastId, 'after'); }}
+            className={cn('h-7 mt-0.5 border border-dashed transition-colors', over ? 'border-gold bg-gold/10' : 'border-transparent')}
+          />
+        );
+      })()}
     </div>
   );
 }
@@ -346,6 +535,43 @@ function NestZone({ block, active, isOver, onHover, onDrop, children }: { block:
   );
 }
 
+/** Renders a `columns` block's cells as labeled "Column 1 / 2 / …" sections in
+ *  the tree, so it's unambiguous which column a block lives in. Each section is
+ *  its own drop-into target with a "+ Add" button; its blocks render via a
+ *  nested BlockTree (with before/after reorder + the trailing drop zone). */
+function ColumnsSections({ columns, tree: p, depth }: { columns: ContainerBlock; tree: TreeProps; depth: number }) {
+  return (
+    <div className="ml-3.5 border-l border-dashed border-gold/20 pl-1 space-y-1.5 mt-0.5">
+      {columns.children.map((col, ci) => {
+        const active = p.dragId != null && p.dragId !== col.id && !isDescendant([columns], p.dragId, col.id);
+        const over = p.dropInfo?.id === col.id && p.dropInfo.pos === 'into';
+        const colChildren = isContainer(col) ? col.children : [];
+        return (
+          <div key={col.id}>
+            <div className="flex items-center justify-between px-1">
+              <span className="section-label">Column {ci + 1}</span>
+              <button onClick={() => p.onAddInside(col.id)} className="field-hint hover:text-gold">+ Add</button>
+            </div>
+            <div
+              onDragOver={(e) => { if (!active) return; e.preventDefault(); e.stopPropagation(); p.onHover({ id: col.id, pos: 'into' }); }}
+              onDrop={(e) => { if (!active) return; e.preventDefault(); e.stopPropagation(); p.onDrop(col.id, 'into'); }}
+              className={cn('ml-1 border-l border-dashed pl-1', over ? 'border-gold' : 'border-gold/20')}
+            >
+              {colChildren.length === 0 ? (
+                <div className={cn('px-2 py-1 text-[10px] italic border border-dashed', over ? 'border-gold text-gold bg-gold/10' : 'border-transparent text-ink/30')}>
+                  empty — drop or “+ Add” a block
+                </div>
+              ) : (
+                <BlockTree {...p} blocks={colChildren} depth={depth + 1} />
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ════════════════════ Inspector ════════════════════ */
 interface InspectorProps {
   block: HomeBlock;
@@ -355,8 +581,9 @@ interface InspectorProps {
   onDuplicate: (id: string) => void;
   onRemove: (id: string) => void;
   onAddInside: (containerId: string) => void;
+  onColumnCount: (id: string, n: number) => void;
 }
-function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onAddInside }: InspectorProps) {
+function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onAddInside, onColumnCount }: InspectorProps) {
   const meta = BLOCK_TYPE_META[block.blockType];
   const i = parent?.index ?? 0;
   const n = parent?.list.length ?? 1;
@@ -365,17 +592,17 @@ function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onA
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center gap-1 pb-3 border-b border-gold/20">
-        <span className="font-serif text-lg font-bold flex-1">{meta.label}</span>
+        <span className="h3-title flex-1">{meta.label}</span>
         <button disabled={i === 0} onClick={() => onMove(block.id, -1)} className="p-1.5 text-ink/40 hover:text-gold disabled:opacity-20" aria-label="Move up"><ChevronUp className="w-4 h-4" /></button>
         <button disabled={i === n - 1} onClick={() => onMove(block.id, 1)} className="p-1.5 text-ink/40 hover:text-gold disabled:opacity-20" aria-label="Move down"><ChevronDown className="w-4 h-4" /></button>
         <button onClick={() => onDuplicate(block.id)} className="p-1.5 text-ink/40 hover:text-gold" aria-label="Duplicate"><Copy className="w-4 h-4" /></button>
-        <button onClick={() => onRemove(block.id)} className="p-1.5 btn-danger" aria-label="Delete"><Trash2 className="w-4 h-4" /></button>
+        <button onClick={() => onRemove(block.id)} className="p-1.5 text-ink/40 hover:text-blood" aria-label="Delete"><Trash2 className="w-4 h-4" /></button>
       </div>
 
       {block.blockType === 'hero' && (<>
-        <Field label="Title"><Input className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="Stories in Dauligor" /></Field>
-        <Field label="Subtitle"><textarea className="field-input min-h-[70px] py-2 font-serif italic w-full" value={block.subtitle} onChange={(e) => set({ subtitle: e.target.value })} placeholder="A welcome line…" /></Field>
-        <Seg label="Alignment" value={block.align} options={[['center', 'Center'], ['left', 'Left']]} onChange={(v) => set({ align: v })} />
+        <Field label="Title"><Input autoComplete="off" className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="Stories in Dauligor" /></Field>
+        <Field label="Subtitle (BBCode)"><MarkdownEditor value={block.subtitle} onChange={(v) => set({ subtitle: v })} placeholder="A welcome line…" /></Field>
+        <Seg label="Alignment" value={block.align} options={[['left', 'Left'], ['center', 'Center'], ['right', 'Right']]} onChange={(v) => set({ align: v })} />
         <Seg label="Size" value={block.size} options={[['normal', 'Normal'], ['large', 'Large']]} onChange={(v) => set({ size: v })} />
       </>)}
 
@@ -386,17 +613,28 @@ function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onA
 
       {block.blockType === 'image' && (<>
         <Field label="Image"><ImageUpload currentImageUrl={block.url || ''} onUpload={(url) => set({ url })} storagePath={`images/campaigns/home`} /></Field>
-        <Field label="Caption (optional)"><Input className="field-input" value={block.caption} onChange={(e) => set({ caption: e.target.value })} placeholder="A short caption" /></Field>
+        <Field label="Caption (optional)"><Input autoComplete="off" className="field-input" value={block.caption} onChange={(e) => set({ caption: e.target.value })} placeholder="A short caption" /></Field>
         <Seg label="Height" value={block.height} options={[['small', 'S'], ['medium', 'M'], ['large', 'L']]} onChange={(v) => set({ height: v })} />
-        <Field label="Links to (optional)"><Input className="field-input" value={block.link} onChange={(e) => set({ link: e.target.value })} placeholder="/wiki/article/…" /></Field>
+        <Field label="Links to (optional)"><Input autoComplete="off" className="field-input" value={block.link} onChange={(e) => set({ link: e.target.value })} placeholder="/wiki/article/…" /></Field>
       </>)}
 
       {block.blockType === 'divider' && (
         <Seg label="Style" value={block.style} options={[['line', 'Line'], ['dots', 'Dots'], ['space', 'Space']]} onChange={(v) => set({ style: v })} />
       )}
 
+      {block.blockType === 'callout' && (<>
+        <Field label="Heading"><Input autoComplete="off" className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="Character Creation" /></Field>
+        <Field label="Body (BBCode)"><MarkdownEditor value={block.body} onChange={(v) => set({ body: v })} placeholder="A short message…" /></Field>
+        <Seg label="Style" value={block.style} options={[['soft', 'Soft (dashed)'], ['plain', 'Plain']]} onChange={(v) => set({ style: v })} />
+        <fieldset className="config-fieldset"><legend className="section-label px-1">Button (optional)</legend>
+          <Field label="Label"><Input autoComplete="off" className="field-input" value={block.buttonLabel} onChange={(e) => set({ buttonLabel: e.target.value })} placeholder="Browse Sources" /></Field>
+          <Field label="Links to"><Input autoComplete="off" className="field-input" value={block.buttonLink} onChange={(e) => set({ buttonLink: e.target.value })} placeholder="/sources" /></Field>
+          <p className="field-hint">The button shows only when both label and link are set.</p>
+        </fieldset>
+      </>)}
+
       {block.blockType === 'recommended' && (<>
-        <Field label="Heading (optional)"><Input className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="Recommended for this campaign" /></Field>
+        <Field label="Heading (optional)"><Input autoComplete="off" className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="Recommended for this campaign" /></Field>
         <Seg label="Source" value={block.source} options={[['auto', 'Campaign pick'], ['specific', 'Specific entity']]} onChange={(v) => set({ source: v })} />
         {block.source === 'specific'
           ? <Field label="Entity"><EntityRefPicker mode="single" value={block.ref} onChange={(ref) => set({ ref })} /></Field>
@@ -405,14 +643,14 @@ function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onA
       </>)}
 
       {block.blockType === 'entity-feature' && (<>
-        <Field label="Heading (optional)"><Input className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} /></Field>
+        <Field label="Heading (optional)"><Input autoComplete="off" className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} /></Field>
         <Field label="Featured entity"><EntityRefPicker mode="single" value={block.ref} onChange={(ref) => set({ ref })} /></Field>
         <Seg label="Image side" value={block.imageSide} options={[['left', 'Left'], ['right', 'Right']]} onChange={(v) => set({ imageSide: v })} />
         <Toggle label="Show excerpt" value={block.excerpt} onChange={(v) => set({ excerpt: v })} />
       </>)}
 
       {block.blockType === 'entity-row' && (<>
-        <Field label="Heading"><Input className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="The World of Dauligor" /></Field>
+        <Field label="Heading"><Input autoComplete="off" className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="The World of Dauligor" /></Field>
         <Toggle label="Show heading" value={block.showHeading} onChange={(v) => set({ showHeading: v })} />
         <fieldset className="config-fieldset"><legend className="section-label px-1">Content</legend>
           <Field label="Entities"><EntityRefPicker mode="multi" value={block.refs} onChange={(refs) => set({ refs })} /></Field>
@@ -421,22 +659,24 @@ function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onA
           <Stepper label="Columns" value={block.columns} min={1} max={4} onChange={(v) => set({ columns: v })} />
           <Seg label="Card style" value={block.card} options={[['image', 'Image'], ['compact', 'Compact'], ['list', 'List']]} onChange={(v) => set({ card: v })} />
           <Toggle label="Show excerpts" value={block.excerpt} onChange={(v) => set({ excerpt: v })} />
+          {block.card !== 'list' && block.columns >= 2 && (
+            <p className="field-hint">To make a card wider, expand it under Content and set its Card width.</p>
+          )}
         </fieldset>
       </>)}
 
       {block.blockType === 'group' && (<>
-        <Field label="Title"><Input className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="Section title" /></Field>
+        <Field label="Title"><Input autoComplete="off" className="field-input" value={block.title} onChange={(e) => set({ title: e.target.value })} placeholder="Section title" /></Field>
         <Toggle label="Show title" value={block.showTitle} onChange={(v) => set({ showTitle: v })} />
         <Seg label="Style" value={block.style} options={[['card', 'Card'], ['bordered', 'Bordered'], ['plain', 'Plain']]} onChange={(v) => set({ style: v })} />
-        <Button onClick={() => onAddInside(block.id)} className="btn-gold w-full gap-2 h-8 text-xs"><Plus className="w-3.5 h-3.5" /> Add block inside</Button>
+        <Button onClick={() => onAddInside(block.id)} className="btn-gold w-full h-8 text-xs">Add block inside</Button>
         <p className="field-hint">Or drag any block onto this group in the structure tree to nest it.</p>
       </>)}
 
       {block.blockType === 'columns' && (<>
-        <Stepper label="Columns" value={block.columns} min={2} max={4} onChange={(v) => set({ columns: v })} />
+        <Stepper label="Columns" value={block.columns} min={2} max={4} onChange={(v) => onColumnCount(block.id, v)} />
         <Seg label="Gap" value={block.gap} options={[['small', 'S'], ['medium', 'M'], ['large', 'L']]} onChange={(v) => set({ gap: v })} />
-        <Button onClick={() => onAddInside(block.id)} className="btn-gold w-full gap-2 h-8 text-xs"><Plus className="w-3.5 h-3.5" /> Add column block</Button>
-        <p className="field-hint">Each nested block becomes one column cell, left to right.</p>
+        <p className="field-hint">Each column is its own section in the structure tree — open this block there to fill Column 1, Column 2, … separately (add a block or drag one in). Reducing the count merges the last column's blocks into the previous one, so nothing is lost.</p>
       </>)}
     </div>
   );
@@ -496,7 +736,9 @@ function EntityRefPicker({ mode, value, onChange }: {
   const pick = (r: EntityRef) => {
     if (mode === 'single') { onChange(r); setOpen(false); setQuery(''); }
     else {
-      if (list.some((x) => x.kind === r.kind && x.id === r.id)) return;
+      // Dedupe real entities by kind+id; placeholders (id '') are name-only and
+      // may legitimately repeat, so never blocked.
+      if (r.kind !== 'placeholder' && list.some((x) => x.kind === r.kind && x.id === r.id)) return;
       onChange([...list, r]); setQuery('');
     }
   };
@@ -507,6 +749,20 @@ function EntityRefPicker({ mode, value, onChange }: {
     if (chipDrag == null || chipDrag === to) return;
     const next = [...list]; const [m] = next.splice(chipDrag, 1); next.splice(to, 0, m); onChange(next); setChipDrag(null);
   };
+  // Per-card override editing (title / description / span). One chip expanded at
+  // a time. `updateAt` patches a single ref, dropping empty/default overrides so
+  // they fall back to the resolved entity / Placeholder · Coming-Soon defaults.
+  const [editIdx, setEditIdx] = useState<number | null>(null);
+  const updateAt = (idx: number, patch: Partial<EntityRef>) => {
+    onChange(list.map((r, j) => {
+      if (j !== idx) return r;
+      const next: EntityRef = { ...r, ...patch };
+      if (!next.title) delete next.title;
+      if (!next.description) delete next.description;
+      if (!next.span || next.span <= 1) delete next.span;
+      return next;
+    }));
+  };
 
   return (
     <div className="space-y-2">
@@ -515,20 +771,70 @@ function EntityRefPicker({ mode, value, onChange }: {
           ? <p className="field-hint">No entities yet — add some below.</p>
           : <div className="data-table">
               <div className="data-table-body">
-                {list.map((r, idx) => (
-                  <div key={`${r.kind}:${r.id}:${idx}`} draggable
-                    onDragStart={() => setChipDrag(idx)}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={() => reorder(idx)}
-                    className={cn('data-table-row grid grid-cols-[auto_1fr_auto_auto] gap-2', chipDrag === idx && 'opacity-40')}>
-                    <GripVertical className="w-3.5 h-3.5 text-ink/30 cursor-grab" />
-                    <span className="text-xs font-serif truncate" title={r.name}>{r.name || r.id}</span>
-                    <span className="label-text">{kindLabel(r.kind)}</span>
-                    <button onClick={() => onChange(list.filter((_, j) => j !== idx))} className="text-ink/30 hover:text-blood" aria-label="Remove"><X className="w-3.5 h-3.5" /></button>
+                {list.map((r, idx) => {
+                  const ph = r.kind === 'placeholder';
+                  const expanded = editIdx === idx;
+                  return (
+                  <div key={`${r.kind}:${r.id}:${idx}`} className={cn(chipDrag === idx && 'opacity-40')}>
+                    {/* Summary row — drag to reorder; chevron toggles the override editor. */}
+                    <div draggable
+                      onDragStart={() => setChipDrag(idx)}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={() => reorder(idx)}
+                      className="data-table-row grid grid-cols-[auto_1fr_auto_auto_auto] gap-2 items-center">
+                      <GripVertical className="w-3.5 h-3.5 text-ink/30 cursor-grab" />
+                      <span className={cn('text-xs font-serif truncate', !(r.title || r.name || r.id) && 'italic text-ink/40')} title={r.title || r.name}>
+                        {r.title || r.name || (ph ? 'Empty card' : r.id)}
+                        {!!r.span && r.span > 1 && <span className="label-text ml-1.5 text-gold/70">×{r.span}</span>}
+                      </span>
+                      <span className="label-text">{kindLabel(r.kind)}</span>
+                      <button onClick={() => setEditIdx(expanded ? null : idx)} className={cn('text-ink/30 hover:text-gold', expanded && 'text-gold')} aria-label="Edit card">
+                        <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', !expanded && '-rotate-90')} />
+                      </button>
+                      <button onClick={() => { onChange(list.filter((_, j) => j !== idx)); if (expanded) setEditIdx(null); }} className="text-ink/30 hover:text-blood" aria-label="Remove"><X className="w-3.5 h-3.5" /></button>
+                    </div>
+                    {/* Per-card overrides: heading ("what it says"), description
+                        ("what its description says"), and column span. Empty fields
+                        fall back to the resolved entity / Placeholder · Coming Soon. */}
+                    {expanded && (
+                      <div className="px-2 py-2 space-y-2 bg-gold/5 border-t border-gold/10">
+                        <div className="space-y-1">
+                          <label className="field-label">Card title</label>
+                          <Input autoComplete="off" className="field-input text-xs" value={r.title || ''} placeholder={r.name || PLACEHOLDER_TITLE} onChange={(e) => updateAt(idx, { title: e.target.value })} />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="field-label">Description (BBCode)</label>
+                          <MarkdownEditor value={r.description || ''} placeholder={ph ? PLACEHOLDER_DESCRIPTION : "Uses the entity's own summary"} onChange={(v) => updateAt(idx, { description: v })} />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="field-label">Card width (columns)</label>
+                          <div className="flex border border-gold/20 w-fit">
+                            {[1, 2, 3, 4].map((n) => {
+                              const active = (r.span || 1) === n;
+                              return (
+                                <button key={n} onClick={() => updateAt(idx, { span: n })}
+                                  className={cn('w-8 text-[11px] py-1 transition-colors', n > 1 && 'border-l border-gold/10', active ? 'bg-gold text-white font-semibold' : 'bg-card text-ink/60 hover:bg-gold/5')}>
+                                  {n}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <p className="field-hint">1 = normal. Wider cards are capped at the row's column count.</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
+      )}
+      {mode === 'multi' && (
+        <button
+          onClick={() => onChange([...list, makePlaceholderRef('')])}
+          className="btn-gold w-full h-8 text-xs">
+          + Add empty card
+        </button>
       )}
       {mode === 'single' && single && (
         <div className="data-table"><div className="data-table-row grid grid-cols-[1fr_auto_auto] gap-2 items-center">
@@ -540,25 +846,37 @@ function EntityRefPicker({ mode, value, onChange }: {
 
       <div ref={boxRef} className="relative">
         <div className="flex gap-2">
-          <select className="field-input w-[42%] text-xs" value={kind} onChange={(e) => { setKind(e.target.value); setResults([]); }}>
+          <select autoComplete="off" className="field-input w-[42%] text-xs" value={kind} onChange={(e) => { setKind(e.target.value); setResults([]); }}>
             {ENTITY_PICKER_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
           </select>
           <div className="relative flex-1">
             <Search className="w-3.5 h-3.5 text-ink/30 absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <Input className="field-input pl-7 text-xs" value={query} placeholder={`Search ${kindMeta.label.toLowerCase()}…`}
+            <Input autoComplete="off" className="field-input pl-7 text-xs" value={query} placeholder={`Search ${kindMeta.label.toLowerCase()}…`}
               onFocus={() => setOpen(true)} onChange={(e) => { setQuery(e.target.value); setOpen(true); }} />
           </div>
         </div>
         {open && (
           <div className="absolute left-0 right-0 top-[calc(100%+2px)] z-30 bg-card border border-gold max-h-56 overflow-y-auto custom-scrollbar shadow-lg">
-            {busy ? <p className="px-3 py-2 text-[11px] text-ink/40 italic">Searching…</p>
-              : results.length === 0 ? <p className="px-3 py-2 text-[11px] text-ink/40 italic">{query ? 'No matches.' : 'Type to search.'}</p>
-              : results.map((r, i) => (
-                <button key={`${r.kind}:${r.id}:${i}`} onClick={() => pick(r)} className="block w-full text-left px-3 py-1.5 text-xs hover:bg-gold/10 transition-colors flex items-center justify-between gap-2">
-                  <span className="truncate font-serif">{r.name || r.id}</span>
-                  <span className="label-text shrink-0">{kindLabel(r.kind)}</span>
-                </button>
-              ))}
+            {busy && <p className="px-3 py-2 text-[11px] text-ink/40 italic">Searching…</p>}
+            {!busy && results.length === 0 && !query.trim() && (
+              <p className="px-3 py-2 text-[11px] text-ink/40 italic">Type to search, or add a placeholder.</p>
+            )}
+            {!busy && results.map((r, i) => (
+              <button key={`${r.kind}:${r.id}:${i}`} onClick={() => pick(r)} className="block w-full text-left px-3 py-1.5 text-xs hover:bg-gold/10 transition-colors flex items-center justify-between gap-2">
+                <span className="truncate font-serif">{r.name || r.id}</span>
+                <span className="label-text shrink-0">{kindLabel(r.kind)}</span>
+              </button>
+            ))}
+            {/* Placeholder affordance — name a card slot without a real entity,
+                exactly like the legacy "(Article not found)" tiles. Always offered
+                once something's typed, even when there are real matches. */}
+            {!busy && query.trim() && (
+              <button onClick={() => pick(makePlaceholderRef(query.trim()))}
+                className="block w-full text-left px-3 py-1.5 text-xs hover:bg-gold/10 transition-colors flex items-center justify-between gap-2 border-t border-gold/10">
+                <span className="truncate font-serif italic text-ink/70">Add “{query.trim()}” as placeholder</span>
+                <span className="label-text shrink-0 text-ink/30">Placeholder</span>
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -646,9 +964,9 @@ function Stepper({ label, value, min, max, onChange }: { label: string; value: n
     <div className="space-y-1.5">
       <label className="field-label">{label}</label>
       <div className="inline-flex border border-gold/20">
-        <button onClick={() => onChange(Math.max(min, value - 1))} className="px-3 py-1.5 text-ink/60 hover:bg-gold/10 hover:text-gold">−</button>
+        <button onClick={() => onChange(Math.max(min, value - 1))} disabled={value <= min} className="px-3 py-1.5 text-ink/60 hover:bg-gold/10 hover:text-gold disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-ink/60" aria-label="Decrease">−</button>
         <span className="px-4 py-1.5 text-sm border-x border-gold/20 min-w-[40px] text-center">{value}</span>
-        <button onClick={() => onChange(Math.min(max, value + 1))} className="px-3 py-1.5 text-ink/60 hover:bg-gold/10 hover:text-gold">＋</button>
+        <button onClick={() => onChange(Math.min(max, value + 1))} disabled={value >= max} className="px-3 py-1.5 text-ink/60 hover:bg-gold/10 hover:text-gold disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-ink/60" aria-label="Increase">+</button>
       </div>
     </div>
   );

@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Pages — Spec (Draft)</title>
+<style>
+  :root {
+    --parchment: #f5f2e8; --parchment-soft: #faf7ed; --ink: #1a1a1a; --ink-soft: #3a3a3a;
+    --muted: #6b6457; --gold: #c5a059; --gold-deep: #8a6d2f; --blood: #7a1f1f; --leaf: #355c3a;
+    --card: #fbf8ee; --rule: #d8cfb8; --code-bg: #2b2620; --code-ink: #f0e9d2;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 10px rgba(0,0,0,0.04);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--parchment); color: var(--ink);
+    font-family: "Inter", -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 15px; line-height: 1.65; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 40px 32px 80px; }
+  header.hero { border-bottom: 1px solid var(--rule); padding-bottom: 22px; margin-bottom: 30px; }
+  header.hero .eyebrow { text-transform: uppercase; letter-spacing: 1.2px; font-size: 11px; color: var(--gold-deep); font-weight: 600; margin-bottom: 8px; }
+  header.hero h1 { font-family: "Cormorant Garamond", Georgia, serif; font-weight: 600; font-size: 44px; line-height: 1.05; margin: 0 0 8px; }
+  header.hero .tagline { font-family: "Cormorant Garamond", Georgia, serif; font-style: italic; font-size: 19px; color: var(--muted); margin: 0 0 12px; }
+  header.hero .meta { font-size: 13px; color: var(--muted); }
+  h2 { font-family: "Cormorant Garamond", Georgia, serif; font-size: 30px; font-weight: 600; margin: 50px 0 10px; padding-bottom: 8px; border-bottom: 2px solid var(--gold); }
+  h3 { font-family: "Cormorant Garamond", Georgia, serif; font-size: 21px; font-weight: 600; margin: 26px 0 8px; }
+  h4 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.9px; color: var(--gold-deep); margin: 18px 0 6px; font-weight: 700; }
+  p { margin: 9px 0; }
+  ul, ol { margin: 8px 0 8px 22px; padding: 0; }
+  li { margin: 5px 0; }
+  code { font-family: "JetBrains Mono", Consolas, monospace; font-size: 13px; background: rgba(138,109,47,0.12); color: var(--ink); padding: 1px 6px; border-radius: 3px; }
+  pre { background: var(--code-bg); color: var(--code-ink); padding: 14px 16px; border-radius: 5px; overflow-x: auto; font-family: "JetBrains Mono", Consolas, monospace; font-size: 13px; line-height: 1.5; box-shadow: var(--shadow); margin: 14px 0; }
+  pre code { background: transparent; color: inherit; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; background: var(--parchment-soft); box-shadow: var(--shadow); border-radius: 4px; overflow: hidden; }
+  th, td { text-align: left; padding: 9px 13px; border-bottom: 1px solid var(--rule); font-size: 14px; vertical-align: top; }
+  th { background: rgba(138,109,47,0.10); font-weight: 600; color: var(--gold-deep); text-transform: uppercase; font-size: 11px; letter-spacing: 0.6px; }
+  tr:last-child td { border-bottom: none; }
+  .toc { background: var(--parchment-soft); border: 1px solid var(--rule); border-radius: 4px; padding: 16px 22px; margin-bottom: 34px; box-shadow: var(--shadow); }
+  .toc h4 { margin: 0 0 8px; }
+  .toc ol { margin: 0 0 0 20px; columns: 2; column-gap: 32px; }
+  .toc a { color: var(--gold-deep); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; color: var(--blood); }
+  .decision { background: var(--card); border: 1px solid var(--rule); border-left: 4px solid var(--gold); border-radius: 4px; padding: 16px 20px; margin: 16px 0; box-shadow: var(--shadow); }
+  .decision .q { font-weight: 600; color: var(--gold-deep); }
+  .decision.locked { border-left-color: var(--leaf); }
+  .decision.open { border-left-color: var(--blood); }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 99px; font-size: 11px; font-weight: 600; letter-spacing: 0.4px; }
+  .pill.locked { background: rgba(53,92,58,0.18); color: var(--leaf); }
+  .pill.open { background: rgba(122,31,31,0.12); color: var(--blood); }
+  .pill.later { background: rgba(107,100,87,0.18); color: var(--ink-soft); }
+  .pill.rec { background: rgba(197,160,89,0.20); color: var(--gold-deep); }
+  .callout { background: rgba(122,31,31,0.06); border: 1px solid rgba(122,31,31,0.25); border-radius: 4px; padding: 13px 17px; margin: 15px 0; font-size: 14px; }
+  .callout strong { color: var(--blood); }
+  .note { background: rgba(53,92,58,0.06); border: 1px solid rgba(53,92,58,0.25); border-radius: 4px; padding: 13px 17px; margin: 15px 0; font-size: 14px; }
+  .note strong { color: var(--leaf); }
+  hr.section { border: none; border-top: 1px solid var(--rule); margin: 36px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="eyebrow">Spec &middot; locked 2026-05-29 &middot; in build</div>
+  <h1>System Pages</h1>
+  <p class="tagline">Site-consistent reference pages — a glossary type the cross-reference system points into, distinct from campaign lore.</p>
+  <div class="meta">
+    <strong>Locked &mdash; in build.</strong> Branch: <code>system-applications</code> (local, not pushed).
+    Companion: <a href="reference-system-spec.html">reference-system-spec.html</a> (the <code>&amp;</code> refs that resolve here).
+  </div>
+</header>
+
+<div class="toc">
+  <h4>Contents</h4>
+  <ol>
+    <li><a href="#what">What a system page is</a></li>
+    <li><a href="#vs-lore">System page vs. lore article</a></li>
+    <li><a href="#model">Data model</a></li>
+    <li><a href="#refs">Reference integration</a></li>
+    <li><a href="#conditions">The conditions question</a></li>
+    <li><a href="#ui">UI surfaces</a></li>
+    <li><a href="#build">Build sequence</a></li>
+    <li><a href="#open">Open decisions to lock</a></li>
+  </ol>
+</div>
+
+<h2 id="what">1. What a system page is</h2>
+<p>
+  A <strong>system page</strong> is a site-consistent reference page about one <em>system</em> of the
+  game — <em>Conditions</em>, <em>Skills</em>, <em>Magic</em>, a homebrew ruleset. It is a
+  <strong>generic page type</strong>: you create instances of it the way you create a class or a
+  spell. Each instance is glossary-shaped — a parent page with <strong>addressable entries</strong>
+  (subsections) — mirroring how dnd5e ships its <em>Conditions</em> / <em>Rules</em> journals.
+</p>
+<p>The two things that make it special, and that the rest of this spec hangs on:</p>
+<ul>
+  <li><strong>Reference-addressable.</strong> The cross-reference system's <code>&amp;</code> rule
+    sigil resolves into these pages. <code>&amp;condition[prone]</code> &rarr; the Conditions system
+    page, scrolled to the <em>Prone</em> entry. Today those refs hover but can't navigate (their route
+    is deliberately <code>null</code>) — system pages are the navigation target they've been waiting for.</li>
+  <li><strong>Site-consistent.</strong> Unlike lore, a system page is canonical and global — the same
+    everywhere, not scoped to a campaign or era, with no secrets / DM-only layers. It's rules
+    reference, not narrative.</li>
+</ul>
+
+<h2 id="vs-lore">2. System page vs. lore article</h2>
+<p>Both are "articles" loosely, but they are different enough to be a <strong>separate table</strong>,
+  not a discriminator on <code>lore_articles</code> (consistent with the project's "new table for new
+  functionality" rule — splitting later is harder than starting split).</p>
+<table>
+  <thead><tr><th></th><th>Lore article</th><th>System page</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Purpose</strong></td><td>Campaign / world narrative</td><td>Canonical rules reference</td></tr>
+    <tr><td><strong>Visibility</strong></td><td>era / campaign scoped, secrets, DM notes</td><td>Site-wide, public, no secrets</td></tr>
+    <tr><td><strong>Shape</strong></td><td>Free nested hierarchy of prose</td><td>One parent + a flat, ordered list of addressable entries (a glossary)</td></tr>
+    <tr><td><strong>Reference sigil</strong></td><td><code>@article[slug]</code> (entity)</td><td><code>&amp;&lt;system&gt;[entry]</code> (rule)</td></tr>
+    <tr><td><strong>Backing table</strong></td><td><code>lore_articles</code></td><td><code>system_pages</code> + <code>system_page_entries</code> (new)</td></tr>
+  </tbody>
+</table>
+
+<h2 id="model">3. Data model <span class="pill rec">proposed</span></h2>
+<p>Two new tables, following the established <code>identifier</code> + <code>order</code> + JSON-column conventions.</p>
+<pre><code>system_pages
+  id            TEXT PRIMARY KEY
+  identifier    TEXT UNIQUE NOT NULL   -- site-wide slug: "condition", "skill", "magic"
+  name          TEXT NOT NULL          -- "Conditions"
+  description   TEXT                   -- intro prose shown atop the glossary (BBCode)
+  icon          TEXT                   -- optional lucide icon / image_url
+  "order"       INTEGER
+  created_at / updated_at
+
+system_page_entries
+  id            TEXT PRIMARY KEY
+  page_id       TEXT NOT NULL REFERENCES system_pages(id) ON DELETE CASCADE
+  identifier    TEXT NOT NULL          -- slug, unique within page: "prone"
+  name          TEXT NOT NULL          -- "Prone"
+  summary       TEXT                   -- short blurb for the hover card
+  body          TEXT                   -- full entry text (BBCode); nullable if entity-backed
+  source_kind   TEXT                   -- OPTIONAL binding to an existing entity ("condition")
+  source_id     TEXT                   -- OPTIONAL  e.g. a status_conditions.id
+  image_url     TEXT
+  "order"       INTEGER
+  created_at / updated_at
+  UNIQUE(page_id, identifier)</code></pre>
+<p>An <strong>entry is one of two flavours</strong> (see §5 — this is the open fork):</p>
+<ul>
+  <li><strong>Free entry</strong> — <code>body</code> authored directly (a homebrew rule, a magic
+    subsection). <code>source_*</code> null.</li>
+  <li><strong>Entity-backed entry</strong> — <code>source_kind</code>/<code>source_id</code> point at an
+    existing canonical row (a <code>status_conditions</code> row); the reader pulls its name / description
+    / image so there's <strong>no duplication</strong>. <code>body</code> may hold an optional override / note.</li>
+</ul>
+
+<h2 id="refs">4. Reference integration</h2>
+<p>The page's <code>identifier</code> <em>is</em> a reference kind. Creating a page with identifier
+  <code>condition</code> makes <code>&amp;condition[&lt;entry&gt;]</code> resolve to it — no per-kind code.</p>
+<pre><code>&amp;condition[prone]              &rarr; /system/condition#prone   (hover = entry summary)
+&amp;condition[prone]{knocked prone} &rarr; custom display
+&amp;skill[stealth]                 &rarr; /system/skill#stealth</code></pre>
+<ul>
+  <li><strong>Resolve</strong> (<code>references.ts</code>): look up <code>system_pages</code> by the kind =
+    page identifier, then the entry by its identifier; return name + summary + route + anchor. Falls back
+    to the entity-backed source row for name/summary when the entry is entity-backed.</li>
+  <li><strong>Route</strong> (<code>resolveRefRoute</code>): <code>/system/&lt;page&gt;#&lt;entry&gt;</code> —
+    flips the currently-<code>null</code> condition route on, so <code>&amp;condition</code> becomes clickable.</li>
+  <li><strong>Authoring</strong>: the existing <code>&amp;</code> autocomplete already searches a "rule"
+    family; it gains the system-page kinds (each page = a searchable kind, entries = its results).</li>
+  <li><strong>Foundry (later):</strong> the module compiles <code>&amp;condition[prone]</code> to dnd5e's
+    native <code>&amp;Reference[condition=prone]</code> where Foundry already has the system, and to a
+    <code>@UUID[JournalEntryPage…]</code> into our exported system page otherwise. Out of scope here.</li>
+</ul>
+
+<h2 id="conditions">5. The conditions question <span class="pill locked">locked: hybrid</span></h2>
+<p>Conditions already exist as rich data — <code>status_conditions</code> (identifier, name, description,
+  image, <code>changes</code>/<code>implied_ids</code> for Active Effects) grouped by
+  <code>condition_categories</code>. That table is also the <strong>mechanical</strong> source (character
+  sheet + Foundry export). So the Conditions system page must not fork that text. Three ways:</p>
+<table>
+  <thead><tr><th>Option</th><th>How the Conditions page is built</th><th>Trade-off</th></tr></thead>
+  <tbody>
+    <tr><td><strong>A — Free only</strong></td><td>Entries authored fresh in <code>system_page_entries</code>; <code>&amp;condition</code> re-points here.</td><td>Simplest table, but <strong>duplicates</strong> condition rules text — drifts from <code>status_conditions</code>.</td></tr>
+    <tr><td><strong>B — Entity-backed only</strong></td><td>Entries are pointers to <code>status_conditions</code> rows; reader pulls their text.</td><td>No duplication, but every system page must map to a backing table — no pure-prose homebrew pages.</td></tr>
+    <tr><td><strong>C — Hybrid <span class="pill rec">recommended</span></strong></td><td>An entry is <em>either</em> free prose <em>or</em> entity-backed (the <code>source_kind/source_id</code> columns above).</td><td>One extra optional column-pair. Conditions page = entity-backed (zero dup, stays canonical); Homebrew/Magic page = free prose. Matches "handled by the reference system."</td></tr>
+  </tbody>
+</table>
+<p class="note"><strong>Recommendation: C.</strong> It lets a system page <em>curate</em> existing
+  canonical entities (conditions, skills) without copying them, <em>and</em> author original rules where
+  no table exists — which is exactly the Conditions-vs-Homebrew spread you described.</p>
+
+<h2 id="ui">6. UI surfaces</h2>
+<table>
+  <thead><tr><th>Surface</th><th>Route</th><th>Role</th></tr></thead>
+  <tbody>
+    <tr><td><code>SystemPagesList.tsx</code></td><td><code>/compendium/system-pages</code></td><td>List + create system pages (admin).</td></tr>
+    <tr><td><code>SystemPageEditor.tsx</code></td><td><code>/compendium/system-pages/:identifier</code></td><td>Edit page meta + its entries: add free or entity-backed entry, reorder, per-entry name / summary / body.</td></tr>
+    <tr><td><code>SystemPageGlossary.tsx</code></td><td><code>/system/:identifier</code></td><td>Public reader: intro + every entry rendered in order, each with an <code>#identifier</code> anchor (the <code>&amp;</code>-ref deep-link target).</td></tr>
+  </tbody>
+</table>
+<p>Sidebar gets a "System Pages" entry under Compendium. The reader reuses <code>BBCodeRenderer</code>
+  (so refs inside a system page hover/resolve like anywhere else).</p>
+
+<h2 id="build">7. Build sequence</h2>
+<ol>
+  <li><strong>Migration</strong> — <code>system_pages</code> + <code>system_page_entries</code> (local first).</li>
+  <li><strong>Registry + helpers</strong> — <code>d1Tables.ts</code>, <code>compendium.ts</code> upserts.</li>
+  <li><strong>Reader</strong> — <code>/system/:identifier</code> + <code>SystemPageGlossary</code> (anchors).</li>
+  <li><strong>Reference wiring</strong> — <code>references.ts</code> resolves system-page kinds; <code>resolveRefRoute</code> &rarr; <code>/system/&lt;page&gt;#&lt;entry&gt;</code>. <code>&amp;condition</code> goes clickable.</li>
+  <li><strong>Admin</strong> — <code>SystemPagesList</code> + <code>SystemPageEditor</code> + routes + sidebar.</li>
+  <li><strong>Later</strong> — proposal-pipeline support; Foundry enricher/export.</li>
+</ol>
+
+<h2 id="open">8. Decisions — locked 2026-05-29</h2>
+<table>
+  <thead><tr><th>#</th><th>Decision</th><th>Locked</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>Entry model (§5) — free / entity-backed / hybrid</td><td><strong>Hybrid</strong> &mdash; an entry is free prose <em>or</em> entity-backed.</td></tr>
+    <tr><td>2</td><td>Reference grammar — page <code>identifier</code> = the <code>&amp;</code> kind, vs. a generic <code>&amp;system[condition:prone]</code></td><td><strong>identifier = kind</strong> (<code>&amp;condition[prone]</code>).</td></tr>
+    <tr><td>3</td><td>Does a "condition" system page <strong>replace</strong> the current <code>&amp;condition</code>&rarr;<code>status_conditions</code> resolve?</td><td><strong>Replaces it.</strong> Linking a condition <em>to</em> an entry is a later option &mdash; not now; the focus is the system page itself.</td></tr>
+    <tr><td>4</td><td>Grouping / layout inside a page</td><td><strong>Flat + <code>order</code> for v1.</strong> The richer layout is deferred to the broader <em>article overhaul</em>.</td></tr>
+  </tbody>
+</table>
+
+<p style="margin-top:22px"><strong>Locked &mdash; building in the §7 order.</strong> Migration stays local until remote is OK'd; nothing pushed.</p>
+
+</div>
+</body>
+</html>

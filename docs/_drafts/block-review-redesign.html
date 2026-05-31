@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Block Review — Redesign Mockups</title>
+<style>
+  :root{
+    --parch:#f5ecd6; --parch2:#efe3c4; --ink:#3a2f1e; --ink2:#6b5d44;
+    --gold:#b88a2e; --gold-d:#8a6618; --line:#d8c79b;
+    --add:#3f7d4e; --del:#a23b3b; --upd:#2f6f8f; --card:#fbf5e4;
+    --shadow:0 1px 3px rgba(80,60,20,.18);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--parch);color:var(--ink);
+    font-family:'Iowan Old Style','Palatino Linotype',Georgia,serif;line-height:1.5}
+  .wrap{max-width:1080px;margin:0 auto;padding:32px 24px 80px}
+  h1{font-size:30px;margin:0 0 4px;letter-spacing:.3px}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:2px;color:var(--gold-d);
+    border-bottom:1px solid var(--line);padding-bottom:6px;margin:48px 0 18px}
+  h3{margin:0;font-size:17px}
+  .sub{color:var(--ink2);font-size:14px;margin:0 0 8px}
+  .lede{background:var(--parch2);border:1px solid var(--line);border-left:4px solid var(--gold);
+    border-radius:8px;padding:14px 18px;margin:18px 0 8px;font-size:14px}
+  .lede b{color:var(--gold-d)}
+  .pain{font-size:13px;color:var(--ink2);margin:6px 0 0;padding-left:18px}
+  .pain li{margin:3px 0}
+  .mono{font-family:'SF Mono',ui-monospace,Consolas,monospace;font-size:12px}
+  .tag{display:inline-block;font-size:10px;text-transform:uppercase;letter-spacing:1px;
+    padding:2px 8px;border-radius:999px;border:1px solid var(--line);background:#fff8e7;color:var(--ink2)}
+  .op{display:inline-block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
+    padding:2px 8px;border-radius:4px;color:#fff}
+  .op.create{background:var(--add)} .op.update{background:var(--upd)} .op.delete{background:var(--del)}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow)}
+  .note{font-size:12px;color:var(--ink2);font-style:italic;margin:8px 2px 0}
+  .btn{font-family:inherit;font-size:13px;border-radius:6px;padding:7px 14px;border:1px solid var(--line);
+    background:#fff8e7;color:var(--ink);cursor:default}
+  .btn.go{background:var(--add);color:#fff;border-color:var(--add)}
+  .btn.no{background:#fff;color:var(--del);border-color:rgba(162,59,59,.4)}
+  .btn.gold{background:var(--gold);color:#fff;border-color:var(--gold-d)}
+  /* block header */
+  .bhead{display:flex;align-items:center;gap:14px;padding:16px 18px;border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,#fbf3df,#f3e7c6)}
+  .bhead .meta{flex:1;min-width:0}
+  .counts{font-size:12px;color:var(--ink2)}
+  .counts .b{color:var(--gold-d);font-weight:700}
+  /* diff */
+  .diff{font-size:12.5px;margin:6px 0 0;border-left:2px solid var(--line);padding-left:10px}
+  .diff .d-del{color:var(--del);text-decoration:line-through;opacity:.8}
+  .diff .d-add{color:var(--add)}
+  .field{color:var(--ink2);font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+  /* A: feed cards */
+  .card{padding:14px 18px;border-bottom:1px solid var(--line)}
+  .card:last-child{border-bottom:0}
+  .cardtop{display:flex;align-items:center;gap:10px}
+  .cardtop h3{flex:1}
+  .ref{font-size:11px;color:var(--upd);background:#eaf3f8;border:1px solid #cfe2ee;border-radius:4px;padding:1px 6px}
+  /* B: tree */
+  .tree{padding:14px 20px}
+  .node{padding:7px 0;border-bottom:1px dashed var(--line)}
+  .node:last-child{border-bottom:0}
+  .node .row{display:flex;align-items:center;gap:9px}
+  .node.child{margin-left:26px;border-left:2px solid var(--line);padding-left:14px}
+  .node.gchild{margin-left:52px;border-left:2px solid var(--line);padding-left:14px}
+  .twist{color:var(--gold-d);font-weight:700}
+  .peek{font-size:12px;color:var(--ink2);margin:2px 0 0}
+  /* C: split */
+  .split{display:flex;min-height:340px}
+  .rail{width:300px;border-right:1px solid var(--line);background:#faf2dc}
+  .rail .grp{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--gold-d);
+    padding:10px 14px 4px}
+  .rail .item{display:flex;align-items:center;gap:8px;padding:8px 14px;font-size:13px;border-left:3px solid transparent;cursor:default}
+  .rail .item.sel{background:#fff8e7;border-left-color:var(--gold)}
+  .detail{flex:1;padding:18px 22px}
+  .preview{background:#fff;border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin-top:10px}
+  .kept{color:var(--ink2)}
+  .legend{font-size:12px;color:var(--ink2);margin-top:6px}
+  .pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--ink2);margin-right:12px}
+  .dot{width:9px;height:9px;border-radius:2px;display:inline-block}
+  footer{margin-top:56px;font-size:13px;color:var(--ink2);border-top:1px solid var(--line);padding-top:16px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Block Review — redesign mockups</h1>
+  <p class="sub">Three approaches for displaying a submitted block and reviewing its changes. Static mockups — pick a direction (or mix), then I build it.</p>
+
+  <div class="lede">
+    <b>Why this needs a redo.</b> Today a block is a flat list of revision rows (op badge + a one-line summary + status). The only way to see <i>what actually changed</i> is a "review" link that opens the entity's editor — and that link
+    <b>only works for class/subclass</b>; features, scaling columns, and option groups/items dump you on the catalog list (e.g. "modular option groups") with no focused diff, and some types have no link at all. So in practice there's <b>no real way to review most of a block</b> before approving it.
+    <ul class="pain">
+      <li>No before→after diff — you can't tell what an UPDATE changed.</li>
+      <li>No sense of the block as a <i>cluster</i> (a class + its features/columns/subclasses that reference each other).</li>
+      <li>Review navigation is broken for everything but class/subclass.</li>
+    </ul>
+    The common thread in all three mockups: <b>review happens inside the block view — no navigating out to editors.</b>
+  </div>
+
+  <p class="legend">
+    <span class="pill"><span class="dot" style="background:var(--add)"></span>create</span>
+    <span class="pill"><span class="dot" style="background:var(--upd)"></span>update</span>
+    <span class="pill"><span class="dot" style="background:var(--del)"></span>delete</span>
+    <span class="pill"><span class="ref">↳ in-block ref</span> a field pointing at another draft in the same block</span>
+  </p>
+  <p class="note">Sample data throughout: a content-creator's block proposing a <b>Druid</b> class with a <b>Wild Shape</b> feature, a <b>CR</b> scaling column, an <b>Animal Forms</b> option group (with a <b>Wolf</b> option), and a <b>Circle of the Land</b> subclass — all referencing each other.</p>
+
+  <!-- ============================================================ -->
+  <h2>Mockup A — Review feed (inline diff cards)</h2>
+  <p class="sub">The block opens straight to its changes. Each change is a card with an inline diff/preview; expand for full detail. Block-level actions pinned at top. Closest to today's structure, lowest build cost.</p>
+  <div class="panel">
+    <div class="bhead">
+      <div class="meta">
+        <h3>Druid class pack</h3>
+        <div class="counts"><span class="b">5 changes</span> · by <b>ardent_scribe</b> · submitted 2 hours ago · all references resolve ✓</div>
+      </div>
+      <button class="btn no">Reject block</button>
+      <button class="btn go">Approve block (5)</button>
+    </div>
+
+    <div class="card">
+      <div class="cardtop"><span class="op create">create</span><h3>Druid</h3><span class="tag">class</span></div>
+      <div class="diff">
+        <div><span class="field">hit die</span> d8 &nbsp; <span class="field">primary</span> Wisdom</div>
+        <div><span class="field">grants</span> <span class="ref">↳ Wild Shape</span> at L2 · scales via <span class="ref">↳ CR column</span> · options from <span class="ref">↳ Animal Forms</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="cardtop"><span class="op create">create</span><h3>Wild Shape</h3><span class="tag">feature</span><span class="ref">↳ parent: Druid</span></div>
+      <div class="diff"><span class="field">type</span> active · <span class="field">uses</span> 2 / short rest · <span class="field">desc</span> "You can magically assume the shape of a beast…"</div>
+    </div>
+    <div class="card">
+      <div class="cardtop"><span class="op create">create</span><h3>CR</h3><span class="tag">scaling column</span><span class="ref">↳ parent: Druid</span></div>
+      <div class="diff"><span class="field">type</span> cr · <span class="field">values</span> L2:¼ · L4:½ · L8:1 …</div>
+    </div>
+    <div class="card">
+      <div class="cardtop"><span class="op create">create</span><h3>Animal Forms</h3><span class="tag">option group</span></div>
+      <div class="diff"><span class="field">contains</span> 1 option · <span class="field">restricted to</span> <span class="ref">↳ Druid</span></div>
+    </div>
+    <div class="card">
+      <div class="cardtop"><span class="op update">update</span><h3>Circle of the Land</h3><span class="tag">subclass</span><span class="ref">↳ class: Druid</span></div>
+      <div class="diff">
+        <div><span class="field">preview</span> <span class="d-del">"A druid circle…"</span> <span class="d-add">"Druids of the Land draw power from the terrain."</span></div>
+        <div><span class="field">spellcasting</span> <span class="kept">(unchanged)</span></div>
+      </div>
+    </div>
+  </div>
+  <p class="note">Each card carries its own approve/reject on hover (omitted here for clarity). "↳" chips make the cross-references obvious. Build cost: low — reuses the existing row list + adds a diff renderer.</p>
+
+  <!-- ============================================================ -->
+  <h2>Mockup B — Cluster outline (tree)</h2>
+  <p class="sub">Shows the block as the dependency hierarchy it actually is — the class at the root with its features/columns/subclasses/options nested under it. Best for understanding "what am I approving" as one coherent thing.</p>
+  <div class="panel">
+    <div class="bhead">
+      <div class="meta">
+        <h3>Druid class pack</h3>
+        <div class="counts"><span class="b">5 changes</span> · cluster rooted at <b>Druid</b> · references resolve ✓</div>
+      </div>
+      <button class="btn no">Reject block</button>
+      <button class="btn go">Approve block</button>
+    </div>
+    <div class="tree">
+      <div class="node">
+        <div class="row"><span class="twist">▾</span><span class="op create">create</span><h3>Druid</h3><span class="tag">class</span></div>
+        <div class="peek">d8 · Wisdom · grants Wild Shape, scales via CR, options from Animal Forms</div>
+      </div>
+      <div class="node child">
+        <div class="row"><span class="op create">create</span><strong>Wild Shape</strong><span class="tag">feature</span></div>
+        <div class="peek">active · 2 uses / short rest</div>
+      </div>
+      <div class="node child">
+        <div class="row"><span class="op create">create</span><strong>CR</strong><span class="tag">scaling column</span></div>
+        <div class="peek">cr · L2:¼ · L4:½ · L8:1</div>
+      </div>
+      <div class="node child">
+        <div class="row"><span class="twist">▾</span><span class="op create">create</span><strong>Animal Forms</strong><span class="tag">option group</span></div>
+        <div class="peek">restricted to Druid</div>
+      </div>
+      <div class="node gchild">
+        <div class="row"><span class="op create">create</span><strong>Wolf</strong><span class="tag">option item</span></div>
+        <div class="peek">requires: Druid · grants the wolf statblock</div>
+      </div>
+      <div class="node child">
+        <div class="row"><span class="op update">update</span><strong>Circle of the Land</strong><span class="tag">subclass</span></div>
+        <div class="peek"><span class="field">preview</span> changed · spellcasting unchanged</div>
+      </div>
+    </div>
+  </div>
+  <p class="note">Clicking any node expands its full before→after diff in place. The tree makes a malformed cluster obvious (e.g. a feature whose parent isn't in the block would surface as an orphan node, in red — the visual twin of guard #1). Build cost: medium.</p>
+
+  <!-- ============================================================ -->
+  <h2>Mockup C — Split-pane review (PR-style)</h2>
+  <p class="sub">Left: every change in the block, grouped by type. Right: the selected change rendered + a field-level diff. Familiar code-review feel; best for blocks with many changes.</p>
+  <div class="panel">
+    <div class="bhead">
+      <div class="meta"><h3>Druid class pack</h3><div class="counts"><span class="b">5 changes</span> · reviewing 1 of 5</div></div>
+      <button class="btn no">Reject block</button>
+      <button class="btn go">Approve block</button>
+    </div>
+    <div class="split">
+      <div class="rail">
+        <div class="grp">Class</div>
+        <div class="item sel"><span class="op create">c</span> Druid</div>
+        <div class="grp">Features &amp; scaling</div>
+        <div class="item"><span class="op create">c</span> Wild Shape</div>
+        <div class="item"><span class="op create">c</span> CR (column)</div>
+        <div class="grp">Options</div>
+        <div class="item"><span class="op create">c</span> Animal Forms</div>
+        <div class="item"><span class="op create">c</span> Wolf</div>
+        <div class="grp">Subclass</div>
+        <div class="item"><span class="op update">u</span> Circle of the Land</div>
+      </div>
+      <div class="detail">
+        <div class="cardtop"><span class="op create">create</span><h3>Druid</h3><span class="tag">class</span></div>
+        <div class="preview">
+          <div><span class="field">name</span> Druid &nbsp; <span class="field">hit die</span> d8 &nbsp; <span class="field">primary ability</span> Wisdom</div>
+          <div style="margin-top:8px"><span class="field">advancements</span></div>
+          <div class="diff">
+            <div>L2 — grant feature <span class="ref">↳ Wild Shape</span></div>
+            <div>L2 — scale value via <span class="ref">↳ CR column</span></div>
+            <div>L2 — grant options from <span class="ref">↳ Animal Forms</span></div>
+          </div>
+          <div style="margin-top:8px"><span class="field">preview text (rendered)</span><br/><em>Masters of nature magic who draw on the primal forces of the wild.</em></div>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
+          <button class="btn">Skip</button><button class="btn no">Flag</button><button class="btn go">Looks good ✓</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note">Per-change "looks good / flag" lets a reviewer walk the whole block, then the top-level Approve commits the lot atomically (Part D). Build cost: medium-high.</p>
+
+  <footer>
+    <b>My lean:</b> <b>A (review feed)</b> as the default — it directly kills the "no way to see what changed / broken review link" problem at the lowest cost — with <b>B (cluster outline)</b> as a toggle for class packs, since it mirrors how the block was authored and visually echoes the guard-#1 integrity check. C is the most work and shines mainly when a block is large.
+    <br/><br/>
+    All three replace the broken per-entity "review" navigation (#4) with in-place diffs. Tell me which direction (or combination), and I'll build it into AdminProposals.
+    <br/><br/>
+    <span class="note">Separately tracked, not part of this redesign: the rich-text "[b]…[/b]" wrapping bug (#3) and the dev-only broken-image-preview (uploads succeed + save; local R2 just isn't served at the public image URL).</span>
+  </footer>
+
+</div>
+</body>
+</html>

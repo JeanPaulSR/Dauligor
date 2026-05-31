@@ -44,7 +44,7 @@ import SpellcastingScalingEditor from './pages/compendium/scaling/SpellcastingSc
 import SpellsKnownScalingEditor from './pages/compendium/scaling/SpellsKnownScalingEditor';
 import UniqueOptionGroupList from './pages/compendium/UniqueOptionGroupList';
 import UniqueOptionGroupEditor from './pages/compendium/UniqueOptionGroupEditor';
-import UniqueOptionGroupView from './pages/compendium/UniqueOptionGroupView';
+import UniqueOptionGroupBrowser from './pages/compendium/UniqueOptionGroupBrowser';
 import SystemPagesList from './pages/compendium/SystemPagesList';
 import SystemPageEditor from './pages/compendium/SystemPageEditor';
 import TagsExplorer from './pages/compendium/TagsExplorer';
@@ -72,6 +72,7 @@ import CharacterErrorBoundary from './pages/characters/CharacterErrorBoundary';
 import { TooltipProvider } from './components/ui/tooltip';
 import CampaignManager from './pages/campaign/CampaignManager';
 import CampaignEditor from './pages/campaign/CampaignEditor';
+import CampaignHomeEditorPage from './pages/campaign/CampaignHomeEditorPage';
 import RedeemTokenPage from './pages/auth/RedeemTokenPage';
 
 import Sidebar from './components/Sidebar';
@@ -316,10 +317,14 @@ export default function App() {
                   <Route path="/compendium/spells-known-scaling/new" element={<SpellsKnownScalingEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/spells-known-scaling/edit/:id" element={<SpellsKnownScalingEditor userProfile={effectiveProfile} />} />
                   
-                  <Route path="/compendium/unique-options" element={<UniqueOptionGroupList userProfile={effectiveProfile} />} />
+                  {/* 3-pane browse surface (groups | options | detail) replaces
+                      the old card-grid list AND the single-group read view.
+                      `/new` + `/edit/:id` keep the comprehensive editor; `/:id`
+                      deep-links the browser with that group preselected. */}
+                  <Route path="/compendium/unique-options" element={<UniqueOptionGroupBrowser userProfile={effectiveProfile} />} />
                   <Route path="/compendium/unique-options/new" element={<UniqueOptionGroupEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/unique-options/edit/:id" element={<UniqueOptionGroupEditor userProfile={effectiveProfile} />} />
-                  <Route path="/compendium/unique-options/:id" element={<UniqueOptionGroupView userProfile={effectiveProfile} />} />
+                  <Route path="/compendium/unique-options/:id" element={<UniqueOptionGroupBrowser userProfile={effectiveProfile} />} />
                   {/* System pages — admin authoring for the reference-addressable
                       glossary type. Public reader is /system/:identifier. */}
                   <Route path="/compendium/system-pages" element={<SystemPagesList userProfile={effectiveProfile} />} />
@@ -439,6 +444,7 @@ export default function App() {
                   <Route path="/admin/campaigns" element={<AdminCampaigns userProfile={effectiveProfile} />} />
                   <Route path="/campaign/:id" element={<CampaignManager userProfile={effectiveProfile} />} />
                   <Route path="/campaign/edit/:id" element={<CampaignEditor userProfile={effectiveProfile} />} />
+                  <Route path="/campaign/edit/:id/homepage" element={<CampaignHomeEditorPage userProfile={effectiveProfile} />} />
                   <Route path="/admin/proficiencies" element={<AdminProficiencies userProfile={effectiveProfile} />} />
                   <Route path="/admin/statuses" element={<StatusesEditor userProfile={effectiveProfile} />} />
                   <Route path="/admin/images" element={<ImageManager userProfile={effectiveProfile} />} />
