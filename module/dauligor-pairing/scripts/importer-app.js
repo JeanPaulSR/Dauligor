@@ -3238,13 +3238,26 @@ function getOverviewFeatureDescription(item) {
 
 function renderOverviewAdvancementCard(adv) {
   const isHp = adv.id === "base-hp";
+  // Proficiencies grant by CATEGORY ("Simple Weapons", "Light Armor",
+  // "Artisan's Tools"); `fixed`/`options` are just the per-item expansion.
+  // Show the category display names instead of every individual item.
+  // choiceCount tells us which side the categories describe: 0 = the
+  // guaranteed grant (armor/weapons), >0 = the choice pool (e.g. tools).
+  const categoryIds = Array.isArray(adv.categoryIds) ? adv.categoryIds : [];
+  const choiceCount = adv.choiceCount ?? 0;
+  const categoryText = categoryIds.map((val) => formatFoundryLabel(val)).join(", ");
+
   const fixedText = isHp
     ? `1d${adv.adv?.configuration?.hitDie || 8} + Con modifier`
-    : (adv.fixed?.length ? adv.fixed.map((val) => formatFoundryLabel(val)).join(", ") : "");
+    : (choiceCount === 0 && categoryIds.length)
+      ? categoryText
+      : (adv.fixed?.length ? adv.fixed.map((val) => formatFoundryLabel(val)).join(", ") : "");
   const choiceText = isHp
     ? "Average / Maximum / Manual roll"
-    : (adv.options?.length ? adv.options.map((val) => formatFoundryLabel(val)).join(", ") : "");
-  const choiceLabel = adv.choiceCount > 0 ? `Choice (${adv.choiceCount})` : "Choice";
+    : (choiceCount > 0 && categoryIds.length)
+      ? categoryText
+      : (adv.options?.length ? adv.options.map((val) => formatFoundryLabel(val)).join(", ") : "");
+  const choiceLabel = choiceCount > 0 ? `Choice (${choiceCount})` : "Choice";
 
   const rows = [];
   if (fixedText) {

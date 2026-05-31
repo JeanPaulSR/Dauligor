@@ -29,10 +29,15 @@ export function baseClassHandler(workflow) {
 
     const rawFixed = adv.configuration?.fixed || adv.configuration?.fixedIds || adv.configuration?.grants || adv.configuration?.grantsFixed || [];
     const rawOptions = adv.configuration?.options || adv.configuration?.optionIds || adv.configuration?.choices || [];
-    
+    // Category grants (e.g. ["simple"] / ["shields","medium","light"] / ["art"]).
+    // `fixed`/`options` are the per-item EXPANSION of these; the categories are
+    // the display-friendly grouping the overview shows instead of every item.
+    const rawCategories = adv.configuration?.categoryIds || adv.configuration?.categories || [];
+
     // Normalize to strings/slugs
     const fixed = extractStrings(rawFixed).filter(val => !/^\d+$/.test(String(val).trim()));
     const options = extractStrings(rawOptions).filter(val => !/^\d+$/.test(String(val).trim()));
+    const categoryIds = extractStrings(rawCategories).filter(Boolean);
 
     // Extract choice count
     let choiceCount = adv.configuration?.choiceCount || adv.configuration?.choicesCount || adv.configuration?.pool || 0;
@@ -48,6 +53,7 @@ export function baseClassHandler(workflow) {
     return {
       fixed,
       options,
+      categoryIds,
       choiceCount: typeof choiceCount === 'number' ? choiceCount : 0
     };
   };
@@ -159,6 +165,9 @@ export function baseClassHandler(workflow) {
       entry.fixed = [...new Set([...baseFixed, ...categoryFixed])];
       entry.options = (block.optionIds || []).map((slug) => `${mc.kind}:${slug}`);
       entry.choiceCount = Number(block.choiceCount || 0) || 0;
+      // Display: show the multiclass category grants by name, not the
+      // expanded items (matches the primary-path overview behaviour).
+      entry.categoryIds = extractStrings(block.categoryIds || []).filter(Boolean);
     }
   }
 
@@ -233,6 +242,23 @@ export function formatFoundryLabel(slug) {
     hvy: "Heavy Armor",
     shl: "Shields",
     shield: "Shields",
+    // Long-form proficiency CATEGORY ids (as authored in option configs /
+    // categoryIds), so the overview can label category grants by name
+    // ("Simple Weapons") instead of expanding them to every item.
+    light: "Light Armor",
+    medium: "Medium Armor",
+    heavy: "Heavy Armor",
+    shields: "Shields",
+    simple: "Simple Weapons",
+    martial: "Martial Weapons",
+    art: "Artisan's Tools",
+    artisan: "Artisan's Tools",
+    music: "Musical Instruments",
+    musical: "Musical Instruments",
+    game: "Gaming Sets",
+    gaming: "Gaming Sets",
+    vehicle: "Vehicles",
+    vehicles: "Vehicles",
     padded: "Padded",
     leather: "Leather",
     "studded-leather": "Studded Leather",
