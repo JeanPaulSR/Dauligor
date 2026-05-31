@@ -70,6 +70,13 @@ export type DraftRevision = {
   entity_id: string | null;
   operation: 'create' | 'update' | 'delete';
   proposed_payload: Record<string, any> | null;
+  /**
+   * Live row state captured when this draft was authored (UPDATE/DELETE).
+   * Null for CREATE (no live row yet). Drives the before→after diff in the
+   * creator's own block review (BlockReviewBody) — same FieldDiff the admin
+   * sees. The server returns it on every draft row; we just carry it through.
+   */
+  snapshot_at_proposal: Record<string, any> | null;
   notes_from_proposer: string | null;
   proposed_at: string;
   /**
@@ -297,6 +304,7 @@ export function BlockProvider({ children }: { children: ReactNode }) {
           entity_id: d.entity_id,
           operation: d.operation,
           proposed_payload: d.proposed_payload ?? null,
+          snapshot_at_proposal: d.snapshot_at_proposal ?? null,
           notes_from_proposer: d.notes_from_proposer ?? null,
           proposed_at: d.proposed_at,
           cascade_parent_revision_id: d.cascade_parent_revision_id ?? null,

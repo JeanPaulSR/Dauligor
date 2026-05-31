@@ -31,9 +31,10 @@ import {
   Plus, Edit3, Inbox, Swords, Layers, Package, Send, Trash2,
   Scroll, Hammer, Eye,
 } from 'lucide-react';
-import { useBlock } from '../../lib/proposalBlock';
+import { useBlock, type DraftRevision } from '../../lib/proposalBlock';
 import { BlockMetadataDialog } from '../../components/proposals/BlockMetadataDialog';
 import { PickOrCreateBlockDialog } from '../../components/proposals/PickOrCreateBlockDialog';
+import { BlockReviewBody } from '../../components/proposals/BlockReviewBody';
 import { SubclassPickerDialog } from '../../components/proposals/SubclassPickerDialog';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import {
@@ -176,6 +177,20 @@ export default function MyProposals({ userProfile }: { userProfile: any }) {
     void load();
   }, [allowed, topTab, load]);
 
+  // Block tab fills the viewport so the block fits without an outer page
+  // scroll — only the block's own panes scroll. `admin-page-fullscreen`
+  // (reused from the editors) strips <main>'s padding + max-width, hides the
+  // footer, and locks body overflow at lg+. Scoped to the Block tab.
+  useEffect(() => {
+    if (topTab !== 'block') return;
+    document.body.classList.add('admin-page-fullscreen');
+    document.documentElement.classList.add('admin-page-fullscreen');
+    return () => {
+      document.body.classList.remove('admin-page-fullscreen');
+      document.documentElement.classList.remove('admin-page-fullscreen');
+    };
+  }, [topTab]);
+
   const handleWithdraw = async (id: string) => {
     if (!confirm('Withdraw this proposal? Pending only; admin will no longer see it.')) return;
     setWorking(id);
@@ -208,28 +223,37 @@ export default function MyProposals({ userProfile }: { userProfile: any }) {
     );
   }
 
+  const isBlock = topTab === 'block';
+
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-20">
-      <div className="flex items-center gap-3 text-gold mb-2">
-        <ScrollText className="w-6 h-6" />
-        <span className="text-sm font-bold uppercase tracking-[0.3em]">Proposals</span>
-      </div>
-
-      <div className="space-y-2">
+    // Submissions: natural reading column with normal page scroll.
+    // Block: a viewport-bound flex column (header chrome stays put, the block
+    // area flexes + scrolls internally) so the whole block fits without an
+    // outer scroll. The 6xl width gives the split-pane room.
+    <div
+      className={
+        isBlock
+          ? 'max-w-6xl mx-auto w-full px-4 py-4 flex flex-col h-[calc(100vh-4rem)] min-h-0 gap-3'
+          : 'max-w-4xl mx-auto space-y-6 pb-20'
+      }
+    >
+      <div className={isBlock ? 'shrink-0' : 'space-y-2'}>
         <h1 className="text-4xl font-serif font-bold text-ink tracking-tight uppercase">My Proposals</h1>
-        <p className="text-ink/60 font-serif italic">
-          Compendium changes you've submitted for admin review. Stack
-          multiple edits into a <strong>Block</strong> for one combined
-          proposal, use <strong>New</strong> / <strong>Edit</strong> to
-          jump into an editor, or review the queue of your past
-          submissions.
-        </p>
+        {!isBlock && (
+          <p className="text-ink/60 font-serif italic">
+            Compendium changes you've submitted for admin review. Stack
+            multiple edits into a <strong>Block</strong> for one combined
+            proposal, use <strong>New</strong> / <strong>Edit</strong> to
+            jump into an editor, or review the queue of your past
+            submissions.
+          </p>
+        )}
       </div>
 
-      {/* Top-level tabs: Submissions / Block / New / Edit. Block sits
-          between Submissions and New so users see it as the "active
-          work area" before the launchers. */}
-      <BlockTabBar topTab={topTab} setTopTab={setTopTab} />
+      {/* Top-level tabs: Submissions / Block. */}
+      <div className={isBlock ? 'shrink-0' : undefined}>
+        <BlockTabBar topTab={topTab} setTopTab={setTopTab} />
+      </div>
 
       {topTab === 'submissions' && (
         <SubmissionsPanel
@@ -241,7 +265,11 @@ export default function MyProposals({ userProfile }: { userProfile: any }) {
           onWithdraw={handleWithdraw}
         />
       )}
-      {topTab === 'block' && <BlockPanel />}
+      {isBlock && (
+        <div className="flex-1 min-h-0 flex flex-col">
+          <BlockPanel />
+        </div>
+      )}
     </div>
   );
 }
@@ -865,16 +893,42 @@ function BlockPanel() {
     submitBlock,
     discardBlock,
     patchActiveBlock,
+    refresh,
   } = useBlock();
+  const navigate = useNavigate();
   const [working, setWorking] = useState<'submit' | 'discard' | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
+  const [changeOpen, setChangeOpen] = useState(false);
 
   const handleCreate = async (name: string, description: string | null) => {
     await startBlock(name, description);
     toast.success('Block started. Edits made now will be staged until you submit.');
+  };
+
+  // Un-stage a single draft from the block (hard-deletes the pending_revisions
+  // row — owner-scoped on the server). Invoked from the inline BlockReviewBody's
+  // "Remove from block". Recoverable by re-authoring; not a submitted change.
+  const removeDraft = async (d: DraftRevision) => {
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) throw new Error('Not signed in.');
+      const res = await fetch(`/api/proposals/${encodeURIComponent(d.id)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error || `Failed to remove (HTTP ${res.status})`);
+      }
+      const name = (d.proposed_payload && (d.proposed_payload as any).name) || d.entity_id || 'change';
+      toast.success(`Removed "${name}" from the block.`);
+      await refresh();
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to remove from block.');
+    }
   };
 
   const performSubmit = async () => {
@@ -906,74 +960,75 @@ function BlockPanel() {
     toast.success('Block updated.');
   };
 
-  // Sort: the currently-active block first, others by most-recently-updated.
-  const sortedBlocks = [...openBlocks].sort((a, b) => {
-    if (a.id === activeBundleId) return -1;
-    if (b.id === activeBundleId) return 1;
-    return b.updated_at.localeCompare(a.updated_at);
-  });
+  // The active block (metadata from openBlocks — already loaded — falling back
+  // to the lazily-fetched activeBundle). Only this block renders; switching to
+  // another open block is via the "Change Block" picker.
+  const activeBlock = activeBundleId
+    ? (openBlocks.find((b) => b.id === activeBundleId) ?? activeBundle)
+    : null;
 
   return (
-    <>
-      <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
-        <div className="space-y-1 min-w-0 flex-1">
-          <h3 className="text-sm font-bold uppercase tracking-widest text-ink/70">
-            Your Blocks
-          </h3>
-          <p className="text-xs text-ink/55 leading-relaxed">
-            A block is a grouping of content that is submitted for review. To create or
-            edit content for a review block, click New and Edit respectively to open up
-            editor windows.
-          </p>
-        </div>
-        <Button
-          onClick={() => setCreateOpen(true)}
-          className="gap-2 bg-gold text-white flex-shrink-0"
-        >
+    <div className="flex flex-col h-full min-h-0 gap-3">
+      {/* Controls — no "Your Blocks" heading/blurb; block switching is a picker. */}
+      <div className="flex items-center justify-end gap-2 flex-wrap shrink-0">
+        {openBlocks.length > 0 && (
+          <Button
+            onClick={() => setChangeOpen(true)}
+            variant="outline"
+            className="gap-2 border-gold/30 text-gold hover:bg-gold/10"
+          >
+            <Package className="w-4 h-4" /> Change Block
+          </Button>
+        )}
+        <Button onClick={() => setCreateOpen(true)} className="gap-2 bg-gold text-white">
           <Plus className="w-4 h-4" /> Start a new block
         </Button>
       </div>
 
-      {openBlocks.length === 0 ? (
-        <Card className="border-gold/20 bg-gold/5">
-          <CardContent className="py-10 text-center space-y-2">
-            <Package className="w-8 h-8 mx-auto text-gold/60" />
-            <p className="text-sm text-ink/70 font-medium">
-              You haven't started a block yet.
-            </p>
-            <p className="text-xs text-ink/55 max-w-md mx-auto">
-              Click <strong>Start a new block</strong> above to begin. Each block bundles
-              your edits into one proposal for an admin to review.
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <ul className="space-y-3">
-          {sortedBlocks.map((b) => {
-            const isActive = b.id === activeBundleId;
-            return (
-              <li key={b.id}>
-                {isActive ? (
-                  <ActiveBlockCard
-                    block={b}
-                    drafts={drafts}
-                    loading={loading}
-                    working={working}
-                    onRename={() => setRenameOpen(true)}
-                    onDiscard={() => setDiscardConfirmOpen(true)}
-                    onSubmit={() => setSubmitConfirmOpen(true)}
-                  />
-                ) : (
-                  <InactiveBlockCard
-                    block={b}
-                    onActivate={() => setActiveBlock(b.id)}
-                  />
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      {/* The active block fills the remaining height; only its panes scroll. */}
+      <div className="flex-1 min-h-0">
+        {activeBlock ? (
+          <ActiveBlockCard
+            block={activeBlock}
+            drafts={drafts}
+            loading={loading}
+            working={working}
+            onRename={() => setRenameOpen(true)}
+            onDiscard={() => setDiscardConfirmOpen(true)}
+            onSubmit={() => setSubmitConfirmOpen(true)}
+            onRemoveDraft={removeDraft}
+            onContinueEditing={(d) => {
+              const href = continueHrefForDraft(d);
+              if (href) navigate(href);
+            }}
+          />
+        ) : openBlocks.length > 0 ? (
+          <div className="h-full flex items-center justify-center text-center">
+            <div className="space-y-3">
+              <Package className="w-8 h-8 mx-auto text-gold/60" />
+              <p className="text-sm text-ink/70 font-medium">No block selected.</p>
+              <Button
+                onClick={() => setChangeOpen(true)}
+                variant="outline"
+                className="gap-2 border-gold/30 text-gold hover:bg-gold/10"
+              >
+                <Package className="w-4 h-4" /> Choose a block
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="h-full flex items-center justify-center text-center">
+            <div className="space-y-2 max-w-md">
+              <Package className="w-8 h-8 mx-auto text-gold/60" />
+              <p className="text-sm text-ink/70 font-medium">You haven't started a block yet.</p>
+              <p className="text-xs text-ink/55">
+                Click <strong>Start a new block</strong> to begin. Each block bundles your
+                edits into one proposal for an admin to review.
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
       <BlockMetadataDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
@@ -1013,7 +1068,16 @@ function BlockPanel() {
         confirmLabel="Submit block"
         onConfirm={performSubmit}
       />
-    </>
+      <PickOrCreateBlockDialog
+        open={changeOpen}
+        onOpenChange={setChangeOpen}
+        openBlocks={openBlocks}
+        onPick={(id) => { setActiveBlock(id); setChangeOpen(false); }}
+        onCreate={async (name, description) => { await startBlock(name, description); setChangeOpen(false); }}
+        title="Switch block"
+        description="Pick an open block to work in, or start a new one. Your edits land in the active block."
+      />
+    </div>
   );
 }
 
@@ -1029,14 +1093,19 @@ function ActiveBlockCard({
   onRename,
   onDiscard,
   onSubmit,
+  onRemoveDraft,
+  onContinueEditing,
 }: {
   block: import('../../lib/proposalBlock').ProposalBundle;
-  drafts: import('../../lib/proposalBlock').DraftRevision[];
+  drafts: DraftRevision[];
   loading: boolean;
   working: 'submit' | 'discard' | null;
   onRename: () => void;
   onDiscard: () => void;
+  /** Open the submit-block confirm. */
   onSubmit: () => void;
+  onRemoveDraft: (d: DraftRevision) => void;
+  onContinueEditing: (d: DraftRevision) => void;
 }) {
   // In-block launcher popups. New = create content; Edit = pick from
   // the existing catalog. Both navigate into the wired editor with
@@ -1046,8 +1115,8 @@ function ActiveBlockCard({
   const [editLauncherOpen, setEditLauncherOpen] = useState(false);
 
   return (
-    <Card className="border-blood/30 bg-blood/5 ring-2 ring-blood/20">
-      <CardHeader className="flex flex-row items-start justify-between gap-3">
+    <Card className="border-blood/30 bg-blood/5 ring-2 ring-blood/20 flex flex-col h-full min-h-0 overflow-hidden">
+      <CardHeader className="flex flex-row items-start justify-between gap-3 shrink-0">
         <div className="space-y-1 min-w-0 flex-1">
           <CardTitle className="text-base font-bold uppercase tracking-widest flex items-center gap-2 flex-wrap">
             <Package className="w-4 h-4 text-blood" />
@@ -1113,10 +1182,12 @@ function ActiveBlockCard({
           mode="edit"
         />
       </CardHeader>
-      <CardContent>
-        {loading && drafts.length === 0 ? (
+      {loading && drafts.length === 0 ? (
+        <CardContent>
           <p className="text-ink/50 italic text-center py-12">Loading drafts…</p>
-        ) : drafts.length === 0 ? (
+        </CardContent>
+      ) : drafts.length === 0 ? (
+        <CardContent>
           <div className="text-center py-8 text-ink/60 text-sm">
             <p>
               No drafts yet — open one of the editors (Tags, Spell Rules, Spell Lists,
@@ -1127,19 +1198,30 @@ function ActiveBlockCard({
               instead of going to the admin queue.
             </p>
           </div>
-        ) : (
-          <DraftGroups drafts={drafts} />
-        )}
-      </CardContent>
+        </CardContent>
+      ) : (
+        // Inline Option-C review — the same split-pane the admin sees. Fills the
+        // card body (flex-1) so the block fits the page; only its panes scroll.
+        // Per-change Open-in-editor / Remove-from-block live in its detail pane;
+        // Submit Block is the header action above.
+        <div className="flex-1 min-h-0">
+          <BlockReviewBody
+            drafts={drafts}
+            loading={loading}
+            onRemoveDraft={onRemoveDraft}
+            onContinueEditing={onContinueEditing}
+            minHeightClass="h-full min-h-0"
+            scrollMaxHeightClass="h-full"
+          />
+        </div>
+      )}
     </Card>
   );
 }
 
 /* -------------------------------------------------------------------------- */
-/* DraftGroups — group an active block's drafts by entity_type so a mixed     */
-/* block reads as "5 spells, 2 feats, 1 item" instead of one flat 8-row list. */
-/* Groups appear in the order each entity_type's first draft was created     */
-/* (proposed_at ASC from the block API).                                      */
+/* Continue-editing route resolution — used by the inline block review's      */
+/* "Open in editor" action (continueHrefForDraft).                            */
 /* -------------------------------------------------------------------------- */
 
 // Maps entity_type → the route that lets the user "continue editing".
@@ -1194,106 +1276,19 @@ const CONTINUE_ROUTE: Record<string, string | ((d: import('../../lib/proposalBlo
   },
 };
 
-const SINGLE_WORK_ENTITY_TYPES = new Set(['class', 'subclass']);
-
-function DraftGroups({
-  drafts,
-}: {
-  drafts: import('../../lib/proposalBlock').DraftRevision[];
-}) {
-  const navigate = useNavigate();
-  // Insertion-ordered Map preserves "first seen" position so the
-  // grouped list stays stable as the user adds drafts. Within each
-  // group, drafts come in the same order the API returned them.
-  const groups = new Map<string, import('../../lib/proposalBlock').DraftRevision[]>();
-  for (const d of drafts) {
-    const key = d.entity_type;
-    const bucket = groups.get(key);
-    if (bucket) bucket.push(d);
-    else groups.set(key, [d]);
-  }
-
-  return (
-    <div className="space-y-4">
-      {Array.from(groups.entries()).map(([entityType, group]) => {
-        // Op counts for the section header. Mirrors the "create / update
-        // / delete" mini-summary the old PendingDraftsPanel had.
-        let creates = 0, updates = 0, deletes = 0;
-        for (const d of group) {
-          if (d.operation === 'create') creates++;
-          else if (d.operation === 'update') updates++;
-          else if (d.operation === 'delete') deletes++;
-        }
-        const label = ENTITY_LABEL[entityType as EntityType] || entityType;
-        const isSingleWork = SINGLE_WORK_ENTITY_TYPES.has(entityType);
-        const continueRoute = CONTINUE_ROUTE[entityType];
-        const sectionHref = typeof continueRoute === 'string' ? continueRoute : null;
-        return (
-          <section key={entityType} className="space-y-1">
-            <header className="flex items-center gap-2 flex-wrap text-[11px] uppercase tracking-widest text-ink/70 font-bold border-b border-blood/15 pb-1">
-              <span>{label}</span>
-              <Badge variant="outline" className="text-[9px] border-blood/20 text-blood">
-                {group.length}
-              </Badge>
-              <span className="flex items-center gap-2 text-[10px] font-normal normal-case tracking-normal text-ink/50">
-                {creates > 0 && <span className="text-emerald-700">{creates} create{creates === 1 ? '' : 's'}</span>}
-                {updates > 0 && <span className="text-archive-blue">{updates} update{updates === 1 ? '' : 's'}</span>}
-                {deletes > 0 && <span className="text-blood">{deletes} delete{deletes === 1 ? '' : 's'}</span>}
-              </span>
-              {/* Multi-work types get ONE Continue button at the
-                  section level — the editor list-pane is where the
-                  user resumes editing any of the staged entries. */}
-              {!isSingleWork && sectionHref && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => navigate(sectionHref)}
-                  className="ml-auto h-6 text-[10px] gap-1 border-gold/30 text-gold hover:bg-gold/10"
-                >
-                  Continue
-                  <ArrowRight className="w-3 h-3" />
-                </Button>
-              )}
-            </header>
-            {isSingleWork ? (
-              // Single-work types (class, subclass): one Continue
-              // button per draft since each opens its own editor.
-              <ul className="divide-y divide-blood/10">
-                {group.map((d) => {
-                  const name = (d.proposed_payload && (d.proposed_payload as any).name)
-                    || d.entity_id
-                    || '(no preview)';
-                  const href = typeof continueRoute === 'function' ? continueRoute(d) : null;
-                  return (
-                    <li key={d.id} className="py-2 flex items-center gap-3">
-                      <OperationBadge op={d.operation} />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{name}</p>
-                        <p className="text-[11px] text-ink/50">
-                          {formatSqliteLocal(d.proposed_at)}
-                        </p>
-                      </div>
-                      {href && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => navigate(href)}
-                          className="h-7 gap-1 border-gold/30 text-gold hover:bg-gold/10 flex-shrink-0"
-                        >
-                          Continue
-                          <ArrowRight className="w-3 h-3" />
-                        </Button>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : null}
-          </section>
-        );
-      })}
-    </div>
-  );
+// Resolve the "continue editing this draft" route for the inline block
+// review's "Open in editor" action. Returns null for an entity type with no
+// editor route wired.
+function continueHrefForDraft(d: DraftRevision): string | null {
+  const route = CONTINUE_ROUTE[d.entity_type];
+  if (!route) return null;
+  // Single-work editors (class/subclass) build a per-instance /edit/<id> route.
+  if (typeof route === 'function') return route(d);
+  // Multi-work catalog editors take ?editingId=<id> to focus that exact entity
+  // for editing (SpellsEditor / FeatsEditor / ItemsEditor honor it). Editors
+  // that ignore the param simply land on their list — no regression.
+  const id = effectiveDraftId(d);
+  return id ? `${route}?editingId=${encodeURIComponent(id)}` : route;
 }
 
 function InactiveBlockCard({
