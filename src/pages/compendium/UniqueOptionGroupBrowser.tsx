@@ -30,15 +30,18 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
-import { Input } from '../../components/ui/input';
 import BBCodeRenderer from '../../components/BBCodeRenderer';
 import {
-  Plus, Search, Repeat, BookOpen, Edit, ChevronRight, CornerLeftUp, Layers,
+  Plus, Repeat, BookOpen, Edit, ChevronRight, CornerLeftUp, Layers,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { fetchCollection, fetchDocument } from '../../lib/d1';
 import { denormalizeCompendiumData } from '../../lib/compendium';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
+import { useAxisFilters, type AxisState } from '../../hooks/useAxisFilters';
+import { matchesSingleAxisFilter, matchesMultiAxisFilter } from '../../lib/spellFilters';
+import { FilterBar } from '../../components/compendium/FilterBar';
+import { SectionFilterPanel, type FilterSection } from '../../components/compendium/SectionFilterPanel';
 import {
   parseRequirementTree,
   resolveDetailPrereq,
@@ -95,11 +98,21 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
   const [groups, setGroups] = useState<GroupRow[]>([]);
   const [groupsLoading, setGroupsLoading] = useState(true);
   const [search, setSearch] = useState('');
+  // Class id → name, for the Groups class-restriction filter axis.
+  const [classNameById, setClassNameById] = useState<Record<string, string>>({});
 
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(routeGroupId ?? null);
   const [items, setItems] = useState<ItemRow[]>([]);
   const [itemsLoading, setItemsLoading] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [itemSearch, setItemSearch] = useState('');
+
+  // Independent filter state per pane (shared useAxisFilters semantics).
+  // Groups: Source (single) + Class restriction (multi — a group can list
+  // several classes). Options: Level bucket (single) + boolean Traits
+  // (multi — repeatable / has-activities / has-effects).
+  const groupFilters = useAxisFilters(['source', 'class'] as const);
+  const optionFilters = useAxisFilters(['level', 'traits'] as const);
 
   // Foundation lookups (sources + name maps for requirement formatting).
   const [sourceNameById, setSourceNameById] = useState<Record<string, string>>({});
@@ -169,6 +182,7 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
           ) as Record<string, string>;
         setGroups(groupRows);
         setSourceNameById(Object.fromEntries(sourceRows.map((s) => [s.id, s.name])));
+        setClassNameById(byId(classRows));
         setReqLookup({
           classNameById: byId(classRows),
           subclassNameById: byId(subclassRows),
@@ -291,14 +305,112 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
     );
   }, [selectedGroupId, selectedItemId, groups, items]);
 
-  const filteredGroups = useMemo(
-    () => groups.filter((g) => (g.name || '').toLowerCase().includes(search.toLowerCase())),
-    [groups, search],
-  );
+  // ─── Groups pane filter axes (Source + Class restriction) ────────
+  const groupAxes: PaneAxis[] = useMemo(() => {
+    // Only surface sources / classes that actually appear on a group, so
+    // the chip set stays relevant to the current catalog (12 groups).
+    const sourceIds = new Set<string>();
+    const classIds = new Set<string>();
+    for (const g of groups) {
+      const sid = g.source_id ?? g.sourceId;
+      if (sid) sourceIds.add(sid);
+      for (const cid of (g.class_ids ?? g.classIds ?? [])) classIds.add(cid);
+    }
+    const axes: PaneAxis[] = [];
+    if (sourceIds.size) {
+      axes.push({
+        key: 'source', label: 'Source',
+        values: [...sourceIds]
+          .map((id) => ({ value: id, label: sourceNameById[id] ?? id }))
+          .sort((a, b) => a.label.localeCompare(b.label)),
+      });
+    }
+    if (classIds.size) {
+      axes.push({
+        key: 'class', label: 'Class Restriction', multi: true,
+        values: [...classIds]
+          .map((id) => ({ value: id, label: classNameById[id] ?? id }))
+          .sort((a, b) => a.label.localeCompare(b.label)),
+      });
+    }
+    return axes;
+  }, [groups, sourceNameById, classNameById]);
+
+  const filteredGroups = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return groups.filter((g) => {
+      if (q && !(g.name || '').toLowerCase().includes(q)) return false;
+      const sid = g.source_id ?? g.sourceId ?? null;
+      if (!matchesSingleAxisFilter(sid, groupFilters.axisFilters.source)) return false;
+      const gClassIds = new Set<string>(g.class_ids ?? g.classIds ?? []);
+      if (!matchesMultiAxisFilter(gClassIds, groupFilters.axisFilters.class)) return false;
+      return true;
+    });
+  }, [groups, search, groupFilters.axisFilters]);
+
   const selectedGroup = useMemo(
     () => groups.find((g) => g.id === selectedGroupId) ?? null,
     [groups, selectedGroupId],
   );
+
+  // ─── Options pane filter axes (Level bucket + boolean Traits) ────
+  const levelBucket = (lvl: number | null | undefined): string => {
+    const n = Number(lvl) || 0;
+    if (n <= 0) return 'none';
+    if (n <= 4) return '1-4';
+    if (n <= 9) return '5-9';
+    if (n <= 13) return '10-13';
+    return '14+';
+  };
+  const optionAxes: PaneAxis[] = useMemo(() => {
+    if (!items.length) return [];
+    const buckets = new Set<string>();
+    let anyRepeatable = false, anyActivities = false, anyEffects = false;
+    for (const it of items) {
+      buckets.add(levelBucket(it.levelPrereq ?? it.level_prereq));
+      if ((it as any).isRepeatable ?? (it as any).is_repeatable) anyRepeatable = true;
+      const acts = (it as any).activities;
+      if (Array.isArray(acts) ? acts.length : acts) anyActivities = true;
+      const fx = (it as any).effects;
+      if (Array.isArray(fx) ? fx.length : fx) anyEffects = true;
+    }
+    const LEVEL_ORDER = ['none', '1-4', '5-9', '10-13', '14+'];
+    const LEVEL_LABEL: Record<string, string> = {
+      none: 'No level', '1-4': 'Lv 1–4', '5-9': 'Lv 5–9', '10-13': 'Lv 10–13', '14+': 'Lv 14+',
+    };
+    const axes: PaneAxis[] = [];
+    // Always surface the Level axis when there are options (it always
+    // yields ≥1 bucket), so the Filters button is consistently present
+    // on the Options pane — same as the Groups pane. Only the buckets
+    // that actually appear among this group's options are shown.
+    axes.push({
+      key: 'level', label: 'Level Prerequisite',
+      values: LEVEL_ORDER.filter((b) => buckets.has(b)).map((b) => ({ value: b, label: LEVEL_LABEL[b] })),
+    });
+    const traitVals: { value: string; label: string }[] = [];
+    if (anyRepeatable) traitVals.push({ value: 'repeatable', label: 'Repeatable' });
+    if (anyActivities) traitVals.push({ value: 'activities', label: 'Has Activities' });
+    if (anyEffects) traitVals.push({ value: 'effects', label: 'Has Effects' });
+    if (traitVals.length) axes.push({ key: 'traits', label: 'Traits', multi: true, values: traitVals });
+    return axes;
+  }, [items]);
+
+  const filteredItems = useMemo(() => {
+    const q = itemSearch.trim().toLowerCase();
+    return items.filter((it) => {
+      if (q && !(it.name || '').toLowerCase().includes(q)) return false;
+      if (!matchesSingleAxisFilter(levelBucket(it.levelPrereq ?? it.level_prereq), optionFilters.axisFilters.level)) return false;
+      const traits = new Set<string>();
+      if ((it as any).isRepeatable ?? (it as any).is_repeatable) traits.add('repeatable');
+      const acts = (it as any).activities;
+      if (Array.isArray(acts) ? acts.length : acts) traits.add('activities');
+      const fx = (it as any).effects;
+      if (Array.isArray(fx) ? fx.length : fx) traits.add('effects');
+      if (!matchesMultiAxisFilter(traits, optionFilters.axisFilters.traits)) return false;
+      return true;
+    });
+  }, [items, itemSearch, optionFilters.axisFilters]);
+
   const selectedItem = useMemo(
     () => items.find((it) => it.id === selectedItemId) ?? null,
     [items, selectedItemId],
@@ -334,11 +446,34 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
           </h1>
         </div>
         {canManage && (
-          <Link to="/compendium/unique-options/new">
-            <Button size="sm" className="btn-gold-solid gap-2">
-              <Plus className="w-4 h-4" /> New Group
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Edit the selected group — disabled until one is picked, so
+                the action always has a target. Sits beside New Group per
+                the toolbar redesign (was a buried link in the Options
+                pane header). */}
+            {selectedGroup ? (
+              <Link to={`/compendium/unique-options/edit/${selectedGroup.id}`}>
+                <Button size="sm" variant="outline" className="gap-2 border-gold/30 text-gold hover:bg-gold/10">
+                  <Edit className="w-4 h-4" /> Edit Group
+                </Button>
+              </Link>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled
+                className="gap-2 border-gold/20 text-ink/30 cursor-not-allowed"
+                title="Select a group to edit"
+              >
+                <Edit className="w-4 h-4" /> Edit Group
+              </Button>
+            )}
+            <Link to="/compendium/unique-options/new">
+              <Button size="sm" className="btn-gold-solid gap-2">
+                <Plus className="w-4 h-4" /> New Group
+              </Button>
+            </Link>
+          </div>
         )}
       </div>
 
@@ -353,16 +488,18 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
           )}
           style={{ height: `${paneHeight}px` }}
         >
-          <div className="border-b border-gold/10 bg-background/35 p-2.5 shrink-0">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/30" />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search groups…"
-                className="pl-8 h-8 text-xs bg-background/50 border-gold/10 focus:border-gold"
-              />
-            </div>
+          <div className="border-b border-gold/10 bg-background/35 px-2 py-2 shrink-0">
+            <PaneFilter
+              search={search}
+              setSearch={setSearch}
+              placeholder="Search groups…"
+              filterTitle="Filter Groups"
+              axes={groupAxes}
+              axisFilters={groupFilters.axisFilters}
+              cyclers={groupFilters.cyclers}
+              activeFilterCount={groupFilters.activeFilterCount}
+              resetAll={groupFilters.resetAll}
+            />
           </div>
           <CardContent className="p-0 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
             {groupsLoading ? (
@@ -423,20 +560,21 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
               <CornerLeftUp className="w-3.5 h-3.5 rotate-90" /> Groups
             </Button>
           </div>
-          <div className="border-b border-gold/10 bg-background/35 px-3 py-2 shrink-0 flex items-center justify-between gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-gold/70 truncate">
-              {selectedGroup ? `Options · ${items.length}` : 'Options'}
-            </span>
-            {canManage && selectedGroup && (
-              <Link
-                to={`/compendium/unique-options/edit/${selectedGroup.id}`}
-                className="text-[10px] inline-flex items-center gap-1 text-ink/50 hover:text-gold transition-colors uppercase tracking-widest"
-                title="Edit this group"
-              >
-                <Edit className="w-3 h-3" /> Edit
-              </Link>
-            )}
-          </div>
+          {selectedGroup && items.length > 0 && (
+            <div className="border-b border-gold/10 bg-background/35 px-2 py-2 shrink-0">
+              <PaneFilter
+                search={itemSearch}
+                setSearch={setItemSearch}
+                placeholder="Search options…"
+                filterTitle="Filter Options"
+                axes={optionAxes}
+                axisFilters={optionFilters.axisFilters}
+                cyclers={optionFilters.cyclers}
+                activeFilterCount={optionFilters.activeFilterCount}
+                resetAll={optionFilters.resetAll}
+              />
+            </div>
+          )}
           <CardContent className="p-0 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
             {!selectedGroup ? (
               <div className="px-4 py-12 text-center text-ink/40 italic text-sm">
@@ -448,9 +586,13 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
               <div className="px-4 py-12 text-center text-ink/40 italic text-sm">
                 No options in this group yet.
               </div>
+            ) : filteredItems.length === 0 ? (
+              <div className="px-4 py-12 text-center text-ink/40 italic text-sm">
+                No options match the filter.
+              </div>
             ) : (
               <div className="divide-y divide-gold/5">
-                {items.map((item) => {
+                {filteredItems.map((item) => {
                   const selected = item.id === selectedItemId;
                   const level = item.levelPrereq ?? item.level_prereq ?? null;
                   const icon = item.iconUrl ?? item.icon_url ?? null;
@@ -514,6 +656,98 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
     </div>
   );
 }
+
+// ─── Pane filter ──────────────────────────────────────────────────
+// Per-pane search + filter, using the SAME components as Spells / Feats:
+// a compact <FilterBar> toolbar (search input + Filters button + Reset)
+// whose Filters button opens the real centered modal containing
+// <SectionFilterPanel embedded>. So pressing Filters here gives the exact
+// experience the rest of the compendium does — collapsible sections,
+// 3-state chips, per-section AND/OR/XOR combinators, chip-label search,
+// Show All / Hide All — just scoped to this pane's axes. Groups and
+// Options each mount their own instance with independent axis sets +
+// independent useAxisFilters state.
+type PaneAxis = {
+  key: string;
+  label: string;
+  multi?: boolean; // multi-valued (an entity can satisfy several) vs single
+  values: { value: string; label: string }[];
+};
+function PaneFilter({
+  search, setSearch, placeholder, filterTitle,
+  axes, axisFilters, cyclers, activeFilterCount, resetAll,
+}: {
+  search: string;
+  setSearch: (v: string) => void;
+  placeholder: string;
+  filterTitle: string;
+  axes: PaneAxis[];
+  axisFilters: Record<string, AxisState>;
+  cyclers: ReturnType<typeof useAxisFilters>['cyclers'];
+  activeFilterCount: number;
+  resetAll: () => void;
+}) {
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+
+  // Map our PaneAxis list → the FilterSection shape SectionFilterPanel
+  // reads. All axes are 'axis' kind (no tag-group hierarchy here).
+  const sections: FilterSection[] = useMemo(
+    () => axes.map((a) => ({
+      key: a.key,
+      name: a.label,
+      kind: 'axis' as const,
+      axisKey: a.key,
+      values: a.values.map((v) => ({ value: v.value, label: v.label })),
+    })),
+    [axes],
+  );
+
+  return (
+    <FilterBar
+      hideFilters={sections.length === 0}
+      hideInlineReset
+      search={search}
+      setSearch={setSearch}
+      isFilterOpen={isFilterOpen}
+      setIsFilterOpen={setIsFilterOpen}
+      activeFilterCount={activeFilterCount}
+      resetFilters={resetAll}
+      searchPlaceholder={placeholder}
+      filterTitle={filterTitle}
+      renderFilters={
+        <SectionFilterPanel
+          embedded
+          axes={sections}
+          axisFilters={axisFilters}
+          tagStates={EMPTY_TAG_STATES}
+          setTagStates={NOOP_SET_TAG_STATES}
+          cycleAxisState={cyclers.cycleAxisState}
+          cycleAxisStateReverse={cyclers.cycleAxisStateReverse}
+          cycleTagState={NOOP_CYCLE_TAG}
+          cycleTagStateReverse={NOOP_CYCLE_TAG}
+          cycleAxisCombineMode={cyclers.cycleAxisCombineMode}
+          cycleAxisCombineModeReverse={cyclers.cycleAxisCombineModeReverse}
+          cycleAxisExclusionMode={cyclers.cycleAxisExclusionMode}
+          cycleAxisExclusionModeReverse={cyclers.cycleAxisExclusionModeReverse}
+          axisIncludeAll={cyclers.axisIncludeAll}
+          axisExcludeAll={cyclers.axisExcludeAll}
+          axisClear={cyclers.axisClear}
+          search={search}
+          setSearch={setSearch}
+          searchPlaceholder={placeholder}
+          activeFilterCount={activeFilterCount}
+          resetAll={resetAll}
+        />
+      }
+    />
+  );
+}
+
+// No tag-kind axes in this browser — SectionFilterPanel still requires
+// the tag prop pair, so supply inert handlers (matches FeatList).
+const NOOP_CYCLE_TAG = () => { /* no tag axes */ };
+const NOOP_SET_TAG_STATES: React.Dispatch<React.SetStateAction<Record<string, number>>> = () => { /* no tag axes */ };
+const EMPTY_TAG_STATES: Record<string, number> = {};
 
 // ─── Option list-row icon ─────────────────────────────────────────
 // Shows the option's icon_url when present; otherwise a small neutral

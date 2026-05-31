@@ -69,6 +69,14 @@ export interface FilterBarProps {
    * misleadingly imply "back to saved state."
    */
   resetInlineLabel?: string;
+  /**
+   * Hide the inline Reset button on the main row. The modal's own
+   * "Reset" (in the filter panel header) still clears everything, so
+   * compact hosts (e.g. the narrow Modular-Options browse panes) can
+   * drop the redundant toolbar Reset without losing the affordance.
+   * Defaults to false — every existing consumer keeps the inline Reset.
+   */
+  hideInlineReset?: boolean;
   renderFilters?: ReactNode;
   /**
    * Optional slot rendered to the right of the Filter button on the
@@ -98,6 +106,7 @@ export function FilterBar({
   filterSubtitle,
   resetLabel = 'Reset All Filters',
   resetInlineLabel = 'Reset',
+  hideInlineReset = false,
   renderFilters,
   trailingActions,
   leadingActions,
@@ -170,7 +179,7 @@ export function FilterBar({
             One click clears both filters and the search box — same
             effect as opening the modal and clicking "Reset Filters"
             then clearing the search, but in one motion. */}
-        {(() => {
+        {!hideInlineReset && (() => {
           const canReset = activeFilterCount > 0 || search.length > 0;
           return (
             <Button
