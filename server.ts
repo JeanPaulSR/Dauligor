@@ -13,7 +13,7 @@ import {
 } from "./api/_lib/r2-proxy.js";
 import { handleD1Query } from "./api/_lib/d1-proxy.js";
 import { executeD1QueryInternal, loadUserRoleFromD1 } from "./api/_lib/d1-internal.js";
-import { HttpError, getAdminServices, getCredentialErrorMessage } from "./api/_lib/firebase-admin.js";
+import { HttpError, getAdminServices, getCredentialErrorMessage, verifyEitherToken } from "./api/_lib/firebase-admin.js";
 import { wrapPagesFunction } from "./api/_lib/pages-to-express.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -39,8 +39,8 @@ async function verifyAdminToken(authHeader: string | string[] | undefined): Prom
   const idToken = headerValue.slice("Bearer ".length);
   let decoded: any;
   try {
-    const { auth } = getAdminServices();
-    decoded = await auth.verifyIdToken(idToken);
+    // Accepts our native session token OR a Firebase ID token (migration window).
+    decoded = await verifyEitherToken(idToken);
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     throw new HttpError(401, `Invalid auth token: ${reason}`);
@@ -410,6 +410,10 @@ async function startServer() {
   // the pipeline gracefully degrades without (cold path goes straight
   // to D1 every time, slower but functional).
   const pagesFunctions: Array<{ mount: string; modulePath: string }> = [
+    // Native auth (Firebase-exit migration). Unauthenticated login + the
+    // hash-on-next-login adopt endpoint. Prod auto-discovers it by file path;
+    // dev needs this explicit mount like every other Pages Function below.
+    { mount: "/api/auth", modulePath: "./functions/api/auth/[[path]].ts" },
     { mount: "/api/me", modulePath: "./functions/api/me/[[path]].ts" },
     { mount: "/api/admin/users", modulePath: "./functions/api/admin/users/[[path]].ts" },
     { mount: "/api/admin/worlds", modulePath: "./functions/api/admin/worlds/[[path]].ts" },

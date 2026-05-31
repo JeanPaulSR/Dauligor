@@ -24,6 +24,7 @@ import {
   SignJWT,
 } from "jose";
 import { executeD1QueryInternal, loadUserRoleFromD1 } from "./d1-internal.js";
+import { isNativeAuthConfigured, verifySessionToken } from "./sessionToken.js";
 
 const HARDCODED_STAFF_EMAILS = new Set([
   "luapnaej101@gmail.com",
@@ -312,6 +313,28 @@ export function getAdminServices() {
   return { auth: authImpl };
 }
 
+/**
+ * Verify a bearer token that may be EITHER our native session JWT (HS256,
+ * issued by /api/auth/login) OR a Firebase ID token (RS256, JWKS-verified).
+ *
+ * This is the dual-acceptance gate for the Firebase-exit migration window: a
+ * client that has logged in natively presents our token; a client still on
+ * Firebase presents theirs. Native is tried first when configured — a native
+ * token is HS256 and a Firebase token is RS256, so a Firebase token simply
+ * fails the native verify and falls through. Once Firebase is fully retired
+ * (Phase 5) the fallback can be deleted and only the native branch remains.
+ */
+export async function verifyEitherToken(idToken: string): Promise<VerifiedToken> {
+  if (isNativeAuthConfigured()) {
+    try {
+      return (await verifySessionToken(idToken)) as unknown as VerifiedToken;
+    } catch {
+      // Not our token (or ours but invalid/expired) — try Firebase below.
+    }
+  }
+  return await authImpl.verifyIdToken(idToken);
+}
+
 /* -------------------------------------------------------------------------- */
 /* Token gate helpers                                                          */
 /* -------------------------------------------------------------------------- */
@@ -329,11 +352,12 @@ async function checkAccessFromToken(
   const idToken = headerValue.slice("Bearer ".length);
   let decoded: VerifiedToken;
   try {
-    decoded = await authImpl.verifyIdToken(idToken);
+    // Accepts our native session token OR a Firebase ID token during the
+    // migration window. No signatureless fallback — both paths are
+    // signature-checked (HS256 secret / Firebase JWKS), so an unverifiable
+    // token always rejects.
+    decoded = await verifyEitherToken(idToken);
   } catch (error) {
-    // No signatureless fallback — jose rejects, we reject. The old
-    // fallback was a credential-missing safety net for firebase-admin;
-    // with public-key verification there's no credentials to miss.
     const reason = error instanceof Error ? error.message : String(error);
     throw new HttpError(401, `Invalid auth token: ${reason}`);
   }
