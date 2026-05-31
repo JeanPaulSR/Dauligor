@@ -251,6 +251,8 @@ If you add a new full-bleed editor, add `spell-list-fullscreen` to its mount eff
 | `<PickOrCreateBlockDialog>` | [src/components/proposals/PickOrCreateBlockDialog.tsx](../../src/components/proposals/PickOrCreateBlockDialog.tsx) | Block picker when the user tries to write with no active block |
 | `<SubclassPickerDialog>` | [src/components/proposals/SubclassPickerDialog.tsx](../../src/components/proposals/SubclassPickerDialog.tsx) | Two-step class-then-subclass pick flow for the proposal launcher |
 | `<DropEntityButton>` / `<DropFieldIcon>` | [src/components/proposals/](../../src/components/proposals/) | Drop Edits affordances (Phase 4.3) |
+| `<BlockReviewPane>` | [src/components/proposals/BlockReviewPane.tsx](../../src/components/proposals/BlockReviewPane.tsx) | Shared "Option C" split-pane block review (rail + `FieldDiff`) — used by admin review AND the creator's `<BlockReviewBody>`. See [Block review](#block-review-the-creators-whole-block-view). |
+| `<BlockReviewBody>` | [src/components/proposals/BlockReviewBody.tsx](../../src/components/proposals/BlockReviewBody.tsx) | The creator's inline whole-block review (wraps `<BlockReviewPane>`) on My Proposals → Block |
 
 ---
 
@@ -265,6 +267,26 @@ When the URL carries `?review=<id>`:
 - Each editor's load effect short-circuits to `reviewMode.proposedPayload` when `isReviewingThis*` is true
 
 Field-level change highlighting: wrap any field in `<ReviewFieldHighlight columnKey="X">` and it gets a gold accent + "Changed" badge when `reviewMode.changedFields.has('X')`. Apply liberally to the most-edited columns; the wrapper is a no-op outside review mode.
+
+---
+
+## Block review (the creator's whole-block view)
+
+Distinct from per-proposal `?review=` mode above: this is the **creator reviewing their entire active block before submitting it** — using the *same* split-pane the admin uses to triage a submitted block, so what the creator sees and what the reviewer sees are identical.
+
+- **[`<BlockReviewPane>`](../../src/components/proposals/BlockReviewPane.tsx)** — the shared "Option C" split-pane: a left rail grouping changes by entity type + a right detail pane with a field-level `FieldDiff`, prev/next stepping, and a per-revision action slot. **Used by both sides** — the admin (`AdminProposals`) and the creator (`BlockReviewBody`) render the same pane. The caller passes `revisions` and a `renderRevisionActions(rev)` slot (Approve/Reject for admin; Open-in-editor/Remove-from-block for the creator); the pane owns selection, grouping, and the diff.
+- **[`<BlockReviewBody>`](../../src/components/proposals/BlockReviewBody.tsx)** — wraps the pane for the creator, rendered **inline in the active block card** on My Proposals → Block (that tab is viewport-fit, so only the panes scroll). Per-revision actions: **Open in editor** (navigates to the editor focused on that draft — see `?editingId` below) and **Remove from block** (one-more-click inline confirm → drops the draft via `DELETE /api/proposals/:id`).
+- **[`proposalReviewFormat.tsx`](../../src/components/proposals/proposalReviewFormat.tsx)** — humanizes the raw `proposed_payload` so `FieldDiff` reads as content, not a SQL dump. Provides: friendly field labels; suppression of empty/default/noise fields (incl. image-position blobs + the spell-derived duplicate columns); enum labels (spell school, abilities, item rarity, casting-time/range/duration/shape buckets); Yes/No booleans; an `AdvancementList` that resolves a class/feature advancement's `featureId` / pool / scaling-column refs to the **names** of other drafts in the same block; a `ProficiencySummary` that shows the class editor's stored filter-preview display names (`armorDisplayName` etc.) instead of dumping option slugs; and tag-id→name resolution (fetched once, merged into the pane's ref-name map).
+
+`FieldDiff` renders three shapes — **create** = every meaningful field; **update** = changed fields only (before → after, driven by `snapshot_at_proposal`, now carried on `DraftRevision`); **delete** = the entry approval would remove.
+
+### Detail-panel previews render the in-block draft
+
+The catalog editors' right-pane preview ([`<SpellDetailPanel>`](../../src/components/compendium/SpellDetailPanel.tsx), [`<FeatDetailPanel>`](../../src/components/compendium/FeatDetailPanel.tsx)) fetches the entity by id. In proposal mode a draft has no persisted live row (create) — or its live row doesn't yet reflect the edits (update) — so the editor passes the in-block draft's raw row via the optional `spellData` / `featData` prop and the panel renders from it instead of fetching (a shared `mapRaw*Row` maps the row identically on both paths). `<ItemDetailPanel>` already took `row={formData}`, so items needed no change. The block review's **Open in editor** seeds `editingId` from a `?editingId=<id>` query param (SpellsEditor / FeatsEditor / ItemsEditor honor it) so the creator lands on the exact entity.
+
+### Icon selection for content-creators
+
+The icon picker lists the shared `icons/` R2 folder. `GET /api/r2/list` lets **any signed-in user** read that folder (read-only) so content-creators can browse + **select** icons for their proposals; uploads and folder management stay staff-gated (uploads are also allowed into the caller's own open block). In local dev the worker serves `icons/` + `tokens/` directly (in prod, images.dauligor.com serves the whole bucket).
 
 ---
 
