@@ -25,7 +25,19 @@ All on the working tree only. tsc: **7 pre-existing errors, 0 introduced** (Base
 
 **Verification NOT done:** live HTTP e2e. This worktree's local D1 is **empty/unseeded** and the worker isn't running, so no real login round-trip yet. Best run in the **main checkout** (`dauligor-applications` @ `node scripts/dev-sysapp.mjs`, :3001/:8788, seeded local D1) — set `AUTH_JWT_SECRET` in its env, insert a test user with a hash (or call `/adopt`), then `POST /api/auth/login`.
 
-## Next — Phase 3 (the disruptive part; needs owner go-ahead)
+## Phase 3a — DONE (client flip), committed `047db15` (not pushed)
+
+The whole client is off `firebase.auth.currentUser` and onto `src/lib/auth.ts`.
+- **`src/lib/auth.ts`** (new): single source of truth. `getSessionToken()` (native JWT if present+unexpired, else Firebase), `getIdentity()`/`isAuthenticated()`, `onAuthChange()`, `login()` (native-first → Firebase fallback → `/adopt`), `logout()`, `redeemToken()`. Continuous expiry check; flash-free subscribe (sync-fires only on a definitive native session); native-token-set-before-firebase-signout ordering.
+- **~44 files swept** via codemod: `auth.currentUser.getIdToken()`→`getSessionToken()`, `auth.currentUser`→`getIdentity()`/`isAuthenticated()`. Orphaned firebase imports removed from 30 files.
+- **Entry points (hand-wired):** `App.tsx` (`onAuthChange` + `Identity` state, `loadProfile()` uses `getSessionToken`), `Navbar` (`login`/`logout`), `RedeemTokenPage` (`redeemToken`), `d1.ts` (`getAuthHeaders`/`checkFoundationUpdate`).
+- **Settings:** dropped the redundant Firebase `updateProfile` (D1 PATCH is source of truth); password change → new **`POST /api/auth/change-password`** (session-authed; no current-password field by design parity — hardening follow-up: require current password).
+- **Verified:** `tsc` 0 new errors; **`vite build` green**; live endpoint smoke login + adopt + **change-password 6/6** through a real worker + D1.
+- ⚠ **Env hiccup (resolved):** the earlier hung/offline `npm install` left the `motion`/`framer-motion`/`motion-dom` packages with incomplete ESM extraction → `vite build` failed on entry resolution. Fixed with `npm cache clean --force` + removing the motion-family dirs + fresh reinstall. Not a code issue. `package.json`/lock unchanged beyond the committed `@noble/hashes` add.
+
+Codemod gotcha for the future: insert new imports AFTER the last import statement's *end* (multi-line `import {…}` blocks span several lines) — a first attempt inserted mid-statement and broke ~6 files.
+
+## Next — Phase 3b / 5 (each needs owner go-ahead)
 
 1. **Remote migration** `20260531-1200_*` applied to remote D1 WITH the code (per-migration go-ahead). Lesson re-stated in the design doc §8.
 2. **Client flip** — `src/lib/auth.ts` (new) replacing the Firebase SDK surface in `src/lib/firebase.ts`; `Navbar.tsx` login → `POST /api/auth/login` + store token; `App.tsx` `onAuthStateChanged` → our listener; `RedeemTokenPage.tsx` → our one-time token. Wire `/adopt` into the existing Firebase login so accounts self-migrate during the window.
