@@ -39,13 +39,16 @@ Classes opt into option groups via `classes.advancements` (an `ItemChoice` advan
 - How many choices the player makes at each level (fixed or scaling)
 - Whether the choice is optional
 
+### Editor layout
+The comprehensive editor (`/compendium/unique-options/edit/:id`) is an inline **3-pane** surface mirroring the browse page: **Group Details | Options | Option editor**. Selecting (or adding) an option loads it in the right pane — no modal context-switch. On `<lg` the panes become a single-pane drilldown (group → options → editor) with back/forward nav, the same convention the browse page uses. The pane heights are fixed (the page is locked fullscreen; each pane scrolls internally).
+
 ### Item editor
-Items are managed in a Dialog modal with a five-tab layout matching the ClassEditor feature modal: **Description / Details / Activities / Effects / Advancement**. Authoring a Battle Master Maneuver / Eldritch Invocation / Artificer Infusion feels identical to authoring a class feature.
+An option is authored in the right pane with a five-tab layout matching the ClassEditor feature editor: **Description / Details / Activities / Effects / Advancement**. Authoring a Battle Master Maneuver / Eldritch Invocation / Artificer Infusion feels identical to authoring a class feature.
 
 | Tab | Fields |
 |---|---|
 | **Description** | Icon, Name, Markdown body |
-| **Details** | Source, Page, **Modular Option Group** (read-only display of the parent group's name; drives dnd5e v5.x `system.type.subtype` on export so authors don't have to remember to fill in `featureType`), Subtype, Level Prereq + **Total character level** checkbox, String Prereq, **Compound Requirements** (the full requirements tree — see below), Repeatable |
+| **Details** | Source, Page, **Modular Option Group** (read-only display of the parent group's name; drives dnd5e v5.x `system.type.subtype` on export so authors don't have to remember to fill in `featureType`), Subtype, **Prerequisites** (the full requirements tree — see below; the `<RequirementsEditor>` now hosts level, free-text/string, class/subclass and the compound tree in one component, so there are no separate flat Level / String inputs), a **Usage** block (limited uses + recovery rules), and the Repeatable toggle |
 | **Activities** | `<ActivityEditor />` — same component class features use |
 | **Effects** | `<ActiveEffectEditor />` — see [active-effects.md](active-effects.md) for the autocomplete + status picker + categories wiring |
 | **Advancement** | `<AdvancementManager />` standalone-mode — option items can have their own advancements (rare; used by Invocations granting spells via `ItemGrant`) |
@@ -106,12 +109,12 @@ Most option items gate on level — typically "available at level 5" of the impo
 - `0` (default) — the gate checks the *importing class's* level (Battle Master Maneuvers' "level 5" = Fighter 5).
 - `1` — the gate checks *total character level* (rare; some feat-shape options need character-level 4 regardless of class).
 
-Surfaced in the editor as a "Total character level (default: class level)" checkbox under the Level Prerequisite input.
+Surfaced in the editor through the `<RequirementsEditor>`'s `level` leaf (which carries the minimum level + an "is total character level" flag). On save the flat `level_prerequisite` / `level_prereq_is_total` columns are re-derived from that top-level `level` leaf (`extractTopLevelLevelLeaf`), and on open an item's existing flat level migrates into the tree (`migrateFlatLevelIntoTree`), so the flat columns the exporter/importer read stay in sync.
 
 ### List-row summary formats the tree
 {#list-row-summary-formats-the-tree}
 
-The Individual Options list under the group page renders a one-line prereq summary per row. The flat-level + flat-string fields render first, then the tree is rendered to readable text via `formatRequirementText(tree, lookup)`:
+The **Options** list (middle pane) renders a one-line prereq summary per row, and is ordered by level prerequisite (ascending, then name) when the group is level-restricted — otherwise alphabetical. The flat-level + flat-string fields render first, then the tree is rendered to readable text via `formatRequirementText(tree, lookup)`:
 
 - `{ abilityScore: dex 13 }` → "Dexterity 13 or higher"
 - `{ any: [proficiency simple-weapons, proficiency martial-weapons] }` → "Simple or Martial Weapons"
@@ -203,9 +206,9 @@ The filtering UI in `ClassList`, `SpellList`, etc. only fetches tag groups that 
 ## Common tasks
 
 ### Add a new option group (e.g., a homebrew Maneuver set)
-1. `/compendium/options` → create new group.
+1. `/compendium/unique-options` → **New Group**.
 2. Set name, description, source, class restrictions.
-3. Add items in the modal.
+3. Add options in the editor's Options pane (each opens inline in the Option editor pane).
 4. Open the relevant class editor, add an `ItemChoice` advancement at the right level pointing at this group.
 
 ### Add a new tag

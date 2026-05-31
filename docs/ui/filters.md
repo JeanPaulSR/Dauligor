@@ -145,7 +145,7 @@ Bulk controls are implemented as monotonic version counters in `FilterBarContext
 |---|---|
 | Search input | Free-text search; consumer-owned via `setSearch`. |
 | Filters button | Opens the modal. Badge shows `activeFilterCount` (number of non-neutral chips across all axes). |
-| Reset (inline) | Always rendered. When `activeFilterCount > 0 \|\| search.length > 0`, one click clears both filters and search via `resetFilters()` + `setSearch('')`. When there's nothing to reset, the button dims and shows a "Nothing to reset" tooltip — the affordance stays discoverable. Blood-tinted hover signals it's destructive. |
+| Reset (inline) | Rendered by default. When `activeFilterCount > 0 \|\| search.length > 0`, one click clears both filters and search via `resetFilters()` + `setSearch('')`. When there's nothing to reset, the button dims and shows a "Nothing to reset" tooltip — the affordance stays discoverable. Blood-tinted hover signals it's destructive. Pass `hideInlineReset` to drop it (the filter modal carries its own Reset, so compact hosts that only need search + Filters can omit the toolbar Reset). |
 | `trailingActions` slot | Optional `ReactNode` prop rendered after Reset. Children get `flex items-center gap-2 shrink-0`. Used by pages that want page-level actions inline with the filter controls — e.g., Settings popovers, edit-mode entry points, result counts. |
 
 The trailing slot is how `SpellList` puts its `count + Settings + Spell Manager` chips on the same row as Filters, and how `SpellsEditor` puts `count + New Spell` there. Pages without trailing controls leave the prop omitted.
