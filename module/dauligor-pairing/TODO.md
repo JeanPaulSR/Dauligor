@@ -4,6 +4,24 @@
 > The current-state audit (`docs/_drafts/module-current-state-2026-05-30.html`) is the
 > source for what is *built* vs *deferred*; this file is the deferred-work backlog.
 
+## Local data cache (future)
+
+- **Revisit a local cache of module data for data saving.** The bundled offline mirror
+  (`data/sources/`, `sources.zip`, `dauligor_artificer_full_export.json`) was **removed 2026-05-30**
+  — it was a stale, mostly-empty snapshot and the module reads everything live from `/api/module/*`.
+  A real local/offline cache could be revisited later, BUT it's **low priority**: the endpoints are
+  served from R2 (CDN-backed), so repeat requests are cheap. Only worth it for true offline play.
+- **Cleanup leftover bundled-file references (dead now that `data/` is gone):**
+  - `constants.js`: `SOURCE_LIBRARY_FILE` (→ deleted `data/sources/catalog.json`), `CLASS_CATALOG_FILE`
+    (→ never-existed `data/classes/catalog.json`), `SAMPLE_FILE` (→ never-existed
+    `data/sample-character.json`). These are only used as vestigial default params/fallbacks; the
+    live flow always passes real `/api/module/*` URLs, so they're never hit — but they should be
+    removed and the function signatures (`fetchSourceCatalog`, the class-catalog defaults at
+    `importer-app.js:288/860/900`, the `defaultClassCatalogUrl` setting default) cleaned to not
+    reference disk paths.
+  - `import-service.js` "Import Sample" + `serve-sample.ps1` reference the missing
+    `data/sample-character.json` — both already dead; remove or repoint.
+
 ## Backgrounds & Races importer
 
 - **[done]** Consume `GET /api/module/backgrounds/<dbId>.json` (`dauligor.background-item.v1`,

@@ -111,14 +111,14 @@ World settings: `defaultImportUrl`, `defaultClassCatalogUrl`, `defaultClassFolde
 
 \* = under-construction placeholder dialog.
 
-## Bundled data (`data/`)
+## Data
 
-- `data/sources/catalog.json` — source-library index used by the import wizard's source step.
-- `data/sources/<source>/` for `phb`, `tce`, `scag`, `xge`, `dsotdq`, `rj`, `uah`, `vrgr` — each with
-  `source.json` + `{bestiary,classes,items,journals,spells}/catalog.json`. Individual class JSONs
-  exist for `phb` (barbarian, bard, cleric, druid, sorcerer) and `tce` (artificer).
-- `data/dauligor_artificer_full_export.json` — a full semantic class-export sample.
-- `data/sources.zip` — zipped copy of the sources tree.
+The module reads its source library, classes, spells, feats, etc. **live** from the app's
+`/api/module/*` endpoints (host chosen by the `apiEndpointMode` setting). There is no longer a
+bundled offline copy: the old `data/sources/` snapshot (a stale, mostly-empty mirror) was removed
+on 2026-05-30 — see [TODO.md](TODO.md) "Local data cache" for the future-caching note and the
+leftover dead bundled-file constants still to clean. Wire-shape contract:
+[docs/source-library-contract.md](docs/source-library-contract.md).
 
 Research corpus lives under `docs/corpus/` (source-side 5etools captures + templates).
 

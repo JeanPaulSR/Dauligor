@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bundled data/sources — what it is (2026-05-30)</title>
+<style>
+  :root{--parchment:#f5f2e8;--parchment-soft:#faf7ed;--ink:#1a1a1a;--ink-soft:#3a3a3a;--muted:#6b6457;--gold:#c5a059;--gold-deep:#8a6d2f;--blood:#7a1f1f;--leaf:#355c3a;--card:#fbf8ee;--rule:#d8cfb8;--code-bg:#2b2620;--code-ink:#f0e9d2;--shadow:0 1px 3px rgba(0,0,0,.08),0 4px 10px rgba(0,0,0,.04);}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--parchment);color:var(--ink);font-family:"Inter",-apple-system,"Segoe UI",Roboto,sans-serif;font-size:15px;line-height:1.55;}
+  .wrap{max-width:1040px;margin:0 auto;padding:40px 32px 80px;}
+  header.hero{border-bottom:1px solid var(--rule);padding-bottom:20px;margin-bottom:24px;}
+  header.hero h1{font-family:"Cormorant Garamond","Georgia",serif;font-weight:600;font-size:34px;line-height:1.1;margin:0 0 6px;}
+  header.hero .sub{color:var(--muted);font-size:14px;}
+  h2{font-family:"Cormorant Garamond","Georgia",serif;font-size:23px;font-weight:600;margin:30px 0 10px;padding-bottom:6px;border-bottom:2px solid var(--gold);}
+  p{margin:8px 0;} ul{margin:8px 0 8px 22px;padding:0;} li{margin:5px 0;}
+  code{font-family:"JetBrains Mono","Consolas",monospace;font-size:12.5px;background:rgba(138,109,47,.12);padding:1px 5px;border-radius:3px;}
+  pre{background:var(--code-bg);color:var(--code-ink);padding:13px 15px;border-radius:5px;overflow-x:auto;font-family:"JetBrains Mono","Consolas",monospace;font-size:12.5px;line-height:1.5;box-shadow:var(--shadow);}
+  pre code{background:transparent;color:inherit;padding:0;}
+  table{border-collapse:collapse;width:100%;margin:12px 0;background:var(--parchment-soft);box-shadow:var(--shadow);border-radius:4px;overflow:hidden;}
+  th,td{text-align:left;padding:8px 11px;border-bottom:1px solid var(--rule);font-size:13.5px;vertical-align:top;} tr:last-child td{border-bottom:none;}
+  th{background:rgba(138,109,47,.10);font-weight:600;color:var(--gold-deep);text-transform:uppercase;font-size:11px;letter-spacing:.6px;}
+  .callout{background:rgba(122,31,31,.06);border:1px solid rgba(122,31,31,.25);border-radius:4px;padding:12px 16px;margin:14px 0;font-size:14px;}
+  .callout strong{color:var(--blood);}
+  .callout.leaf{background:rgba(53,92,58,.07);border-color:rgba(53,92,58,.3);} .callout.leaf strong{color:var(--leaf);}
+  .path{font-family:"JetBrains Mono","Consolas",monospace;font-size:12.5px;color:var(--gold-deep);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>Bundled <code>data/sources/</code> &mdash; what it is</h1>
+  <div class="sub">module/dauligor-pairing/data &middot; 2026-05-30</div>
+</header>
+
+<div class="callout leaf">
+  <strong>Resolved (2026-05-30): deleted.</strong> Per the owner, the bundled offline data
+  (<span class="path">data/sources/</span>, <span class="path">sources.zip</span>,
+  <span class="path">dauligor_artificer_full_export.json</span>) was removed — it was stale and the
+  module reads everything live from <code>/api/module/*</code> (R2-backed, so repeat requests are
+  cheap). A local cache may be revisited later (low priority) — see <span class="path">TODO.md</span>
+  "Local data cache". This doc is kept as the rationale + a description of what was there.
+</div>
+
+<p>
+  <span class="path">data/sources/</span> is an <strong>offline, file-based mirror of the app's live <code>/api/module/*</code> source library</strong>.
+  It uses the <em>same payload kinds</em> and a folder layout that mirrors the live URL routes &mdash; so the importer can read a source library
+  from disk exactly as it would from the server. It is the historical seed data from before the live export pipeline existed.
+</p>
+
+<h2>Layout = the live URL routes, on disk</h2>
+<pre><code>data/sources/
+  catalog.json                         dauligor.source-catalog.v1     ← all sources (the index)
+  &lt;slug&gt;/                              one folder per source (phb, tce, scag, xge, dsotdq, rj, uah, vrgr)
+    source.json                        dauligor.source.v1             ← source detail (name, cover, rules, tags)
+    classes/
+      catalog.json                     dauligor.class-catalog.v1      ← class list for this source
+      &lt;identifier&gt;.json                dauligor.semantic.class-export ← the FULL class bundle (e.g. bard.json)
+    spells/catalog.json                dauligor.spell-catalog.v1
+    bestiary/catalog.json              dauligor.bestiary-catalog.v1
+    items/catalog.json                 dauligor.item-catalog.v1
+    journals/catalog.json              dauligor.journal-catalog.v1</code></pre>
+<p>
+  Each file's <code>kind</code> matches the live endpoint it mirrors: <span class="path">data/sources/catalog.json</span> ≙
+  <code>GET /api/module/sources/catalog.json</code>, <span class="path">phb/classes/bard.json</span> ≙
+  <code>GET /api/module/phb/classes/bard.json</code>, etc. Same shapes, just static files instead of the D1-backed worker.
+</p>
+
+<h2>What's actually in it (sparse skeleton)</h2>
+<p>8 sources are listed in the catalog, but almost everything is an <strong>empty stub</strong>:</p>
+<table>
+  <tr><th>Source</th><th>Classes (catalog / full JSON)</th><th>Spells / Bestiary / Items / Journals</th></tr>
+  <tr><td><strong>phb</strong></td><td>5 / 5 (barbarian, bard, cleric, druid, sorcerer)</td><td>all empty</td></tr>
+  <tr><td><strong>tce</strong></td><td>1 / 1 (artificer)</td><td>all empty</td></tr>
+  <tr><td>scag, xge, dsotdq, rj, uah, vrgr</td><td>0 / 0</td><td>all empty</td></tr>
+</table>
+<p>So only 6 PHB+TCE classes carry real <code>semantic.class-export</code> data; every spell/creature/item/journal catalog and the other six sources' classes are present-but-empty placeholders.</p>
+
+<h2>Does the module still use it? Mostly no.</h2>
+<p>
+  In normal operation the module fetches the <strong>live</strong> <code>/api/module/*</code> endpoints (via the <code>apiEndpointMode</code>
+  setting → <code>localhost:3000</code> or <code>www.dauligor.com</code>) — that's where current data comes from (the class browser, spell
+  browser, and the Bard fetch we just ran all hit live URLs). The bundled files are largely <strong>vestigial</strong>:
+</p>
+<ul>
+  <li><code>SOURCE_LIBRARY_FILE</code> = <span class="path">data/sources/catalog.json</span> is defined in <code>constants.js</code> but isn't actually fetched anywhere in the scripts.</li>
+  <li><code>CLASS_CATALOG_FILE</code> points at <span class="path">data/classes/catalog.json</span> — a path that <strong>doesn't even exist</strong> (the real data moved to <span class="path">data/sources/</span>). It's the <code>defaultClassCatalogUrl</code> fallback, so that fallback is dead.</li>
+  <li><code>SAMPLE_FILE</code> = <span class="path">data/sample-character.json</span> — also <strong>missing</strong>; the "Import Sample" button references it.</li>
+</ul>
+
+<h2>The two loose files</h2>
+<ul>
+  <li><span class="path">data/dauligor_artificer_full_export.json</span> — a standalone <code>semantic.class-export</code> sample (Artificer), handy as a test fixture for the class normalizer.</li>
+  <li><span class="path">data/sources.zip</span> — a zipped copy of the <code>sources/</code> tree (pairs with <span class="path">serve-sample.ps1</span> for serving the sample library over a local URL).</li>
+</ul>
+
+<div class="callout">
+  <strong>The catch (why Bard looked wrong earlier):</strong> these are <em>static committed snapshots</em>, so they drift from live. The bundled
+  <span class="path">phb/classes/bard.json</span> had no Light Armor and <code>skills.choiceCount: 0</code>; the live bake is correct
+  (Light Armor + one skill + one instrument). <strong>Live is authoritative; the bundled files are stale.</strong>
+</div>
+
+<div class="callout leaf">
+  <strong>Recommendation:</strong> they're stale and partly dead-referenced. Options: (1) delete <code>data/sources/</code> + the dead
+  <code>SAMPLE_FILE</code>/<code>CLASS_CATALOG_FILE</code> constants if offline import isn't a goal; or (2) keep an offline mode but
+  re-export the tree from the live bake and fix the constants to point at <span class="path">data/sources/</span>. Tracked alongside the
+  existing <code>constants.js</code> dead-path note in <span class="path">TODO.md</span>. Canonical wire-shape contract:
+  <span class="path">docs/source-library-contract.md</span>.
+</div>
+
+<p style="margin-top:18px;"><small style="color:var(--muted);">This explainer: <span class="path">module/dauligor-pairing/docs/_drafts/bundled-data-sources-explainer-2026-05-30.html</span>.</small></p>
+
+</div>
+</body>
+</html>
