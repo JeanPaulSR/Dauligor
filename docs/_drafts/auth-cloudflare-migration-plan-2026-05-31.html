@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Accounts → Cloudflare: Firebase Auth Exit Plan</title>
+<style>
+  :root{
+    --parchment:#f5f5f0; --parchment-deep:#ece8dd; --gold:#c5a059; --gold-deep:#9c7b38;
+    --blood:#8b0000; --ink:#1f1c17; --ink-soft:#4a4438; --line:#d8cfb8;
+    --good:#3f6f3f; --warn:#9c6b1f; --bad:#8b0000; --panel:#fbf9f3;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--parchment); color:var(--ink);
+    font-family:"Inter","Segoe UI",system-ui,sans-serif; line-height:1.6;
+    padding:0 0 5rem;
+  }
+  .wrap{max-width:1040px; margin:0 auto; padding:0 1.5rem}
+  header.hero{
+    background:linear-gradient(160deg,#26221b,#3a3328); color:#f2ead6;
+    border-bottom:3px solid var(--gold); padding:2.6rem 0 2.2rem; margin-bottom:2rem;
+  }
+  header.hero .wrap{padding-top:0}
+  h1,h2,h3{font-family:"Cormorant Garamond","Georgia",serif; font-weight:600; line-height:1.15; letter-spacing:.3px}
+  header.hero h1{font-size:2.5rem; margin:.2rem 0 .4rem; color:#f4ecd6}
+  .kicker{text-transform:uppercase; letter-spacing:.28em; font-size:.72rem; color:var(--gold); font-weight:600}
+  .sub{color:#d8cdb2; font-size:1.05rem; max-width:70ch}
+  h2{font-size:1.85rem; margin:2.6rem 0 .4rem; color:#2a2419; border-bottom:1px solid var(--line); padding-bottom:.35rem}
+  h2 .num{color:var(--gold-deep); font-size:1.2rem; vertical-align:.15em; margin-right:.5rem}
+  h3{font-size:1.3rem; margin:1.6rem 0 .3rem; color:#332c20}
+  p{margin:.5rem 0 .9rem}
+  code{background:var(--parchment-deep); border:1px solid var(--line); border-radius:0; padding:.05rem .35rem; font-family:"JetBrains Mono","Consolas",monospace; font-size:.86em; color:#5a3a12}
+  pre{background:#26221b; color:#ecdfc2; padding:1rem 1.1rem; overflow:auto; border-left:3px solid var(--gold); font-family:"JetBrains Mono","Consolas",monospace; font-size:.82rem; line-height:1.5}
+  pre code{background:none; border:none; color:inherit; padding:0}
+  .banner{
+    display:flex; gap:1rem; align-items:flex-start; background:var(--panel);
+    border:1px solid var(--line); border-left:4px solid var(--gold); padding:1rem 1.2rem; margin:1.4rem 0;
+  }
+  .banner .tag{font-weight:700; color:var(--gold-deep); white-space:nowrap; font-size:.8rem; text-transform:uppercase; letter-spacing:.1em; padding-top:.15rem}
+  table{width:100%; border-collapse:collapse; margin:1rem 0; font-size:.92rem; background:var(--panel)}
+  th,td{text-align:left; padding:.55rem .7rem; border:1px solid var(--line); vertical-align:top}
+  th{background:var(--parchment-deep); font-family:"Cormorant Garamond",serif; font-size:1.05rem; font-weight:600}
+  .pill{display:inline-block; font-size:.72rem; font-weight:700; padding:.1rem .5rem; border-radius:999px; letter-spacing:.04em; text-transform:uppercase}
+  .pill.fb{background:#f3dede; color:var(--blood); border:1px solid #d9a7a7}
+  .pill.cf{background:#dfe9df; color:var(--good); border:1px solid #a7c4a7}
+  .pill.done{background:#dfe9df; color:var(--good); border:1px solid #a7c4a7}
+  .pill.todo{background:#f6ead2; color:var(--warn); border:1px solid #ddc28a}
+  .cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:1rem; margin:1.2rem 0}
+  .card{background:var(--panel); border:1px solid var(--line); border-top:3px solid var(--gold); padding:1rem 1.1rem}
+  .card h4{margin:.1rem 0 .5rem; font-family:"Cormorant Garamond",serif; font-size:1.25rem; color:#2a2419}
+  .card.rec{border-top-color:var(--good)}
+  .card.rec h4::after{content:" ◆ recommended"; font-family:Inter,sans-serif; font-size:.62rem; letter-spacing:.1em; color:var(--good); vertical-align:.25em; text-transform:uppercase; font-weight:700}
+  .card .meta{font-size:.78rem; color:var(--ink-soft); margin-top:.6rem; border-top:1px dotted var(--line); padding-top:.5rem}
+  .flow{background:var(--panel); border:1px solid var(--line); padding:1.1rem 1.2rem; margin:1.2rem 0; font-family:"JetBrains Mono",monospace; font-size:.82rem; line-height:1.8; color:var(--ink-soft)}
+  .flow b{color:var(--blood)}
+  .flow .cf{color:var(--good); font-weight:700}
+  .decision{background:#fbf4e6; border:1px solid #e3cf9c; border-left:4px solid var(--gold-deep); padding:1rem 1.2rem; margin:1.2rem 0}
+  .decision .q{font-family:"Cormorant Garamond",serif; font-size:1.3rem; color:#2a2419; margin-bottom:.3rem}
+  .decision .rec-line{color:var(--good); font-weight:600; font-size:.9rem; margin-top:.5rem}
+  ul,ol{margin:.4rem 0 1rem; padding-left:1.3rem}
+  li{margin:.3rem 0}
+  .lead{font-size:1.08rem; color:var(--ink-soft)}
+  .phase{display:flex; gap:1rem; margin:1rem 0; align-items:flex-start}
+  .phase .n{flex:0 0 auto; width:2.4rem; height:2.4rem; background:#26221b; color:var(--gold); font-family:"Cormorant Garamond",serif; font-size:1.4rem; display:flex; align-items:center; justify-content:center; border:2px solid var(--gold)}
+  .phase .body{flex:1}
+  .phase .body h4{margin:.1rem 0 .25rem; font-size:1.15rem; font-family:"Cormorant Garamond",serif}
+  footer{margin-top:3rem; border-top:1px solid var(--line); padding-top:1rem; font-size:.84rem; color:var(--ink-soft)}
+  .nochange{background:#26221b; color:#ecdfc2; padding:1.1rem 1.3rem; margin:1.4rem 0; border-left:4px solid var(--blood)}
+  .nochange b{color:var(--gold)}
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <div class="kicker">Dauligor · The Archive · Platform Architecture</div>
+    <h1>Bringing Accounts Home to Cloudflare</h1>
+    <p class="sub">A plan to retire Firebase Authentication and self-roll account credentials on the existing Cloudflare / D1 stack — so the Archive runs on one stack, end to end, with no managed-auth vendor in the loop.</p>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="nochange">
+    <b>Nothing has changed yet.</b> This is a survey + plan for review. No code edited, no migration written, no database touched. The decisions in §9 gate the build.
+  </div>
+
+  <h2><span class="num">§1</span> Where we actually are today</h2>
+  <p class="lead">The story you may remember — "we moved off Firebase" — is <em>half true</em>, and the half that's done is the half people usually mean. Worth being precise, because it changes how much work is left.</p>
+
+  <div class="banner">
+    <div class="tag">Key fact</div>
+    <div><strong>Firebase the <em>database</em> is gone. Firebase <em>Authentication</em> is not.</strong> The Firestore→D1 migration completed in May 2026, and the server-side <code>firebase-admin</code> SDK was already removed — the proxy now verifies Firebase ID tokens with <code>jose</code> against Firebase's public JWKS, no credential file needed for the read path. What remains is that <strong>passwords still live in Firebase Auth</strong>, and admin user-management still calls Firebase's Identity Toolkit REST API.</div>
+  </div>
+
+  <p>Concretely, here's what's already Cloudflare-native versus still tied to Firebase:</p>
+  <table>
+    <thead><tr><th>Concern</th><th>Lives in</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>User profile, role, permissions</td><td><span class="pill cf">D1</span></td><td><code>users</code> table + <code>user_permissions</code>. Already ours.</td></tr>
+      <tr><td>Campaign membership, characters, lore, all content</td><td><span class="pill cf">D1 / R2</span></td><td>Already ours.</td></tr>
+      <tr><td>Token <em>verification</em> (read path)</td><td><span class="pill cf">jose + JWKS</span></td><td><code>api/_lib/firebase-admin.ts</code> verifies with public keys. No SDK, no secret. <span class="pill done">Stage 1 done</span></td></tr>
+      <tr><td><strong>Password storage &amp; check</strong></td><td><span class="pill fb">Firebase Auth</span></td><td>The thing the owner is asking about. No <code>password_hash</code> exists in D1.</td></tr>
+      <tr><td><strong>Token <em>issuance</em> (login)</strong></td><td><span class="pill fb">Firebase Auth</span></td><td>Client calls <code>signInWithEmailAndPassword</code>; Firebase mints the ID token.</td></tr>
+      <tr><td>Admin create / delete / reset-password user</td><td><span class="pill fb">Identity Toolkit REST</span></td><td>Needs <code>FIREBASE_SERVICE_ACCOUNT_JSON</code>. The last server-side Firebase dependency.</td></tr>
+      <tr><td>Admin "sign-in link"</td><td><span class="pill fb">Firebase custom token</span></td><td><code>signInWithCustomToken</code> + <code>/auth/redeem</code>. Also needs the service account.</td></tr>
+    </tbody>
+  </table>
+
+  <p>The synthetic-email layer is the other piece of color: users log in with a <strong>handle</strong>, not a real email. <code>usernameToEmail('cleric_dan')</code> → <code>cleric_dan@archive.internal</code> — a fake domain that never receives mail. Real addresses, when present, live in <code>users.recovery_email</code> and are not wired to anything. This matters for password-reset design (no inbox to send a link to).</p>
+
+  <h2><span class="num">§2</span> The goal, stated plainly</h2>
+  <ul>
+    <li><strong>Passwords become ours:</strong> an Argon2/scrypt hash on each <code>users</code> row in D1.</li>
+    <li><strong>The Worker issues the token:</strong> on login we verify the hash and sign our own JWT with a Worker secret.</li>
+    <li><strong>Firebase leaves entirely:</strong> the <code>firebase</code> client SDK is removed, <code>FIREBASE_SERVICE_ACCOUNT_JSON</code> is deleted, and the Identity Toolkit calls become plain D1 writes.</li>
+    <li><strong>One stack:</strong> browser → Cloudflare Pages Functions → D1 / R2. No third-party auth vendor anywhere in the request path.</li>
+  </ul>
+
+  <h2><span class="num">§3</span> Target request flow</h2>
+  <div class="flow">
+    <b>LOGIN</b> &nbsp; browser → <span class="cf">POST /api/auth/login</span> {username, password}<br>
+    &nbsp;&nbsp;&nbsp;↳ Worker: <code>usernameToEmail</code>? no — look up <code>users</code> by username<br>
+    &nbsp;&nbsp;&nbsp;↳ verify password against <code>users.password_hash</code> (Web Crypto / scrypt)<br>
+    &nbsp;&nbsp;&nbsp;↳ sign JWT { sub:user.id, role, exp } with <code>AUTH_JWT_SECRET</code><br>
+    &nbsp;&nbsp;&nbsp;↳ return { token } &nbsp;(+ optional refresh cookie)<br>
+    <br>
+    <b>REQUEST</b> &nbsp; browser → any endpoint, <code>Authorization: Bearer &lt;our-jwt&gt;</code><br>
+    &nbsp;&nbsp;&nbsp;↳ <code>require*</code> helper: <span class="cf">jwtVerify(token, AUTH_JWT_SECRET)</span> &nbsp;(was: Firebase JWKS)<br>
+    &nbsp;&nbsp;&nbsp;↳ read role from D1 (unchanged) → allow / deny<br>
+    <br>
+    <b>SIGN-OUT</b> &nbsp; client drops the token + clears cache (no Firebase session to revoke)
+  </div>
+  <p>The shape barely changes — every <code>require*</code> gate already reads the role from D1; only the <em>token-verification line</em> swaps from Firebase's public keys to our own secret. That's the leverage point that makes this tractable.</p>
+
+  <h2><span class="num">§4</span> What changes, component by component</h2>
+  <table>
+    <thead><tr><th>File / area</th><th>Change</th></tr></thead>
+    <tbody>
+      <tr><td><code>src/lib/firebase.ts</code></td><td>Replaced by <code>src/lib/auth.ts</code>: <code>login()</code>/<code>logout()</code>/<code>getToken()</code>/<code>onAuthChange()</code> backed by our API + token storage. Keep <code>usernameToEmail</code> only if we still want email-shaped principals (we don't need to).</td></tr>
+      <tr><td><code>src/components/Navbar.tsx</code></td><td>Login form POSTs to <code>/api/auth/login</code> instead of calling the Firebase SDK.</td></tr>
+      <tr><td><code>src/App.tsx</code></td><td><code>onAuthStateChanged</code> → our own listener; profile-load sequence is otherwise unchanged (still <code>GET /api/me</code>).</td></tr>
+      <tr><td><code>src/pages/auth/RedeemTokenPage.tsx</code></td><td>Redeems <em>our</em> one-time sign-in token instead of a Firebase custom token.</td></tr>
+      <tr><td><code>api/_lib/firebase-admin.ts</code></td><td>Renamed (e.g. <code>auth.ts</code>). <code>verifyIdToken</code> → verify our JWT. Identity-Toolkit <code>createUser/updateUser/deleteUser/createCustomToken</code> → D1 writes + local token mint. The role-gate helpers keep their exact signatures, so callers don't change.</td></tr>
+      <tr><td><code>functions/api/auth/[[path]].ts</code> <span class="pill todo">new</span></td><td><code>POST /login</code>, <code>POST /logout</code>, optional <code>POST /refresh</code>, <code>GET /redeem</code>.</td></tr>
+      <tr><td><code>functions/api/admin/users/[[path]].ts</code></td><td>Create = D1 insert + hash. Temp-password = rehash + write. Sign-in-token = mint our one-time JWT. Delete = D1 delete only.</td></tr>
+      <tr><td><code>worker/migrations/…</code> <span class="pill todo">new</span></td><td>Add <code>password_hash TEXT</code> (and <code>password_updated_at</code>) to <code>users</code>. Applied to <strong>remote</strong> D1 <em>with</em> the code (see landmines).</td></tr>
+      <tr><td>Secrets</td><td>Add <code>AUTH_JWT_SECRET</code> (Worker + Pages). <strong>Remove</strong> <code>FIREBASE_SERVICE_ACCOUNT_JSON</code> and the <code>firebase</code> npm dep once cutover completes.</td></tr>
+    </tbody>
+  </table>
+  <div class="banner"><div class="tag">Don't re-key</div><div><code>users.id</code> is a Firebase UID today and is a foreign key target across characters, lore, campaign_members, user_permissions, proposals, and more. <strong>Keep those id values verbatim</strong> — we stop <em>deriving</em> ids from Firebase, but never rewrite existing ones. New users get a <code>crypto.randomUUID()</code>. This avoids a sprawling FK migration and is non-negotiable.</div></div>
+
+  <h2><span class="num">§5</span> The one genuine technical constraint: hashing on Workers</h2>
+  <p>Cloudflare Workers have no Node native addons, so the usual <code>bcrypt</code>/<code>argon2</code> native libraries don't run. Three viable, Workers-safe paths:</p>
+  <div class="cards">
+    <div class="card rec">
+      <h4>PBKDF2 via Web Crypto</h4>
+      <p><code>crypto.subtle</code> is built into the Workers runtime. Zero dependencies, runs natively, FIPS-grade. ~310k iterations.</p>
+      <p class="meta">Pro: nothing to add. Con: weaker against GPU cracking than memory-hard KDFs — irrelevant at ~10 trusted accounts.</p>
+    </div>
+    <div class="card">
+      <h4>scrypt via <code>@noble/hashes</code></h4>
+      <p>Pure-JS, audited, memory-hard. One small dependency. The stronger choice if we want best-practice hashing regardless of scale.</p>
+      <p class="meta">Pro: memory-hard. Con: one dep; slightly slower per login (fine at this volume).</p>
+    </div>
+    <div class="card">
+      <h4>A library: Lucia / Better Auth</h4>
+      <p>Full session frameworks that pair with D1. They bring hashing, sessions, and reset flows — but also opinions and surface area we'd have to bend to the existing <code>users</code> schema + RBAC.</p>
+      <p class="meta">Pro: batteries included. Con: heavier; may fight our bespoke role model. Likely over-built for ~10 users.</p>
+    </div>
+  </div>
+
+  <h2><span class="num">§6</span> The hard part: migrating existing users</h2>
+  <p class="lead">We <strong>cannot read</strong> anyone's current password out of Firebase — that's the whole point of a hash. So every existing account needs a credential transition. Three strategies, in order of elegance:</p>
+  <div class="cards">
+    <div class="card rec">
+      <h4>Hash-on-next-login (dual window)</h4>
+      <p>Keep Firebase login alive for a short window. When a user logs in successfully via Firebase, the client has the plaintext for that instant — POST it to <code>/api/auth/adopt</code>, which writes the D1 hash and flips the account to native auth. Zero user disruption; accounts migrate themselves as people sign in. After the window, force-reset the stragglers.</p>
+      <p class="meta">Best UX. Cost: a temporary dual-auth code path that we delete after.</p>
+    </div>
+    <div class="card">
+      <h4>Admin-set temp passwords</h4>
+      <p>Admin sets a temp password for each of the ~10 accounts in one sitting; distribute out-of-band (the owner knows the players). Each user changes it on first native login.</p>
+      <p class="meta">Simplest to build. Cost: a manual afternoon + a "change me" nudge.</p>
+    </div>
+    <div class="card">
+      <h4>One-time reset links</h4>
+      <p>Mint a reset token per user, hand out <code>/auth/redeem?token=…</code> URLs ("we upgraded our login — set a new password"). Reuses the sign-in-link machinery we already have.</p>
+      <p class="meta">Clean story. Cost: everyone must act once before they can log in.</p>
+    </div>
+  </div>
+
+  <h2><span class="num">§7</span> Suggested rollout (each phase shippable)</h2>
+  <div class="phase"><div class="n">1</div><div class="body"><h4>Schema + hashing primitives</h4><p>Migration adds <code>password_hash</code> / <code>password_updated_at</code> (local first, then remote <em>with</em> the code). Add hash + verify helpers. No behavior change yet.</p></div></div>
+  <div class="phase"><div class="n">2</div><div class="body"><h4>Native login endpoint, dark</h4><p><code>POST /api/auth/login</code> + our JWT signing/verifying, behind the scenes. <code>require*</code> helpers learn to accept <em>either</em> a Firebase token or ours during transition.</p></div></div>
+  <div class="phase"><div class="n">3</div><div class="body"><h4>Migrate the accounts</h4><p>Run the chosen §6 strategy. Verify every account has a D1 hash.</p></div></div>
+  <div class="phase"><div class="n">4</div><div class="body"><h4>Flip the client</h4><p>Navbar + App use our auth; admin CRUD writes D1 instead of Identity Toolkit; <code>RedeemTokenPage</code> redeems our tokens.</p></div></div>
+  <div class="phase"><div class="n">5</div><div class="body"><h4>Remove Firebase</h4><p>Drop the dual-token acceptance, the <code>firebase</code> dep, <code>firebase-applet-config.json</code>, and <code>FIREBASE_SERVICE_ACCOUNT_JSON</code>. Update docs (<code>auth-firebase.md</code> → <code>auth.md</code>).</p></div></div>
+
+  <h2><span class="num">§8</span> Risks &amp; landmines (some already paid for)</h2>
+  <ul>
+    <li><strong>Remote migration must ship <em>with</em> the code.</strong> The reverted password-reset attempt applied <code>must_change_password</code> only locally; remote endpoints would 500. Same class of bug bit <code>callout</code>/<code>column</code> on the home builder. Apply <code>password_hash</code> to remote D1 (with per-migration go-ahead) before/with the code.</li>
+    <li><strong>The "requires-recent-login" pain disappears.</strong> Firebase's <code>updatePassword</code> needed a fresh login (the reverted attempt tripped on this). Once we own the password, a self-service change is just "verify old hash, write new hash" — no re-auth dance. A genuine simplification.</li>
+    <li><strong>No real inboxes.</strong> <code>@archive.internal</code> can't receive a reset email. Self-service forgot-password needs either a real address (<code>recovery_email</code> + Resend, later) or admin-mediated reset. For ~10 users, admin-mediated is enough; flag email as a v2.</li>
+    <li><strong>Token longevity / refresh.</strong> Firebase auto-refreshed a 1-hour token. We choose: a single sliding ~30-day JWT (simplest, fine at this scale) or access+refresh (correct, more moving parts). Decision in §9.</li>
+    <li><strong>Keep the hardcoded staff-email bypass in sync.</strong> Three files still special-case the owner/admin/gm principals; that logic survives the swap and must move with us.</li>
+    <li><strong>Don't push to <code>main</code>.</strong> All of this lands on <code>dauligor-applications</code> and ships only on explicit request — per standing rule.</li>
+  </ul>
+
+  <h2><span class="num">§9</span> Decisions I need from you before building</h2>
+  <div class="decision">
+    <div class="q">1 · Hashing approach</div>
+    <p>PBKDF2 (Web Crypto, zero deps) vs scrypt (<code>@noble/hashes</code>, memory-hard) vs a full library (Lucia/Better Auth).</p>
+    <p class="rec-line">◆ Recommend: scrypt via <code>@noble/hashes</code> — best-practice hashing, one tiny pure-JS dep, no framework lock-in.</p>
+  </div>
+  <div class="decision">
+    <div class="q">2 · Existing-user cutover</div>
+    <p>Hash-on-next-login (zero disruption, dual window) vs admin-set temp passwords vs one-time reset links.</p>
+    <p class="rec-line">◆ Recommend: hash-on-next-login if you want no disruption; admin-set temp passwords if you'd rather just do it in one sitting and skip the dual-auth code.</p>
+  </div>
+  <div class="decision">
+    <div class="q">3 · Token model</div>
+    <p>Single sliding ~30-day JWT vs short access token + refresh token.</p>
+    <p class="rec-line">◆ Recommend: single sliding JWT — at ~10 trusted users the refresh-token machinery isn't worth its complexity.</p>
+  </div>
+  <div class="decision">
+    <div class="q">4 · Scope of this pass</div>
+    <p>Full exit (Phases 1–5, Firebase gone) vs foundation only (Phases 1–2: schema + native login dark, leave the flip + Firebase removal for a later pass).</p>
+    <p class="rec-line">◆ Recommend: do it as a deliberate sequence — I build through Phase 2, we verify login works against a test account, then proceed to the account migration and the flip. Each phase is shippable and reversible.</p>
+  </div>
+
+  <footer>
+    <p>Draft · 2026-05-31 · branch <code>dauligor-applications</code> · local read-aid (drafts stay local). Supersedes the 13-day-old memory note that placed firebase-admin in <code>server.ts</code> — that was pre-Pages-migration; the SDK is already gone. Sources surveyed: <code>src/lib/firebase.ts</code>, <code>api/_lib/firebase-admin.ts</code>, <code>functions/api/me/[[path]].ts</code>, <code>functions/api/admin/users/[[path]].ts</code>, <code>worker/migrations/0002_phase2_identity.sql</code>, <code>docs/platform/auth-firebase.md</code>, <code>docs/architecture/permissions-rbac.md</code>.</p>
+  </footer>
+</div>
+</body>
+</html>
