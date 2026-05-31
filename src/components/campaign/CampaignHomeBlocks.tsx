@@ -43,10 +43,13 @@ function collectRefs(blocks: HomeBlock[]): EntityRef[] {
   const out: EntityRef[] = [];
   const push = (r: EntityRef | null) => { if (r && !isPlaceholderRef(r)) out.push(r); };
   const visit = (b: HomeBlock) => {
-    if (b.blockType === 'entity-row' && b.source === 'manual') b.refs.forEach(push);
+    // Guard against a malformed/unparseable block sneaking into a children array
+    // (e.g. an undefined from a missing parse case) — skip rather than crash.
+    if (!b || typeof b !== 'object') return;
+    if (b.blockType === 'entity-row' && b.source === 'manual') (b.refs || []).forEach(push);
     if (b.blockType === 'entity-feature') push(b.ref);
     if (b.blockType === 'recommended' && b.source === 'specific') push(b.ref);
-    if (isContainer(b)) b.children.forEach(visit);
+    if (isContainer(b)) (b.children || []).forEach(visit);
   };
   blocks.forEach(visit);
   return out;
