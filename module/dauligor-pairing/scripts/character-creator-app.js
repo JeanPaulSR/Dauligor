@@ -257,19 +257,25 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
 
   // ── data loading ────────────────────────────────────────────────────
 
-  async _loadSourceSlugs() {
-    if (Array.isArray(this._sourceSlugsCache)) return this._sourceSlugsCache;
+  // Returns [{ slug, sourceId }] — `slug` is the URL component
+  // (e.g. "phb"); `sourceId` is the source's catalog id (e.g.
+  // "source-phb-2014"), which is what the class importer keys on.
+  async _loadSources() {
+    if (Array.isArray(this._sourcesCache)) return this._sourcesCache;
     const host = resolveApiHost();
     try {
       const res = await fetch(`${host}/api/module/sources/catalog.json`, { cache: "no-store" });
       if (!res.ok) return [];
       const payload = await res.json();
       if (payload?.kind !== "dauligor.source-catalog.v1") return [];
-      const slugs = (Array.isArray(payload.entries) ? payload.entries : [])
-        .map((e) => String(e?.sourceId ?? "").toLowerCase())
-        .filter(Boolean);
-      this._sourceSlugsCache = slugs;
-      return slugs;
+      const sources = (Array.isArray(payload.entries) ? payload.entries : [])
+        .map((e) => ({
+          slug: String(e?.slug ?? "").toLowerCase(),
+          sourceId: String(e?.sourceId ?? ""),
+        }))
+        .filter((s) => s.slug);
+      this._sourcesCache = sources;
+      return sources;
     } catch (err) {
       log("character-creator: source catalog fetch failed", err);
       return [];
@@ -280,8 +286,8 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     this._featFamily = { status: "loading", backgrounds: [], races: [] };
     if (this._stepId() === "background" || this._stepId() === "race") this._renderBody();
 
-    const slugs = await this._loadSourceSlugs();
-    if (!slugs.length) {
+    const sources = await this._loadSources();
+    if (!sources.length) {
       this._featFamily = { status: "error", backgrounds: [], races: [], errors: ["No sources available."] };
       if (this._stepId() === "background" || this._stepId() === "race") this._renderBody();
       return;
@@ -292,7 +298,7 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     const races = [];
     const errors = [];
 
-    await Promise.all(slugs.map(async (slug) => {
+    await Promise.all(sources.map(async ({ slug }) => {
       const url = `${host}/api/module/${encodeURIComponent(slug)}/feats.json`;
       try {
         const res = await fetch(url, { cache: "no-store" });
@@ -329,12 +335,12 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     this._classes = { status: "loading", entries: [] };
     if (this._stepId() === "class") this._renderBody();
 
-    const slugs = await this._loadSourceSlugs();
+    const sources = await this._loadSources();
     const host = resolveApiHost();
     const entries = [];
     const errors = [];
 
-    await Promise.all(slugs.map(async (slug) => {
+    await Promise.all(sources.map(async ({ slug, sourceId }) => {
       const url = `${host}/api/module/${encodeURIComponent(slug)}/classes/catalog.json`;
       try {
         const res = await fetch(url, { cache: "no-store" });
@@ -342,13 +348,17 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
         const payload = await res.json();
         if (payload?.kind !== "dauligor.class-catalog.v1") return;
         for (const entry of (Array.isArray(payload.entries) ? payload.entries : [])) {
-          if (entry?.type !== "class" || !entry?.id) continue;
+          // Class-catalog entries identify by `sourceId` (e.g.
+          // "class-wizard"); that's also what the importer's class
+          // selection matches against (preferredSelectionIds).
+          if (entry?.type !== "class" || !entry?.sourceId) continue;
           entries.push({
-            entryId: String(entry.id),
-            name: String(entry.name ?? entry.id),
-            img: entry.img ?? null,
+            entryId: String(entry.sourceId),
+            name: String(entry.name ?? entry.sourceId),
+            img: entry.img || null,
             summary: String(entry.description ?? entry.summary ?? ""),
             sourceSlug: slug,
+            sourceId, // the SOURCE's id, for the importer's sourceTypeIds
           });
         }
       } catch (err) {
@@ -871,7 +881,7 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
   _pickClass(entryId, sourceSlug) {
     const entry = this._classes.entries.find((e) => e.entryId === entryId && e.sourceSlug === sourceSlug);
     if (!entry) return;
-    this._choices.class = { entryId: entry.entryId, sourceSlug: entry.sourceSlug, name: entry.name, img: entry.img, summary: entry.summary };
+    this._choices.class = { entryId: entry.entryId, sourceSlug: entry.sourceSlug, sourceId: entry.sourceId, name: entry.name, img: entry.img, summary: entry.summary };
     this._renderBody();
     this._renderStepper();
     this._renderFooter();
@@ -962,8 +972,8 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
       await openDauligorImporter({
         actor,
         importTypeId: "classes-subclasses",
-        sourceTypeIds: [cls.sourceSlug],
-        selectedEntryIds: [cls.entryId],
+        sourceTypeIds: [cls.sourceId], // the SOURCE's catalog id, what the importer keys on
+        selectedEntryIds: [cls.entryId], // the class entry's sourceId
         targetLevel: 1,
       });
 
