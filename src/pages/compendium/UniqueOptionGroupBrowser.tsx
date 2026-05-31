@@ -45,6 +45,7 @@ import { SectionFilterPanel, type FilterSection } from '../../components/compend
 import {
   parseRequirementTree,
   resolveDetailPrereq,
+  extractTopLevelLevelLeaf,
   type Requirement,
   type RequirementFormatLookup,
 } from '../../lib/requirements';
@@ -68,8 +69,10 @@ type ItemRow = {
   icon_url?: string | null;
   usesMax?: string | number | null;
   usesRecovery?: string | null;
-  level_prereq?: number | null;
-  levelPrereq?: number | null;
+  // NB: the column is `level_prerequisite` → denormalizes to
+  // `levelPrerequisite` (NOT `levelPrereq`). Read those exact keys.
+  level_prerequisite?: number | null;
+  levelPrerequisite?: number | null;
   level_prereq_is_total?: boolean | null;
   levelPrereqIsTotal?: boolean | null;
   // Free-text prerequisite override (the `string_prerequisite` column).
@@ -105,14 +108,18 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
   const [items, setItems] = useState<ItemRow[]>([]);
   const [itemsLoading, setItemsLoading] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
-  const [itemSearch, setItemSearch] = useState('');
 
-  // Independent filter state per pane (shared useAxisFilters semantics).
-  // Groups: Source (single) + Class restriction (multi — a group can list
-  // several classes). Options: Level bucket (single) + boolean Traits
-  // (multi — repeatable / has-activities / has-effects).
-  const groupFilters = useAxisFilters(['source', 'class'] as const);
-  const optionFilters = useAxisFilters(['level', 'traits'] as const);
+  // Every option row, bucketed by group_id (built from the catalog-wide
+  // fetch the requirement lookup already loads — no extra query). Powers
+  // (a) the top search matching a group by any contained option's name,
+  // and (b) the Level / Traits axes filtering to groups that CONTAIN a
+  // matching option.
+  const [allItemsByGroup, setAllItemsByGroup] = useState<Record<string, any[]>>({});
+
+  // One filter surface for the whole browser (top toolbar), matching the
+  // Spells / Feats layout. Source + Class are group-level; Level + Traits
+  // are option-level (a group passes if any contained option matches).
+  const browserFilters = useAxisFilters(['source', 'class', 'level', 'traits'] as const);
 
   // Foundation lookups (sources + name maps for requirement formatting).
   const [sourceNameById, setSourceNameById] = useState<Record<string, string>>({});
@@ -183,6 +190,17 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
         setGroups(groupRows);
         setSourceNameById(Object.fromEntries(sourceRows.map((s) => [s.id, s.name])));
         setClassNameById(byId(classRows));
+        // Bucket the catalog-wide option rows by group_id (denormalized so
+        // camelCase fields — levelPrerequisite / isRepeatable / activities — are
+        // present for the Level/Traits axes + the search-includes-options).
+        const itemsByGroup: Record<string, any[]> = {};
+        for (const raw of (allItems as any[])) {
+          const denorm = denormalizeCompendiumData(raw);
+          const gid = String(denorm.groupId ?? denorm.group_id ?? '');
+          if (!gid) continue;
+          (itemsByGroup[gid] ??= []).push(denorm);
+        }
+        setAllItemsByGroup(itemsByGroup);
         setReqLookup({
           classNameById: byId(classRows),
           subclassNameById: byId(subclassRows),
@@ -305,55 +323,7 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
     );
   }, [selectedGroupId, selectedItemId, groups, items]);
 
-  // ─── Groups pane filter axes (Source + Class restriction) ────────
-  const groupAxes: PaneAxis[] = useMemo(() => {
-    // Only surface sources / classes that actually appear on a group, so
-    // the chip set stays relevant to the current catalog (12 groups).
-    const sourceIds = new Set<string>();
-    const classIds = new Set<string>();
-    for (const g of groups) {
-      const sid = g.source_id ?? g.sourceId;
-      if (sid) sourceIds.add(sid);
-      for (const cid of (g.class_ids ?? g.classIds ?? [])) classIds.add(cid);
-    }
-    const axes: PaneAxis[] = [];
-    if (sourceIds.size) {
-      axes.push({
-        key: 'source', label: 'Source',
-        values: [...sourceIds]
-          .map((id) => ({ value: id, label: sourceNameById[id] ?? id }))
-          .sort((a, b) => a.label.localeCompare(b.label)),
-      });
-    }
-    if (classIds.size) {
-      axes.push({
-        key: 'class', label: 'Class Restriction', multi: true,
-        values: [...classIds]
-          .map((id) => ({ value: id, label: classNameById[id] ?? id }))
-          .sort((a, b) => a.label.localeCompare(b.label)),
-      });
-    }
-    return axes;
-  }, [groups, sourceNameById, classNameById]);
-
-  const filteredGroups = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return groups.filter((g) => {
-      if (q && !(g.name || '').toLowerCase().includes(q)) return false;
-      const sid = g.source_id ?? g.sourceId ?? null;
-      if (!matchesSingleAxisFilter(sid, groupFilters.axisFilters.source)) return false;
-      const gClassIds = new Set<string>(g.class_ids ?? g.classIds ?? []);
-      if (!matchesMultiAxisFilter(gClassIds, groupFilters.axisFilters.class)) return false;
-      return true;
-    });
-  }, [groups, search, groupFilters.axisFilters]);
-
-  const selectedGroup = useMemo(
-    () => groups.find((g) => g.id === selectedGroupId) ?? null,
-    [groups, selectedGroupId],
-  );
-
-  // ─── Options pane filter axes (Level bucket + boolean Traits) ────
+  // ─── Shared filter helpers ──────────────────────────────────────
   const levelBucket = (lvl: number | null | undefined): string => {
     const n = Number(lvl) || 0;
     if (n <= 0) return 'none';
@@ -362,54 +332,145 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
     if (n <= 13) return '10-13';
     return '14+';
   };
-  const optionAxes: PaneAxis[] = useMemo(() => {
-    if (!items.length) return [];
+  // The Level / Traits axis values an option satisfies (for option-level
+  // filtering + group-containment).
+  const optionTraits = (it: any): Set<string> => {
+    const traits = new Set<string>();
+    if (it.isRepeatable ?? it.is_repeatable) traits.add('repeatable');
+    const acts = it.activities;
+    if (Array.isArray(acts) ? acts.length : acts) traits.add('activities');
+    const fx = it.effects;
+    if (Array.isArray(fx) ? fx.length : fx) traits.add('effects');
+    return traits;
+  };
+  const optionPassesOptAxes = (it: any): boolean => {
+    if (!matchesSingleAxisFilter(levelBucket(it.levelPrerequisite ?? it.level_prerequisite), browserFilters.axisFilters.level)) return false;
+    if (!matchesMultiAxisFilter(optionTraits(it), browserFilters.axisFilters.traits)) return false;
+    return true;
+  };
+
+  // ─── One filter surface: Source + Class (group-level), Level +
+  //     Traits (option-level). Only values present in the catalog show. ──
+  const browserAxes: PaneAxis[] = useMemo(() => {
+    const sourceIds = new Set<string>();
+    const classIds = new Set<string>();
+    for (const g of groups) {
+      const sid = g.source_id ?? g.sourceId;
+      if (sid) sourceIds.add(sid);
+      for (const cid of (g.class_ids ?? g.classIds ?? [])) classIds.add(cid);
+    }
     const buckets = new Set<string>();
     let anyRepeatable = false, anyActivities = false, anyEffects = false;
-    for (const it of items) {
-      buckets.add(levelBucket(it.levelPrereq ?? it.level_prereq));
-      if ((it as any).isRepeatable ?? (it as any).is_repeatable) anyRepeatable = true;
-      const acts = (it as any).activities;
-      if (Array.isArray(acts) ? acts.length : acts) anyActivities = true;
-      const fx = (it as any).effects;
-      if (Array.isArray(fx) ? fx.length : fx) anyEffects = true;
+    for (const list of Object.values(allItemsByGroup)) {
+      for (const it of list) {
+        buckets.add(levelBucket(it.levelPrerequisite ?? it.level_prerequisite));
+        const t = optionTraits(it);
+        if (t.has('repeatable')) anyRepeatable = true;
+        if (t.has('activities')) anyActivities = true;
+        if (t.has('effects')) anyEffects = true;
+      }
+    }
+    const axes: PaneAxis[] = [];
+    if (sourceIds.size) {
+      axes.push({
+        key: 'source', label: 'Source',
+        values: [...sourceIds].map((id) => ({ value: id, label: sourceNameById[id] ?? id }))
+          .sort((a, b) => a.label.localeCompare(b.label)),
+      });
+    }
+    if (classIds.size) {
+      axes.push({
+        key: 'class', label: 'Class Restriction', multi: true,
+        values: [...classIds].map((id) => ({ value: id, label: classNameById[id] ?? id }))
+          .sort((a, b) => a.label.localeCompare(b.label)),
+      });
     }
     const LEVEL_ORDER = ['none', '1-4', '5-9', '10-13', '14+'];
     const LEVEL_LABEL: Record<string, string> = {
       none: 'No level', '1-4': 'Lv 1–4', '5-9': 'Lv 5–9', '10-13': 'Lv 10–13', '14+': 'Lv 14+',
     };
-    const axes: PaneAxis[] = [];
-    // Always surface the Level axis when there are options (it always
-    // yields ≥1 bucket), so the Filters button is consistently present
-    // on the Options pane — same as the Groups pane. Only the buckets
-    // that actually appear among this group's options are shown.
-    axes.push({
-      key: 'level', label: 'Level Prerequisite',
-      values: LEVEL_ORDER.filter((b) => buckets.has(b)).map((b) => ({ value: b, label: LEVEL_LABEL[b] })),
-    });
+    if (buckets.size) {
+      axes.push({
+        key: 'level', label: 'Option Level',
+        values: LEVEL_ORDER.filter((b) => buckets.has(b)).map((b) => ({ value: b, label: LEVEL_LABEL[b] })),
+      });
+    }
     const traitVals: { value: string; label: string }[] = [];
     if (anyRepeatable) traitVals.push({ value: 'repeatable', label: 'Repeatable' });
     if (anyActivities) traitVals.push({ value: 'activities', label: 'Has Activities' });
     if (anyEffects) traitVals.push({ value: 'effects', label: 'Has Effects' });
-    if (traitVals.length) axes.push({ key: 'traits', label: 'Traits', multi: true, values: traitVals });
+    if (traitVals.length) axes.push({ key: 'traits', label: 'Option Traits', multi: true, values: traitVals });
     return axes;
-  }, [items]);
+  }, [groups, allItemsByGroup, sourceNameById, classNameById]);
 
-  const filteredItems = useMemo(() => {
-    const q = itemSearch.trim().toLowerCase();
-    return items.filter((it) => {
-      if (q && !(it.name || '').toLowerCase().includes(q)) return false;
-      if (!matchesSingleAxisFilter(levelBucket(it.levelPrereq ?? it.level_prereq), optionFilters.axisFilters.level)) return false;
-      const traits = new Set<string>();
-      if ((it as any).isRepeatable ?? (it as any).is_repeatable) traits.add('repeatable');
-      const acts = (it as any).activities;
-      if (Array.isArray(acts) ? acts.length : acts) traits.add('activities');
-      const fx = (it as any).effects;
-      if (Array.isArray(fx) ? fx.length : fx) traits.add('effects');
-      if (!matchesMultiAxisFilter(traits, optionFilters.axisFilters.traits)) return false;
+  // Whether the option-level axes (Level / Traits) are actively filtering.
+  const optAxesActive = useMemo(() =>
+    Object.keys(browserFilters.axisFilters.level?.states ?? {}).length > 0 ||
+    Object.keys(browserFilters.axisFilters.traits?.states ?? {}).length > 0,
+    [browserFilters.axisFilters],
+  );
+
+  const filteredGroups = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return groups.filter((g) => {
+      // Group-level axes.
+      const sid = g.source_id ?? g.sourceId ?? null;
+      if (!matchesSingleAxisFilter(sid, browserFilters.axisFilters.source)) return false;
+      const gClassIds = new Set<string>(g.class_ids ?? g.classIds ?? []);
+      if (!matchesMultiAxisFilter(gClassIds, browserFilters.axisFilters.class)) return false;
+      const groupItems = allItemsByGroup[g.id] ?? [];
+      // Option-level axes — group passes if it CONTAINS a matching option.
+      if (optAxesActive && !groupItems.some(optionPassesOptAxes)) return false;
+      // Search matches the group name OR any contained option's name.
+      if (q) {
+        const nameHit = (g.name || '').toLowerCase().includes(q);
+        const itemHit = groupItems.some((it) => String(it.name || '').toLowerCase().includes(q));
+        if (!nameHit && !itemHit) return false;
+      }
       return true;
     });
-  }, [items, itemSearch, optionFilters.axisFilters]);
+  }, [groups, search, browserFilters.axisFilters, allItemsByGroup, optAxesActive]);
+
+  const selectedGroup = useMemo(
+    () => groups.find((g) => g.id === selectedGroupId) ?? null,
+    [groups, selectedGroupId],
+  );
+
+  // Options of the selected group, narrowed by the SAME top search +
+  // the option-level axes (so a search that surfaced a group by its
+  // contained option also highlights the matching options within it).
+  const filteredItems = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return items.filter((it) => {
+      if (!optionPassesOptAxes(it)) return false;
+      // Only narrow by search text when the group itself didn't match the
+      // query (so searching a group name still shows all its options).
+      if (q) {
+        const groupNameHit = (selectedGroup?.name || '').toLowerCase().includes(q);
+        if (!groupNameHit && !(it.name || '').toLowerCase().includes(q)) return false;
+      }
+      return true;
+    });
+  }, [items, search, browserFilters.axisFilters, selectedGroup]);
+
+  // Order the option list. When the group is level-restricted (any option
+  // carries a level prereq, flat OR via the tree's top-level `level` leaf)
+  // sort by that level ascending, then name — same as the editor's
+  // sortedItems. Otherwise keep the alphabetical order they loaded in.
+  const sortedItems = useMemo(() => {
+    const effectiveLevel = (it: any): number => {
+      const leaf = extractTopLevelLevelLeaf((it.requirementsTree as Requirement | null) ?? null);
+      if (leaf) return Number(leaf.minLevel) || 0;
+      return Number(it.levelPrerequisite ?? it.level_prerequisite) || 0;
+    };
+    const anyLevelRestricted = filteredItems.some((it) => effectiveLevel(it) > 0);
+    if (!anyLevelRestricted) return filteredItems;
+    return [...filteredItems].sort((a, b) => {
+      const la = effectiveLevel(a), lb = effectiveLevel(b);
+      if (la !== lb) return la - lb;
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    });
+  }, [filteredItems]);
 
   const selectedItem = useMemo(
     () => items.find((it) => it.id === selectedItemId) ?? null,
@@ -433,48 +494,53 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
   }, [selectedGroup, sourceNameById]);
 
   return (
-    // max-width cap + center so the 3-pane row doesn't sprawl across an
-    // ultrawide monitor (the detail pane is the only one that wants to grow,
-    // and even it reads better with a bounded measure).
-    <div className="flex flex-col mx-auto w-full max-w-[1400px]" style={{ height: `${paneHeight + 56}px` }}>
-      {/* ── Toolbar ─────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-3 px-1 pb-3 shrink-0">
-        <div className="flex items-center gap-3 min-w-0">
-          <Repeat className="w-5 h-5 text-gold shrink-0" />
-          <h1 className="text-lg font-serif font-bold text-ink uppercase tracking-tight truncate">
-            Modular Options
-          </h1>
-        </div>
-        {canManage && (
-          <div className="flex items-center gap-2 shrink-0">
-            {/* Edit the selected group — disabled until one is picked, so
-                the action always has a target. Sits beside New Group per
-                the toolbar redesign (was a buried link in the Options
-                pane header). */}
-            {selectedGroup ? (
-              <Link to={`/compendium/unique-options/edit/${selectedGroup.id}`}>
-                <Button size="sm" variant="outline" className="gap-2 border-gold/30 text-gold hover:bg-gold/10">
+    // Full-width fullscreen surface (no title chrome, no max-width cap) —
+    // matches the Spells / Feats layout: the page IS the search + filter
+    // bar over the panes.
+    <div className="flex flex-col w-full" style={{ height: `${paneHeight + 64}px` }}>
+      {/* ── Top filter bar (matches Spells / Feats): one search + one
+          Filters button, with Edit / New Group in the trailing slot to
+          the right of Filters. Search matches a group by its name OR by
+          any option it contains; Filters carries Source / Class (group) +
+          Option Level / Traits (group passes if it contains a match). ── */}
+      <div className="pb-3 shrink-0">
+        <BrowserFilterBar
+          search={search}
+          setSearch={setSearch}
+          placeholder="Search groups or options…"
+          filterTitle="Filter Modular Options"
+          axes={browserAxes}
+          axisFilters={browserFilters.axisFilters}
+          cyclers={browserFilters.cyclers}
+          activeFilterCount={browserFilters.activeFilterCount}
+          resetAll={browserFilters.resetAll}
+          trailingActions={canManage ? (
+            <>
+              {selectedGroup ? (
+                <Link to={`/compendium/unique-options/edit/${selectedGroup.id}`}>
+                  <Button size="sm" variant="outline" className="h-8 gap-2 border-gold/30 text-gold hover:bg-gold/10">
+                    <Edit className="w-4 h-4" /> Edit Group
+                  </Button>
+                </Link>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled
+                  className="h-8 gap-2 border-gold/20 text-ink/30 cursor-not-allowed"
+                  title="Select a group to edit"
+                >
                   <Edit className="w-4 h-4" /> Edit Group
                 </Button>
+              )}
+              <Link to="/compendium/unique-options/new">
+                <Button size="sm" className="h-8 btn-gold-solid gap-2">
+                  <Plus className="w-4 h-4" /> New Group
+                </Button>
               </Link>
-            ) : (
-              <Button
-                size="sm"
-                variant="outline"
-                disabled
-                className="gap-2 border-gold/20 text-ink/30 cursor-not-allowed"
-                title="Select a group to edit"
-              >
-                <Edit className="w-4 h-4" /> Edit Group
-              </Button>
-            )}
-            <Link to="/compendium/unique-options/new">
-              <Button size="sm" className="btn-gold-solid gap-2">
-                <Plus className="w-4 h-4" /> New Group
-              </Button>
-            </Link>
-          </div>
-        )}
+            </>
+          ) : undefined}
+        />
       </div>
 
       {/* ── 3-pane row ──────────────────────────────────────────── */}
@@ -488,18 +554,10 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
           )}
           style={{ height: `${paneHeight}px` }}
         >
-          <div className="border-b border-gold/10 bg-background/35 px-2 py-2 shrink-0">
-            <PaneFilter
-              search={search}
-              setSearch={setSearch}
-              placeholder="Search groups…"
-              filterTitle="Filter Groups"
-              axes={groupAxes}
-              axisFilters={groupFilters.axisFilters}
-              cyclers={groupFilters.cyclers}
-              activeFilterCount={groupFilters.activeFilterCount}
-              resetAll={groupFilters.resetAll}
-            />
+          <div className="border-b border-gold/10 bg-background/35 px-3 py-2 shrink-0">
+            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-gold/70">
+              Groups · {filteredGroups.length}{filteredGroups.length !== groups.length ? ` / ${groups.length}` : ''}
+            </span>
           </div>
           <CardContent className="p-0 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
             {groupsLoading ? (
@@ -560,19 +618,11 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
               <CornerLeftUp className="w-3.5 h-3.5 rotate-90" /> Groups
             </Button>
           </div>
-          {selectedGroup && items.length > 0 && (
-            <div className="border-b border-gold/10 bg-background/35 px-2 py-2 shrink-0">
-              <PaneFilter
-                search={itemSearch}
-                setSearch={setItemSearch}
-                placeholder="Search options…"
-                filterTitle="Filter Options"
-                axes={optionAxes}
-                axisFilters={optionFilters.axisFilters}
-                cyclers={optionFilters.cyclers}
-                activeFilterCount={optionFilters.activeFilterCount}
-                resetAll={optionFilters.resetAll}
-              />
+          {selectedGroup && (
+            <div className="border-b border-gold/10 bg-background/35 px-3 py-2 shrink-0">
+              <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-gold/70 truncate block">
+                Options · {filteredItems.length}{filteredItems.length !== items.length ? ` / ${items.length}` : ''}
+              </span>
             </div>
           )}
           <CardContent className="p-0 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
@@ -592,10 +642,22 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
               </div>
             ) : (
               <div className="divide-y divide-gold/5">
-                {filteredItems.map((item) => {
+                {sortedItems.map((item) => {
                   const selected = item.id === selectedItemId;
-                  const level = item.levelPrereq ?? item.level_prereq ?? null;
                   const icon = item.iconUrl ?? item.icon_url ?? null;
+                  // Requirement summary — same chain feats use: the
+                  // free-text `string_prerequisite` override wins, else
+                  // the structured tree formatted via resolveDetailPrereq.
+                  let reqText: string | null = null;
+                  try {
+                    reqText = resolveDetailPrereq(
+                      {
+                        freeText: item.stringPrerequisite ?? item.string_prerequisite ?? null,
+                        tree: item.requirementsTree ?? null,
+                      },
+                      reqLookup,
+                    ) || null;
+                  } catch { reqText = null; }
                   return (
                     <button
                       key={item.id}
@@ -614,10 +676,9 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
                         )}>
                           {item.name || 'Unnamed option'}
                         </span>
-                        {level !== null && level !== undefined && (
-                          <span className="text-[10px] text-ink/45">
-                            {(item.levelPrereqIsTotal ?? item.level_prereq_is_total)
-                              ? `Character Lv ${level}` : `Class Lv ${level}`}
+                        {reqText && (
+                          <span className="block truncate text-[10px] text-ink/45" title={reqText}>
+                            {reqText}
                           </span>
                         )}
                       </span>
@@ -657,25 +718,23 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
   );
 }
 
-// ─── Pane filter ──────────────────────────────────────────────────
-// Per-pane search + filter, using the SAME components as Spells / Feats:
-// a compact <FilterBar> toolbar (search input + Filters button + Reset)
-// whose Filters button opens the real centered modal containing
-// <SectionFilterPanel embedded>. So pressing Filters here gives the exact
-// experience the rest of the compendium does — collapsible sections,
-// 3-state chips, per-section AND/OR/XOR combinators, chip-label search,
-// Show All / Hide All — just scoped to this pane's axes. Groups and
-// Options each mount their own instance with independent axis sets +
-// independent useAxisFilters state.
+// ─── Top filter bar ───────────────────────────────────────────────
+// The single page-top search + filter, using the SAME components as
+// Spells / Feats: the real <FilterBar> (search input + Filters button +
+// trailingActions slot) whose Filters button opens the centered modal
+// containing <SectionFilterPanel embedded> — collapsible sections, 3-state
+// chips, per-section AND/OR/XOR, chip-label search, Show All / Hide All.
+// Page-level actions (Edit / New Group) ride in `trailingActions`, right
+// of the Filters button, exactly like SpellList / FeatList.
 type PaneAxis = {
   key: string;
   label: string;
   multi?: boolean; // multi-valued (an entity can satisfy several) vs single
   values: { value: string; label: string }[];
 };
-function PaneFilter({
+function BrowserFilterBar({
   search, setSearch, placeholder, filterTitle,
-  axes, axisFilters, cyclers, activeFilterCount, resetAll,
+  axes, axisFilters, cyclers, activeFilterCount, resetAll, trailingActions,
 }: {
   search: string;
   setSearch: (v: string) => void;
@@ -686,6 +745,7 @@ function PaneFilter({
   cyclers: ReturnType<typeof useAxisFilters>['cyclers'];
   activeFilterCount: number;
   resetAll: () => void;
+  trailingActions?: React.ReactNode;
 }) {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
@@ -705,7 +765,6 @@ function PaneFilter({
   return (
     <FilterBar
       hideFilters={sections.length === 0}
-      hideInlineReset
       search={search}
       setSearch={setSearch}
       isFilterOpen={isFilterOpen}
@@ -714,6 +773,7 @@ function PaneFilter({
       resetFilters={resetAll}
       searchPlaceholder={placeholder}
       filterTitle={filterTitle}
+      trailingActions={trailingActions}
       renderFilters={
         <SectionFilterPanel
           embedded
@@ -850,7 +910,7 @@ function OptionDetail({
   }
 
   // Option selected — full detail.
-  const level = item.levelPrereq ?? item.level_prereq ?? null;
+  const level = item.levelPrerequisite ?? item.level_prerequisite ?? null;
   const isTotalLevel = item.levelPrereqIsTotal ?? item.level_prereq_is_total ?? false;
   const usesMax = item.usesMax ?? null;
   const usesRecovery = item.usesRecovery ?? null;
