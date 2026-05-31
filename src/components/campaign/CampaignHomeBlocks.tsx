@@ -265,11 +265,9 @@ export default function CampaignHomeBlocks({ blocks, recommendedLore, campaignNa
           : { 1: '', 2: 'md:grid-cols-2', 3: 'md:grid-cols-3', 4: 'md:grid-cols-2 lg:grid-cols-4' }[block.columns];
         const isGrid = block.card !== 'list';
         const renderCard = (vm: CardVM, i: number) => {
-          // Per-card column span: an explicit ref.span (>1) wins; otherwise the
-          // featureFirst shortcut widens just the first card. Clamped to the row's
-          // column count so a card never overflows its grid.
-          let span = vm.span > 1 ? vm.span : (block.featureFirst && i === 0 ? 2 : 1);
-          span = Math.min(span, block.columns);
+          // Per-card column span (set in the entity picker, default 1), clamped to
+          // the row's column count so a card never overflows its grid.
+          const span = Math.min(vm.span > 1 ? vm.span : 1, block.columns);
           // Static classes (Tailwind needs literal strings). For the 4-col grid
           // (md:grid-cols-2 lg:grid-cols-4) a 4-span is full width at both stops.
           const spanCls = isGrid && span >= 2

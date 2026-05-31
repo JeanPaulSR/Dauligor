@@ -265,12 +265,6 @@ export function denormalizeCompendiumData(row: any): any {
     starting_equipment: 'startingEquipment',
     primary_ability: 'primaryAbility',
     primary_ability_choice: 'primaryAbilityChoice',
-    // Was MISSING — the ClassEditor reads `remapped.multiclassProficiencies`
-    // off this denormalize pass, but without the alias the camelCase key
-    // never existed, so every multiclass proficiency loaded empty (and a
-    // subsequent save persisted the empties). The column is also added to
-    // jsonColumns below so it parses from its TEXT string to an object.
-    multiclass_proficiencies: 'multiclassProficiencies',
     tag_ids: 'tagIds',
     item_type: 'itemType',
     feat_type: 'featType',
@@ -419,13 +413,7 @@ export function denormalizeCompendiumData(row: any): any {
   const jsonColumns = [
     'proficiencies', 'spellcasting', 'advancements', 'tagIds', 'savingThrows',
     'primaryAbility', 'primaryAbilityChoice', 'subclassFeatureLevels',
-    'imageDisplay', 'cardDisplay', 'previewDisplay', 'properties',
-    // Parse the multiclass proficiency collection (same shape as
-    // `proficiencies`). Aliased from `multiclass_proficiencies` above;
-    // stored as a TEXT JSON string, so without this the ClassEditor's
-    // `typeof rawMultiProf.armor === 'object'` guard sees a string and
-    // falls back to all-empty collections.
-    'multiclassProficiencies'
+    'imageDisplay', 'cardDisplay', 'previewDisplay', 'properties'
   ];
 
   jsonColumns.forEach(col => {

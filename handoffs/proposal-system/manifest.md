@@ -3,7 +3,7 @@
 Started: `2026-05-28`
 Owner: `Claude`
 Goal: `Own and evolve the content-proposals subsystem — queue/drafts/blocks, cascade engine, review mode, and proposal-mode editor wiring. Specific task per session.`
-Status: `feature complete + block UX redesign in progress` — **RESUME VIA [2026-05-30-session-resume.md](2026-05-30-session-resume.md)** (read it first post-compaction). The cross-referential-cluster feature (Part D atomic approve + guard #1, R4, F3, F2, remote entity_type migrations) is **functionally complete and live in prod**. Current work: a **UX redesign of the block experience** — admin review **Option C split-pane shipped** (`9f610e8`, owner testing on the :3002 dev stack); **authoring-side mocked up** (`docs/_drafts/authoring-block-redesign.html`, 3 surfaces) and **awaiting the owner's pick** before building. Branch == `main` == `6be599a`. Housekeeping: backfill remote `d1_migrations` (#39).
+Status: `Part D shipped` — block-atomic approve + guard #1 reference-integrity walk landed on `main` (`b35705f`), incl. the AdminProposals Approve-/Reject-block UI. Pure logic unit-tested green **and the live data-layer e2e passed** (19/19) against local D1 through the real worker `env.DB.batch()` — see the log entry below. **R4** (atomic submit flush + fold-race closure) shipped `700f23a`; **F2-leftover** verified already-satisfied in the merged tree. The whole cross-referential-cluster feature is **functionally complete and live in prod** — the remote `scaling_column` + `feature` entity_type migrations were applied 2026-05-30 (10 rows preserved, both types in the CHECK). Remaining housekeeping only: backfill the remote `d1_migrations` tracking rows for these two (task #39) so a future `migrations apply --remote` won't try to re-run them.
 
 > Lives in the `loving-banach-d76c40` worktree directory (the dir
 > couldn't be renamed to match the branch — Windows locks the active
@@ -61,15 +61,6 @@ Proposal-mode logic lives *inside* these files, but the files themselves are own
 
 Newest at the top. Each entry: date + link to the handoff doc in this same folder.
 
-- `2026-05-30` — **Block UX redesign in progress; session resume point written.**
-  Admin review **Option C split-pane shipped** (`9f610e8`) — `BlockReview`/`FieldDiff`
-  in AdminProposals (grouped rail + field-level diff, replaces the flat list +
-  retires the broken review nav). **Authoring side mocked up** (3 surfaces:
-  picker/switcher, block bar + drawer, Review&Submit) at
-  `docs/_drafts/authoring-block-redesign.html` — **awaiting owner's pick**, no
-  code yet. Plus the dev image proxy (`worker/index.js` `/images` serve route +
-  `dev-proposal.mjs` R2_PUBLIC_URL override) so uploads render in dev. Full
-  resume context: [2026-05-30-session-resume.md](2026-05-30-session-resume.md).
 - `2026-05-30` — **Live-testing bug pass (4 reported).** **#1 block isolation**
   (`bf7e53b`): active-block id was a global localStorage key → bled across
   accounts in one browser; now per-uid + reset on auth change. **#4 option

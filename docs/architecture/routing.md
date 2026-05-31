@@ -24,7 +24,7 @@
 | `/compendium/classes/edit/:id` | `ClassEditor.tsx` | Admin |
 | `/compendium/spells` | `SpellList.tsx` | All authenticated |
 | `/compendium/spells/manage` | `SpellsEditor.tsx` | Admin |
-| `/compendium/unique-options` | `UniqueOptionGroupBrowser.tsx` | All authenticated |
+| `/compendium/options` | `UniqueOptionGroupList.tsx` | All authenticated |
 | `/compendium/tags` | `TagManager.tsx` | Admin |
 | `/characters` | `CharacterList.tsx` | All authenticated |
 | `/characters/:id` | `CharacterBuilder.tsx` | Owner or character-DM (admin/co-dm) |

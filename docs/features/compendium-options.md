@@ -6,9 +6,8 @@ Modular choice systems (Metamagic, Invocations, Maneuvers, Spell Schools, etc.) 
 
 | Route | File | Purpose |
 |---|---|---|
-| `/compendium/unique-options` | [UniqueOptionGroupBrowser.tsx](../../src/pages/compendium/UniqueOptionGroupBrowser.tsx) | 3-pane browser: groups \| options-in-group \| detail. `#group-slug` / `#group-slug:option-slug` URL hash deep-links a group or a specific option (same slug convention as `@option-group[group:item]` refs). |
-| `/compendium/unique-options/:id` | [UniqueOptionGroupBrowser.tsx](../../src/pages/compendium/UniqueOptionGroupBrowser.tsx) | Same browser, with that group preselected (kept so old per-group view URLs still resolve). |
-| `/compendium/unique-options/edit/:id` | [UniqueOptionGroupEditor.tsx](../../src/pages/compendium/UniqueOptionGroupEditor.tsx) | Comprehensive group + items editor (linked from the browser's Edit affordance). |
+| `/compendium/options` | [UniqueOptionGroupList.tsx](../../src/pages/compendium/UniqueOptionGroupList.tsx) | Group browser |
+| `/compendium/options/edit/:id` | [UniqueOptionGroupEditor.tsx](../../src/pages/compendium/UniqueOptionGroupEditor.tsx) | Group + items editor |
 | `/compendium/tags` | [TagManager.tsx](../../src/pages/compendium/TagManager.tsx) | Global tag catalog |
 | `/compendium/tags/groups/:id` | [TagGroupEditor.tsx](../../src/pages/compendium/TagGroupEditor.tsx) | Tag-group editor |
 

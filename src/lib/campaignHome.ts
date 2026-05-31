@@ -91,8 +91,8 @@ export interface EntityRef {
    *  PLACEHOLDER_DESCRIPTION default. */
   description?: string;
   /** How many grid columns this card spans (1–4, default 1). Lets a GM size any
-   *  card — supersedes the row-level `featureFirst` shortcut, which only widens
-   *  the first card. Clamped to the row's column count at render time. */
+   *  card individually (set in the entity picker). Clamped to the row's column
+   *  count at render time. */
   span?: number;
 }
 
@@ -128,10 +128,6 @@ export interface EntityRowBlock extends BlockBase {
   columns: 1 | 2 | 3 | 4;
   card: 'image' | 'compact' | 'list';
   excerpt: boolean;
-  /** When true (and columns ≥ 2, card ≠ list), the FIRST card spans 2 columns —
-   *  the asymmetric "feature + grid" look of the default home (World Primer wide,
-   *  then the rest in an even grid). */
-  featureFirst?: boolean;
 }
 
 /** A styled call-to-action box — the "Character Creation · Work in Progress"
@@ -240,7 +236,7 @@ export function makeBlock(type: HomeBlockType, id: string): HomeBlock {
     case 'callout':
       return { id, blockType: 'callout', title: '', body: '', buttonLabel: '', buttonLink: '', style: 'soft' };
     case 'entity-row':
-      return { id, blockType: 'entity-row', title: '', showHeading: true, source: 'manual', refs: [], category: '', count: 3, columns: 3, card: 'image', excerpt: true, featureFirst: false };
+      return { id, blockType: 'entity-row', title: '', showHeading: true, source: 'manual', refs: [], category: '', count: 3, columns: 3, card: 'image', excerpt: true };
     case 'entity-feature':
       return { id, blockType: 'entity-feature', title: '', ref: null, imageSide: 'left', excerpt: true };
     case 'group':
@@ -263,15 +259,15 @@ export function defaultHomeBlocks(): HomeBlock[] {
   hero.title = 'Stories in Dauligor';
   hero.subtitle = '[i]Your GM has made this website to give you easy access to the lore of the setting of Dauligor, and to the homebrew options they allow.[/i]';
 
-  // "The World of Dauligor" — five articles in the asymmetric feature-first grid
-  // (World Primer spans 2 cols, then the rest fill an even 3-col grid), exactly
-  // like the legacy home.
+  // "The World of Dauligor" — five articles in the asymmetric grid (World Primer
+  // spans 2 cols via its per-card span, then the rest fill an even 3-col grid),
+  // exactly like the legacy home. Span is round-tripped through save/load (unlike
+  // the removed row-level featureFirst flag, which parse never read back).
   const row = makeBlock('entity-row', crypto.randomUUID()) as EntityRowBlock;
   row.title = 'The World of Dauligor';
   row.columns = 3;
-  row.featureFirst = true;
   row.refs = [
-    { kind: 'article', id: 'world-primer', name: 'World Primer' },
+    { kind: 'article', id: 'world-primer', name: 'World Primer', span: 2 },
     { kind: 'article', id: 'world-history', name: 'World History' },
     { kind: 'article', id: 'rules', name: 'Rules' },
     { kind: 'article', id: 'divinity', name: 'Divinity' },

@@ -580,7 +580,7 @@ function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onA
           <Seg label="Card style" value={block.card} options={[['image', 'Image'], ['compact', 'Compact'], ['list', 'List']]} onChange={(v) => set({ card: v })} />
           <Toggle label="Show excerpts" value={block.excerpt} onChange={(v) => set({ excerpt: v })} />
           {block.card !== 'list' && block.columns >= 2 && (
-            <Toggle label="Feature first card (spans 2 columns)" value={!!block.featureFirst} onChange={(v) => set({ featureFirst: v })} />
+            <p className="field-hint">To make a card wider, expand it under Content and set its Card width.</p>
           )}
         </fieldset>
       </>)}
