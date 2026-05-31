@@ -549,8 +549,8 @@ function ColumnsSections({ columns, tree: p, depth }: { columns: ContainerBlock;
         return (
           <div key={col.id}>
             <div className="flex items-center justify-between px-1">
-              <span className="text-[9px] uppercase tracking-widest font-bold text-gold/70">Column {ci + 1}</span>
-              <button onClick={() => p.onAddInside(col.id)} className="text-[10px] text-ink/40 hover:text-gold">+ Add</button>
+              <span className="section-label">Column {ci + 1}</span>
+              <button onClick={() => p.onAddInside(col.id)} className="field-hint hover:text-gold">+ Add</button>
             </div>
             <div
               onDragOver={(e) => { if (!active) return; e.preventDefault(); e.stopPropagation(); p.onHover({ id: col.id, pos: 'into' }); }}
