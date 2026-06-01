@@ -18,6 +18,7 @@ import { cn } from '../../lib/utils';
 import { denormalizeCompendiumData } from '../../lib/compendium';
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
 import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
+import { useBlockDraftedList } from '../../hooks/useBlockDraftedList';
 import { actionLabel, applyProposalWrite } from '../../lib/proposalAware';
 import { useProposalReview, resolveReviewPayload } from '../../lib/proposalReview';
 import { DeletedEntityBanner } from '../../components/proposals/TombstoneRow';
@@ -246,6 +247,32 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
     };
   }, [classes, subclasses, spellRules, allOptionGroups, proficiencyPools]);
 
+  // Overlay the active block's drafted options for THIS group onto the
+  // live `items` so a proposed option persists in the Options column
+  // across reopens — not just optimistically in-session. loadAll fetches
+  // only LIVE rows, so without this a queued CREATE shows in the block
+  // but vanishes from the column on reload. Keyed on `group_id`; the
+  // sentinel parentId keeps it from sweeping in other groups' drafts
+  // before this group has an id. Returns `items` untouched outside a
+  // wrapper (admin route).
+  const displayItems = useBlockDraftedList<any>('unique_option_item', items, {
+    parentId: effectiveId || '__no_group__',
+    parentKey: 'group_id',
+  });
+  // Normalize like loadAll does — appended draft rows arrive with a raw
+  // (string) requirements_tree + snake-case flags; parse so the list-row
+  // renderer and the level sort read the same typed shape as live rows.
+  // parseRequirementTree is idempotent (loadAll already parses live rows).
+  const optionRows = useMemo(
+    () =>
+      displayItems.map((it: any) => ({
+        ...it,
+        requirementsTree: parseRequirementTree(it.requirementsTree ?? it.requirements_tree),
+        levelPrereqIsTotal: Boolean(it.levelPrereqIsTotal ?? it.level_prereq_is_total),
+      })),
+    [displayItems],
+  );
+
   // Options list ordered by level prerequisite (ascending), then name.
   // The effective level is the flat `level_prerequisite` column OR, for
   // tree-authored / migrated items, the tree's top-level `level` leaf —
@@ -256,12 +283,12 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
       if (leaf) return Number(leaf.minLevel) || 0;
       return Number(it.level_prerequisite ?? it.levelPrerequisite) || 0;
     };
-    return [...items].sort((a, b) => {
+    return [...optionRows].sort((a, b) => {
       const la = effectiveLevel(a), lb = effectiveLevel(b);
       if (la !== lb) return la - lb;
       return String(a.name || '').localeCompare(String(b.name || ''));
     });
-  }, [items]);
+  }, [optionRows]);
 
   useEffect(() => {
     const loadAll = async () => {
@@ -831,7 +858,7 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
               onClick={() => setNarrowView('options')}
               className="lg:hidden shrink-0 flex items-center justify-between gap-2 border-t border-gold/15 bg-background/35 px-4 py-2.5 text-gold hover:bg-gold/5 transition-colors"
             >
-              <span className="text-xs font-bold uppercase tracking-widest">Options · {items.length}</span>
+              <span className="text-xs font-bold uppercase tracking-widest">Options · {optionRows.length}</span>
               <ChevronRight className="w-4 h-4" />
             </button>
           )}
@@ -935,7 +962,7 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                   </div>
                   );
                 })}
-                {items.length === 0 && (
+                {sortedItems.length === 0 && (
                   <p className="py-4 text-center text-xs text-ink/30 italic">No options added yet.</p>
                 )}
             </div>

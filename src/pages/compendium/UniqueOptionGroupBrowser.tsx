@@ -508,12 +508,38 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
     [displayGroups, selectedGroupId],
   );
 
+  // Overlay the active block's drafted options for the selected group onto
+  // the live `items` so a proposed (not-yet-approved) option shows in the
+  // Options pane here too — the same gap the editor had (the load fetches
+  // only LIVE rows). Keyed on group_id; sentinel parentId before a group is
+  // picked. Returns `items` untouched outside a wrapper (admin route).
+  const browserItemRows = useBlockDraftedList<ItemRow>('unique_option_item', items, {
+    parentId: selectedGroupId || '__no_group__',
+    parentKey: 'group_id',
+  });
+  // Normalize appended draft rows (raw string requirements_tree + snake-case
+  // flags) to the typed shape the row + detail renderers expect, matching
+  // the live-load mapping. parseRequirementTree is idempotent.
+  const optionRows = useMemo(
+    () =>
+      browserItemRows.map((it) => ({
+        ...it,
+        requirementsTree: parseRequirementTree(
+          (it as any).requirementsTree ?? (it as any).requirements_tree,
+        ),
+        levelPrereqIsTotal: Boolean(
+          (it as any).levelPrereqIsTotal ?? (it as any).level_prereq_is_total,
+        ),
+      })) as ItemRow[],
+    [browserItemRows],
+  );
+
   // Options of the selected group, narrowed by the SAME top search +
   // the option-level axes (so a search that surfaced a group by its
   // contained option also highlights the matching options within it).
   const filteredItems = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return items.filter((it) => {
+    return optionRows.filter((it) => {
       if (!optionPassesOptAxes(it)) return false;
       // Only narrow by search text when the group itself didn't match the
       // query (so searching a group name still shows all its options).
@@ -523,7 +549,7 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
       }
       return true;
     });
-  }, [items, search, browserFilters.axisFilters, selectedGroup]);
+  }, [optionRows, search, browserFilters.axisFilters, selectedGroup]);
 
   // Order the option list. When the group is level-restricted (any option
   // carries a level prereq, flat OR via the tree's top-level `level` leaf)
@@ -545,8 +571,8 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
   }, [filteredItems]);
 
   const selectedItem = useMemo(
-    () => items.find((it) => it.id === selectedItemId) ?? null,
-    [items, selectedItemId],
+    () => optionRows.find((it) => it.id === selectedItemId) ?? null,
+    [optionRows, selectedItemId],
   );
 
   const handleSelectGroup = (gid: string) => {
