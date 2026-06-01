@@ -1,11 +1,13 @@
 // Builder for the full Foundry-ready race/species item — served by
 // `/api/module/races/<dbId>.json`. Parallel to `_featExport.ts`.
 //
-// Races live in the `feats` table (feat_type='race'); they share the feat
-// machinery (description, advancements, source, tags) and differ only in the
-// Foundry `type` ("race", not "feat") plus three creature-shaped fields the
-// dnd5e RaceData schema adds (verified against dnd5e master
-// module/data/item/race.mjs):
+// Species (the 2024 rename of "Race") now live in their own `species` table
+// (migration 20260601-1200), promoted out of the shared `feats` table. The UI
+// calls them "Species"; the Foundry export `type` stays "race" for dnd5e
+// compatibility. The shared description / advancement / source machinery comes
+// from `buildSpeciesBackgroundItem`; this builder layers on the three
+// creature-shaped `system` fields the dnd5e RaceData schema adds (verified
+// against dnd5e master module/data/item/race.mjs):
 //
 //   system.movement  — MovementField {walk,fly,swim,climb,burrow,hover,units}
 //                       (bonus/special disabled for races)
@@ -15,27 +17,15 @@
 //                       — the creature type the species confers
 //
 // dnd5e RaceData mixins: AdvancementTemplate + ItemDescriptionTemplate, plus
-// the three fields above. The racial traits themselves are ItemGrant
-// advancements (feature items granted on the actor), same as feats.
+// the three fields above. The racial traits themselves are ItemGrant / Size /
+// ScaleValue advancements on the `advancements` column.
 //
-// Storage note: the Dauligor `feats` table has no dedicated movement/senses/
-// creature-type columns yet (races are an intentional placeholder there). We
-// read them best-effort and default to dnd5e-schema-clean empties so the
-// exported document validates in Foundry today; the round-trip will reveal
-// what the eventual races table must carry.
+// Storage: read straight from the `species` table's camelCase columns
+// (`movement` / `senses` / `creatureType`, all JSON). Defaults below fill any
+// missing keys so the exported document validates in Foundry.
 
 import type { ExportFetchers } from "./_classExport.js";
-import { buildFeatLikeItem } from "./_featExport.js";
-
-const parseJsonField = (val: any, fallback: any) => {
-  if (val == null) return fallback;
-  if (typeof val !== "string") return val;
-  try {
-    return JSON.parse(val);
-  } catch {
-    return fallback;
-  }
-};
+import { buildSpeciesBackgroundItem, parseJsonField } from "./_speciesBackgroundShared.js";
 
 export interface RaceItemBundle {
   kind: "dauligor.race-item.v1";
@@ -53,38 +43,51 @@ export interface RaceItemBundle {
   generatedAt: number;
 }
 
+const RACE_MOVEMENT_DEFAULTS = {
+  walk: null, fly: null, swim: null, climb: null, burrow: null, hover: false, units: null,
+};
+const RACE_SENSES_DEFAULTS = {
+  darkvision: null, blindsight: null, tremorsense: null, truesight: null, units: null, special: "",
+};
+const RACE_TYPE_DEFAULTS = {
+  value: "humanoid", subtype: "", swarm: "", custom: "",
+};
+
 /**
  * Build the full Foundry-ready race item bundle for one row.
- * Returns null when no row matches (or the row isn't a race).
+ * Returns null when no row matches.
  */
 export async function buildRaceItemBundle(
   raceId: string,
   fetchers: ExportFetchers,
 ): Promise<RaceItemBundle | null> {
-  const built = await buildFeatLikeItem(raceId, fetchers, {
+  const built = await buildSpeciesBackgroundItem("species", raceId, fetchers, {
     foundryType: "race",
     entityKind: "race",
+    scalingParentType: "race",
   });
   if (!built) return null;
 
   const { row, item, sourceId } = built;
   const system = item.system;
 
-  // Race-only fields. Best-effort from the row (placeholder storage today),
-  // defaulting to dnd5e schema-clean shapes so the document validates.
+  // Race-only fields, read from the dedicated table's JSON columns. Overlay
+  // stored values onto the dnd5e schema skeleton so every expected key is
+  // present (a partial stored object still validates).
   const movement = parseJsonField(row.movement, null);
   const senses = parseJsonField(row.senses, null);
-  const creatureType = parseJsonField(row.creature_type ?? row.type, null);
+  const creatureType = parseJsonField(row.creatureType, null);
 
   system.movement = movement && typeof movement === "object"
-    ? movement
-    : { walk: null, fly: null, swim: null, climb: null, burrow: null, hover: false, units: null };
+    ? { ...RACE_MOVEMENT_DEFAULTS, ...movement }
+    : { ...RACE_MOVEMENT_DEFAULTS };
   system.senses = senses && typeof senses === "object"
-    ? senses
-    : { darkvision: null, blindsight: null, tremorsense: null, truesight: null, units: null, special: "" };
+    ? { ...RACE_SENSES_DEFAULTS, ...senses }
+    : { ...RACE_SENSES_DEFAULTS };
+  // dnd5e RaceData exposes the creature type as `system.type`.
   system.type = creatureType && typeof creatureType === "object"
-    ? creatureType
-    : { value: "humanoid", subtype: "", swarm: "", custom: "" };
+    ? { ...RACE_TYPE_DEFAULTS, ...creatureType }
+    : { ...RACE_TYPE_DEFAULTS };
 
   return {
     kind: "dauligor.race-item.v1",

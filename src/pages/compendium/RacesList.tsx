@@ -5,14 +5,15 @@ import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
 
 /**
- * Placeholder list page for /compendium/races.
+ * Placeholder list page for /compendium/races (the "Species" surface).
  *
- * Races live in the `feats` table with `feat_type='race'`. A full
- * public list page (header + FilterBar + virtualized list + detail
- * panel, patterned after FeatList) is planned for a later milestone.
- * For now this stub explains the storage shape and surfaces the admin
- * "Manage" link for users who can edit content — so the editor is
- * reachable while the public surface catches up.
+ * Species (the 2024 rename of "Race") now live in their own `species`
+ * table (migration 20260601-1200), edited via SpeciesBackgroundEditor.
+ * A full public browser (header + FilterBar + virtualized list + detail
+ * panel, patterned after FeatList) is planned for a later milestone, and
+ * the catalog is populated by the Foundry-export importer. For now this
+ * stub surfaces the admin "Manage" link so the editor is reachable while
+ * the public surface catches up. The route stays `/compendium/races`.
  */
 export default function RacesList({ userProfile }: { userProfile: any }) {
   const isAdmin = userProfile?.role === 'admin';
@@ -28,19 +29,20 @@ export default function RacesList({ userProfile }: { userProfile: any }) {
         <span className="text-xs font-bold uppercase tracking-[0.3em]">Compendium</span>
       </div>
 
-      <h1 className="h1-title">Races</h1>
+      <h1 className="h1-title">Species</h1>
 
       <Card className="border-gold/10 bg-card/50">
         <CardContent className="space-y-4 px-6 py-10 text-center">
           <p className="font-serif italic text-ink/70 text-lg">
-            The races compendium browser is coming soon.
+            The species compendium browser is coming soon.
           </p>
           <p className="text-sm text-ink/55 max-w-xl mx-auto">
-            Race data lives inside the feats table with a
-            <code className="mx-1 rounded bg-background/40 px-1.5 py-0.5 font-mono text-[11px] text-gold">feat_type='race'</code>
-            tag. The public list page is planned for a later milestone,
-            but admins / content-creators can manage entries today via
-            the editor below.
+            Species have their own dedicated
+            <code className="mx-1 rounded bg-background/40 px-1.5 py-0.5 font-mono text-[11px] text-gold">species</code>
+            table now (movement, senses, creature type, and advancement
+            traits). The public list page is planned for a later milestone,
+            but admins / content-creators can author entries today via the
+            editor below.
           </p>
           <div className="pt-2 flex flex-wrap items-center justify-center gap-2">
             <Link to="/compendium">
@@ -52,7 +54,7 @@ export default function RacesList({ userProfile }: { userProfile: any }) {
             {canManage && (
               <Link to="/compendium/races/manage">
                 <Button type="button" variant="outline" size="sm" className="h-8 border-gold/20 text-gold hover:bg-gold/5">
-                  Race Manager
+                  Species Manager
                 </Button>
               </Link>
             )}
