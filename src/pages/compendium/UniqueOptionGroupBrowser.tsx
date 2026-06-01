@@ -20,13 +20,23 @@
 // optional `:id` param to deep-link/preselect a group (so the old
 // /compendium/unique-options/:id view URLs still resolve).
 //
-// Browse-only: all reads via the d1 helpers, no proposal flow. The proposal
-// authoring surface (/proposals/edit/option-groups) is a separate concern and
-// keeps using the wrapped UniqueOptionGroupList.
+// Dual-route surface:
+//   - /compendium/unique-options              → admin browse (no wrapper).
+//   - /proposals/edit/option-groups           → content-creator group picker,
+//     mounted inside <ProposalEditorWrapper enableFocusMode>. There the Edit /
+//     New links target the proposal editor, the active block's draft groups are
+//     overlaid (the "in this block" badge), and the wrapper's In Block / Full
+//     Catalog toggle filters the Groups pane to the user's block work vs the
+//     whole catalog — the SAME focus-mode system SpellsEditor uses.
+//
+// All reads go through the d1 helpers; all WRITES still happen in the wrapped
+// UniqueOptionGroupEditor this surface links into. The browser itself stays
+// read-only browse + navigation, so the proposal-mode adoption added no
+// backend / endpoint / accumulator changes — purely a UI upgrade.
 // =============================================================================
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
@@ -40,6 +50,10 @@ import { denormalizeCompendiumData } from '../../lib/compendium';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { useAxisFilters, type AxisState } from '../../hooks/useAxisFilters';
 import { matchesSingleAxisFilter, matchesMultiAxisFilter } from '../../lib/spellFilters';
+import { useProposalContextOptional } from '../../lib/proposalAccumulator';
+import { useDraftedEntityIds } from '../../hooks/useDraftedEntityIds';
+import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
+import { useBlockDraftedList } from '../../hooks/useBlockDraftedList';
 import { FilterBar } from '../../components/compendium/FilterBar';
 import { SectionFilterPanel, type FilterSection } from '../../components/compendium/SectionFilterPanel';
 import {
@@ -97,6 +111,40 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
     Object.prototype.hasOwnProperty.call(userProfile.permissions, 'content-creator');
   const canManage = isAdmin || isContentCreator;
 
+  // ─── Proposal-mode awareness ────────────────────────────────────
+  // At /proposals/edit/option-groups this browser is the content-
+  // creator's group picker, mounted inside <ProposalEditorWrapper
+  // enableFocusMode>. Outside that route (admin /compendium/unique-
+  // options) proposalContext is null and every flag below is inert, so
+  // the admin surface is unchanged.
+  const location = useLocation();
+  const isProposalRoute = location.pathname.startsWith('/proposals/edit/');
+  const proposalContext = useProposalContextOptional();
+  const focusMode = proposalContext?.focusMode ?? 'drafts';
+  const focusModeEnabled = proposalContext?.focusModeEnabled ?? false;
+  // Route-aware link targets — proposal route points Edit/New at the
+  // wrapped editor; admin route keeps its /compendium/* targets.
+  const editGroupHref = (gid: string) =>
+    isProposalRoute
+      ? `/proposals/edit/option-groups/edit/${gid}`
+      : `/compendium/unique-options/edit/${gid}`;
+  const newGroupHref = isProposalRoute
+    ? '/proposals/edit/option-groups/new'
+    : '/compendium/unique-options/new';
+  // "My work in this block" signals for the In Block focus filter:
+  // groups carrying any group-level draft (CREATE/UPDATE/DELETE) plus
+  // groups that contain a drafted option item. Empty outside a wrapper.
+  const draftedGroupIds = useDraftedEntityIds('unique_option_group');
+  const itemDrafts = useProposalEntityDrafts('unique_option_item');
+  const groupIdsWithDraftedItems = useMemo(() => {
+    const s = new Set<string>();
+    for (const payload of itemDrafts.byId.values()) {
+      const gid = (payload as any).group_id ?? (payload as any).groupId;
+      if (gid) s.add(String(gid));
+    }
+    return s;
+  }, [itemDrafts]);
+
   // ─── Data ───────────────────────────────────────────────────────
   const [groups, setGroups] = useState<GroupRow[]>([]);
   const [groupsLoading, setGroupsLoading] = useState(true);
@@ -136,15 +184,22 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
     document.body.classList.add('spell-list-fullscreen');
     return () => document.body.classList.remove('spell-list-fullscreen');
   }, []);
+  // Chrome budget subtracted from the viewport to size the panes. The
+  // proposal route stacks the wrapper's sticky "PROPOSAL EDITOR" strip
+  // (+ the In Block / Full Catalog toggle) above us, so bump the budget
+  // there to keep the panes inside the locked viewport instead of
+  // spilling below the fold. Matches UniqueOptionGroupEditor /
+  // CompendiumEditorShell's proposal-mode offset bump.
+  const chromeOffset = isProposalRoute ? 260 : 140;
   const [paneHeight, setPaneHeight] = useState<number>(() =>
-    typeof window === 'undefined' ? 720 : Math.max(420, window.innerHeight - 140),
+    typeof window === 'undefined' ? 720 : Math.max(420, window.innerHeight - chromeOffset),
   );
   useEffect(() => {
-    const onResize = () => setPaneHeight(Math.max(420, window.innerHeight - 140));
+    const onResize = () => setPaneHeight(Math.max(420, window.innerHeight - chromeOffset));
     onResize();
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, []);
+  }, [chromeOffset]);
 
   // ─── Load groups + foundation once ──────────────────────────────
   useEffect(() => {
@@ -410,9 +465,26 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
     [browserFilters.axisFilters],
   );
 
+  // Active block's draft groups overlaid onto the live list: CREATE-draft
+  // groups (no live row yet) get appended + tagged `__draft`; UPDATE drafts
+  // overlay their payload; DELETE drafts get tagged `__pendingDelete`.
+  // Returns `groups` untouched outside a wrapper (admin route).
+  const displayGroups = useBlockDraftedList<GroupRow>('unique_option_group', groups);
+
   const filteredGroups = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return groups.filter((g) => {
+    return displayGroups.filter((g) => {
+      // In Block focus: when the wrapper's toggle is on "In Block", keep
+      // only the groups this block touches — CREATE drafts, group-level
+      // drafts, or groups that contain a drafted option. "Full Catalog"
+      // (and the admin route, where focusModeEnabled is false) show all.
+      if (focusModeEnabled && focusMode === 'drafts') {
+        const mine =
+          (g as any).__draft === true ||
+          draftedGroupIds.has(g.id) ||
+          groupIdsWithDraftedItems.has(g.id);
+        if (!mine) return false;
+      }
       // Group-level axes.
       const sid = g.source_id ?? g.sourceId ?? null;
       if (!matchesSingleAxisFilter(sid, browserFilters.axisFilters.source)) return false;
@@ -429,11 +501,11 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
       }
       return true;
     });
-  }, [groups, search, browserFilters.axisFilters, allItemsByGroup, optAxesActive]);
+  }, [displayGroups, search, browserFilters.axisFilters, allItemsByGroup, optAxesActive, focusModeEnabled, focusMode, draftedGroupIds, groupIdsWithDraftedItems]);
 
   const selectedGroup = useMemo(
-    () => groups.find((g) => g.id === selectedGroupId) ?? null,
-    [groups, selectedGroupId],
+    () => displayGroups.find((g) => g.id === selectedGroupId) ?? null,
+    [displayGroups, selectedGroupId],
   );
 
   // Options of the selected group, narrowed by the SAME top search +
@@ -517,7 +589,7 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
           trailingActions={canManage ? (
             <>
               {selectedGroup ? (
-                <Link to={`/compendium/unique-options/edit/${selectedGroup.id}`}>
+                <Link to={editGroupHref(selectedGroup.id)}>
                   <Button size="sm" variant="outline" className="h-8 gap-2 border-gold/30 text-gold hover:bg-gold/10">
                     <Edit className="w-4 h-4" /> Edit Group
                   </Button>
@@ -533,7 +605,7 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
                   <Edit className="w-4 h-4" /> Edit Group
                 </Button>
               )}
-              <Link to="/compendium/unique-options/new">
+              <Link to={newGroupHref}>
                 <Button size="sm" className="h-8 btn-gold-solid gap-2">
                   <Plus className="w-4 h-4" /> New Group
                 </Button>
@@ -556,14 +628,25 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
         >
           <div className="border-b border-gold/10 bg-background/35 px-3 py-2 shrink-0">
             <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-gold/70">
-              Groups · {filteredGroups.length}{filteredGroups.length !== groups.length ? ` / ${groups.length}` : ''}
+              Groups · {filteredGroups.length}{filteredGroups.length !== displayGroups.length ? ` / ${displayGroups.length}` : ''}
             </span>
           </div>
           <CardContent className="p-0 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
             {groupsLoading ? (
               <div className="px-4 py-12 text-center text-ink/45 text-sm">Loading…</div>
             ) : filteredGroups.length === 0 ? (
-              <div className="px-4 py-12 text-center text-ink/40 italic text-sm">No groups found.</div>
+              focusModeEnabled && focusMode === 'drafts' ? (
+                <div className="px-4 py-12 text-center text-ink/55 text-sm space-y-1.5">
+                  <p className="font-semibold text-ink/70">Nothing in this block yet</p>
+                  <p className="text-xs text-ink/45 italic leading-relaxed">
+                    Use <span className="text-gold not-italic font-semibold">New Group</span> to start one, or
+                    switch to <span className="text-gold not-italic font-semibold">Full Catalog</span> to edit an
+                    existing group.
+                  </p>
+                </div>
+              ) : (
+                <div className="px-4 py-12 text-center text-ink/40 italic text-sm">No groups found.</div>
+              )
             ) : (
               <div className="divide-y divide-gold/5">
                 {filteredGroups.map((group) => {

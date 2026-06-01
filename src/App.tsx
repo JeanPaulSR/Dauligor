@@ -42,7 +42,6 @@ import SubclassEditor from './pages/compendium/SubclassEditor';
 import ScalingEditor from './pages/compendium/scaling/ScalingEditor';
 import SpellcastingScalingEditor from './pages/compendium/scaling/SpellcastingScalingEditor';
 import SpellsKnownScalingEditor from './pages/compendium/scaling/SpellsKnownScalingEditor';
-import UniqueOptionGroupList from './pages/compendium/UniqueOptionGroupList';
 import UniqueOptionGroupEditor from './pages/compendium/UniqueOptionGroupEditor';
 import UniqueOptionGroupBrowser from './pages/compendium/UniqueOptionGroupBrowser';
 import SystemPagesList from './pages/compendium/SystemPagesList';
@@ -374,12 +373,16 @@ export default function App() {
                       <SpellsEditor userProfile={effectiveProfile} />
                     </ProposalEditorWrapper>
                   } />
-                  {/* Option Groups — hybrid: list (no wrapper, just
-                      navigation) → per-group editor (wrapped, takes
-                      both entity types for the queue). */}
+                  {/* Option Groups — hybrid: the 3-pane browser is the
+                      group picker (wrapped + enableFocusMode so the In
+                      Block / Full Catalog toggle filters the Groups pane
+                      to the user's block work), then the per-group editor
+                      (wrapped, takes both entity types for the queue).
+                      Same browser component as the admin /compendium route;
+                      it goes proposal-aware purely on the client. */}
                   <Route path="/proposals/edit/option-groups" element={
-                    <ProposalEditorWrapper entityType={['unique_option_group', 'unique_option_item']}>
-                      <UniqueOptionGroupList userProfile={effectiveProfile} />
+                    <ProposalEditorWrapper entityType={['unique_option_group', 'unique_option_item']} enableFocusMode>
+                      <UniqueOptionGroupBrowser userProfile={effectiveProfile} />
                     </ProposalEditorWrapper>
                   } />
                   <Route path="/proposals/edit/option-groups/new" element={
