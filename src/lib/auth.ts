@@ -89,6 +89,28 @@ function decodeToken(token: string): Decoded | null {
   }
 })();
 
+// Cross-tab sync: the `storage` event fires in OTHER tabs when localStorage
+// changes here, so a native login/logout in one tab mirrors into the rest.
+// (Firebase already syncs its own session across tabs via onAuthStateChanged;
+// this covers the native token, which Firebase knows nothing about.) We update
+// the in-memory state directly — NOT via setNativeToken — to avoid writing back
+// to storage and looping. Then emit so subscribers (App.tsx) react.
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (e) => {
+    if (e.key !== TOKEN_KEY) return;
+    const stored = e.newValue; // null when the key was removed (logout elsewhere)
+    const decoded = stored ? decodeToken(stored) : null;
+    if (decoded && decoded.expMs > Date.now()) {
+      nativeToken = stored;
+      nativeDecoded = decoded;
+    } else {
+      nativeToken = null;
+      nativeDecoded = null;
+    }
+    emit();
+  });
+}
+
 // True only when a native token is present AND currently unexpired. Pure (no
 // side effects) so it's safe to call from React render via getIdentity().
 function isNativeValid(): boolean {
