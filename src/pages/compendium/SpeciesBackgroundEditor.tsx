@@ -23,6 +23,7 @@ import {
 import { SectionFilterPanel, type FilterSection } from '../../components/compendium/SectionFilterPanel';
 import AdvancementManager, { type Advancement } from '../../components/compendium/AdvancementManager';
 import ScalingColumnsPanel from '../../components/compendium/ScalingColumnsPanel';
+import SpeciesBackgroundImportWorkbench from '../../components/compendium/SpeciesBackgroundImportWorkbench';
 import TagPicker from '../../components/compendium/TagPicker';
 import { normalizeTagRow } from '../../lib/tagHierarchy';
 import MarkdownEditor from '../../components/MarkdownEditor';
@@ -734,9 +735,23 @@ export default function SpeciesBackgroundEditor({
     },
   ], [sourceAbbrevById]);
 
-  // ── Mode tabs (manual editor only for v1; Foundry-import is a
-  //    follow-up that lands with the importer step) ──────────────
+  // ── Mode tabs ─────────────────────────────────────────────────
+  // Foundry-import workbench (admin-only) + manual editor. The
+  // workbench's onImported refreshes the manual-editor list so freshly
+  // imported rows show up without a reload.
   const modes: EditorMode[] = [
+    ...(isAdmin ? [{
+      key: 'foundry-import',
+      label: 'Foundry Import',
+      adminOnly: true,
+      render: (
+        <SpeciesBackgroundImportWorkbench
+          userProfile={userProfile}
+          kind={kind}
+          onImported={() => { void refreshEntries(); }}
+        />
+      ),
+    } as EditorMode] : []),
     { key: 'manual-editor', label: 'Manual Editor', render: null },
   ];
 

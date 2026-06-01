@@ -103,6 +103,20 @@ export function cleanFoundryHtml(html: string, opts: FoundryCleanupOptions = {})
     return parts[0];
   });
 
+  // 5etools / plutonium `&Reference[key=Value]` cross-reference enricher
+  // (and any `&Word[…]` form). Arrives HTML-escaped as `&amp;Reference[…]`.
+  // Resolve to the value after `=` (or the whole bracket content), first
+  // pipe-segment only — so `&amp;Reference[skill=History]` → `History`,
+  // `&amp;Reference[condition=frightened]` → `frightened`. Without this the
+  // raw token leaks as literal text; it's pervasive in imported 5etools
+  // backgrounds / species (and harmless no-op for content that lacks it).
+  out = out.replace(/&(?:amp;)?[a-zA-Z][a-zA-Z0-9]*\[([^\]]+)\]/giu, (_match, content) => {
+    const raw = String(content).trim();
+    const eq = raw.indexOf('=');
+    const val = (eq >= 0 ? raw.slice(eq + 1) : raw).trim();
+    return val.split('|')[0].trim();
+  });
+
   // Strip Foundry's noise attributes but preserve Dauligor's own
   // cross-reference markers (data-ref-* and class names containing
   // ref-). bbcodeToHtml emits those when rendering [ref|kind|id]…

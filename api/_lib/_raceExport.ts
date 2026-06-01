@@ -46,9 +46,6 @@ export interface RaceItemBundle {
 const RACE_MOVEMENT_DEFAULTS = {
   walk: null, fly: null, swim: null, climb: null, burrow: null, hover: false, units: null,
 };
-const RACE_SENSES_DEFAULTS = {
-  darkvision: null, blindsight: null, tremorsense: null, truesight: null, units: null, special: "",
-};
 const RACE_TYPE_DEFAULTS = {
   value: "humanoid", subtype: "", swarm: "", custom: "",
 };
@@ -81,9 +78,21 @@ export async function buildRaceItemBundle(
   system.movement = movement && typeof movement === "object"
     ? { ...RACE_MOVEMENT_DEFAULTS, ...movement }
     : { ...RACE_MOVEMENT_DEFAULTS };
-  system.senses = senses && typeof senses === "object"
-    ? { ...RACE_SENSES_DEFAULTS, ...senses }
-    : { ...RACE_SENSES_DEFAULTS };
+  // Stored senses are FLAT ({darkvision,…,units,special}); dnd5e race
+  // senses nests the four ranges under `.ranges`. Re-nest on the way out
+  // (defensively tolerate an already-nested stored shape too).
+  const sensesObj = senses && typeof senses === "object" ? senses : {};
+  const sensesRanges = sensesObj.ranges && typeof sensesObj.ranges === "object" ? sensesObj.ranges : sensesObj;
+  system.senses = {
+    ranges: {
+      darkvision: sensesRanges.darkvision ?? null,
+      blindsight: sensesRanges.blindsight ?? null,
+      tremorsense: sensesRanges.tremorsense ?? null,
+      truesight: sensesRanges.truesight ?? null,
+    },
+    units: sensesObj.units ?? null,
+    special: sensesObj.special ?? "",
+  };
   // dnd5e RaceData exposes the creature type as `system.type`.
   system.type = creatureType && typeof creatureType === "object"
     ? { ...RACE_TYPE_DEFAULTS, ...creatureType }
