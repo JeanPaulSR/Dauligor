@@ -215,15 +215,15 @@ export default function Navbar({
               <DropdownMenuTrigger render={
                 <Button variant="ghost" className="relative h-10 w-10 rounded-full border border-gold/20">
                   <Avatar className="h-9 w-9">
-                    <AvatarImage src={userProfile?.avatar_url || user.photoURL} alt={user.displayName} />
-                    <AvatarFallback className="bg-gold/10 text-gold">{user.displayName?.[0]}</AvatarFallback>
+                    <AvatarImage src={userProfile?.avatar_url || undefined} alt={userProfile?.display_name || userProfile?.username || 'User'} />
+                    <AvatarFallback className="bg-gold/10 text-gold">{(userProfile?.display_name || userProfile?.username)?.[0]?.toUpperCase()}</AvatarFallback>
                   </Avatar>
                 </Button>
               } />
               <DropdownMenuContent align="end" className="w-56 p-1">
                 <div className="flex items-center justify-start gap-2 p-3 bg-background/50">
                   <div className="flex flex-col space-y-1 leading-none">
-                    <p className="font-medium">{userProfile?.display_name || user.displayName}</p>
+                    <p className="font-medium">{userProfile?.display_name || userProfile?.username}</p>
                     <p className="text-xs text-muted-foreground">@{userProfile?.username || 'user'}</p>
                     <div className="flex items-center gap-1 mt-1">
                       <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase font-bold ${(userProfile?.role === 'admin' || userProfile?.role === 'co-dm') ? 'bg-gold/20 text-gold' : 'bg-ink/10 text-ink/40'}`}>
