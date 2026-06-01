@@ -1,27 +1,7 @@
-// Client auth — the native session layer that replaces direct Firebase SDK use.
-//
-// Part of retiring Firebase Auth (see
-// docs/_drafts/auth-cloudflare-migration-plan-2026-05-31.html). This module is
-// the SINGLE place the client decides "what is my bearer token" and "who am I",
-// so every API call site can stop reaching into `firebase.auth.currentUser`.
-//
-// Dual-mode during the migration window:
-//   - NATIVE: a 30-day session JWT from POST /api/auth/login, kept in
-//     localStorage. Preferred when present + unexpired.
-//   - FIREBASE (fallback): an existing Firebase session, used until the account
-//     is adopted. `login()` falls back to it and fires the hash-on-next-login
-//     cutover (POST /api/auth/adopt) so the NEXT login is native.
-//
-// Once every account is adopted and the client is fully on native tokens
-// (Phase 5), the Firebase branches here and the `firebase` dep can be deleted —
-// this module's public surface stays the same.
-
-import { auth as firebaseAuth, usernameToEmail } from "./firebase";
-import {
-  signInWithEmailAndPassword,
-  signOut as firebaseSignOut,
-  onAuthStateChanged,
-} from "firebase/auth";
+// Client auth — native session layer. Firebase has been removed (Phase 5); this
+// is the SINGLE place the client decides "what is my bearer token" and "who am
+// I". A session is a 30-day JWT from POST /api/auth/login, kept in localStorage
+// and renewed in the background by the sliding refresh.
 
 const TOKEN_KEY = "dauligor:authToken";
 
@@ -89,11 +69,9 @@ function decodeToken(token: string): Decoded | null {
 })();
 
 // Cross-tab sync: the `storage` event fires in OTHER tabs when localStorage
-// changes here, so a native login/logout in one tab mirrors into the rest.
-// (Firebase already syncs its own session across tabs via onAuthStateChanged;
-// this covers the native token, which Firebase knows nothing about.) We update
-// the in-memory state directly — NOT via setNativeToken — to avoid writing back
-// to storage and looping. Then emit so subscribers (App.tsx) react.
+// changes here, so a login/logout in one tab mirrors into the rest. Update the
+// in-memory state directly — NOT via setNativeToken — to avoid writing back to
+// storage and looping. Then emit so subscribers (App.tsx) react.
 if (typeof window !== "undefined") {
   window.addEventListener("storage", (e) => {
     if (e.key !== TOKEN_KEY) return;
@@ -150,10 +128,8 @@ async function maybeRefreshSession(): Promise<void> {
       const body = await res.json();
       if (body?.token) setNativeToken(body.token);
     }
-    // On failure (401/network) the existing token stays valid until it expires;
-    // the user re-logs in then. Nothing to do here.
   } catch {
-    /* best-effort */
+    /* best-effort; token stays valid until it expires */
   } finally {
     refreshInFlight = false;
   }
@@ -164,27 +140,23 @@ async function maybeRefreshSession(): Promise<void> {
 /* -------------------------------------------------------------------------- */
 
 /**
- * The active bearer token: the native session if present + unexpired, else the
- * current Firebase ID token, else null. This is the one function every fetch()
- * should call to populate `Authorization: Bearer …`. An expired native token is
- * cleared here so a dead session never lingers.
+ * The active bearer token, or null when signed out. The one function every
+ * fetch() calls to populate `Authorization: Bearer …`. An expired token is
+ * cleared here so a dead session never lingers; a live one triggers an
+ * opportunistic background refresh.
  */
 export async function getSessionToken(): Promise<string | null> {
   if (isNativeValid()) {
-    void maybeRefreshSession(); // opportunistic sliding renewal (non-blocking)
+    void maybeRefreshSession();
     return nativeToken;
   }
   if (nativeToken) setNativeToken(null); // expired — drop it + notify subscribers
-  if (firebaseAuth.currentUser) return await firebaseAuth.currentUser.getIdToken();
   return null;
 }
 
-/** Normalised identity from whichever mode is active, or null when signed out. */
+/** Identity of the signed-in user, or null when signed out. */
 export function getIdentity(): Identity | null {
-  if (isNativeValid()) return nativeDecoded!.identity;
-  const u = firebaseAuth.currentUser;
-  if (u) return { uid: u.uid, email: u.email };
-  return null;
+  return isNativeValid() ? nativeDecoded!.identity : null;
 }
 
 export function isAuthenticated(): boolean {
@@ -192,89 +164,40 @@ export function isAuthenticated(): boolean {
 }
 
 /**
- * Subscribe to auth-state changes (native token set/cleared OR Firebase
- * sign-in/out). Returns an unsubscribe function.
- *
- * Fires synchronously on subscribe ONLY when there's a definitive native
- * session; otherwise it waits for Firebase's first onAuthStateChanged (which
- * always fires once on init). That avoids flashing "logged out" — and resolving
- * a loading gate early — while a Firebase session is still being restored.
+ * Subscribe to auth-state changes (token set/cleared, including cross-tab).
+ * Fires synchronously on subscribe with the current identity. Returns an
+ * unsubscribe function.
  */
 export function onAuthChange(cb: (id: Identity | null) => void): () => void {
   listeners.add(cb);
-  const unsubFirebase = onAuthStateChanged(firebaseAuth, () => emit());
-  if (isNativeValid()) cb(getIdentity());
+  cb(getIdentity());
   return () => {
     listeners.delete(cb);
-    unsubFirebase();
   };
 }
 
 /**
- * Native-first login with Firebase fallback for the migration window.
- *
- *  1. POST /api/auth/login. If the account is already adopted → native session,
- *     done (no Firebase involved).
- *  2. On ANY native failure — bad creds (401), native auth not configured (503),
- *     the remote DB not yet carrying the password column in prod (500), or a
- *     network error — fall through to Firebase, the live system during the
- *     migration window. On success, POST /api/auth/adopt so the NEXT login goes
- *     native.
- *
- * Throws only when BOTH paths reject (genuinely bad credentials). This
- * any-failure fallback is what keeps the branch safe to deploy regardless of
- * whether the remote migration / AUTH_JWT_SECRET are in place yet. Once Firebase
- * is removed (Phase 5) native failures become hard errors.
+ * Log in with username + password. POST /api/auth/login → store the native
+ * session token. Throws on bad credentials (or if native auth is unavailable).
  */
 export async function login(username: string, password: string): Promise<void> {
-  try {
-    const res = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ username, password }),
-    });
-    if (res.ok) {
-      const body = await res.json();
-      // Set native FIRST so getIdentity() is never momentarily null, THEN clear
-      // any stale Firebase session.
-      setNativeToken(body.token);
-      if (firebaseAuth.currentUser) {
-        await firebaseSignOut(firebaseAuth).catch(() => {});
-      }
-      return;
-    }
-    console.warn(`[auth] native login unavailable (HTTP ${res.status}); using Firebase fallback`);
-  } catch (err) {
-    console.warn("[auth] native login request failed; using Firebase fallback:", err);
+  const res = await fetch("/api/auth/login", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Login failed (HTTP ${res.status})`);
   }
-
-  // Firebase fallback — throws on bad credentials.
-  await signInWithEmailAndPassword(firebaseAuth, usernameToEmail(username), password);
-
-  // Hash-on-next-login cutover: write the D1 hash so the next login is native.
-  // Non-fatal — a failed adopt just means we retry the migration next time.
-  try {
-    const idToken = await firebaseAuth.currentUser?.getIdToken();
-    if (idToken) {
-      await fetch("/api/auth/adopt", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${idToken}`,
-        },
-        body: JSON.stringify({ password }),
-      });
-    }
-  } catch (err) {
-    console.warn("[auth] adopt-on-login failed (non-fatal):", err);
-  }
-  emit();
+  const body = await res.json();
+  setNativeToken(body.token);
 }
 
 /**
- * Redeem a one-time admin sign-in link. The link now carries a short-lived
- * NATIVE session token: validate + store it (the sliding refresh extends an
- * active session to full length). Throws if the link has expired or is invalid.
+ * Redeem a one-time admin sign-in link, which carries a short-lived native
+ * session token. The sliding refresh extends an active session to full length.
+ * Throws if the link has expired or is invalid.
  */
 export async function redeemToken(token: string): Promise<void> {
   const decoded = decodeToken(token);
@@ -282,26 +205,8 @@ export async function redeemToken(token: string): Promise<void> {
     throw new Error("This sign-in link has expired or is invalid.");
   }
   setNativeToken(token);
-  if (firebaseAuth.currentUser) {
-    await firebaseSignOut(firebaseAuth).catch(() => {});
-  }
 }
 
 export async function logout(): Promise<void> {
-  // Clear the native session SILENTLY first (no emit yet), then sign out
-  // Firebase, then emit once. Otherwise an intermediate emit fires while the
-  // Firebase session is still live → getIdentity() returns the still-signed-in
-  // user → App re-runs loadProfile() and re-populates the profile after logout
-  // (the UI keeps the logged-in appearance/role).
-  nativeToken = null;
-  nativeDecoded = null;
-  try {
-    localStorage.removeItem(TOKEN_KEY);
-  } catch {
-    /* storage unavailable */
-  }
-  if (firebaseAuth.currentUser) {
-    await firebaseSignOut(firebaseAuth).catch(() => {});
-  }
-  emit();
+  setNativeToken(null);
 }

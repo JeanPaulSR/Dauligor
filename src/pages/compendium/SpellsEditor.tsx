@@ -36,7 +36,7 @@ import ActivityEditor from '../../components/compendium/ActivityEditor';
 import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
 import MarkdownEditor from '../../components/MarkdownEditor';
 import { useEditorFormSession } from '../../components/compendium/useEditorFormSession';
-import { reportClientError, OperationType } from '../../lib/firebase';
+import { reportClientError, OperationType } from '../../lib/clientError';
 import { upsertSpell, deleteSpell, fetchSpell, purgeAllSpells, prepareSpellPayloadForWrite, denormalizeCompendiumData } from '../../lib/compendium';
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
 import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';

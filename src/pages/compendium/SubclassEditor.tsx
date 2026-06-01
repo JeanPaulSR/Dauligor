@@ -17,7 +17,7 @@ import { ProposalAwareEditorHeader } from '../../components/proposals/ProposalAw
 import ActivityEditor from '../../components/compendium/ActivityEditor';
 import FeatureModalHero from '../../components/compendium/FeatureModalHero';
 import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
-import { reportClientError, OperationType } from '../../lib/firebase';
+import { reportClientError, OperationType } from '../../lib/clientError';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { 

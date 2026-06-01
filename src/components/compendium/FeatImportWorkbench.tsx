@@ -28,7 +28,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, BookOpen, Download, FileJson, Layers3, Search, Sparkles, Tag, Upload, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { reportClientError, OperationType } from '../../lib/firebase';
+import { reportClientError, OperationType } from '../../lib/clientError';
 import { upsertFeat, upsertFeatBatch } from '../../lib/compendium';
 import {
   extractAndPersistScalingColumns,

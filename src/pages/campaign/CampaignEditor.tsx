@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { auth, OperationType, reportClientError } from '@/lib/firebase';
+import { OperationType, reportClientError } from '@/lib/clientError';
 import { fetchDocument, fetchCollection } from '@/lib/d1';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';

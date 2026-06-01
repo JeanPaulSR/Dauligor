@@ -21,7 +21,7 @@ import { actionLabel, applyProposalWrite } from '../../lib/proposalAware';
 import { useProposalReview, resolveReviewPayload, ReviewFieldHighlight } from '../../lib/proposalReview';
 import { CascadeDependentBanner } from '../../components/proposals/CascadeDependentBanner';
 import { TagReplacementPicker } from '../../components/proposals/TagReplacementPicker';
-import { reportClientError, OperationType } from '../../lib/firebase';
+import { reportClientError, OperationType } from '../../lib/clientError';
 import { upsertItem, deleteItem, fetchItem, denormalizeCompendiumData } from '../../lib/compendium';
 import { fetchCollection } from '../../lib/d1';
 import { slugify, cn } from '../../lib/utils';

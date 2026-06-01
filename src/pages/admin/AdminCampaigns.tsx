@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { auth, OperationType, reportClientError } from '../../lib/firebase';
+import { OperationType, reportClientError } from '../../lib/clientError';
 import { fetchCollection, getSystemMetadata } from '../../lib/d1';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';

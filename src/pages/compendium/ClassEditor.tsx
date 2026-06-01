@@ -7,7 +7,7 @@ import { useKeyboardSave } from '../../hooks/useKeyboardSave';
 import ActivityEditor from '../../components/compendium/ActivityEditor';
 import FeatureModalHero from '../../components/compendium/FeatureModalHero';
 import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
-import { reportClientError, OperationType } from '../../lib/firebase';
+import { reportClientError, OperationType } from '../../lib/clientError';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { auth } from '@/lib/firebase';
+
 import CampaignHomeEditor from '@/components/campaign/CampaignHomeEditor';
 import { getSessionToken } from "../../lib/auth";
 

@@ -15,7 +15,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, BookOpen, Download, FileJson, Layers3, Shield, Sparkles, Sword, Upload, Wand2, Wrench } from 'lucide-react';
 import { toast } from 'sonner';
-import { reportClientError, OperationType } from '../../lib/firebase';
+import { reportClientError, OperationType } from '../../lib/clientError';
 import { upsertItemBatch } from '../../lib/compendium';
 import { extractAndPersistScalingColumns } from '../../lib/scalingImport';
 import { fetchCollection } from '../../lib/d1';

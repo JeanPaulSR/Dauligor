@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useKeyboardSave } from "../../hooks/useKeyboardSave";
-import { reportClientError, OperationType } from "../../lib/firebase";
+import { reportClientError, OperationType } from "../../lib/clientError";
 import {
   upsertDocument,
   fetchCollection,

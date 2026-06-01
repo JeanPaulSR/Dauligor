@@ -1,10 +1,6 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { auth } from '../../lib/firebase';
 import { fetchCollection, upsertDocument, deleteDocument, deleteDocuments } from '../../lib/d1';
-
-
-import { getAuth, sendPasswordResetEmail } from 'firebase/auth';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
@@ -294,16 +290,6 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
     } catch (err: any) {
       console.error(err);
       toast.error(err?.message || 'Failed to update role');
-    }
-  };
-
-  const handleSendRecoveryEmail = async (email: string) => {
-    try {
-      await sendPasswordResetEmail(auth, email);
-      toast.success(`Password reset email sent to ${email}`);
-    } catch (err: any) {
-      console.error('Failed to send recovery email:', err);
-      toast.error(err.message || 'Failed to send recovery email');
     }
   };
 
@@ -786,16 +772,9 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
                           {passwordResetUserId === u.id ? 'Generating...' : 'Temp Password'}
                         </Button>
                       )}
-                      {userProfile?.role === 'admin' && u.recoveryEmail && (
-                        <Button 
-                          variant="ghost" 
-                          size="xs" 
-                          onClick={() => handleSendRecoveryEmail(u.recoveryEmail)}
-                          className="h-6 px-2 text-[10px] text-archive-blue hover:bg-archive-blue/10 border border-archive-blue/10"
-                        >
-                          Send Recovery Email
-                        </Button>
-                      )}
+                      {/* "Send Recovery Email" removed with the Firebase exit — synthetic
+                          @archive.internal addresses can't receive mail. Use Temp Password
+                          or Sign-in Link instead. */}
                       <Button variant="ghost" size="icon" className="btn-danger" onClick={() => handleDeleteUser(u.id)}>
                         <Trash2 className="w-4 h-4" />
                       </Button>

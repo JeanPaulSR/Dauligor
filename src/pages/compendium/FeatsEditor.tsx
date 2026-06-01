@@ -34,7 +34,7 @@ import {
   RECOVERY_PERIOD_OPTIONS,
   RECOVERY_TYPE_OPTIONS,
 } from '../../components/compendium/activity/constants';
-import { reportClientError, OperationType } from '../../lib/firebase';
+import { reportClientError, OperationType } from '../../lib/clientError';
 import { upsertFeat, deleteFeat, fetchFeat, denormalizeCompendiumData } from '../../lib/compendium';
 import { rebakeNow } from '../../lib/moduleExport';
 import { fetchCollection } from '../../lib/d1';

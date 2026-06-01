@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { auth, OperationType, reportClientError } from '../../lib/firebase';
+import { OperationType, reportClientError } from '../../lib/clientError';
 import { deleteLoreArticle } from '../../lib/lore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

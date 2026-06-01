@@ -45,9 +45,10 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { auth } from './firebase';
-import { onAuthStateChanged } from 'firebase/auth';
+
+
 import { getIdentity, getSessionToken } from "./auth";
+import { onAuthChange } from "./auth";
 
 const LS_KEY = 'dauligor:active-block-id';
 // The active-block id is persisted PER USER. A global key let one account's
@@ -204,7 +205,7 @@ export function BlockProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Track auth changes so block state is scoped per account.
-  useEffect(() => onAuthStateChanged(auth, (u) => setCurrentUid(u?.uid ?? null)), []);
+  useEffect(() => onAuthChange((u) => setCurrentUid(u?.uid ?? null)), []);
 
   // On account switch (incl. the async restore of the signed-in user after
   // mount), drop in-memory block state and load THIS user's persisted active

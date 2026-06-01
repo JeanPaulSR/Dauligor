@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { auth } from '@/lib/firebase';
+
 import { fetchDocument, fetchCollection } from '@/lib/d1';
 
 import { Shield, ChevronLeft, Calendar, Users, MapPin, Sparkles, Edit, FileText, Scroll, History, LayoutGrid } from 'lucide-react';

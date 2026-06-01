@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useCompendiumHashLink } from '../../lib/useCompendiumHashLink';
 import { Lock, Sparkles, Star } from 'lucide-react';
-import { auth } from '../../lib/firebase';
+
 import { fetchCollection } from '../../lib/d1';
 import { cn } from '../../lib/utils';
 import { Button } from '../../components/ui/button';
@@ -16,6 +16,7 @@ import { useAxisFilters } from '../../hooks/useAxisFilters';
 import { useItemFavorites } from '../../lib/itemFavorites';
 import ItemDetailPanel from '../../components/compendium/ItemDetailPanel';
 import { getIdentity } from "../../lib/auth";
+import { onAuthChange } from "../../lib/auth";
 
 /**
  * Public items browser — thin wrapper around `CompendiumBrowserShell`.
@@ -128,7 +129,7 @@ export default function ItemList({ userProfile }: { userProfile: any }) {
 
   const [authUserId, setAuthUserId] = useState<string | null>(() => getIdentity()?.uid ?? null);
   useEffect(() => {
-    const unsub = auth.onAuthStateChanged((u) => setAuthUserId(u?.uid ?? null));
+    const unsub = onAuthChange((u) => setAuthUserId(u?.uid ?? null));
     return unsub;
   }, []);
   const { favorites, isFavorite, toggleFavorite } = useItemFavorites(authUserId);

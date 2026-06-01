@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useCompendiumHashLink } from '../../lib/useCompendiumHashLink';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Star, X } from 'lucide-react';
-import { auth } from '../../lib/firebase';
+
 import { fetchCollection } from '../../lib/d1';
 import { cn } from '../../lib/utils';
 import { Button } from '../../components/ui/button';
@@ -25,6 +25,7 @@ import {
   type RequirementFormatLookup,
 } from '../../lib/requirements';
 import { getIdentity } from "../../lib/auth";
+import { onAuthChange } from "../../lib/auth";
 
 /**
  * Public feat browser — thin wrapper around `CompendiumBrowserShell`.
@@ -193,7 +194,7 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
   // whenever sign-in / sign-out happens so cloud + local merge.
   const [authUserId, setAuthUserId] = useState<string | null>(() => getIdentity()?.uid ?? null);
   useEffect(() => {
-    const unsub = auth.onAuthStateChanged((u) => setAuthUserId(u?.uid ?? null));
+    const unsub = onAuthChange((u) => setAuthUserId(u?.uid ?? null));
     return unsub;
   }, []);
   const { favorites, isFavorite, toggleFavorite } = useFeatFavorites(authUserId);

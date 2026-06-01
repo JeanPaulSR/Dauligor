@@ -22,7 +22,7 @@ import {
   AlertTriangle,
   Upload
 } from 'lucide-react';
-import { reportClientError, OperationType } from '../../lib/firebase';
+import { reportClientError, OperationType } from '../../lib/clientError';
 import { cn } from '../../lib/utils';
 import Markdown from 'react-markdown';
 import BBCodeRenderer from '../../components/BBCodeRenderer';

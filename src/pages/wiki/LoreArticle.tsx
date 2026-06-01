@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { auth, OperationType, reportClientError } from '../../lib/firebase';
+import { OperationType, reportClientError } from '../../lib/clientError';
 import { fetchCollection, getSystemMetadata } from '../../lib/d1';
 import { fetchLoreArticle, upsertLoreSecret, deleteLoreArticle } from '../../lib/lore';
 import BBCodeRenderer from '@/components/BBCodeRenderer';
