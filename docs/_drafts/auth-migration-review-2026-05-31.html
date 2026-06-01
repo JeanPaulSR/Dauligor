@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Auth Migration — Full Review</title>
+<style>
+  :root{--parchment:#f5f5f0;--parchment-deep:#ece8dd;--gold:#c5a059;--gold-deep:#9c7b38;--blood:#8b0000;--ink:#1f1c17;--ink-soft:#4a4438;--line:#d8cfb8;--good:#3f6f3f;--warn:#9c6b1f;--panel:#fbf9f3;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--parchment);color:var(--ink);font-family:"Inter","Segoe UI",system-ui,sans-serif;line-height:1.6;padding:0 0 5rem}
+  .wrap{max-width:1040px;margin:0 auto;padding:0 1.5rem}
+  header.hero{background:linear-gradient(160deg,#26221b,#3a3328);color:#f2ead6;border-bottom:3px solid var(--gold);padding:2.6rem 0 2.1rem;margin-bottom:1.4rem}
+  h1,h2,h3,h4{font-family:"Cormorant Garamond","Georgia",serif;font-weight:600;line-height:1.15}
+  header.hero h1{font-size:2.5rem;margin:.2rem 0 .4rem;color:#f4ecd6}
+  .kicker{text-transform:uppercase;letter-spacing:.26em;font-size:.72rem;color:var(--gold);font-weight:600}
+  .sub{color:#d8cdb2;font-size:1.05rem;max-width:76ch}
+  nav.toc{background:var(--panel);border:1px solid var(--line);padding:.8rem 1.1rem;margin:1.2rem 0;font-size:.9rem;columns:2;column-gap:2rem}
+  nav.toc a{color:var(--gold-deep);text-decoration:none} nav.toc a:hover{text-decoration:underline}
+  h2{font-size:1.75rem;margin:2.4rem 0 .5rem;color:#2a2419;border-bottom:1px solid var(--line);padding-bottom:.3rem;scroll-margin-top:1rem}
+  h2 .n{color:var(--gold-deep);font-size:1.1rem;vertical-align:.15em;margin-right:.5rem}
+  h3{font-size:1.25rem;margin:1.3rem 0 .3rem;color:#332c20}
+  p{margin:.45rem 0 .8rem}
+  code{background:var(--parchment-deep);border:1px solid var(--line);padding:.03rem .32rem;font-family:"JetBrains Mono","Consolas",monospace;font-size:.85em;color:#5a3a12}
+  pre{background:#26221b;color:#ecdfc2;padding:.85rem 1.05rem;overflow:auto;border-left:3px solid var(--gold);font-family:"JetBrains Mono","Consolas",monospace;font-size:.8rem;line-height:1.5;margin:.5rem 0}
+  pre code{background:none;border:none;color:inherit;padding:0}
+  table{width:100%;border-collapse:collapse;margin:.8rem 0;font-size:.9rem;background:var(--panel)}
+  th,td{text-align:left;padding:.5rem .7rem;border:1px solid var(--line);vertical-align:top}
+  th{background:var(--parchment-deep);font-family:"Cormorant Garamond",serif;font-size:1.02rem}
+  .pill{display:inline-block;font-size:.68rem;font-weight:700;padding:.07rem .5rem;border-radius:999px;letter-spacing:.03em;text-transform:uppercase}
+  .pill.done{background:#dfe9df;color:var(--good);border:1px solid #a7c4a7}
+  .pill.todo{background:#f6ead2;color:var(--warn);border:1px solid #ddc28a}
+  .pill.fb{background:#f3dede;color:var(--blood);border:1px solid #d9a7a7}
+  .banner{display:flex;gap:1rem;align-items:flex-start;background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--gold);padding:.85rem 1.1rem;margin:1rem 0}
+  .banner.good{border-left-color:var(--good)} .banner.warn{border-left-color:var(--warn)}
+  .banner .tag{font-weight:700;color:var(--gold-deep);white-space:nowrap;font-size:.76rem;text-transform:uppercase;letter-spacing:.07em;padding-top:.12rem}
+  .banner.good .tag{color:var(--good)} .banner.warn .tag{color:var(--warn)}
+  .item{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--gold);padding:.7rem 1.05rem;margin:.6rem 0}
+  .item.safe{border-left-color:var(--good)} .item.warn{border-left-color:var(--warn)} .item.phase{border-left-color:var(--gold-deep)}
+  .item h4{margin:0 0 .25rem;font-size:1.08rem;display:flex;align-items:baseline;gap:.5rem}
+  .item p{margin:.25rem 0;font-size:.92rem}
+  .tag2{font-size:.62rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:.07rem .42rem;border-radius:999px;white-space:nowrap}
+  .tag2.safe{background:#dfe9df;color:var(--good);border:1px solid #a7c4a7}
+  .tag2.watch{background:#f6ead2;color:var(--warn);border:1px solid #ddc28a}
+  .tag2.phase{background:#ece1c4;color:var(--gold-deep);border:1px solid var(--gold)}
+  .tag2.fixable{background:#e7e0f0;color:#5b3f8a;border:1px solid #c3b2e0}
+  .tag2.fixed{background:#dfe9df;color:var(--good);border:1px solid #a7c4a7}
+  ul,ol{margin:.35rem 0 .9rem;padding-left:1.3rem} li{margin:.22rem 0}
+  .lead{font-size:1.06rem;color:var(--ink-soft)}
+  .flow{background:var(--panel);border:1px solid var(--line);padding:.9rem 1.1rem;margin:.8rem 0;font-family:"JetBrains Mono",monospace;font-size:.78rem;line-height:1.75;color:var(--ink-soft)}
+  .flow b{color:var(--blood)} .flow .cf{color:var(--good);font-weight:700}
+  .muted{color:var(--ink-soft);font-size:.86rem}
+  footer{margin-top:3rem;border-top:1px solid var(--line);padding-top:1rem;font-size:.83rem;color:var(--ink-soft)}
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <div class="kicker">Dauligor · The Archive · Firebase-Auth Exit</div>
+    <h1>Auth Migration — Full Review</h1>
+    <p class="sub">One place to review everything done this session: moving user accounts off Firebase Authentication onto the native Cloudflare / D1 stack — what was built, the bugs found while testing, what to keep in mind, how to test it, and what's left.</p>
+  </div>
+</header>
+<div class="wrap">
+
+  <nav class="toc">
+    <a href="#status">1 · Status at a glance</a><br>
+    <a href="#built">2 · What was built</a><br>
+    <a href="#flow">3 · How login works now</a><br>
+    <a href="#fixes">4 · Bugs found &amp; fixed in testing</a><br>
+    <a href="#audit">5 · Behavior audit — keep in mind</a><br>
+    <a href="#test">6 · How to test locally</a><br>
+    <a href="#left">7 · What's left</a><br>
+    <a href="#decisions">8 · Decisions on record</a>
+  </nav>
+
+  <div class="banner good"><div class="tag">Bottom line</div><div>Phases 1–3a are <strong>built, committed, and running locally with your production data</strong>. The whole client is off Firebase and on native Worker-issued tokens; accounts migrate themselves on first sign-in. Everything is on branch <code>claude/kind-wright-2cb7a2</code> — <strong>nothing pushed</strong>, nothing deployed.</div></div>
+
+  <h2 id="status"><span class="n">1</span> Status at a glance</h2>
+  <table>
+    <thead><tr><th>Phase</th><th>Status</th><th>Summary</th></tr></thead>
+    <tbody>
+      <tr><td><strong>1 · Schema + hashing</strong></td><td><span class="pill done">done</span></td><td><code>users.password_hash</code> + scrypt hash/verify (<code>@noble/hashes</code>).</td></tr>
+      <tr><td><strong>2 · Login backend</strong></td><td><span class="pill done">done</span></td><td><code>/api/auth/login</code> + <code>/adopt</code> + <code>/change-password</code>; Worker-issued 30-day JWTs; gates accept native OR Firebase tokens during the window.</td></tr>
+      <tr><td><strong>3a · Client flip</strong></td><td><span class="pill done">done</span></td><td>~44 files centralized on <code>src/lib/auth.ts</code>; native-first login w/ Firebase fallback + silent migration.</td></tr>
+      <tr><td><strong>3b · Token refresh</strong></td><td><span class="pill todo">later</span></td><td>Sliding <code>/api/auth/refresh</code> so sessions renew instead of ending at 30 days.</td></tr>
+      <tr><td><strong>4 · Admin CRUD → D1</strong></td><td><span class="pill todo">later</span></td><td>Create / delete / temp-password stop using Firebase Identity Toolkit.</td></tr>
+      <tr><td><strong>5 · Remove Firebase</strong></td><td><span class="pill todo">later</span></td><td>Drop the dual-token branch, the <code>firebase</code> dep, and the service-account secret.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Commits (branch <code>claude/kind-wright-2cb7a2</code>, unpushed)</h3>
+  <table>
+    <thead><tr><th>SHA</th><th>What</th></tr></thead>
+    <tbody>
+      <tr><td><code>bcca68b</code></td><td>Foundation — scrypt, session JWTs, login/adopt, dual-token gate, migration</td></tr>
+      <tr><td><code>047db15</code></td><td>Client flip — <code>src/lib/auth.ts</code> + 44-file sweep + native change-password</td></tr>
+      <tr><td><code>2fa466e</code></td><td>fix: default-user avatar</td></tr>
+      <tr><td><code>7804c2c</code></td><td>fix: logout fully signs out (no profile-reload race)</td></tr>
+      <tr><td><code>961e3b1</code></td><td>fix: keep D1 cache across logout/login</td></tr>
+      <tr><td class="muted"><code>debdb91</code>, <code>8c1fb4f</code></td><td class="muted">docs / handoff</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="built"><span class="n">2</span> What was built</h2>
+  <h3>Server</h3>
+  <ul>
+    <li><strong><code>api/_lib/password.ts</code></strong> — scrypt hash + constant-time verify (pure-JS, runs in Node + Workers).</li>
+    <li><strong><code>api/_lib/sessionToken.ts</code></strong> — issues/verifies HS256 session JWTs signed with <code>AUTH_JWT_SECRET</code>; 30-day sliding.</li>
+    <li><strong><code>functions/api/auth/[[path]].ts</code></strong> — <code>POST /login</code>, <code>/adopt</code> (hash-on-next-login), <code>/change-password</code>.</li>
+    <li><strong><code>firebase-admin.ts → verifyEitherToken()</code></strong> — every <code>require*</code> gate now accepts a native token OR a Firebase token during the migration window.</li>
+    <li><strong>migration <code>20260531-1200</code></strong> — adds <code>password_hash</code> + <code>password_updated_at</code> (local only; remote pending your go-ahead).</li>
+  </ul>
+  <h3>Client</h3>
+  <ul>
+    <li><strong><code>src/lib/auth.ts</code></strong> (new) — the single source of truth: <code>getSessionToken()</code>, <code>getIdentity()</code>, <code>isAuthenticated()</code>, <code>onAuthChange()</code>, <code>login()</code>, <code>logout()</code>, <code>redeemToken()</code>.</li>
+    <li><strong>~44 files swept</strong> — every <code>auth.currentUser.getIdToken()</code> → <code>getSessionToken()</code>, every <code>auth.currentUser</code> → <code>getIdentity()</code>.</li>
+    <li><strong>Entry points</strong> — <code>App.tsx</code> (Identity state + <code>onAuthChange</code>), <code>Navbar</code> (login/logout), <code>RedeemTokenPage</code>, <code>Settings</code> (native change-password).</li>
+  </ul>
+
+  <h2 id="flow"><span class="n">3</span> How login works now</h2>
+  <div class="flow">
+    user types username + password<br>
+    &nbsp;1. → <span class="cf">POST /api/auth/login</span> &nbsp;·&nbsp; adopted account → <span class="cf">native JWT</span>, done.<br>
+    &nbsp;2. not adopted → 401 → fall back to <b>Firebase</b> → on success, <span class="cf">POST /api/auth/adopt</span> writes the hash.<br>
+    &nbsp;&nbsp;&nbsp;→ the <b>next</b> login is fully native. Accounts migrate themselves, no reset email.<br>
+    <br>
+    every request → <code>Authorization: Bearer &lt;token&gt;</code> from <code>getSessionToken()</code> → gate verifies + reads role from D1.
+  </div>
+
+  <h2 id="fixes"><span class="n">4</span> Bugs found &amp; fixed in testing</h2>
+  <p class="lead">All three came from the same root: code that assumed the Firebase <code>User</code> shape or its auth lifecycle.</p>
+  <div class="item"><h4><span class="tag2 fixed">fixed</span> Default-user avatar was blank</h4>
+    <p>The avatar fell back to <code>user.displayName</code>/<code>photoURL</code> — Firebase-only fields the new <code>Identity</code> lacks. Now sources from the D1 profile. <span class="muted">(<code>2fa466e</code>)</span></p></div>
+  <div class="item"><h4><span class="tag2 fixed">fixed</span> Logout didn't fully sign out</h4>
+    <p>Logout emitted an auth-change while Firebase was still signed in → the app re-loaded the profile → appearance/role/theme persisted. Now: clear native session silently → sign out Firebase → emit once. <span class="muted">(<code>7804c2c</code>)</span></p></div>
+  <div class="item"><h4><span class="tag2 fixed">fixed</span> Cache: keep it across logout/login</h4>
+    <p>Confirmed the D1 cache is shared content only (no private data), so it correctly persists across logout/login — no needless re-fetch. <span class="muted">(<code>961e3b1</code>)</span></p></div>
+
+  <h2 id="audit"><span class="n">5</span> Behavior audit — keep in mind</h2>
+  <h3>Checked &amp; safe</h3>
+  <div class="item safe"><h4><span class="tag2 safe">safe</span> No private data in the persistent cache</h4>
+    <p>The sessionStorage cache holds only shared content (compendium/lore/campaigns); per-user data uses uncached endpoints, and <code>lore_secrets</code>/<code>users</code> are proxy-blocked from the cacheable path. Safe across users on a shared browser.</p></div>
+  <div class="item safe"><h4><span class="tag2 safe">safe</span> No other Firebase-User field reads; Settings is fine; roles are live from D1</h4>
+    <p>The only auth-object Firebase-shape reads were the (now-fixed) Navbar ones. Demotion/deletion takes effect immediately because every request re-reads the role from D1.</p></div>
+  <h3>Differences to watch</h3>
+  <div class="item warn"><h4><span class="tag2 watch">watch</span> <span class="tag2 fixable">fixable now</span> Multi-tab auth sync is gone</h4>
+    <p>Firebase synced login/logout across tabs; the native token doesn't. Log out in one tab → others stay "logged in" until reload. A small <code>storage</code>-event listener in <code>auth.ts</code> restores it.</p></div>
+  <div class="item warn"><h4><span class="tag2 watch">watch</span> Fixed 30-day token, no auto-refresh</h4>
+    <p>Firebase refreshed hourly; the native token is fixed 30-day. Long sessions end hard until the Phase 3b refresh endpoint exists.</p></div>
+  <div class="item warn"><h4><span class="tag2 watch">minor</span> Error reports omit identity for native users</h4>
+    <p><code>reportClientError</code> reads <code>auth.currentUser</code> (null for native). Harmless; could fall back to <code>getIdentity()</code>.</p></div>
+  <h3>Will need rework when Firebase is removed</h3>
+  <div class="item phase"><h4><span class="tag2 phase">phase 5</span> Sign-in links (Firebase custom token)</h4><p><code>RedeemTokenPage</code> sessions never adopt — they stay on Firebase. Need a native one-time token before cut-out.</p></div>
+  <div class="item phase"><h4><span class="tag2 phase">phase 5</span> Username → Firebase-email sync</h4><p>Changing a username syncs the Firebase login email server-side; native-only accounts won't have that to sync.</p></div>
+  <div class="item phase"><h4><span class="tag2 phase">phase 4</span> Admin user create / delete / temp-password</h4><p>Still call Firebase Identity Toolkit; Phase 4 moves them to D1 writes.</p></div>
+
+  <h2 id="test"><span class="n">6</span> How to test locally</h2>
+  <p class="lead">The stack is running now — app on <code>:3001</code>, worker on <code>:8788</code>, seeded with a copy of your <strong>production</strong> data + the password column.</p>
+  <ol>
+    <li><strong>Instant native admin:</strong> log in as <code>tester</code> / <code>test1234</code> (no Firebase needed).</li>
+    <li><strong>Your real accounts:</strong> log in with the real username + Firebase password → native 401 → Firebase fallback → <code>/adopt</code> writes the hash → next login is native. Real prod roles apply.</li>
+    <li><strong>Prove it's native:</strong> DevTools → Application → Local Storage shows <code>dauligor:authToken</code>; Network shows <code>POST /api/auth/login → 200</code> with no Firebase call.</li>
+    <li><strong>Change password:</strong> Settings → Security, then re-login with the new one.</li>
+    <li><strong>Logout:</strong> theme/appearance revert to default, fully signed out; the content cache stays warm for the next login.</li>
+  </ol>
+  <p class="muted">Real accounts available: <code>admin</code> (admin); <code>ayogavino</code>, <code>raelily</code>, <code>etacarinaecer</code>, <code>10charismabard</code>, <code>thejuus</code>, <code>danglenibble</code> (trusted-player); <code>rekiwylls</code>, <code>duncles</code>, <code>frenseeker</code>, <code>creator-test</code> (user).</p>
+
+  <h2 id="left"><span class="n">7</span> What's left</h2>
+  <ul>
+    <li><strong>Decision points still open:</strong> add the multi-tab sync listener now? Build the Phase 3b refresh endpoint?</li>
+    <li><strong>To go live (production):</strong> apply the <code>password_hash</code> migration to remote D1 (read-once your go-ahead) + set <code>AUTH_JWT_SECRET</code> as a Cloudflare secret. Until then native auth stays dormant in prod and Firebase carries on.</li>
+    <li><strong>Phase 4–5:</strong> move admin CRUD to D1, then drop Firebase entirely (incl. sign-in links + username-email sync rework).</li>
+    <li><strong>Branch:</strong> nothing pushed — when you're happy, fast-forward <code>dauligor-applications</code> onto these commits.</li>
+  </ul>
+
+  <h2 id="decisions"><span class="n">8</span> Decisions on record</h2>
+  <table>
+    <tbody>
+      <tr><td><strong>Hashing</strong></td><td>scrypt via <code>@noble/hashes</code> (pure-JS, Workers-safe)</td></tr>
+      <tr><td><strong>Cutover</strong></td><td>hash-on-next-login (accounts migrate silently as users sign in)</td></tr>
+      <tr><td><strong>Token</strong></td><td>single sliding ~30-day JWT (refresh endpoint deferred to 3b)</td></tr>
+      <tr><td><strong>User IDs</strong></td><td>keep the existing Firebase UID as <code>users.id</code> — never re-key (FK target everywhere)</td></tr>
+      <tr><td><strong>Cache</strong></td><td>persists across logout/login (shared content only)</td></tr>
+      <tr><td><strong>Local data</strong></td><td>seeded from a read-only production snapshot</td></tr>
+    </tbody>
+  </table>
+
+  <footer>
+    <p>Draft · 2026-05-31 · branch <code>claude/kind-wright-2cb7a2</code> · local read-aid. Consolidates the earlier migration-plan, status/testing, and audit drafts in this folder.</p>
+  </footer>
+</div>
+</body>
+</html>

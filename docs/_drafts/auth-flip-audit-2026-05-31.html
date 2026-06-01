@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Auth Client-Flip — Behavior Audit</title>
+<style>
+  :root{--parchment:#f5f5f0;--parchment-deep:#ece8dd;--gold:#c5a059;--gold-deep:#9c7b38;--blood:#8b0000;--ink:#1f1c17;--ink-soft:#4a4438;--line:#d8cfb8;--good:#3f6f3f;--warn:#9c6b1f;--panel:#fbf9f3;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--parchment);color:var(--ink);font-family:"Inter","Segoe UI",system-ui,sans-serif;line-height:1.6;padding:0 0 5rem}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 1.5rem}
+  header.hero{background:linear-gradient(160deg,#26221b,#3a3328);color:#f2ead6;border-bottom:3px solid var(--gold);padding:2.4rem 0 2rem;margin-bottom:1.6rem}
+  h1,h2,h3,h4{font-family:"Cormorant Garamond","Georgia",serif;font-weight:600;line-height:1.15}
+  header.hero h1{font-size:2.3rem;margin:.2rem 0 .35rem;color:#f4ecd6}
+  .kicker{text-transform:uppercase;letter-spacing:.26em;font-size:.7rem;color:var(--gold);font-weight:600}
+  .sub{color:#d8cdb2;font-size:1.02rem;max-width:74ch}
+  h2{font-size:1.55rem;margin:2rem 0 .3rem;color:#2a2419;border-bottom:1px solid var(--line);padding-bottom:.3rem}
+  code{background:var(--parchment-deep);border:1px solid var(--line);padding:.03rem .32rem;font-family:"JetBrains Mono","Consolas",monospace;font-size:.85em;color:#5a3a12}
+  .item{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--gold);padding:.85rem 1.1rem;margin:.8rem 0}
+  .item.safe{border-left-color:var(--good)} .item.warn{border-left-color:var(--warn)} .item.phase{border-left-color:var(--gold-deep)} .item.done{border-left-color:var(--good);opacity:.92}
+  .item h4{margin:0 0 .3rem;font-size:1.15rem;display:flex;align-items:baseline;gap:.5rem}
+  .tag{font-size:.64rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:.08rem .45rem;border-radius:999px;white-space:nowrap}
+  .tag.safe{background:#dfe9df;color:var(--good);border:1px solid #a7c4a7}
+  .tag.watch{background:#f6ead2;color:var(--warn);border:1px solid #ddc28a}
+  .tag.phase{background:#ece1c4;color:var(--gold-deep);border:1px solid var(--gold)}
+  .tag.fixed{background:#dfe9df;color:var(--good);border:1px solid #a7c4a7}
+  .tag.fixable{background:#e7e0f0;color:#5b3f8a;border:1px solid #c3b2e0}
+  .item p{margin:.35rem 0}
+  .item .why{font-size:.9rem;color:var(--ink-soft)}
+  .lead{font-size:1.05rem;color:var(--ink-soft)}
+  footer{margin-top:2.5rem;border-top:1px solid var(--line);padding-top:1rem;font-size:.83rem;color:var(--ink-soft)}
+  .legend{font-size:.85rem;color:var(--ink-soft);margin:.5rem 0 0}
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <div class="kicker">Dauligor · Firebase-Auth Exit · QA</div>
+    <h1>Client-Flip Behavior Audit</h1>
+    <p class="sub">Everything that changed in feel/behavior when the client moved from the Firebase <code>User</code> object + Firebase auth lifecycle onto the native <code>Identity</code> + Worker-token model — what's already fixed, what's safe, and what to keep in mind.</p>
+  </div>
+</header>
+<div class="wrap">
+
+  <p class="lead">The bugs we hit (blank avatar, logout not sticking) share one root cause: code that assumed a Firebase <code>User</code> shape or a Firebase auth-lifecycle behavior. This audit sweeps for the rest of that class.</p>
+
+  <h2>Already fixed this session</h2>
+  <div class="item done"><h4><span class="tag fixed">fixed</span> Default-user avatar</h4>
+    <p>Avatar fell back to <code>user.displayName</code>/<code>photoURL</code> (Firebase-only fields) → blank. Now sources from the D1 profile (<code>display_name</code>/<code>username</code>/<code>avatar_url</code>). <span class="why">commit <code>2fa466e</code></span></p></div>
+  <div class="item done"><h4><span class="tag fixed">fixed</span> Logout not fully signing out</h4>
+    <p><code>logout()</code> emitted an auth-change while Firebase was still signed in → <code>loadProfile()</code> re-ran → appearance/role persisted. Now clears native session silently → signs out Firebase → emits once. <span class="why">commit <code>7804c2c</code></span></p></div>
+  <div class="item done"><h4><span class="tag fixed">fixed</span> Cache wrongly cleared on logout</h4>
+    <p>Reverted — the D1 cache (shared content) correctly persists across logout/login again. <span class="why">commit <code>961e3b1</code></span></p></div>
+
+  <h2>Checked &amp; safe — no action needed</h2>
+  <div class="item safe"><h4><span class="tag safe">safe</span> Settings page</h4>
+    <p>Receives the <code>user</code> (Identity) prop but only uses it for a truthiness "are you signed in" check — no Firebase-shape field reads. Display/email/password all go through <code>userProfile</code> + endpoints.</p></div>
+  <div class="item safe"><h4><span class="tag safe">safe</span> Persistent cache holds no private data</h4>
+    <p>The sessionStorage cache (<code>PERSISTENT_TABLES</code>) is shared content only — compendium + lore + campaigns. Per-user data (characters, etc.) uses uncached endpoints, and protected tables (<code>lore_secrets</code>, <code>users</code>) are <em>proxy-blocked</em> from the cacheable <code>queryD1</code> path. So persisting the cache across logout/login (and across different users on one browser) leaks nothing.</p></div>
+  <div class="item safe"><h4><span class="tag safe">safe</span> No other Firebase-User field reads</h4>
+    <p>Swept the codebase: the only auth-object Firebase-shape reads were the Navbar ones (now fixed). Other <code>.displayName</code> hits are on unrelated objects (form state, API user records, image/folder metadata).</p></div>
+  <div class="item safe"><h4><span class="tag safe">safe</span> Role changes / revocation</h4>
+    <p>Every request re-reads the role from D1 server-side, so a demotion or row-deletion takes effect <em>immediately</em> (a deleted user 403s on the next call). The native token's <code>role</code> claim is cosmetic/unused for authorization.</p></div>
+
+  <h2>Behavior differences to keep in mind</h2>
+  <div class="item warn"><h4><span class="tag watch">watch</span> <span class="tag fixable">fixable now</span> Multi-tab auth sync is gone</h4>
+    <p>Firebase broadcast login/logout across all open tabs. The native token lives in <code>localStorage</code> and we don't listen for cross-tab <code>storage</code> events — so logging out in one tab leaves other tabs "logged in" until they reload (or the token expires).</p>
+    <p class="why">Fix is small: add a <code>window.addEventListener('storage', …)</code> in <code>auth.ts</code> that re-emits when <code>dauligor:authToken</code> changes in another tab. Want me to add it?</p></div>
+  <div class="item warn"><h4><span class="tag watch">watch</span> Token is fixed 30-day, no auto-refresh</h4>
+    <p>Firebase silently refreshed the ID token (~hourly). The native token is a fixed 30-day JWT — after 30 days the user must log in again; there's no sliding renewal yet. This is the planned <strong>Phase 3b</strong> <code>POST /api/auth/refresh</code>. Fine for now; just know long-lived sessions end hard at 30 days.</p></div>
+  <div class="item warn"><h4><span class="tag watch">minor</span> Error reports lose auth context for native users</h4>
+    <p><code>reportClientError</code> (in <code>firebase.ts</code>) reads <code>auth.currentUser</code> for uid/email — which is <code>null</code> for a native-only session, so those reports omit the identity. Harmless; could fall back to <code>getIdentity()</code>.</p></div>
+
+  <h2>Will need rework when Firebase is removed (Phase 4–5)</h2>
+  <p class="legend">These still work today because every account has a Firebase identity during the migration window — flagging so they're not forgotten at cut-out.</p>
+  <div class="item phase"><h4><span class="tag phase">phase 5</span> Admin "Sign-in link"</h4>
+    <p><code>RedeemTokenPage</code> still mints + redeems a <em>Firebase custom token</em>, and those sessions never adopt a native hash. Needs a native one-time-token equivalent before Firebase is dropped.</p></div>
+  <div class="item phase"><h4><span class="tag phase">phase 5</span> Username change → Firebase email sync</h4>
+    <p>Changing a username PATCHes <code>/api/me</code>, and the server syncs the Firebase login email via Identity Toolkit. A native-only account (created after Firebase removal) won't have that to sync — the path needs rework then.</p></div>
+  <div class="item phase"><h4><span class="tag phase">phase 4</span> Admin user create / delete / temp-password</h4>
+    <p>Still call Firebase Identity Toolkit server-side. Phase 4 moves these to pure D1 writes + the native sign-in token.</p></div>
+
+  <footer>
+    <p>Draft · 2026-05-31 · branch <code>claude/kind-wright-2cb7a2</code> · local read-aid. Companion: the migration plan + Phases-1–2 handoff in this folder.</p>
+  </footer>
+</div>
+</body>
+</html>
