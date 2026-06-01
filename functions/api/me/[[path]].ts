@@ -47,7 +47,6 @@
 
 import {
   HttpError,
-  getAdminServices,
   getCredentialErrorMessage,
   requireAuthenticatedUser,
 } from "../../../api/_lib/firebase-admin.js";
@@ -72,10 +71,6 @@ const ALLOWED_PATCH_FIELDS = new Set([
 ]);
 
 const BOOLEAN_PATCH_FIELDS = new Set(["hide_username", "is_private"]);
-
-function usernameToEmail(username: string): string {
-  return `${username.toLowerCase().trim()}@archive.internal`;
-}
 
 async function pickInitialActiveCampaign(uid: string): Promise<string | null> {
   const result = await executeD1QueryInternal({
@@ -220,8 +215,8 @@ async function handlePatchMe(request: Request, decoded: any): Promise<Response> 
     if (existingRows.length > 0) {
       throw new HttpError(409, "That username is already taken.");
     }
-    const { auth: adminAuth } = getAdminServices();
-    await adminAuth.updateUser(uid, { email: usernameToEmail(newUsername) });
+    // Username is the native login key (no email to sync). The Firebase
+    // Identity-Toolkit email update was dropped with the Firebase exit.
     updates.username = newUsername;
   }
 

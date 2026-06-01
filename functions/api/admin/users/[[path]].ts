@@ -47,13 +47,14 @@
 
 import {
   HttpError,
-  getAdminServices,
   getCredentialErrorMessage,
   isWikiStaff,
   requireAdminAccess,
   requireAuthenticatedUser,
 } from "../../../../api/_lib/firebase-admin.js";
 import { executeD1QueryInternal } from "../../../../api/_lib/d1-internal.js";
+import { hashPassword } from "../../../../api/_lib/password.js";
+import { issueSessionToken } from "../../../../api/_lib/sessionToken.js";
 import {
   ALL_PERMISSION_KEYS,
   getUserPermissions,
@@ -202,13 +203,15 @@ async function ensureTargetExists(targetUserId: string): Promise<void> {
 async function handleTemporaryPassword(targetUserId: string): Promise<Response> {
   await ensureTargetExists(targetUserId);
   const temporaryPassword = createTemporaryPassword();
-  const { auth } = getAdminServices();
 
-  // Firebase only stores one password per account — this OVERWRITES
-  // whatever the user currently has. The Settings UI's "Generate
-  // temp password" button is labeled accordingly so admins don't
+  // OVERWRITES the user's native credential with a scrypt hash of the temp
+  // password. The Settings UI button is labeled accordingly so admins don't
   // accidentally lock someone out who already knew their password.
-  await auth.updateUser(targetUserId, { password: temporaryPassword });
+  const hash = await hashPassword(temporaryPassword);
+  await executeD1QueryInternal({
+    sql: "UPDATE users SET password_hash = ?, password_updated_at = ? WHERE id = ?",
+    params: [hash, new Date().toISOString(), targetUserId],
+  });
 
   return Response.json({
     temporaryPassword,
@@ -229,10 +232,6 @@ async function handleTemporaryPassword(targetUserId: string): Promise<Response> 
 /* Routing these through dedicated admin-gated endpoints (combined with         */
 /* the proxy-side write block on the `users` table) closes that vector.         */
 /* -------------------------------------------------------------------------- */
-
-function usernameToEmail(username: string): string {
-  return `${username.toLowerCase().trim()}@archive.internal`;
-}
 
 // Columns the admin may set via PATCH. `id`, `username`, `created_at`,
 // `updated_at` are deliberately not in the allow-list: id is immutable,
@@ -367,26 +366,18 @@ async function handleCreate(request: Request): Promise<Response> {
     throw new HttpError(409, "That username is already taken.");
   }
 
-  // Create the Firebase Auth user via Identity Toolkit REST (Phase 1
-  // replaced firebase-admin SDK with this REST path). Cleaner than the
-  // legacy "secondary app + client SDK" dance that existed only so the
-  // admin doing the create didn't get logged out by the client SDK
-  // swapping its session.
-  const { auth } = getAdminServices();
-  const userRecord = await auth.createUser({
-    email: usernameToEmail(username),
-    password,
-    displayName,
-  });
-
-  const uid = userRecord.uid;
+  // Native account: a generated id (no longer a Firebase UID) + the scrypt hash
+  // of the password, stored straight on the D1 row. No Firebase Auth account is
+  // created — the user logs in via /api/auth/login.
+  const uid = crypto.randomUUID();
+  const passwordHash = await hashPassword(password);
   const nowIso = new Date().toISOString();
   const initialActiveCampaign = campaignIds[0] || null;
 
   await executeD1QueryInternal({
-    sql: `INSERT INTO users (id, username, display_name, role, theme, active_campaign_id, created_at, updated_at)
-          VALUES (?, ?, ?, ?, 'parchment', ?, ?, ?)`,
-    params: [uid, username, displayName, role, initialActiveCampaign, nowIso, nowIso],
+    sql: `INSERT INTO users (id, username, display_name, role, theme, active_campaign_id, password_hash, password_updated_at, created_at, updated_at)
+          VALUES (?, ?, ?, ?, 'parchment', ?, ?, ?, ?, ?)`,
+    params: [uid, username, displayName, role, initialActiveCampaign, passwordHash, nowIso, nowIso, nowIso],
   });
 
   if (campaignIds.length > 0) {
@@ -451,22 +442,9 @@ async function handleUpdate(request: Request, targetUserId: string): Promise<Res
 async function handleDelete(targetUserId: string): Promise<Response> {
   await ensureTargetExists(targetUserId);
 
-  // Firebase Auth first — if THIS fails we don't want a dangling D1
-  // row that points at a UID Firebase no longer knows about. The
-  // reverse failure mode (Firebase succeeds, D1 delete fails) is
-  // recoverable: the user simply can't sign in to a profile (the
-  // auto-create path in /api/me would synthesize a fresh row).
-  const { auth } = getAdminServices();
-  try {
-    await auth.deleteUser(targetUserId);
-  } catch (err: any) {
-    // `auth/user-not-found` is benign — they may have been deleted
-    // out-of-band already. Anything else bubbles.
-    if (err?.code !== "auth/user-not-found") throw err;
-  }
-
-  // D1 FK cascades on `users.id` clear campaign_members and any other
-  // rows that referenced this user, per the schema in
+  // Deleting the D1 row removes the native credential (password_hash) with it.
+  // D1 FK cascades on `users.id` clear campaign_members and any other rows that
+  // referenced this user, per the schema in
   // worker/migrations/0002_phase2_identity.sql.
   await executeD1QueryInternal({
     sql: "DELETE FROM users WHERE id = ?",
@@ -581,22 +559,30 @@ async function handlePermissionDelete(
   });
 }
 
+const SIGN_IN_TOKEN_TTL_SECONDS = 60 * 60; // 1 hour to redeem the link
+
 async function handleSignInToken(targetUserId: string): Promise<Response> {
-  await ensureTargetExists(targetUserId);
+  // Load the user so the token carries the current username/role (role still
+  // lives in D1 and is re-checked server-side on every request).
+  const result = await executeD1QueryInternal({
+    sql: "SELECT id, username, role FROM users WHERE id = ? LIMIT 1",
+    params: [targetUserId],
+  });
+  const row = Array.isArray(result?.results) ? (result.results[0] as any) : null;
+  if (!row) {
+    throw new HttpError(404, "Target user profile not found.");
+  }
 
-  // Custom tokens carry the uid but no role claims — role still lives
-  // in D1 and is the single source of truth. If we ever need a token
-  // that signs the user in with elevated claims (emergency support
-  // session, etc.), add a `developerClaims` arg here.
-  const { auth } = getAdminServices();
-  const token = await auth.createCustomToken(targetUserId);
+  // A short-lived native session token: signs the user in directly when
+  // redeemed, but the LINK is unusable after an hour. Once redeemed, the
+  // client's sliding refresh extends an active session to full length.
+  const token = await issueSessionToken(
+    { id: row.id, username: row.username, role: row.role },
+    SIGN_IN_TOKEN_TTL_SECONDS,
+  );
 
-  // 1 hour matches the Firebase Admin SDK default expiry. We compute
-  // the string client-side instead of trusting the JWT exp claim so
-  // the admin can show the user a friendly "expires at <time>" hint
-  // in the dialog.
   const issuedAt = new Date();
-  const expiresAt = new Date(issuedAt.getTime() + 60 * 60 * 1000).toISOString();
+  const expiresAt = new Date(issuedAt.getTime() + SIGN_IN_TOKEN_TTL_SECONDS * 1000).toISOString();
 
   return Response.json({
     token,

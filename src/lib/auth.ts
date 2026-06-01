@@ -19,7 +19,6 @@
 import { auth as firebaseAuth, usernameToEmail } from "./firebase";
 import {
   signInWithEmailAndPassword,
-  signInWithCustomToken,
   signOut as firebaseSignOut,
   onAuthStateChanged,
 } from "firebase/auth";
@@ -272,10 +271,20 @@ export async function login(username: string, password: string): Promise<void> {
   emit();
 }
 
-/** Redeem a one-time admin sign-in link. Still a Firebase custom token until the
- *  server-side mint is swapped to a native one-time token (Phase 3b/5). */
+/**
+ * Redeem a one-time admin sign-in link. The link now carries a short-lived
+ * NATIVE session token: validate + store it (the sliding refresh extends an
+ * active session to full length). Throws if the link has expired or is invalid.
+ */
 export async function redeemToken(token: string): Promise<void> {
-  await signInWithCustomToken(firebaseAuth, token);
+  const decoded = decodeToken(token);
+  if (!decoded || decoded.expMs <= Date.now()) {
+    throw new Error("This sign-in link has expired or is invalid.");
+  }
+  setNativeToken(token);
+  if (firebaseAuth.currentUser) {
+    await firebaseSignOut(firebaseAuth).catch(() => {});
+  }
 }
 
 export async function logout(): Promise<void> {

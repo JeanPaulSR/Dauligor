@@ -59,8 +59,16 @@ function syntheticEmail(username: string): string {
   return `${username.toLowerCase().trim()}@archive.internal`;
 }
 
-/** Mint a 30-day session token for a verified user. */
-export async function issueSessionToken(user: SessionUser): Promise<string> {
+/**
+ * Mint a session token for a verified user. Defaults to the 30-day session TTL;
+ * pass a shorter `ttlSeconds` for one-off uses like admin sign-in links (the
+ * token still signs the user in, but the LINK can't be redeemed after it
+ * lapses; the client's sliding refresh extends an active session to full length).
+ */
+export async function issueSessionToken(
+  user: SessionUser,
+  ttlSeconds: number = SESSION_TTL_SECONDS,
+): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   return await new SignJWT({
     username: user.username,
@@ -74,7 +82,7 @@ export async function issueSessionToken(user: SessionUser): Promise<string> {
     .setAudience(AUDIENCE)
     .setSubject(user.id)
     .setIssuedAt(now)
-    .setExpirationTime(now + SESSION_TTL_SECONDS)
+    .setExpirationTime(now + ttlSeconds)
     .sign(getSecretKey());
 }
 
