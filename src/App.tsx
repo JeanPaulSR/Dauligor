@@ -208,8 +208,10 @@ export default function App() {
       if (identity) {
         loadProfile();
       } else {
+        // NOTE: deliberately do NOT clearCache() here — the D1 cache holds shared
+        // content (compendium/lore), so it persists across logout/login to avoid
+        // re-fetching everything on each sign-in.
         setUserProfile(null);
-        clearCache(); // wipe cached D1 data on sign-out so no stale/other-user data lingers
         setLoading(false);
       }
     });
