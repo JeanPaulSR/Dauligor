@@ -81,6 +81,13 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
   const id = rawId && rawId !== 'null' && rawId !== 'undefined' ? rawId : undefined;
   const navigate = useNavigate();
   const location = useLocation();
+  // Route-aware: the proposal route (/proposals/edit/option-groups/*)
+  // mounts this editor inside <ProposalEditorWrapper>, which renders a
+  // sticky "PROPOSAL EDITOR" strip above the editor body; the admin-
+  // direct route (/compendium/unique-options/*) has none. Declared up
+  // here (ahead of the fullscreen layout math) because the pane-height
+  // chrome budget below has to account for that strip.
+  const isProposalRoute = location.pathname.startsWith('/proposals/edit/');
 
   // ─── Fullscreen fixed-height layout (mirrors the browser / Spells) ─
   // Lock the body so the page itself doesn't scroll; each pane gets a
@@ -91,15 +98,23 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
     document.body.classList.add('spell-list-fullscreen');
     return () => document.body.classList.remove('spell-list-fullscreen');
   }, []);
+  // Chrome budget subtracted from the viewport to size each pane. The
+  // proposal route stacks the wrapper's sticky "PROPOSAL EDITOR" strip
+  // (+ its space-y-4 gap) above us, so the 3-pane row has less vertical
+  // room — bump the budget there so the bottom of the Option editor pane
+  // (its Close / Update Option footer) stays inside the locked viewport
+  // instead of being clipped below the fold. Mirrors
+  // CompendiumEditorShell's `chromeOffset = proposalMode ? 320 : 200`.
+  const chromeOffset = isProposalRoute ? 270 : 150;
   const [paneHeight, setPaneHeight] = useState<number>(() =>
-    typeof window === 'undefined' ? 720 : Math.max(420, window.innerHeight - 150),
+    typeof window === 'undefined' ? 720 : Math.max(420, window.innerHeight - chromeOffset),
   );
   useEffect(() => {
-    const onResize = () => setPaneHeight(Math.max(420, window.innerHeight - 150));
+    const onResize = () => setPaneHeight(Math.max(420, window.innerHeight - chromeOffset));
     onResize();
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, []);
+  }, [chromeOffset]);
   // Only impose the fixed pane height at lg+ (where panes sit side by
   // side); below that one pane shows at a time (drilldown) and fills the
   // locked viewport.
@@ -110,8 +125,8 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
   const [narrowView, setNarrowView] = useState<EditorPane>('group');
   // Route-aware basePath — admin route writes through upsertDocument
   // directly; proposal route wraps with ProposalEditorWrapper and the
-  // accumulators below queue into the active block.
-  const isProposalRoute = location.pathname.startsWith('/proposals/edit/');
+  // accumulators below queue into the active block. (isProposalRoute is
+  // declared above, alongside the fullscreen layout math.)
   const basePath = isProposalRoute ? '/proposals/edit/option-groups' : '/compendium/unique-options';
   const groupWriter = useProposalAccumulator('unique_option_group', userProfile);
   const itemWriter = useProposalAccumulator('unique_option_item', userProfile);
