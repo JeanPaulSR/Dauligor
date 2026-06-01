@@ -1,12 +1,12 @@
 # Compendium — Species & Backgrounds
 
-> **Status:** ✅ Dedicated tables + editors + Foundry exporters shipped (migration `20260601-1200`). ⚠️ Public list pages still placeholders. ⏭️ Bulk importer is the next planned step.
+> **Status:** ✅ Dedicated tables + editors + Foundry exporters + importers + public browsers all shipped (migration `20260601-1200`). Tables start empty; populate them via each editor's admin-only **Foundry Import** tab.
 >
 > **Naming:** the user-facing entity is **"Species"** (the D&D 2024 rename of "Race"). The table is `species`, the editor + sidebar say "Species", but the **Foundry export `type` stays `"race"`** for dnd5e compatibility, and the route URL stays `/compendium/races`.
 >
 > **Read first:**
 > - [`docs/features/compendium-feats-items.md`](compendium-feats-items.md) — the feat/item editors; Species + Backgrounds graduated out of the feats table and reuse its widgets (AdvancementManager, TagPicker, ScalingColumnsPanel)
-> - [`docs/features/compendium-spells-browser.md`](compendium-spells-browser.md) — the public-browser template the placeholder list pages aim to grow into
+> - [`docs/features/compendium-spells-browser.md`](compendium-spells-browser.md) — the public-browser template these pages are built on (`CompendiumBrowserShell`)
 
 Species and Backgrounds used to live in the `feats` table behind a `feat_type` discriminator (an intentional placeholder). They've now been **promoted to their own dedicated tables** per the roadmap's "new table for new functionality" principle. This page documents what shipped and what's left.
 
@@ -16,8 +16,9 @@ Species and Backgrounds used to live in the `feats` table behind a `feat_type` d
 
 | Surface | URL | Component | Status |
 |---|---|---|---|
-| Public list (Species) | `/compendium/races` | `src/pages/compendium/RacesList.tsx` | **Placeholder** — links to `/manage` |
-| Public list (Backgrounds) | `/compendium/backgrounds` | `src/pages/compendium/BackgroundsList.tsx` | **Placeholder** — links to `/manage` |
+| Public browser (Species) | `/compendium/races` | `RacesList.tsx` → `SpeciesBackgroundBrowser kind="species"` | ✅ Shipped |
+| Public browser (Backgrounds) | `/compendium/backgrounds` | `BackgroundsList.tsx` → `SpeciesBackgroundBrowser kind="background"` | ✅ Shipped |
+| Import workbench | each editor's "Foundry Import" tab | `SpeciesBackgroundImportWorkbench` | ✅ Shipped (admin-only) |
 | Editor (Species) | `/compendium/races/manage` | `RaceEditor.tsx` → `SpeciesBackgroundEditor kind="species"` | ✅ Shipped |
 | Editor (Backgrounds) | `/compendium/backgrounds/manage` | `BackgroundEditor.tsx` → `SpeciesBackgroundEditor kind="background"` | ✅ Shipped |
 | Foundry export (Species) | `/api/module/races/<dbId>.json` | `api/_lib/_raceExport.ts` | ✅ Reads the `species` table |
@@ -64,7 +65,7 @@ Shared sub-tabs: **Basics** (image / name / identifier / source / page / descrip
 
 **v1 scope / known follow-ups:**
 - **Direct-write, admin + content-creator.** Proposal-mode authoring (cascade banners, review highlights, block drafts) is NOT wired — `species` / `background` aren't registered proposal entity types yet (would need a `proposals` CHECK migration). Other editors route content-creators through `/proposals/edit/*`; these don't yet.
-- **No Foundry-Import workbench mode** — lands with the importer step.
+- The admin-only **Foundry-Import** workbench mode is wired (see §5).
 - **Starting equipment** has no structured tree editor yet (the `wealth` field is editable; existing `startingEquipment` entries round-trip unchanged). The EquipmentEntryData tree is populated by the importer.
 
 ---
@@ -84,23 +85,21 @@ Verified end-to-end against local D1: a seeded Mountain Dwarf exports with `move
 
 ---
 
-## 5. Implementing the public list pages (deferred)
+## 5. Public browsers + import workbench (shipped)
 
-The placeholders should grow into full browsers mirroring [`FeatList.tsx`](../../src/pages/compendium/FeatList.tsx) / [`SpellList.tsx`](../../src/pages/compendium/SpellList.tsx), both of which consume [`CompendiumBrowserShell`](../../src/components/compendium/CompendiumBrowserShell.tsx).
+Both `/compendium/races` and `/compendium/backgrounds` render [`SpeciesBackgroundBrowser`](../../src/pages/compendium/SpeciesBackgroundBrowser.tsx) (one component, `kind` prop) on [`CompendiumBrowserShell`](../../src/components/compendium/CompendiumBrowserShell.tsx) with **`hideFavorites`** — the shell gained that opt-out (symmetric with `hideFilters`) because these tables have no favorites store yet. Search + a Source axis (+ Creature Type for species); a thumbnail in the name column surfaces imported art; the detail pane renders image / traits / advancements / description (BBCode→HTML). `RacesList.tsx` / `BackgroundsList.tsx` are thin wrappers passing `kind`. The browsers are **public**; the editor "Manager" link in the toolbar shows for admins only.
 
-Data flow now fetches from the dedicated collection (no more `feat_type` filter):
+**Import** — each editor's admin-only **"Foundry Import"** tab mounts [`SpeciesBackgroundImportWorkbench`](../../src/components/compendium/SpeciesBackgroundImportWorkbench.tsx), backed by [`speciesBackgroundImport.ts`](../../src/lib/speciesBackgroundImport.ts). It ingests the dauligor-pairing folder exports (`races` / `backgrounds` arrays) → camelCase rows via direct `upsertDocument`. Notable mapping rules:
 
-```ts
-fetchCollection<any>('species', { orderBy: 'name ASC' })       // or 'backgrounds'
-```
-
-Steps: copy `FeatList.tsx`, swap the fetch to the species/backgrounds collection, define filter axes (Source + Size / Speed / Creature Type for species; Source + granted-proficiency for backgrounds), point `renderDetail` at a new `SpeciesDetailPanel` / `BackgroundDetailPanel` (the editor's `SBPreview` is a starting point), then flip the §1 status to ✅. The shell handles responsive collapse, virtualization, and favourites.
+- **Images** follow the spell importer (the working reference): absolute `cdn.5e.tools` art is kept; Foundry-relative plutonium placeholders (`family-tree.svg`) drop to empty (they'd 404 off our R2). ~236/280 species + 76/152 backgrounds carry real art.
+- **`&Reference[key=Value]`** 5etools enrichers (HTML-escaped) are resolved by the shared `foundryHtmlCleanup` — added there so feat/spell/item imports benefit too.
+- **Senses** flatten from `.ranges` on import; `_raceExport` re-nests them for valid dnd5e on export.
 
 ---
 
-## 6. The next step — bulk importer
+## 6. Populating the tables
 
-The tables start **empty**; content comes from the Foundry export at `E:\DnD\Professional\Foundry Export` (152 backgrounds + 280 species). The "tables + editors first, import after" sequencing was deliberate: prove the schema + editors before bulk-loading 432 rows. The importer reads the export JSON → upserts into the new tables (camelCase payloads, same shape `upsertDocument` writes). The export was built to reveal exactly which columns the import needs; if it surfaces a missing column (e.g. top-level `effects`), add it then via a follow-up `ALTER TABLE`.
+The tables start **empty**; content comes from the Foundry export at `E:\DnD\Professional\Foundry Export` (152 backgrounds + 280 species) via the import workbench (§5). Load the export JSON, review, and **Import Visible** (or per-row). Source-matching is by book/rules against the `sources` table — many 5etools books (EEPC, MPMM, VGM, …) won't match and import with **no source set** (a warning, surfaced as an "unresolved" count + filter, not a blocker). If a future need surfaces a missing column (e.g. top-level `effects`), add it via a follow-up `ALTER TABLE` (local-first).
 
 ---
 

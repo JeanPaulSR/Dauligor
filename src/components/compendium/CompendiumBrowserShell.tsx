@@ -135,20 +135,25 @@ export type CompendiumBrowserShellProps<TRow> = {
   rowHeight?: number;
 
   // ─── Favorites ──────────────────────────────────────────────
-  favorites: Set<string>;
-  onToggleFavorite: (id: string) => void;
+  /** Hide the favorites pane + button + slide-out overlay entirely
+   *  (symmetric with `hideFilters`). Use for browsers with no favorites
+   *  backing store; the favorites props below become optional / ignored.
+   *  The list+detail panes reclaim the favorites column's width. */
+  hideFavorites?: boolean;
+  favorites?: Set<string>;
+  onToggleFavorite?: (id: string) => void;
   /** Render a single pinned row inside the favorites pane. Receives
    *  the row + selected state + a `toggleStar` shortcut that calls
    *  the same `onToggleFavorite` (passed in case the consumer wants
    *  to wire a star button in its custom layout). */
-  favoritesRowRender: (args: { row: TRow; selected: boolean; toggleStar: () => void; onSelect: () => void }) => React.ReactNode;
+  favoritesRowRender?: (args: { row: TRow; selected: boolean; toggleStar: () => void; onSelect: () => void }) => React.ReactNode;
   /** Optional slot that replaces the default favorites-pane header
    *  (icon + "Favorites" label + count). Use for per-character scope
    *  pickers à la SpellList. When omitted, the default header renders. */
   favoritesScopePicker?: React.ReactNode;
   /** Copy for the favorites empty state (e.g. "Star a feat to pin
    *  it here."). */
-  favoritesEmptyMessage: string;
+  favoritesEmptyMessage?: string;
 
   // ─── Sort (optional) ────────────────────────────────────────
   /** Key of the column currently driving the sort. When unset the
@@ -225,11 +230,12 @@ export function CompendiumBrowserShell<TRow>(props: CompendiumBrowserShellProps<
     columns,
     columnsLocalStorageKey,
     rowHeight = 48,
-    favorites,
-    onToggleFavorite,
-    favoritesRowRender,
+    hideFavorites,
+    favorites = new Set<string>(),
+    onToggleFavorite = () => {},
+    favoritesRowRender = () => null,
     favoritesScopePicker,
-    favoritesEmptyMessage,
+    favoritesEmptyMessage = '',
     detailPanel,
     sortBy,
     sortDir,
@@ -454,7 +460,7 @@ export function CompendiumBrowserShell<TRow>(props: CompendiumBrowserShellProps<
   // Lives in the FilterBar's LEADING slot so favorites stay on the
   // left edge of the page (consistent with the xl+ inline pane being
   // the leftmost column).
-  const favoritesButton = !isXl ? (
+  const favoritesButton = !isXl && !hideFavorites ? (
     <Button
       type="button"
       variant="outline"
@@ -594,7 +600,7 @@ export function CompendiumBrowserShell<TRow>(props: CompendiumBrowserShellProps<
             in ONE place at a time. The picker carries internal
             Popover state; double-mounting it (inline + overlay) makes
             a single click open dropdowns at two screen positions. */}
-        {isXl && (
+        {isXl && !hideFavorites && (
           <div
             className="flex w-[260px] flex-none flex-col"
             style={{ height: `${paneHeight}px` }}
@@ -753,7 +759,7 @@ export function CompendiumBrowserShell<TRow>(props: CompendiumBrowserShellProps<
           of the page (matches the xl+ inline pane being the leftmost
           column and the leadingActions placement of the Favorites
           button). */}
-      {!isXl && favoritesOverlayOpen && (
+      {!isXl && !hideFavorites && favoritesOverlayOpen && (
         <div className="fixed inset-0 z-50" role="dialog" aria-modal="true">
           {/* Backdrop — click to close. */}
           <div
