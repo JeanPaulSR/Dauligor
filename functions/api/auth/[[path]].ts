@@ -29,6 +29,7 @@ import { hashPassword, verifyPassword } from "../../../api/_lib/password.js";
 import {
   isNativeAuthConfigured,
   issueSessionToken,
+  verifySessionToken,
 } from "../../../api/_lib/sessionToken.js";
 
 type UserRow = {
@@ -122,6 +123,58 @@ async function handleAdopt(request: Request): Promise<Response> {
   return Response.json({ adopted: true });
 }
 
+async function handleRefresh(request: Request): Promise<Response> {
+  if (!isNativeAuthConfigured()) {
+    return Response.json(
+      { error: "Native auth is not configured." },
+      { status: 503 },
+    );
+  }
+  const headerValue = request.headers.get("authorization") ?? "";
+  if (!headerValue.startsWith("Bearer ")) {
+    return Response.json({ error: "Missing bearer token." }, { status: 401 });
+  }
+  const token = headerValue.slice("Bearer ".length);
+
+  // Must be a valid, unexpired NATIVE session token. Firebase ID tokens
+  // auto-refresh on the client and have nothing to renew here, so we verify
+  // ours specifically rather than via the dual-token gate.
+  let decoded;
+  try {
+    decoded = await verifySessionToken(token);
+  } catch {
+    return Response.json(
+      { error: "Session is invalid or expired; sign in again." },
+      { status: 401 },
+    );
+  }
+  const uid = decoded.uid;
+  if (!uid) {
+    return Response.json({ error: "Invalid session." }, { status: 401 });
+  }
+
+  // Re-read username + role from D1 so the refreshed token reflects any changes
+  // (e.g. a role update) since the previous token was issued.
+  const result = await executeD1QueryInternal({
+    sql: "SELECT id, username, role FROM users WHERE id = ? LIMIT 1",
+    params: [uid],
+  });
+  const row = Array.isArray(result?.results) ? (result.results[0] as UserRow) : null;
+  if (!row) {
+    return Response.json({ error: "Account not found." }, { status: 401 });
+  }
+
+  const refreshed = await issueSessionToken({
+    id: row.id,
+    username: row.username,
+    role: row.role,
+  });
+  return Response.json(
+    { token: refreshed },
+    { headers: { "Cache-Control": "no-store" } },
+  );
+}
+
 async function handleChangePassword(request: Request): Promise<Response> {
   if (!isNativeAuthConfigured()) {
     return Response.json(
@@ -167,6 +220,11 @@ export const onRequest = async (context: any): Promise<Response> => {
 
     if (path.length === 1 && path[0] === "adopt") {
       if (request.method === "POST") return await handleAdopt(request);
+      return Response.json({ error: `Method ${request.method} not allowed.` }, { status: 405 });
+    }
+
+    if (path.length === 1 && path[0] === "refresh") {
+      if (request.method === "POST") return await handleRefresh(request);
       return Response.json({ error: `Method ${request.method} not allowed.` }, { status: 405 });
     }
 

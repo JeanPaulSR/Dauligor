@@ -26,6 +26,13 @@ import {
 
 const TOKEN_KEY = "dauligor:authToken";
 
+// Sliding renewal: once the 30-day token has under ~15 days left (past its
+// half-life), the next request opportunistically refreshes it in the background
+// so an active session never expires out from under the user. An idle session
+// (no requests) still lapses at 30 days, which is the intended behaviour.
+const REFRESH_WHEN_REMAINING_MS = 15 * 24 * 60 * 60 * 1000;
+let refreshInFlight = false;
+
 export type Identity = {
   uid: string;
   email: string | null;
@@ -105,6 +112,32 @@ function emit(): void {
   for (const l of listeners) l(id);
 }
 
+// Background sliding renewal — fire-and-forget. Swaps in a fresh 30-day token
+// (with current role/username) once the live one is past its half-life. The
+// current request keeps using the still-valid token; the refresh only affects
+// subsequent ones. Guarded so only one refresh is ever in flight.
+async function maybeRefreshSession(): Promise<void> {
+  if (refreshInFlight || !nativeToken || !nativeDecoded) return;
+  if (nativeDecoded.expMs - Date.now() > REFRESH_WHEN_REMAINING_MS) return;
+  refreshInFlight = true;
+  try {
+    const res = await fetch("/api/auth/refresh", {
+      method: "POST",
+      headers: { authorization: `Bearer ${nativeToken}` },
+    });
+    if (res.ok) {
+      const body = await res.json();
+      if (body?.token) setNativeToken(body.token);
+    }
+    // On failure (401/network) the existing token stays valid until it expires;
+    // the user re-logs in then. Nothing to do here.
+  } catch {
+    /* best-effort */
+  } finally {
+    refreshInFlight = false;
+  }
+}
+
 /* -------------------------------------------------------------------------- */
 /* Public surface                                                              */
 /* -------------------------------------------------------------------------- */
@@ -116,7 +149,10 @@ function emit(): void {
  * cleared here so a dead session never lingers.
  */
 export async function getSessionToken(): Promise<string | null> {
-  if (isNativeValid()) return nativeToken;
+  if (isNativeValid()) {
+    void maybeRefreshSession(); // opportunistic sliding renewal (non-blocking)
+    return nativeToken;
+  }
   if (nativeToken) setNativeToken(null); // expired — drop it + notify subscribers
   if (firebaseAuth.currentUser) return await firebaseAuth.currentUser.getIdToken();
   return null;
