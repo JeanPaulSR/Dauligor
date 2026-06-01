@@ -372,6 +372,8 @@ async function startServer() {
     { mount: "/api/spell-favorites", modulePath: "./functions/api/spell-favorites.ts" },
     { mount: "/api/feat-favorites", modulePath: "./functions/api/feat-favorites.ts" },
     { mount: "/api/item-favorites", modulePath: "./functions/api/item-favorites.ts" },
+    { mount: "/api/species-favorites", modulePath: "./functions/api/species-favorites.ts" },
+    { mount: "/api/background-favorites", modulePath: "./functions/api/background-favorites.ts" },
     { mount: "/api/proposals", modulePath: "./functions/api/proposals/[[path]].ts" },
     { mount: "/api/lore", modulePath: "./functions/api/lore/[[path]].ts" },
     { mount: "/api/campaigns", modulePath: "./functions/api/campaigns/[[path]].ts" },

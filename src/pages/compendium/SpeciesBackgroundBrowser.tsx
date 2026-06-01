@@ -1,8 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ImageOff } from 'lucide-react';
+import { ImageOff, Star } from 'lucide-react';
+import { auth } from '../../lib/firebase';
 import { fetchCollection } from '../../lib/d1';
 import { bbcodeToHtml } from '../../lib/bbcode';
+import { cn } from '../../lib/utils';
+import { useSpeciesBackgroundFavorites } from '../../lib/speciesBackgroundFavorites';
 import { Button } from '../../components/ui/button';
 import {
   CompendiumBrowserShell,
@@ -96,6 +99,12 @@ export default function SpeciesBackgroundBrowser({
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState('');
 
+  // Auth-aware favorites — userId-bound Set, merged local ↔ cloud on
+  // sign-in (mirrors FeatList). Stars persist across devices when signed in.
+  const [authUserId, setAuthUserId] = useState<string | null>(() => auth.currentUser?.uid ?? null);
+  useEffect(() => auth.onAuthStateChanged((u) => setAuthUserId(u?.uid ?? null)), []);
+  const { favorites, isFavorite, toggleFavorite } = useSpeciesBackgroundFavorites(kind, authUserId);
+
   const { axisFilters, cyclers, activeFilterCount, resetAll } =
     useAxisFilters(kind === 'species' ? SPECIES_AXIS_KEYS : BACKGROUND_AXIS_KEYS);
 
@@ -172,6 +181,7 @@ export default function SpeciesBackgroundBrowser({
         <div className="min-w-0 flex items-center gap-2">
           <Thumb src={r.imageUrl} />
           <span className="truncate font-semibold text-[12px] text-ink">{r.name || <em className="text-ink/40">Untitled</em>}</span>
+          {isFavorite(r.id) && <Star className="w-2.5 h-2.5 text-gold/70 fill-gold/40 shrink-0" aria-label="Favorite" />}
         </div>
       ),
     }];
@@ -206,11 +216,37 @@ export default function SpeciesBackgroundBrowser({
     });
     return cols;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kind, sourceById]);
+  }, [kind, sourceById, isFavorite]);
 
   const selectedRow = useMemo(
     () => filtered.find((r) => r.id === selectedId) || rows.find((r) => r.id === selectedId) || null,
     [filtered, rows, selectedId],
+  );
+
+  const favoritesRowRender = ({ row, selected, toggleStar, onSelect }: { row: Row; selected: boolean; toggleStar: () => void; onSelect: () => void }) => (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={cn(
+        'w-full grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-2 px-3 py-2 text-left transition-colors',
+        selected ? 'bg-gold/10' : 'hover:bg-gold/5',
+      )}
+    >
+      <Thumb src={row.imageUrl} />
+      <span className="truncate text-sm text-ink">{row.name || 'Untitled'}</span>
+      <span className="text-[10px] font-bold text-gold/70">{abbrevOf(row)}</span>
+      <span
+        role="button"
+        tabIndex={0}
+        onClick={(e) => { e.stopPropagation(); toggleStar(); }}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleStar(); } }}
+        className="text-gold/80 hover:text-blood shrink-0 cursor-pointer"
+        title="Remove from favorites"
+        aria-label="Remove from favorites"
+      >
+        <Star className="w-3.5 h-3.5 fill-current" />
+      </span>
+    </button>
   );
 
   return (
@@ -233,8 +269,19 @@ export default function SpeciesBackgroundBrowser({
       columns={columns}
       columnsLocalStorageKey={cfg.columnsKey}
       rowHeight={40}
-      hideFavorites
-      detailPanel={<SBDetail row={selectedRow} kind={kind} sourceById={sourceById} />}
+      favorites={favorites}
+      onToggleFavorite={toggleFavorite}
+      favoritesRowRender={favoritesRowRender}
+      favoritesEmptyMessage={`Star a ${cfg.singular.toLowerCase()} to pin it here.`}
+      detailPanel={(
+        <SBDetail
+          row={selectedRow}
+          kind={kind}
+          sourceById={sourceById}
+          isFavorite={selectedRow ? isFavorite(selectedRow.id) : false}
+          onToggleFavorite={toggleFavorite}
+        />
+      )}
       emptyMessage={`No ${cfg.plural.toLowerCase()} yet${isAdmin ? ` — import some from the ${cfg.singular} Manager.` : '.'}`}
       trailingActions={isAdmin ? (
         <Link to={cfg.managePath}>
@@ -266,10 +313,14 @@ function SBDetail({
   row,
   kind,
   sourceById,
+  isFavorite,
+  onToggleFavorite,
 }: {
   row: Row | null;
   kind: SpeciesBackgroundBrowserKind;
   sourceById: Record<string, any>;
+  isFavorite: boolean;
+  onToggleFavorite: (id: string) => void;
 }) {
   if (!row) {
     return (
@@ -317,7 +368,7 @@ function SBDetail({
             <ImageOff className="h-7 w-7 text-ink/20" />
           </div>
         )}
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h2 className="font-serif text-2xl font-bold text-ink leading-tight break-words">{row.name || 'Untitled'}</h2>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-ink/55">
             {sourceAbbrev ? <span className="font-bold text-gold/80" title={sourceName}>{sourceAbbrev}</span> : null}
@@ -325,6 +376,18 @@ function SBDetail({
             {row.page ? <span>· p.{row.page}</span> : null}
           </div>
         </div>
+        <button
+          type="button"
+          onClick={() => onToggleFavorite(row.id)}
+          className={cn(
+            'shrink-0 inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-bold uppercase tracking-widest transition-colors',
+            isFavorite ? 'border-gold/40 bg-gold/10 text-gold' : 'border-gold/15 text-ink/50 hover:border-gold/30 hover:text-gold',
+          )}
+          title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+        >
+          <Star className={cn('h-3.5 w-3.5', isFavorite && 'fill-gold/40')} />
+          {isFavorite ? 'Favorited' : 'Favorite'}
+        </button>
       </div>
 
       {facts.length > 0 && (
