@@ -71,6 +71,23 @@ interface ClientErrorReport {
   };
 }
 
+// Native-session identity for error context, read directly from the stored JWT.
+// `auth.currentUser` is null for users on the native session (not Firebase), so
+// without this the report would omit their uid/email. Read inline (not via
+// auth.ts) to avoid a circular import — auth.ts imports this module.
+function nativeIdentityForReport(): { uid?: string; email?: string } {
+  try {
+    const token = localStorage.getItem('dauligor:authToken');
+    if (!token) return {};
+    const payload = JSON.parse(
+      atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')),
+    );
+    return { uid: payload?.sub, email: payload?.email };
+  } catch {
+    return {};
+  }
+}
+
 /**
  * Logs a structured client-side error (with auth context) and rethrows.
  * Replaces the old `handleFirestoreError` after the Firestore migration.
@@ -82,11 +99,12 @@ export function reportClientError(
   operationType: OperationType,
   path: string | null,
 ): never {
+  const native = auth.currentUser ? null : nativeIdentityForReport();
   const report: ClientErrorReport = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
+      userId: auth.currentUser?.uid ?? native?.uid,
+      email: auth.currentUser?.email ?? native?.email,
       emailVerified: auth.currentUser?.emailVerified,
       isAnonymous: auth.currentUser?.isAnonymous,
       tenantId: auth.currentUser?.tenantId,

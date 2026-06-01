@@ -216,35 +216,37 @@ export function onAuthChange(cb: (id: Identity | null) => void): () => void {
  *
  *  1. POST /api/auth/login. If the account is already adopted → native session,
  *     done (no Firebase involved).
- *  2. On 401/503 (not adopted yet, or native auth not configured) fall back to
- *     Firebase. On success, POST /api/auth/adopt with the plaintext so the D1
- *     hash is written and the NEXT login goes native.
+ *  2. On ANY native failure — bad creds (401), native auth not configured (503),
+ *     the remote DB not yet carrying the password column in prod (500), or a
+ *     network error — fall through to Firebase, the live system during the
+ *     migration window. On success, POST /api/auth/adopt so the NEXT login goes
+ *     native.
  *
- * Throws on invalid credentials (both paths rejected).
+ * Throws only when BOTH paths reject (genuinely bad credentials). This
+ * any-failure fallback is what keeps the branch safe to deploy regardless of
+ * whether the remote migration / AUTH_JWT_SECRET are in place yet. Once Firebase
+ * is removed (Phase 5) native failures become hard errors.
  */
 export async function login(username: string, password: string): Promise<void> {
-  const res = await fetch("/api/auth/login", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ username, password }),
-  });
-
-  if (res.ok) {
-    const body = await res.json();
-    // Set native FIRST so getIdentity() is never momentarily null, THEN clear
-    // any stale Firebase session.
-    setNativeToken(body.token);
-    if (firebaseAuth.currentUser) {
-      await firebaseSignOut(firebaseAuth).catch(() => {});
+  try {
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    if (res.ok) {
+      const body = await res.json();
+      // Set native FIRST so getIdentity() is never momentarily null, THEN clear
+      // any stale Firebase session.
+      setNativeToken(body.token);
+      if (firebaseAuth.currentUser) {
+        await firebaseSignOut(firebaseAuth).catch(() => {});
+      }
+      return;
     }
-    return;
-  }
-
-  // Only fall through to Firebase for "no native credential" outcomes; surface
-  // anything else (500, etc.) as a real error.
-  if (res.status !== 401 && res.status !== 503) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `Login failed (HTTP ${res.status})`);
+    console.warn(`[auth] native login unavailable (HTTP ${res.status}); using Firebase fallback`);
+  } catch (err) {
+    console.warn("[auth] native login request failed; using Firebase fallback:", err);
   }
 
   // Firebase fallback — throws on bad credentials.

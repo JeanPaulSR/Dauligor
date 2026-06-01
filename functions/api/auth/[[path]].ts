@@ -43,12 +43,20 @@ type UserRow = {
 async function loadUserByUsername(username: string): Promise<UserRow | null> {
   // Case-insensitive match: handles are stored as authored but logins (and the
   // old Firebase `<handle>@archive.internal` mapping) are case-folded.
-  const result = await executeD1QueryInternal({
-    sql: "SELECT id, username, role, display_name, password_hash FROM users WHERE LOWER(username) = ? LIMIT 1",
-    params: [username.toLowerCase().trim()],
-  });
-  const rows = Array.isArray(result?.results) ? result.results : [];
-  return (rows[0] as UserRow) || null;
+  try {
+    const result = await executeD1QueryInternal({
+      sql: "SELECT id, username, role, display_name, password_hash FROM users WHERE LOWER(username) = ? LIMIT 1",
+      params: [username.toLowerCase().trim()],
+    });
+    const rows = Array.isArray(result?.results) ? result.results : [];
+    return (rows[0] as UserRow) || null;
+  } catch (err) {
+    // e.g. the `password_hash` column doesn't exist yet (remote DB not migrated
+    // in prod). Treat as "no native credential" so handleLogin returns 401 and
+    // the client falls back to Firebase, rather than surfacing a 500.
+    console.warn("[auth] native login lookup failed (treating as no credential):", err);
+    return null;
+  }
 }
 
 async function handleLogin(request: Request): Promise<Response> {
