@@ -32,6 +32,7 @@ export default function Settings({ user, userProfile }: { user: any, userProfile
   const [isPrivate, setIsPrivate] = useState(userProfile?.is_private || false);
   const [recoveryEmail, setRecoveryEmail] = useState(userProfile?.recovery_email || '');
 
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   
@@ -139,6 +140,10 @@ export default function Settings({ user, userProfile }: { user: any, userProfile
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!currentPassword) {
+      setError('Enter your current password');
+      return;
+    }
     if (newPassword !== confirmPassword) {
       setError('Passwords do not match');
       return;
@@ -163,13 +168,14 @@ export default function Settings({ user, userProfile }: { user: any, userProfile
           'Content-Type': 'application/json',
           ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
         },
-        body: JSON.stringify({ newPassword }),
+        body: JSON.stringify({ currentPassword, newPassword }),
       });
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}));
         throw new Error(errBody.error || `Failed to update password (HTTP ${res.status})`);
       }
       setSuccess('Password updated successfully!');
+      setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
     } catch (err: any) {
@@ -452,6 +458,17 @@ export default function Settings({ user, userProfile }: { user: any, userProfile
                 </CardHeader>
                 <CardContent className="pt-8">
                   <form onSubmit={handleUpdatePassword} className="space-y-6">
+                    <div className="space-y-2">
+                      <label className="label-text text-ink/60">Current Password</label>
+                      <Input
+                        type="password"
+                        autoComplete="current-password"
+                        className="bg-background/50 border-gold/20 focus:border-gold h-12 text-ink"
+                        value={currentPassword}
+                        onChange={e => setCurrentPassword(e.target.value)}
+                        placeholder="••••••••"
+                      />
+                    </div>
                     <div className="grid sm:grid-cols-2 gap-6">
                       <div className="space-y-2">
                         <label className="label-text text-ink/60">New Password</label>
@@ -475,7 +492,7 @@ export default function Settings({ user, userProfile }: { user: any, userProfile
                       </div>
                     </div>
                     <div className="flex justify-end">
-                      <Button type="submit" disabled={loading || !newPassword} className="bg-primary text-primary-foreground gap-2 px-8 h-12">
+                      <Button type="submit" disabled={loading || !currentPassword || !newPassword} className="bg-primary text-primary-foreground gap-2 px-8 h-12">
                         Update Password
                       </Button>
                     </div>

@@ -196,6 +196,35 @@ async function handleChangePassword(request: Request): Promise<Response> {
     );
   }
 
+  const currentPassword =
+    typeof (body as any).currentPassword === "string" ? (body as any).currentPassword : "";
+
+  // If the account already has a password, require + verify the current one so a
+  // hijacked session can't silently change it (and lock the owner out). A
+  // not-yet-adopted account has no hash, so a first-time set is allowed without
+  // a current password.
+  const existing = await executeD1QueryInternal({
+    sql: "SELECT password_hash FROM users WHERE id = ? LIMIT 1",
+    params: [uid],
+  });
+  const existingRow = (Array.isArray(existing?.results) ? existing.results[0] : null) as
+    | { password_hash?: string | null }
+    | null;
+  if (existingRow?.password_hash) {
+    if (!currentPassword) {
+      return Response.json(
+        { error: "Current password is required." },
+        { status: 400 },
+      );
+    }
+    if (!(await verifyPassword(currentPassword, existingRow.password_hash))) {
+      return Response.json(
+        { error: "Current password is incorrect." },
+        { status: 401 },
+      );
+    }
+  }
+
   const hash = await hashPassword(newPassword);
   await executeD1QueryInternal({
     sql: "UPDATE users SET password_hash = ?, password_updated_at = ? WHERE id = ?",
