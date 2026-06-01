@@ -209,6 +209,7 @@ export default function App() {
         loadProfile();
       } else {
         setUserProfile(null);
+        clearCache(); // wipe cached D1 data on sign-out so no stale/other-user data lingers
         setLoading(false);
       }
     });

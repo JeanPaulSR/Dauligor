@@ -219,8 +219,20 @@ export async function redeemToken(token: string): Promise<void> {
 }
 
 export async function logout(): Promise<void> {
-  setNativeToken(null);
+  // Clear the native session SILENTLY first (no emit yet), then sign out
+  // Firebase, then emit once. Otherwise an intermediate emit fires while the
+  // Firebase session is still live → getIdentity() returns the still-signed-in
+  // user → App re-runs loadProfile() and re-populates the profile after logout
+  // (the UI keeps the logged-in appearance/role).
+  nativeToken = null;
+  nativeDecoded = null;
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    /* storage unavailable */
+  }
   if (firebaseAuth.currentUser) {
     await firebaseSignOut(firebaseAuth).catch(() => {});
   }
+  emit();
 }
