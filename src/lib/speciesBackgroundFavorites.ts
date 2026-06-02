@@ -16,7 +16,7 @@
  * favorites. Universal scope only (no per-character variant).
  */
 import { useCallback, useEffect, useState } from 'react';
-import { auth } from './firebase';
+import { getSessionToken, isAuthenticated } from './auth';
 
 export type FavoriteKind = 'species' | 'background';
 
@@ -71,8 +71,8 @@ function writeLocal(lsKey: string, ids: Set<string>) {
 // ── Cloud backend ──────────────────────────────────────────────────
 
 async function authHeaders(): Promise<HeadersInit | null> {
-  if (!auth.currentUser) return null;
-  const token = await auth.currentUser.getIdToken();
+  if (!isAuthenticated()) return null;
+  const token = await getSessionToken();
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 }
 

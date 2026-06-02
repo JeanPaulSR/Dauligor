@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ImageOff, Star } from 'lucide-react';
-import { auth } from '../../lib/firebase';
+import { getIdentity, onAuthChange } from '../../lib/auth';
 import { fetchCollection } from '../../lib/d1';
 import { bbcodeToHtml } from '../../lib/bbcode';
 import { cn } from '../../lib/utils';
@@ -101,8 +101,8 @@ export default function SpeciesBackgroundBrowser({
 
   // Auth-aware favorites — userId-bound Set, merged local ↔ cloud on
   // sign-in (mirrors FeatList). Stars persist across devices when signed in.
-  const [authUserId, setAuthUserId] = useState<string | null>(() => auth.currentUser?.uid ?? null);
-  useEffect(() => auth.onAuthStateChanged((u) => setAuthUserId(u?.uid ?? null)), []);
+  const [authUserId, setAuthUserId] = useState<string | null>(() => getIdentity()?.uid ?? null);
+  useEffect(() => onAuthChange((id) => setAuthUserId(id?.uid ?? null)), []);
   const { favorites, isFavorite, toggleFavorite } = useSpeciesBackgroundFavorites(kind, authUserId);
 
   const { axisFilters, cyclers, activeFilterCount, resetAll } =
