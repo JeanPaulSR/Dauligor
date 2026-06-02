@@ -116,6 +116,39 @@ available to standalone windows). Reference with `var(--dauligor-…)`.
   of the **containing** (leftmost) block. Keep it that way so the override stays
   predictable.
 
+## Window model (AppV2 sizing + layout) — follow this for every new window
+
+All Dauligor windows use one model. Diverging from it is what caused the
+launcher's content to collapse/overlap before it was rebuilt to match. New
+windows MUST follow it:
+
+1. **Fixed numeric height.** `position: { width: <n>, height: <n> }` — both
+   numbers. `height: "auto"` is **not** honoured by this AppV2 setup (the
+   `applyCenteredPositionToFrame` helper bails on a non-finite height, and the
+   frame never grows to content). If a window should size to its content,
+   compute a numeric height up front (see `launcher-app.js` `launcherHeight()`),
+   don't rely on auto. Stamp it on the frame in a `_renderFrame` override with
+   `applyCenteredPositionToFrame` (copy from feat-browser / launcher).
+
+2. **Standard content classes.** `classes: ["dauligor-importer-app", "<block>"]`
+   and `contentClasses: ["dauligor-importer-window", …]`. Together these make
+   `.window-content` a `display:flex; flex-direction:column; overflow:hidden;
+   padding:0; min-height:0` box (rules live in importer-wizard.css). Don't omit
+   them and hand-roll the content box — that's the trap the launcher fell into.
+
+3. **Shell fills, regions scroll — the `min-height:0` chain.** The template's
+   root shell is `height:100%; display:flex (or grid); min-height:0` so it fills
+   the fixed-height content box. Fixed bits (toolbars, footers, intros) are
+   `flex:0 0 auto`; the area that should scroll is `flex:1 1 auto; min-height:0;
+   overflow:auto`. **`min-height:0` on every flex/grid ancestor of a scroll
+   region is mandatory** — without it the region can't shrink, so it either
+   overflows the frame or compresses its children (text overlap). Grid rows that
+   must shrink use `minmax(0, 1fr)`, not `1fr`.
+
+Reference implementations: `.dauligor-importer` (importer-wizard.css),
+`.dauligor-spell-manager` (spell-manager.css), `.dauligor-character-creator__shell`
+(character-creator.css), `.dauligor-launcher__shell` (launcher.css).
+
 ## Caveat after the split
 
 The reorg gathered interleaved rules into per-component files. It's
