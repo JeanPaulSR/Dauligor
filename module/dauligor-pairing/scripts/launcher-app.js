@@ -50,6 +50,17 @@ function applyCenteredPositionToFrame(frame, { width, height }) {
   frame.style.top = `${Math.max(0, Math.round((vh - height) / 2))}px`;
 }
 
+// Deterministic window height from the tile count — the same "pick a
+// numeric height up front" approach every other Dauligor window uses
+// (NOT measure-and-grow, which fed back on a compressed layout). Two
+// columns; ~112px per row covers a 2-line hint; ~96px base covers the
+// title bar + intro + shell padding. Clamped to the viewport.
+function launcherHeight(count) {
+  const rows = Math.max(1, Math.ceil((Number(count) || 1) / 2));
+  const vh = (typeof window !== "undefined" && window.innerHeight) || 900;
+  return Math.min(96 + rows * 112, vh - 60);
+}
+
 export class DauligorLauncherApp extends HandlebarsApplicationMixin(ApplicationV2) {
   static _instance = null;
 
@@ -68,12 +79,9 @@ export class DauligorLauncherApp extends HandlebarsApplicationMixin(ApplicationV
   }
 
   constructor(config = {}) {
-    // Rough initial numeric height (2-col grid); _fitHeight() measures the
-    // real content after render and sets an exact height. Numeric — NOT
-    // "auto", which this AppV2 setup ignores.
-    const count = Array.isArray(config.actions) ? config.actions.length : 1;
-    const rows = Math.max(1, Math.ceil(count / 2));
-    const initialHeight = Math.min(150 + rows * 104, (window.innerHeight || 900) - 80);
+    // Fixed numeric height from the tile count (NOT "auto", which this AppV2
+    // setup ignores). The shell is a plain block, so it never compresses.
+    const initialHeight = launcherHeight(Array.isArray(config.actions) ? config.actions.length : 1);
     super({
       id: `${MODULE_ID}-launcher`,
       // NOTE: deliberately NOT `dauligor-importer-app` / `dauligor-importer-window`.
@@ -120,24 +128,13 @@ export class DauligorLauncherApp extends HandlebarsApplicationMixin(ApplicationV
     this._introRegion = content.querySelector(`[data-region="intro"]`);
     this._gridRegion = content.querySelector(`[data-region="grid"]`);
     this._renderAll();
-    this._fitHeight();
-  }
-
-  // Measure the rendered content and set an exact NUMERIC window height so
-  // the frame grows to fit the tile grid (height:"auto" is ignored by this
-  // AppV2 setup). Re-runs on every render, so it also covers the reused-
-  // instance path where the action list (and row count) changed.
-  _fitHeight() {
-    const root = this.element instanceof HTMLElement ? this.element : null;
-    if (!root) return;
-    const shell = root.querySelector(".dauligor-launcher__shell");
-    if (!shell) return;
-    const headerH = root.querySelector(".window-header")?.offsetHeight ?? 32;
+    // Re-apply the deterministic height each render so the reused-instance
+    // path (a different action count) resizes too. Deterministic, so there's
+    // no feedback off a compressed layout.
     const vw = document.documentElement.clientWidth || window.innerWidth || 0;
     const vh = document.documentElement.clientHeight || window.innerHeight || 900;
     const width = Number(this.position?.width) || 460;
-    const height = Math.min(Math.ceil(shell.scrollHeight) + headerH + 6, vh - 60);
-    if (!Number.isFinite(height) || height <= 0) return;
+    const height = launcherHeight(Array.isArray(this._config.actions) ? this._config.actions.length : 1);
     this.setPosition({
       width,
       height,

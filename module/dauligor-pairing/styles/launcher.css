@@ -16,17 +16,20 @@
   padding: 0;
 }
 
+/* Plain BLOCK layout — deliberately not flex-column. A flex column shrinks
+ * its children (flex-shrink:1) when the window is even slightly short, which
+ * pushed each tile's text into the next one (the overlap bug). Block content
+ * always takes its natural height; if the window were ever too short it would
+ * simply scroll, never overlap. */
 .dauligor-launcher__shell {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  display: block;
   padding: 14px;
   background: var(--dauligor-panel);
   color: var(--dauligor-text);
 }
 
 .dauligor-launcher__intro {
-  margin: 0;
+  margin: 0 0 12px;
   font-size: 12px;
   color: var(--dauligor-text-muted);
 }
