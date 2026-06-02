@@ -57,11 +57,17 @@ export class DauligorLauncherApp extends HandlebarsApplicationMixin(ApplicationV
   constructor(config = {}) {
     super({
       id: `${MODULE_ID}-launcher`,
-      classes: ["dauligor-importer-app", "dauligor-launcher"],
+      // NOTE: deliberately NOT `dauligor-importer-app` / `dauligor-importer-window`.
+      // Those classes force the window-content to flex-column + overflow:hidden +
+      // padding:0 for the big full-height wizards; on this small auto-height hub
+      // that collapses + clips the content (everything overlaps). The launcher
+      // owns its own layout via `.dauligor-launcher__shell`. `.dauligor-launcher`
+      // is a registered token root (tokens.css), so the palette still resolves.
+      classes: ["dauligor-launcher"],
       window: {
         title: config.title || "Dauligor",
         resizable: false,
-        contentClasses: ["dauligor-importer-window"],
+        contentClasses: ["dauligor-launcher-window"],
       },
       position: { width: 460, height: "auto" },
     });

@@ -9,11 +9,19 @@
  * caption, and the "Soon" badge. Colors via tokens.
  * ========================================================================== */
 
+/* The launcher does NOT use the wizard's content classes (those force
+ * flex/overflow:hidden for full-height windows). Zero the default
+ * window-content padding so the shell owns spacing edge-to-edge. */
+.dauligor-launcher-window {
+  padding: 0;
+}
+
 .dauligor-launcher__shell {
   display: flex;
   flex-direction: column;
   gap: 12px;
   padding: 14px;
+  background: var(--dauligor-panel);
   color: var(--dauligor-text);
 }
 
