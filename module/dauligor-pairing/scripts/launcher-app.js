@@ -95,6 +95,12 @@ export class DauligorLauncherApp extends HandlebarsApplicationMixin(ApplicationV
     this._introRegion = content.querySelector(`[data-region="intro"]`);
     this._gridRegion = content.querySelector(`[data-region="grid"]`);
     this._renderAll();
+
+    // The window is `height: "auto"`, but AppV2 measures that at the first
+    // frame — before our tiles are injected — so the frame stays too short
+    // and clips the grid. Recompute now that the content is in the DOM so
+    // the window grows to fit it.
+    this.setPosition({ height: "auto" });
   }
 
   _renderAll() {
