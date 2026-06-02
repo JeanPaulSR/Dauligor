@@ -28,7 +28,7 @@ import { Input } from '../ui/input';
 
 type SourceRecord = { id: string; name?: string; abbreviation?: string; shortName?: string; slug?: string; rules?: string; [key: string]: any };
 type UploadedBatch = { id: string; fileName: string; payload: any };
-type StatusFilter = 'all' | 'unresolved' | 'missingImage' | 'existing';
+type StatusFilter = 'all' | 'resolved' | 'unresolved' | 'missingImage' | 'existing';
 
 export default function SpeciesBackgroundImportWorkbench({
   userProfile,
@@ -91,6 +91,7 @@ export default function SpeciesBackgroundImportWorkbench({
   const visibleCandidates = useMemo(() => {
     const lowered = search.trim().toLowerCase();
     return candidates.filter((c) => {
+      if (statusFilter === 'resolved' && !c.sourceResolved) return false;
       if (statusFilter === 'unresolved' && c.sourceResolved) return false;
       if (statusFilter === 'missingImage' && c.imageUrl) return false;
       if (statusFilter === 'existing' && !c.existingEntryId) return false;
@@ -196,6 +197,7 @@ export default function SpeciesBackgroundImportWorkbench({
 
   const FILTERS: Array<[StatusFilter, string, number | null]> = [
     ['all', 'All', null],
+    ['resolved', 'Resolved source', batchSummary.total - batchSummary.unresolved],
     ['unresolved', 'Unresolved source', batchSummary.unresolved],
     ['missingImage', 'Missing image', batchSummary.missingImage],
     ['existing', 'Already imported', batchSummary.existing],

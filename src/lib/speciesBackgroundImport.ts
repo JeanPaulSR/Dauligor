@@ -316,8 +316,6 @@ export function buildSpeciesBackgroundCandidates(
       summary = wealth ? `Wealth ${wealth}` : 'Background';
     }
 
-    facts.push(['Advancements', String(advancements.length)]);
-
     return {
       candidateId: `${batchLabel}::${entry.uuid || entry.id || identifier}`,
       batchLabel,
