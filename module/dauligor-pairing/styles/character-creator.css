@@ -6,9 +6,13 @@
  * Follows the house conventions:
  *   - Window model (docs/styles-guide.md "Window model"): the shell is
  *     height:100% + min-height:0 and fills the fixed-height, flex-column
- *     content box; the stepper/footer are flex:0 0 auto, the body is
- *     flex:1 1 auto + min-height:0 + overflow:auto, and the picker columns
- *     scroll via the same min-height:0 chain.
+ *     content box; the tab bar/footer are flex:0 0 auto, the body is
+ *     flex:1 1 auto + min-height:0 + overflow:auto, and the section/picker
+ *     columns scroll via the same min-height:0 chain.
+ *   - UI is a radial hub: a "Create" tab with a wheel (center = Ability
+ *     Scores; wedges = SECTIONS) + a "Character" review tab. Clicking a
+ *     wedge opens that section as a panel (back-to-hub). See the app's
+ *     _renderHub / _renderSection.
  *   - Button APPEARANCE is the canonical button in base.css
  *     (`.dauligor-character-creator__button` is listed there); only the
  *     icon+label LAYOUT and the --primary/--ghost variants live here.
@@ -28,65 +32,134 @@
   color: var(--dauligor-text);
 }
 
-/* ── Stepper rail ─────────────────────────────────────────────────── */
+/* ── Tab bar ──────────────────────────────────────────────────────── */
 
-.dauligor-character-creator__stepper {
+.dauligor-character-creator__tabbar {
   flex: 0 0 auto;
   border-bottom: 1px solid var(--dauligor-border);
-  padding: 8px 10px;
+  padding: 8px 10px 0;
 }
-
-.dauligor-character-creator__steps {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.dauligor-character-creator__step {
+.dauligor-character-creator__tabs { display: flex; gap: 4px; }
+.dauligor-character-creator__tab {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  min-height: 30px;
-  padding: 0 12px 0 6px;
+  gap: 6px;
+  padding: 7px 16px;
   border: 1px solid var(--dauligor-btn-border);
+  border-bottom: none;
   border-radius: 0;
   background: var(--dauligor-btn-bg);
   color: var(--dauligor-text-muted);
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
-  transition: border-color 0.12s ease, background 0.12s ease, color 0.12s ease;
+  transition: background 0.12s ease, color 0.12s ease;
 }
-.dauligor-character-creator__step:hover {
-  border-color: var(--dauligor-btn-border-hover);
-  background: var(--dauligor-btn-hover-bg);
-}
-.dauligor-character-creator__step--current {
+.dauligor-character-creator__tab i { opacity: 0.7; }
+.dauligor-character-creator__tab:hover { background: var(--dauligor-btn-hover-bg); color: var(--dauligor-text); }
+.dauligor-character-creator__tab--active {
   color: var(--dauligor-text);
+  background: var(--dauligor-panel-alt);
   border-color: var(--dauligor-btn-border-hover);
-  background: var(--dauligor-btn-hover-bg);
-  box-shadow: inset 3px 0 0 var(--dauligor-accent);
+  box-shadow: inset 0 2px 0 var(--dauligor-accent);
 }
 
-.dauligor-character-creator__step-num {
-  display: inline-flex;
+/* ── Section panel (a chosen wheel section, with Back-to-hub) ──────── */
+
+.dauligor-character-creator__section {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.dauligor-character-creator__section-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.dauligor-character-creator__section-title {
+  margin: 0;
+  font-size: 18px;
+  color: var(--dauligor-accent-strong);
+}
+.dauligor-character-creator__section-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* ── Radial hub (the wheel) ───────────────────────────────────────── */
+
+.dauligor-character-creator__hub {
+  display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  border: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.4);
-  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.12);
+  min-height: 100%;
+  padding: 8px;
+}
+.dauligor-character-creator__wheel {
+  position: relative;
+  width: min(520px, 68vh);
+  aspect-ratio: 1 / 1;
+}
+.dauligor-character-creator__wheel-svg { display: block; width: 100%; height: 100%; }
+
+.dauligor-character-creator__wedge {
+  fill: var(--dauligor-panel-alt);
+  stroke: var(--dauligor-border);
+  stroke-width: 2;
+  cursor: pointer;
+  transition: fill 0.12s ease;
+}
+.dauligor-character-creator__wedge:hover { fill: var(--dauligor-panel-soft); }
+.dauligor-character-creator__wedge--done {
+  fill: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.22);
+  stroke: var(--dauligor-btn-border-hover);
+}
+.dauligor-character-creator__wedge--done:hover { fill: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.32); }
+
+.dauligor-character-creator__wedge-label,
+.dauligor-character-creator__wedge-choice {
+  pointer-events: none;
+  fill: var(--dauligor-text);
+}
+.dauligor-character-creator__wedge-label { font-size: 15px; font-weight: 600; }
+.dauligor-character-creator__wedge-choice { font-size: 12px; fill: var(--dauligor-accent-strong); }
+
+.dauligor-character-creator__wheel-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 34%;
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+  border: 2px solid var(--dauligor-btn-border-hover);
+  background: var(--dauligor-panel);
   color: var(--dauligor-text);
-  font-size: 11px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.dauligor-character-creator__wheel-center:hover { background: var(--dauligor-btn-hover-bg); }
+.dauligor-character-creator__wheel-center.is-done { border-color: var(--dauligor-success); }
+.dauligor-character-creator__wheel-center-title {
+  font-size: 14px;
   font-weight: 700;
+  line-height: 1.1;
+  color: var(--dauligor-accent-strong);
 }
-.dauligor-character-creator__step.is-complete .dauligor-character-creator__step-num {
-  border-color: rgba(126, 168, 111, 0.5);
-  background: rgba(126, 168, 111, 0.18);
-  color: var(--dauligor-success);
-}
-.dauligor-character-creator__step-label { white-space: nowrap; }
-.dauligor-character-creator__step-label i { opacity: 0.6; margin-right: 3px; }
+.dauligor-character-creator__wheel-center-sub { font-size: 11px; color: var(--dauligor-text-muted); }
+.dauligor-character-creator__wheel-center.is-done .dauligor-character-creator__wheel-center-sub { color: var(--dauligor-success); }
 
 /* ── Body ─────────────────────────────────────────────────────────── */
 

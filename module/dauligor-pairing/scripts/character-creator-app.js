@@ -45,13 +45,21 @@ import {
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
-const STEPS = [
-  { id: "abilities", label: "Ability Scores", icon: "fa-dice-d20" },
-  { id: "background", label: "Background", icon: "fa-scroll" },
-  { id: "race", label: "Race", icon: "fa-dragon" },
+// The two top-level tabs: the radial "Create" hub and the "Character" review.
+const TABS = [
+  { id: "create", label: "Create", icon: "fa-compass-drafting" },
+  { id: "character", label: "Character", icon: "fa-clipboard-check" },
+];
+
+// Wheel wedges, clockwise from the top. The center button is Ability Scores
+// (handled separately). "species" is the 2024 label over the existing race
+// data/endpoints (featType "race"). feat + image are stubbed this pass.
+const SECTIONS = [
   { id: "class", label: "Class", icon: "fa-shield-halved" },
-  { id: "items", label: "Starting Items", icon: "fa-sack-dollar" },
-  { id: "review", label: "Review", icon: "fa-clipboard-check" },
+  { id: "species", label: "Species", icon: "fa-dragon" },
+  { id: "background", label: "Background", icon: "fa-scroll" },
+  { id: "feat", label: "Starting Feat", icon: "fa-medal" },
+  { id: "image", label: "Image", icon: "fa-image" },
 ];
 
 const ABILITIES = [
@@ -110,8 +118,10 @@ function freshChoices() {
       pool: { selectedSetId: null, assignment: ABILITIES.reduce((acc, a) => { acc[a.key] = null; return acc; }, {}) },
     },
     background: null, // { dbId, name, img }
-    race: null,       // { dbId, name, img }
+    race: null,       // { dbId, name, img } — shown as "Species"
     class: null,      // { sourceSlug, entryId, name, img }
+    feat: null,       // stubbed this pass
+    image: null,      // stubbed this pass
   };
 }
 
@@ -156,7 +166,8 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     this._actor = actor ?? null;
     this._createNew = !actor;
 
-    this._step = 0;
+    this._tab = "create";   // "create" (the wheel hub) | "character" (review)
+    this._view = "hub";      // within Create: "hub" | a SECTIONS id | "abilities"
     this._choices = freshChoices();
 
     // Lazy-loaded data caches.
@@ -180,7 +191,7 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     };
 
     // Region handles.
-    this._stepperRegion = null;
+    this._tabsRegion = null;
     this._bodyRegion = null;
     this._footerRegion = null;
 
@@ -213,49 +224,57 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     if (!root) return;
 
     const content = root.querySelector(".window-content") ?? root;
-    this._stepperRegion = content.querySelector(`[data-region="stepper"]`);
+    this._tabsRegion = content.querySelector(`[data-region="tabs"]`);
     this._bodyRegion = content.querySelector(`[data-region="body"]`);
     this._footerRegion = content.querySelector(`[data-region="footer"]`);
 
     if (!this._unsubPool) {
       this._unsubPool = onRollPoolChanged(() => {
-        // Only the ability step shows the pool; cheap to re-render just it.
-        if (this._stepId() === "abilities") this._renderBody();
+        // Only the Ability Scores section shows the pool; cheap to re-render it.
+        if (this._tab === "create" && this._view === "abilities") this._renderBody();
       });
     }
 
     this._renderAll();
   }
 
-  // ── step plumbing ─────────────────────────────────────────────────────
+  // ── tab / view plumbing ───────────────────────────────────────────────
 
-  _stepId() {
-    return STEPS[this._step]?.id ?? "abilities";
-  }
-
-  _goToStep(index) {
-    const next = Math.max(0, Math.min(STEPS.length - 1, index));
-    if (next === this._step) return;
-    this._step = next;
+  _setTab(tab) {
+    if (tab === this._tab) return;
+    this._tab = tab;
     this._ui.status = "";
     this._ui.statusLevel = "";
-    // Kick off lazy loads for the step being entered.
-    this._ensureStepData();
     this._renderAll();
   }
 
-  _ensureStepData() {
-    const id = this._stepId();
-    if ((id === "background" || id === "race" || id === "review") && this._featFamily.status === "idle") {
+  // Open a wheel section (or the center "abilities") as a full panel.
+  _openSection(id) {
+    this._tab = "create";
+    this._view = id;
+    this._ui.status = "";
+    this._ui.statusLevel = "";
+    this._ensureSectionData(id);
+    this._renderAll();
+  }
+
+  _backToHub() {
+    this._view = "hub";
+    this._renderAll();
+  }
+
+  _ensureSectionData(id) {
+    // "species" rides the same feat-family feed as backgrounds (featType "race").
+    if ((id === "background" || id === "species") && this._featFamily.status === "idle") {
       this._loadFeatFamily();
     }
-    if ((id === "class" || id === "review") && this._classes.status === "idle") {
+    if (id === "class" && this._classes.status === "idle") {
       this._loadClasses();
     }
   }
 
   _renderAll() {
-    this._renderStepper();
+    this._renderTabs();
     this._renderBody();
     this._renderFooter();
   }
@@ -289,12 +308,12 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
 
   async _loadFeatFamily() {
     this._featFamily = { status: "loading", backgrounds: [], races: [] };
-    if (this._stepId() === "background" || this._stepId() === "race") this._renderBody();
+    if (this._tab === "create" && (this._view === "background" || this._view === "species")) this._renderBody();
 
     const sources = await this._loadSources();
     if (!sources.length) {
       this._featFamily = { status: "error", backgrounds: [], races: [], errors: ["No sources available."] };
-      if (this._stepId() === "background" || this._stepId() === "race") this._renderBody();
+      if (this._tab === "create" && (this._view === "background" || this._view === "species")) this._renderBody();
       return;
     }
 
@@ -333,12 +352,12 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     backgrounds.sort(byName);
     races.sort(byName);
     this._featFamily = { status: "ready", backgrounds, races, errors };
-    if (["background", "race", "review"].includes(this._stepId())) this._renderAll();
+    if (this._tab === "create" && (this._view === "background" || this._view === "species")) this._renderBody();
   }
 
   async _loadClasses() {
     this._classes = { status: "loading", entries: [] };
-    if (this._stepId() === "class") this._renderBody();
+    if (this._tab === "create" && this._view === "class") this._renderBody();
 
     const sources = await this._loadSources();
     const host = resolveApiHost();
@@ -373,7 +392,7 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
 
     entries.sort((a, b) => a.name.localeCompare(b.name));
     this._classes = { status: "ready", entries, errors };
-    if (["class", "review"].includes(this._stepId())) this._renderAll();
+    if (this._tab === "create" && this._view === "class") this._renderBody();
   }
 
   // Fetch a full background/race item for embed (and richer detail), cached.
@@ -425,53 +444,126 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     return used.size === 6 ? out : null;
   }
 
-  // ── rendering: stepper ──────────────────────────────────────────────
+  // ── rendering: tab bar ──────────────────────────────────────────────
 
-  _renderStepper() {
-    if (!this._stepperRegion) return;
-    const items = STEPS.map((s, i) => {
-      const current = i === this._step ? "dauligor-character-creator__step--current" : "";
-      const done = this._isStepComplete(s.id);
-      return `
-        <button type="button" class="dauligor-character-creator__step ${current} ${done ? "is-complete" : ""}"
-                data-action="goto-step" data-step="${i}">
-          <span class="dauligor-character-creator__step-num">${done ? '<i class="fas fa-check"></i>' : (i + 1)}</span>
-          <span class="dauligor-character-creator__step-label"><i class="fas ${s.icon}"></i> ${escapeHtml(s.label)}</span>
-        </button>`;
-    }).join("");
-    this._stepperRegion.innerHTML = `<nav class="dauligor-character-creator__steps">${items}</nav>`;
-    this._stepperRegion.querySelectorAll(`[data-action="goto-step"]`).forEach((el) => {
-      el.addEventListener("click", () => this._goToStep(Number(el.dataset.step)));
+  _renderTabs() {
+    if (!this._tabsRegion) return;
+    const items = TABS.map((t) => `
+      <button type="button" class="dauligor-character-creator__tab ${t.id === this._tab ? "dauligor-character-creator__tab--active" : ""}" data-action="tab" data-tab="${t.id}">
+        <i class="fas ${t.icon}"></i> ${escapeHtml(t.label)}
+      </button>`).join("");
+    this._tabsRegion.innerHTML = `<nav class="dauligor-character-creator__tabs">${items}</nav>`;
+    this._tabsRegion.querySelectorAll(`[data-action="tab"]`).forEach((el) => {
+      el.addEventListener("click", () => this._setTab(el.dataset.tab));
     });
   }
 
-  _isStepComplete(id) {
+  _isSectionComplete(id) {
     switch (id) {
       case "abilities": return this._resolveAbilityScores() != null;
-      case "background": return !!this._choices.background;
-      case "race": return !!this._choices.race;
       case "class": return !!this._choices.class;
-      case "items": return false; // stubbed
-      case "review": return false;
+      case "species": return !!this._choices.race;
+      case "background": return !!this._choices.background;
+      case "feat": return !!this._choices.feat;
+      case "image": return !!this._choices.image;
       default: return false;
     }
   }
 
-  // ── rendering: body (per step) ──────────────────────────────────────
+  // Short label of the current choice for a section, shown inside its wedge.
+  _sectionChoiceName(id) {
+    switch (id) {
+      case "class": return this._choices.class?.name ?? "";
+      case "species": return this._choices.race?.name ?? "";
+      case "background": return this._choices.background?.name ?? "";
+      default: return "";
+    }
+  }
+
+  // ── rendering: the radial hub (Create tab) ──────────────────────────
+  //
+  // An SVG donut: one annular-sector wedge per SECTIONS entry (clockwise
+  // from the top), with a center button for Ability Scores. Wedges and the
+  // center carry data-action="open-section"; clicking opens that section as
+  // a full panel (replacing the wheel) with a Back-to-hub control.
+  _renderHub() {
+    const cx = 190, cy = 190, R = 180, r = 66;
+    const n = SECTIONS.length;
+    const sweep = 360 / n;
+    const pt = (deg, rad) => {
+      const t = (deg - 90) * Math.PI / 180;
+      return [cx + rad * Math.cos(t), cy + rad * Math.sin(t)];
+    };
+    const wedges = SECTIONS.map((s, i) => {
+      const a0 = i * sweep - sweep / 2;
+      const a1 = a0 + sweep;
+      const [x0o, y0o] = pt(a0, R), [x1o, y1o] = pt(a1, R), [x1i, y1i] = pt(a1, r), [x0i, y0i] = pt(a0, r);
+      const large = sweep > 180 ? 1 : 0;
+      const d = `M${x0o.toFixed(1)},${y0o.toFixed(1)} A${R},${R} 0 ${large} 1 ${x1o.toFixed(1)},${y1o.toFixed(1)} L${x1i.toFixed(1)},${y1i.toFixed(1)} A${r},${r} 0 ${large} 0 ${x0i.toFixed(1)},${y0i.toFixed(1)} Z`;
+      const done = this._isSectionComplete(s.id);
+      const [lx, ly] = pt((a0 + a1) / 2, (R + r) / 2);
+      const choice = this._sectionChoiceName(s.id);
+      return `
+        <path class="dauligor-character-creator__wedge ${done ? "dauligor-character-creator__wedge--done" : ""}" d="${d}" data-action="open-section" data-section="${s.id}"></path>
+        <text class="dauligor-character-creator__wedge-label" x="${lx.toFixed(1)}" y="${(ly - (choice ? 7 : 0)).toFixed(1)}" text-anchor="middle" dominant-baseline="middle">${escapeHtml(s.label)}</text>
+        ${choice ? `<text class="dauligor-character-creator__wedge-choice" x="${lx.toFixed(1)}" y="${(ly + 9).toFixed(1)}" text-anchor="middle" dominant-baseline="middle">${escapeHtml(choice.length > 16 ? choice.slice(0, 15) + "…" : choice)}</text>` : ""}`;
+    }).join("");
+    const abilDone = this._resolveAbilityScores() != null;
+    return `
+      <div class="dauligor-character-creator__hub">
+        <div class="dauligor-character-creator__wheel">
+          <svg class="dauligor-character-creator__wheel-svg" viewBox="0 0 380 380" role="presentation">${wedges}</svg>
+          <div role="button" tabindex="0" class="dauligor-character-creator__wheel-center ${abilDone ? "is-done" : ""}" data-action="open-section" data-section="abilities">
+            <span class="dauligor-character-creator__wheel-center-title">Ability Scores</span>
+            <span class="dauligor-character-creator__wheel-center-sub">${abilDone ? "✓ set" : "choose"}</span>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  // ── rendering: body ─────────────────────────────────────────────────
 
   _renderBody() {
     if (!this._bodyRegion) return;
     let html = "";
-    switch (this._stepId()) {
-      case "abilities": html = this._bodyAbilities(); break;
-      case "background": html = this._bodyFeatFamily("background"); break;
-      case "race": html = this._bodyFeatFamily("race"); break;
-      case "class": html = this._bodyClass(); break;
-      case "items": html = this._bodyItems(); break;
-      case "review": html = this._bodyReview(); break;
+    if (this._tab === "character") {
+      html = this._bodyReview();
+    } else if (this._view === "hub") {
+      html = this._renderHub();
+    } else {
+      html = this._renderSection(this._view);
     }
     this._bodyRegion.innerHTML = html;
     this._bindBody();
+  }
+
+  // A chosen wheel section, rendered as a full panel with a Back-to-hub bar.
+  _renderSection(id) {
+    const meta = {
+      abilities: { title: "Ability Scores", body: () => this._bodyAbilities() },
+      class: { title: "Class", body: () => this._bodyClass() },
+      species: { title: "Species", body: () => this._bodyFeatFamily("race", "species") },
+      background: { title: "Background", body: () => this._bodyFeatFamily("background", "background") },
+      feat: { title: "Starting Feat", body: () => this._bodySectionStub("Starting Feat", "fa-medal", "Pick an origin / starting feat here. This section is being built next — we're settling the wheel layout first.") },
+      image: { title: "Image", body: () => this._bodySectionStub("Image", "fa-image", "Set your character's portrait / token image here. This section is being built next.") },
+    }[id] ?? { title: "", body: () => "" };
+    return `
+      <div class="dauligor-character-creator__section">
+        <div class="dauligor-character-creator__section-head">
+          <button type="button" class="dauligor-character-creator__button dauligor-character-creator__button--ghost" data-action="back-to-hub"><i class="fas fa-arrow-left"></i> Hub</button>
+          <h3 class="dauligor-character-creator__section-title">${escapeHtml(meta.title)}</h3>
+        </div>
+        <div class="dauligor-character-creator__section-body">${meta.body()}</div>
+      </div>`;
+  }
+
+  _bodySectionStub(title, icon, msg) {
+    return `
+      <div class="dauligor-character-creator__stub">
+        <i class="fas ${escapeHtml(icon)}"></i>
+        <h3>${escapeHtml(title)} — coming soon</h3>
+        <p>${escapeHtml(msg)}</p>
+      </div>`;
   }
 
   // ---- Step 1: abilities ----
@@ -592,12 +684,14 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
 
   // ---- Steps 2 & 3: background / race ----
 
-  _bodyFeatFamily(kind) {
+  _bodyFeatFamily(kind, displayNoun) {
     const data = this._featFamily;
     const list = kind === "background" ? data.backgrounds : data.races;
     const searchKey = kind === "background" ? "bgSearch" : "raceSearch";
     const chosen = kind === "background" ? this._choices.background : this._choices.race;
-    const noun = kind === "background" ? "background" : "race";
+    // `kind` is the data/endpoint family ("background" | "race"); `displayNoun`
+    // is the UI word ("species" for race, per 2024 terminology).
+    const noun = displayNoun || (kind === "background" ? "background" : "species");
 
     if (data.status === "loading" || data.status === "idle") {
       return `<div class="dauligor-character-creator__loading"><i class="fas fa-spinner fa-spin"></i> Loading ${noun}s…</div>`;
@@ -646,7 +740,7 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
            <img class="dauligor-detail__img" src="${escapeHtml(chosen.img)}" alt="" />
            <div>
              <h3 class="dauligor-detail__name">${escapeHtml(chosen.name)}</h3>
-             <div class="dauligor-detail__meta">${kind === "background" ? "Background" : "Race"}</div>
+             <div class="dauligor-detail__meta">${kind === "background" ? "Background" : "Species"}</div>
            </div>
          </header>`
       : `<header class="dauligor-detail__header">
@@ -697,7 +791,7 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
              </header>
              <div class="dauligor-detail__body">
                ${chosen.summary ? `<p>${escapeHtml(truncate(chosen.summary, 700))}</p>` : ""}
-               <p class="dauligor-character-creator__hint">At <strong>Finish</strong>, the class builder opens pre-set to <strong>${escapeHtml(chosen.name)}</strong> at level 1 so you can make any skill / option / feature choices in the full importer.</p>
+               <p class="dauligor-character-creator__hint">On <strong>Build Character</strong>, the class builder opens pre-set to <strong>${escapeHtml(chosen.name)}</strong> at level 1 so you can make any skill / option / feature choices in the full importer.</p>
              </div>
            </div>
          </div>`
@@ -713,34 +807,21 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
       </div>`;
   }
 
-  // ---- Step 5: items (stub) ----
-
-  _bodyItems() {
-    return `
-      <div class="dauligor-character-creator__stub">
-        <i class="fas fa-sack-dollar"></i>
-        <h3>Starting Items — coming soon</h3>
-        <p>The starting-equipment picker needs an item-list endpoint and populated
-        class/background equipment data, which aren't available yet. This step is a
-        placeholder for now; you can skip it and equip your character afterward with
-        the Dauligor item importer.</p>
-        <p class="dauligor-character-creator__hint">When the item catalog lands, this slot becomes the equipment chooser with no change to the rest of the flow.</p>
-      </div>`;
-  }
-
-  // ---- Step 6: review ----
+  // ---- Character tab: review ----
 
   _bodyReview() {
     const scores = this._resolveAbilityScores();
     const abilityLine = scores
       ? ABILITIES.map((ab) => `<span class="dauligor-character-creator__scorepill">${ab.abbr} ${scores[ab.key]}</span>`).join("")
-      : `<em class="dauligor-character-creator__warn">Not finished — open the Ability Scores step.</em>`;
+      : `<em class="dauligor-character-creator__warn">Not finished — open Ability Scores.</em>`;
 
-    const card = (idx, title, value, ok) => `
+    // `section` is a wheel section id (or "abilities") so Edit jumps straight
+    // to it on the Create tab.
+    const card = (section, title, value, ok) => `
       <div class="dauligor-character-creator__review-card ${ok ? "dauligor-character-creator__review-card--ok" : "dauligor-character-creator__review-card--missing"}">
         <div class="dauligor-character-creator__review-head">
           <span>${escapeHtml(title)}</span>
-          <button type="button" class="dauligor-character-creator__editlink" data-action="goto-step" data-step="${idx}"><i class="fas fa-pen"></i> Edit</button>
+          <button type="button" class="dauligor-character-creator__editlink" data-action="edit-section" data-section="${section}"><i class="fas fa-pen"></i> Edit</button>
         </div>
         <div class="dauligor-character-creator__review-body">${value}</div>
       </div>`;
@@ -752,12 +833,13 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     return `
       <div class="dauligor-character-creator__review">
         <p class="dauligor-character-creator__review-target"><i class="fas fa-user-plus"></i> ${target}</p>
-        ${card(0, "Ability Scores", `<div class="dauligor-character-creator__scorepills">${abilityLine}</div>`, !!scores)}
-        ${card(1, "Background", this._choices.background ? `<strong>${escapeHtml(this._choices.background.name)}</strong>` : `<em>None chosen (optional)</em>`, !!this._choices.background)}
-        ${card(2, "Race", this._choices.race ? `<strong>${escapeHtml(this._choices.race.name)}</strong>` : `<em>None chosen (optional)</em>`, !!this._choices.race)}
-        ${card(3, "Class", this._choices.class ? `<strong>${escapeHtml(this._choices.class.name)}</strong> <small>(${escapeHtml(this._choices.class.sourceSlug.toUpperCase())}, level 1)</small>` : `<em class="dauligor-character-creator__warn">None chosen</em>`, !!this._choices.class)}
-        ${card(4, "Starting Items", `<em>Stubbed for now — equip later.</em>`, true)}
-        <p class="dauligor-character-creator__hint">Finish writes ability scores, embeds the background &amp; race, then opens the class builder at level 1 to complete the class.</p>
+        ${card("abilities", "Ability Scores", `<div class="dauligor-character-creator__scorepills">${abilityLine}</div>`, !!scores)}
+        ${card("class", "Class", this._choices.class ? `<strong>${escapeHtml(this._choices.class.name)}</strong> <small>(${escapeHtml(this._choices.class.sourceSlug.toUpperCase())}, level 1)</small>` : `<em class="dauligor-character-creator__warn">None chosen</em>`, !!this._choices.class)}
+        ${card("species", "Species", this._choices.race ? `<strong>${escapeHtml(this._choices.race.name)}</strong>` : `<em>None chosen (optional)</em>`, !!this._choices.race)}
+        ${card("background", "Background", this._choices.background ? `<strong>${escapeHtml(this._choices.background.name)}</strong>` : `<em>None chosen (optional)</em>`, !!this._choices.background)}
+        ${card("feat", "Starting Feat", `<em>Coming soon.</em>`, false)}
+        ${card("image", "Image", `<em>Coming soon.</em>`, false)}
+        <p class="dauligor-character-creator__hint"><strong>Build Character</strong> writes ability scores, embeds the species &amp; background, then opens the class builder at level 1 to complete the class.</p>
       </div>`;
   }
 
@@ -769,8 +851,13 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
 
     const on = (sel, evt, fn) => root.querySelectorAll(sel).forEach((el) => el.addEventListener(evt, fn));
 
-    // shared: edit-jump links in review
-    on(`[data-action="goto-step"]`, "click", (e) => this._goToStep(Number(e.currentTarget.dataset.step)));
+    // wheel: open a section (wedge or center button); review: edit-jump; back.
+    on(`[data-action="open-section"]`, "click", (e) => this._openSection(e.currentTarget.dataset.section));
+    on(`[data-action="open-section"]`, "keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); this._openSection(e.currentTarget.dataset.section); }
+    });
+    on(`[data-action="back-to-hub"]`, "click", () => this._backToHub());
+    on(`[data-action="edit-section"]`, "click", (e) => this._openSection(e.currentTarget.dataset.section));
 
     // abilities — mode toggle
     on(`[data-action="ability-mode"]`, "click", (e) => {
@@ -789,7 +876,6 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
       // reset assignment when switching sets
       for (const ab of ABILITIES) this._choices.abilities.pool.assignment[ab.key] = null;
       this._renderBody();
-      this._renderStepper();
       this._renderFooter();
     });
     on(`[data-action="remove-set"]`, "click", async (e) => {
@@ -801,7 +887,6 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
       const raw = e.currentTarget.value;
       this._choices.abilities.pool.assignment[key] = raw === "" ? null : Number(raw);
       this._renderBody();
-      this._renderStepper();
       this._renderFooter();
     });
     on(`[data-action="manual-input"]`, "input", (e) => { this._ui.manualRolls = e.currentTarget.value; });
@@ -835,7 +920,6 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     }
     scores[key] = next;
     this._renderBody();
-    this._renderStepper();
     this._renderFooter();
   }
 
@@ -853,7 +937,7 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
       this._ui.busy = false;
     }
     // Re-render comes via the pool-changed hook, but refresh defensively.
-    if (this._stepId() === "abilities") this._renderBody();
+    if (this._tab === "create" && this._view === "abilities") this._renderBody();
   }
 
   async _handleManualAdd() {
@@ -864,7 +948,7 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     }
     await addManualSet(parts);
     this._ui.manualRolls = "";
-    if (this._stepId() === "abilities") this._renderBody();
+    if (this._tab === "create" && this._view === "abilities") this._renderBody();
   }
 
   async _pickFeat(kind, dbId) {
@@ -876,11 +960,10 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     if (kind === "background") this._choices.background = choice;
     else this._choices.race = choice;
     this._renderBody();
-    this._renderStepper();
     this._renderFooter();
     // Lazy-fetch detail for the preview pane (and to warm the embed cache).
     const full = await this._fetchDetail(kind, dbId);
-    if (full && this._stepId() === kind) this._renderBody();
+    if (full && this._tab === "create" && (this._view === "background" || this._view === "species")) this._renderBody();
   }
 
   _pickClass(entryId, sourceSlug) {
@@ -888,7 +971,6 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     if (!entry) return;
     this._choices.class = { entryId: entry.entryId, sourceSlug: entry.sourceSlug, sourceId: entry.sourceId, name: entry.name, img: entry.img, summary: entry.summary };
     this._renderBody();
-    this._renderStepper();
     this._renderFooter();
   }
 
@@ -896,21 +978,17 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
 
   _renderFooter() {
     if (!this._footerRegion) return;
-    const isFirst = this._step === 0;
-    const isReview = this._stepId() === "review";
     const status = this._ui.status
       ? `<span class="dauligor-character-creator__status dauligor-character-creator__status--${this._ui.statusLevel || "info"}">${escapeHtml(this._ui.status)}</span>`
       : `<span class="dauligor-character-creator__status"></span>`;
 
-    const back = `<button type="button" class="dauligor-character-creator__button dauligor-character-creator__button--ghost" data-action="back" ${isFirst ? "disabled" : ""}><i class="fas fa-arrow-left"></i> Back</button>`;
-    const next = isReview
-      ? `<button type="button" class="dauligor-character-creator__button dauligor-character-creator__button--primary" data-action="finish" ${this._ui.busy ? "disabled" : ""}><i class="fas fa-wand-magic-sparkles"></i> Finish &amp; Build</button>`
-      : `<button type="button" class="dauligor-character-creator__button dauligor-character-creator__button--primary" data-action="next">Next <i class="fas fa-arrow-right"></i></button>`;
+    // One terminal action, available from either tab. Required bits
+    // (abilities + class) are validated in _finish, which jumps to the
+    // offending section if something's missing.
+    const build = `<button type="button" class="dauligor-character-creator__button dauligor-character-creator__button--primary" data-action="build" ${this._ui.busy ? "disabled" : ""}><i class="fas fa-wand-magic-sparkles"></i> Build Character</button>`;
 
-    this._footerRegion.innerHTML = `${status}<div class="dauligor-character-creator__footer-actions">${back}${next}</div>`;
-    this._footerRegion.querySelector(`[data-action="back"]`)?.addEventListener("click", () => this._goToStep(this._step - 1));
-    this._footerRegion.querySelector(`[data-action="next"]`)?.addEventListener("click", () => this._goToStep(this._step + 1));
-    this._footerRegion.querySelector(`[data-action="finish"]`)?.addEventListener("click", () => this._finish());
+    this._footerRegion.innerHTML = `${status}<div class="dauligor-character-creator__footer-actions">${build}</div>`;
+    this._footerRegion.querySelector(`[data-action="build"]`)?.addEventListener("click", () => this._finish());
   }
 
   _setStatus(msg, level = "info") {
@@ -926,20 +1004,20 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
 
     const scores = this._resolveAbilityScores();
     if (!scores) {
-      this._setStatus("Ability scores aren't finished — open the Ability Scores step.", "danger");
-      this._goToStep(0);
+      this._setStatus("Ability scores aren't finished — open Ability Scores.", "danger");
+      this._openSection("abilities");
       return;
     }
     if (!this._choices.class) {
-      this._setStatus("Pick a class before finishing.", "danger");
-      this._goToStep(3);
+      this._setStatus("Pick a class before building.", "danger");
+      this._openSection("class");
       return;
     }
 
-    // Confirm if recommended steps are skipped.
+    // Confirm if recommended sections are skipped.
     const missing = [];
     if (!this._choices.background) missing.push("background");
-    if (!this._choices.race) missing.push("race");
+    if (!this._choices.race) missing.push("species");
     if (missing.length) {
       const proceed = await foundry.applications.api.DialogV2.confirm({
         window: { title: "Finish without all steps?" },
