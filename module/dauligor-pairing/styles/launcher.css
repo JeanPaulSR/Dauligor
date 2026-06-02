@@ -1,0 +1,78 @@
+/* ============================================================================
+ * dauligor-pairing — launcher
+ * The Dauligor Options / Actor Tools hub window. See docs/styles-guide.md
+ * for the component → file map; load order is fixed in module.json.
+ *
+ * Tile APPEARANCE (border / bg / gold hover / disabled) is the canonical
+ * button rule in base.css — `.dauligor-launcher__tile` is listed there.
+ * This file only adds the tile's column LAYOUT, the grid, the intro
+ * caption, and the "Soon" badge. Colors via tokens.
+ * ========================================================================== */
+
+.dauligor-launcher__shell {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  color: var(--dauligor-text);
+}
+
+.dauligor-launcher__intro {
+  margin: 0;
+  font-size: 12px;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-launcher__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+/* Tile = canonical button (base.css) + column layout. Override the
+ * canonical button's compact sizing for the larger tile footprint. */
+.dauligor-launcher__tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-height: 0;
+  padding: 12px 14px;
+  text-align: left;
+  font-weight: 600;
+}
+.dauligor-launcher__tile-icon {
+  font-size: 18px;
+  color: var(--dauligor-accent-strong);
+  opacity: 0.85;
+}
+.dauligor-launcher__tile-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--dauligor-text);
+}
+.dauligor-launcher__tile-hint {
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.35;
+  color: var(--dauligor-text-muted);
+}
+
+/* Under-construction tiles read as muted, with a small badge. They stay
+ * clickable (they open an "under construction" notice). */
+.dauligor-launcher__tile--soon .dauligor-launcher__tile-icon { opacity: 0.45; }
+.dauligor-launcher__tile--soon .dauligor-launcher__tile-label { color: var(--dauligor-text-muted); }
+
+.dauligor-launcher__tile-badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dauligor-warning);
+  border: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.4);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.10);
+  padding: 0 5px;
+  line-height: 1.5;
+}

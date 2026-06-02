@@ -53,6 +53,7 @@
     "styles/directory-tools.css",
     "styles/gm-console.css",
     "styles/character-creator.css",
+    "styles/launcher.css",
     "styles/responsive.css"
   ]
 }

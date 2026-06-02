@@ -22,7 +22,10 @@
 .dauligor-feature-manager *::after,
 .dauligor-character-creator *,
 .dauligor-character-creator *::before,
-.dauligor-character-creator *::after {
+.dauligor-character-creator *::after,
+.dauligor-launcher *,
+.dauligor-launcher *::before,
+.dauligor-launcher *::after {
   box-sizing: border-box;
 }
 
@@ -37,7 +40,8 @@
 .dauligor-class-browser__button,
 .dauligor-spell-tab-tools__button,
 .dauligor-spell-manager__button,
-.dauligor-character-creator__button {
+.dauligor-character-creator__button,
+.dauligor-launcher__tile {
   min-height: 32px;
   margin: 0;
   padding: 0 12px;
@@ -63,7 +67,9 @@
 .dauligor-spell-manager__button:hover,
 .dauligor-spell-manager__button:focus,
 .dauligor-character-creator__button:hover,
-.dauligor-character-creator__button:focus {
+.dauligor-character-creator__button:focus,
+.dauligor-launcher__tile:hover,
+.dauligor-launcher__tile:focus {
   border-color: var(--dauligor-btn-border-hover);
   background: var(--dauligor-btn-hover-bg);
 }

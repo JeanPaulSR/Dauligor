@@ -7,6 +7,7 @@ import { initializeSocket } from "./import-service.js";
 import { openSpellPreparationManager } from "./spell-preparation-app.js";
 import { openDauligorGmConsole } from "./gm-app.js";
 import { openDauligorCharacterCreator } from "./character-creator-app.js";
+import { openDauligorLauncher } from "./launcher-app.js";
 import { log, notifyWarn } from "./utils.js";
 
 Hooks.once("init", () => {
@@ -450,76 +451,78 @@ function registerSpellTabControls() {
 
 async function openLauncher({ actor = null } = {}) {
   const actorDoc = resolveActorDocument(actor);
-  const buttons = [
+  const actions = [
     {
-      action: "import",
+      id: "import",
       label: "Import",
       icon: "fas fa-book",
-      callback: async () => actorDoc ? openDauligorImporter({ actor: actorDoc }) : openDauligorImporter()
+      hint: "Bring in classes, spells, feats, and more.",
+      status: "ready",
+      onSelect: async () => actorDoc ? openDauligorImporter({ actor: actorDoc }) : openDauligorImporter()
+    },
+    {
+      id: "character-creator",
+      label: "Character Creator",
+      icon: "fas fa-user-plus",
+      hint: actorDoc ? "Guided walkthrough applied to this actor." : "Guided walkthrough that builds a new character.",
+      status: "ready",
+      onSelect: async () => openDauligorCharacterCreator(actorDoc ? { actor: actorDoc } : {})
     }
   ];
 
   if (actorDoc) {
-    buttons.push({
-      action: "actor-tools",
+    actions.push({
+      id: "actor-tools",
       label: "Actor Tools",
       icon: "fas fa-user-gear",
-      callback: async () => openActorToolsHub(actorDoc)
+      hint: "Prepare spells, feature manager, and more.",
+      status: "ready",
+      onSelect: async () => openActorToolsHub(actorDoc)
     });
   }
 
-  buttons.push(
+  actions.push(
     {
-      action: "character-creator",
-      label: "Character Creator",
-      icon: "fas fa-user-plus",
-      callback: async () => openDauligorCharacterCreator(actorDoc ? { actor: actorDoc } : {})
-    },
-    {
-      action: "hp-gain-behavior",
+      id: "hp-gain-behavior",
       label: "HP Gain Behavior",
       icon: "fas fa-heart-circle-bolt",
-      callback: async () => openUnderConstructionDialog("HP Gain Behavior")
+      hint: "Configure how hit points are gained on level up.",
+      status: "soon",
+      onSelect: async () => openUnderConstructionDialog("HP Gain Behavior")
     },
     {
-      action: "spell-points-behavior",
+      id: "spell-points-behavior",
       label: "Spell Points Behavior",
       icon: "fas fa-wand-sparkles",
-      callback: async () => openSpellPointsBehaviorDialog()
+      hint: "Integrate with the Spell Points module.",
+      status: "ready",
+      onSelect: async () => openSpellPointsBehaviorDialog()
     },
     {
-      action: "loot-generator",
+      id: "loot-generator",
       label: "Loot Generator",
       icon: "fas fa-coins",
-      callback: async () => openUnderConstructionDialog("Loot Generator")
+      hint: "Roll up treasure and loot.",
+      status: "soon",
+      onSelect: async () => openUnderConstructionDialog("Loot Generator")
     },
     {
-      action: "equipment-shop",
+      id: "equipment-shop",
       label: "Equipment Shop",
       icon: "fas fa-cart-shopping",
-      callback: async () => openUnderConstructionDialog("Equipment Shop")
-    },
-    {
-      action: "close",
-      label: "Close",
-      default: true
+      hint: "Browse and buy gear.",
+      status: "soon",
+      onSelect: async () => openUnderConstructionDialog("Equipment Shop")
     }
   );
 
-  new foundry.applications.api.DialogV2({
-    window: { title: actorDoc ? `Dauligor Options: ${actorDoc.name}` : "Dauligor Options" },
-    content: `
-      <p>Implemented now:</p>
-      <ul>
-        <li><strong>Import</strong>${actorDoc ? "</li><li><strong>Level Up</strong> from character sheets" : ""}</li>
-        <li><strong>Character Creator</strong> — guided walkthrough${actorDoc ? " (applies to this actor)" : " (builds a new character)"}</li>
-      </ul>
-      <p>The remaining entries here are placeholders and currently under construction.</p>
-    `,
-    buttons,
-    rejectClose: false,
-    modal: true
-  }).render({ force: true });
+  return openDauligorLauncher({
+    title: actorDoc ? `Dauligor Options: ${actorDoc.name}` : "Dauligor Options",
+    intro: actorDoc
+      ? "Tools for this character. Greyed entries are coming soon."
+      : "Greyed entries are coming soon.",
+    actions
+  });
 }
 
 async function openActorToolsHub(actorLike) {
@@ -529,52 +532,52 @@ async function openActorToolsHub(actorLike) {
     return;
   }
 
-  new foundry.applications.api.DialogV2({
-    window: { title: `Actor Tools: ${actor.name}` },
-    content: `
-      <p><strong>Prepare Spells</strong> is now available as a first-pass manager for current actor spell items.</p>
-      <p>The remaining actor-side tools here are still under construction.</p>
-    `,
-    buttons: [
+  return openDauligorLauncher({
+    title: `Actor Tools: ${actor.name}`,
+    intro: "Per-character tools. Greyed entries are coming soon.",
+    actions: [
       {
-        action: "item-cleaner",
-        label: "Item Cleaner",
-        icon: "fas fa-trash-can",
-        callback: async () => openUnderConstructionDialog("Item Cleaner", actor.name)
-      },
-      {
-        action: "prepare-spells",
+        id: "prepare-spells",
         label: "Prepare Spells",
         icon: "fas fa-book-open",
-        callback: async () => openSpellPreparationManager(actor)
+        hint: "Manage this actor's prepared spells.",
+        status: "ready",
+        onSelect: async () => openSpellPreparationManager(actor)
       },
       {
-        action: "feature-manager",
+        id: "feature-manager",
         label: "Feature Manager",
         icon: "fas fa-toolbox",
-        callback: async () => openFeatureManager(actor, { scope: "long-rest" })
+        hint: "Overview, features, and long-rest tools.",
+        status: "ready",
+        onSelect: async () => openFeatureManager(actor, { scope: "long-rest" })
       },
       {
-        action: "polymorpher",
+        id: "item-cleaner",
+        label: "Item Cleaner",
+        icon: "fas fa-trash-can",
+        hint: "Tidy up duplicate or orphaned items.",
+        status: "soon",
+        onSelect: async () => openUnderConstructionDialog("Item Cleaner", actor.name)
+      },
+      {
+        id: "polymorpher",
         label: "Polymorpher",
         icon: "fas fa-paw",
-        callback: async () => openUnderConstructionDialog("Polymorpher", actor.name)
+        hint: "Transform into another creature.",
+        status: "soon",
+        onSelect: async () => openUnderConstructionDialog("Polymorpher", actor.name)
       },
       {
-        action: "show-players",
+        id: "show-players",
         label: "Show Players",
         icon: "fas fa-eye",
-        callback: async () => openUnderConstructionDialog("Show Players", actor.name)
-      },
-      {
-        action: "close",
-        label: "Close",
-        default: true
+        hint: "Display this sheet to your players.",
+        status: "soon",
+        onSelect: async () => openUnderConstructionDialog("Show Players", actor.name)
       }
-    ],
-    rejectClose: false,
-    modal: true
-  }).render({ force: true });
+    ]
+  });
 }
 
 async function openUnderConstructionDialog(featureName, actorName = "") {
