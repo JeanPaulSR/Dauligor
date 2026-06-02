@@ -145,6 +145,14 @@ windows MUST follow it:
    overflows the frame or compresses its children (text overlap). Grid rows that
    must shrink use `minmax(0, 1fr)`, not `1fr`.
 
+4. **Background surface is painted on the shared content box.** The combined
+   `.application.dauligor-importer-app .window-content, .dauligor-importer-window`
+   rule (importer-wizard.css) sets `background: var(--dauligor-panel)`, so every
+   window that uses the standard content classes gets a consistent opaque
+   surface — you do NOT need each shell to repaint it, and a shell that forgets
+   won't let dnd5e's themed window default bleed through (which showed as a
+   two-tone background on the character creator before this was centralized).
+
 Reference implementations: `.dauligor-importer` (importer-wizard.css),
 `.dauligor-spell-manager` (spell-manager.css), `.dauligor-character-creator__shell`
 (character-creator.css), `.dauligor-launcher__shell` (launcher.css).
