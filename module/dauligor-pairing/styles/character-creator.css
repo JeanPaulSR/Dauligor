@@ -4,6 +4,11 @@
  * component → file map. Load order is fixed in module.json.
  *
  * Follows the house conventions:
+ *   - Window model (docs/styles-guide.md "Window model"): the shell is
+ *     height:100% + min-height:0 and fills the fixed-height, flex-column
+ *     content box; the stepper/footer are flex:0 0 auto, the body is
+ *     flex:1 1 auto + min-height:0 + overflow:auto, and the picker columns
+ *     scroll via the same min-height:0 chain.
  *   - Button APPEARANCE is the canonical button in base.css
  *     (`.dauligor-character-creator__button` is listed there); only the
  *     icon+label LAYOUT and the --primary/--ghost variants live here.

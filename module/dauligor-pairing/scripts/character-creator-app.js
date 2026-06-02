@@ -134,6 +134,11 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
   }
 
   constructor({ actor = null } = {}) {
+    // Standard Dauligor window model (see docs/styles-guide.md "Window model"):
+    // numeric width/height + the dauligor-importer-app/-window content classes
+    // (flex-column, overflow:hidden content box); the shell fills it via
+    // height:100% + the min-height:0 chain and scrolls its body/picker
+    // internally. `_renderFrame` stamps the centered numeric coords.
     const width = Math.min(window.innerWidth - 120, 1100);
     const height = Math.min(window.innerHeight - 120, 760);
     super({
@@ -142,7 +147,7 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
       window: {
         title: actor ? `Create Character: ${actor.name}` : "Create Character",
         resizable: true,
-        contentClasses: ["dauligor-importer-window", "dauligor-character-creator-host"],
+        contentClasses: ["dauligor-importer-window"],
       },
       position: { width, height },
     });
