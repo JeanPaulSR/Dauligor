@@ -151,27 +151,40 @@ export class DauligorLauncherApp extends HandlebarsApplicationMixin(ApplicationV
 
     const actions = Array.isArray(this._config.actions) ? this._config.actions : [];
     if (this._gridRegion) {
+      // Tiles are <div role="button">, NOT <button>. A real <button> picks up
+      // Foundry/dnd5e's element-level button styling (UA + system), which
+      // collapses a multi-child flex-column tile so its text overlaps the
+      // next one. A div carries only our `.dauligor-launcher__tile` rules
+      // (the canonical look is class-keyed in base.css, so it still applies).
       this._gridRegion.innerHTML = actions.map((a) => {
         const soon = a.status === "soon";
         const badge = soon ? `<span class="dauligor-launcher__tile-badge">Soon</span>` : "";
         const hint = a.hint ? `<span class="dauligor-launcher__tile-hint">${escapeHtml(a.hint)}</span>` : "";
         return `
-          <button type="button" class="dauligor-launcher__tile ${soon ? "dauligor-launcher__tile--soon" : ""}" data-id="${escapeHtml(a.id)}">
+          <div role="button" tabindex="0" class="dauligor-launcher__tile ${soon ? "dauligor-launcher__tile--soon" : ""}" data-id="${escapeHtml(a.id)}">
             <i class="${escapeHtml(a.icon || "fas fa-circle")} dauligor-launcher__tile-icon"></i>
             <span class="dauligor-launcher__tile-label">${escapeHtml(a.label)}${badge}</span>
             ${hint}
-          </button>`;
+          </div>`;
       }).join("");
 
+      const activate = async (el) => {
+        const action = actions.find((a) => a.id === el.dataset.id);
+        if (!action?.onSelect) return;
+        await this.close();
+        try {
+          await action.onSelect();
+        } catch (err) {
+          log("launcher action failed", err);
+        }
+      };
+
       this._gridRegion.querySelectorAll(`[data-id]`).forEach((el) => {
-        el.addEventListener("click", async () => {
-          const action = actions.find((a) => a.id === el.dataset.id);
-          if (!action?.onSelect) return;
-          await this.close();
-          try {
-            await action.onSelect();
-          } catch (err) {
-            log("launcher action failed", err);
+        el.addEventListener("click", () => activate(el));
+        el.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            activate(el);
           }
         });
       });
