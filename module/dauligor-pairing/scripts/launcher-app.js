@@ -37,6 +37,19 @@ function escapeHtml(s) {
     .replace(/'/g, "&#39;");
 }
 
+// Mirror the importer / feat-browser framing: AppV2 here uses explicit
+// NUMERIC width/height (height:"auto" is not honoured — applyCentered…
+// bails on non-finite height), stamped on the frame before first paint.
+function applyCenteredPositionToFrame(frame, { width, height }) {
+  if (!frame || !Number.isFinite(width) || !Number.isFinite(height)) return;
+  const vw = document.documentElement.clientWidth || window.innerWidth || 0;
+  const vh = document.documentElement.clientHeight || window.innerHeight || 0;
+  frame.style.width = `${width}px`;
+  frame.style.height = `${height}px`;
+  frame.style.left = `${Math.max(0, Math.round((vw - width) / 2))}px`;
+  frame.style.top = `${Math.max(0, Math.round((vh - height) / 2))}px`;
+}
+
 export class DauligorLauncherApp extends HandlebarsApplicationMixin(ApplicationV2) {
   static _instance = null;
 
@@ -55,21 +68,27 @@ export class DauligorLauncherApp extends HandlebarsApplicationMixin(ApplicationV
   }
 
   constructor(config = {}) {
+    // Rough initial numeric height (2-col grid); _fitHeight() measures the
+    // real content after render and sets an exact height. Numeric — NOT
+    // "auto", which this AppV2 setup ignores.
+    const count = Array.isArray(config.actions) ? config.actions.length : 1;
+    const rows = Math.max(1, Math.ceil(count / 2));
+    const initialHeight = Math.min(150 + rows * 104, (window.innerHeight || 900) - 80);
     super({
       id: `${MODULE_ID}-launcher`,
       // NOTE: deliberately NOT `dauligor-importer-app` / `dauligor-importer-window`.
       // Those classes force the window-content to flex-column + overflow:hidden +
-      // padding:0 for the big full-height wizards; on this small auto-height hub
-      // that collapses + clips the content (everything overlaps). The launcher
-      // owns its own layout via `.dauligor-launcher__shell`. `.dauligor-launcher`
-      // is a registered token root (tokens.css), so the palette still resolves.
+      // padding:0 for the big full-height wizards; on this small hub that collapses
+      // + clips the content (everything overlaps). The launcher owns its own layout
+      // via `.dauligor-launcher__shell`. `.dauligor-launcher` is a registered token
+      // root (tokens.css), so the palette still resolves.
       classes: ["dauligor-launcher"],
       window: {
         title: config.title || "Dauligor",
         resizable: false,
         contentClasses: ["dauligor-launcher-window"],
       },
-      position: { width: 460, height: "auto" },
+      position: { width: 460, height: initialHeight },
     });
     this._config = config;
     this._gridRegion = null;
@@ -78,6 +97,12 @@ export class DauligorLauncherApp extends HandlebarsApplicationMixin(ApplicationV
 
   _configureRenderParts() {
     return { main: { template: LAUNCHER_TEMPLATE } };
+  }
+
+  async _renderFrame(options) {
+    const frame = await super._renderFrame(options);
+    applyCenteredPositionToFrame(frame, this.position);
+    return frame;
   }
 
   async close(options) {
@@ -95,12 +120,30 @@ export class DauligorLauncherApp extends HandlebarsApplicationMixin(ApplicationV
     this._introRegion = content.querySelector(`[data-region="intro"]`);
     this._gridRegion = content.querySelector(`[data-region="grid"]`);
     this._renderAll();
+    this._fitHeight();
+  }
 
-    // The window is `height: "auto"`, but AppV2 measures that at the first
-    // frame — before our tiles are injected — so the frame stays too short
-    // and clips the grid. Recompute now that the content is in the DOM so
-    // the window grows to fit it.
-    this.setPosition({ height: "auto" });
+  // Measure the rendered content and set an exact NUMERIC window height so
+  // the frame grows to fit the tile grid (height:"auto" is ignored by this
+  // AppV2 setup). Re-runs on every render, so it also covers the reused-
+  // instance path where the action list (and row count) changed.
+  _fitHeight() {
+    const root = this.element instanceof HTMLElement ? this.element : null;
+    if (!root) return;
+    const shell = root.querySelector(".dauligor-launcher__shell");
+    if (!shell) return;
+    const headerH = root.querySelector(".window-header")?.offsetHeight ?? 32;
+    const vw = document.documentElement.clientWidth || window.innerWidth || 0;
+    const vh = document.documentElement.clientHeight || window.innerHeight || 900;
+    const width = Number(this.position?.width) || 460;
+    const height = Math.min(Math.ceil(shell.scrollHeight) + headerH + 6, vh - 60);
+    if (!Number.isFinite(height) || height <= 0) return;
+    this.setPosition({
+      width,
+      height,
+      left: Math.max(0, Math.round((vw - width) / 2)),
+      top: Math.max(0, Math.round((vh - height) / 2)),
+    });
   }
 
   _renderAll() {
