@@ -71,6 +71,26 @@ const ABILITIES = [
   { key: "cha", label: "Charisma", abbr: "CHA" },
 ];
 
+// 5e proficiency bonus by character level (+2 at 1–4, +3 at 5–8, …).
+const PB_BY_LEVEL = (lvl) => 2 + Math.floor((Math.max(1, Math.min(20, Number(lvl) || 1)) - 1) / 4);
+
+const ABILITY_ABBR = { str: "STR", dex: "DEX", con: "CON", int: "INT", wis: "WIS", cha: "CHA" };
+const SKILL_NAMES = {
+  acr: "Acrobatics", ani: "Animal Handling", arc: "Arcana", ath: "Athletics", dec: "Deception",
+  his: "History", ins: "Insight", itm: "Intimidation", inv: "Investigation", med: "Medicine",
+  nat: "Nature", prc: "Perception", prf: "Performance", per: "Persuasion", rel: "Religion",
+  slt: "Sleight of Hand", ste: "Stealth", sur: "Survival",
+};
+// Class-feature advancement types that read as "features" in the level table
+// (ItemGrant = granted, ItemChoice = chosen, Subclass + ASI as their own rows).
+// HitPoints / Trait (proficiencies) / ScaleValue (→ scaling columns) /
+// equipment ItemChoices are excluded.
+const FEATURE_ADV_TYPES = new Set(["ItemGrant", "ItemChoice", "Subclass", "AbilityScoreImprovement"]);
+
+function prettifySlug(s) {
+  return String(s ?? "").replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()).trim();
+}
+
 // ── tiny helpers (mirrors feat-browser-app) ─────────────────────────────
 
 function resolveApiHost() {
@@ -178,6 +198,9 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     // Detail fetch caches keyed by dbId.
     this._bgDetailCache = new Map();
     this._raceDetailCache = new Map();
+    // Full class-bundle cache for the rich class preview, keyed by bundle URL.
+    this._classBundleCache = new Map();
+    this._classBundleInFlight = new Set();
 
     // Ephemeral per-step UI state.
     this._ui = {
@@ -376,6 +399,8 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
           // "class-wizard"); that's also what the importer's class
           // selection matches against (preferredSelectionIds).
           if (entry?.type !== "class" || !entry?.sourceId) continue;
+          let bundleUrl = null;
+          try { if (entry.payloadUrl) bundleUrl = new URL(entry.payloadUrl, url).href; } catch { /* leave null */ }
           entries.push({
             entryId: String(entry.sourceId),
             name: String(entry.name ?? entry.sourceId),
@@ -383,6 +408,7 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
             summary: String(entry.description ?? entry.summary ?? ""),
             sourceSlug: slug,
             sourceId, // the SOURCE's id, for the importer's sourceTypeIds
+            bundleUrl, // full semantic class-export bundle, for the rich preview
           });
         }
       } catch (err) {
@@ -414,6 +440,29 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
       return full;
     } catch (err) {
       log("character-creator: detail fetch failed", { kind, dbId, err });
+      return null;
+    }
+  }
+
+  // Fetch the full semantic class-export bundle for the rich preview, cached
+  // by URL. The bundle has no `kind` wrapper — it's the object with top-level
+  // `class`, `subclasses`, `features`, `scalingColumns`, `source`, etc.
+  async _fetchClassBundle(url) {
+    if (!url) return null;
+    if (this._classBundleCache.has(url)) return this._classBundleCache.get(url);
+    if (this._classBundleInFlight.has(url)) return null;
+    this._classBundleInFlight.add(url);
+    try {
+      const res = await fetch(url, { cache: "no-store" });
+      this._classBundleInFlight.delete(url);
+      if (!res.ok) return null;
+      const payload = await res.json();
+      if (!payload?.class) return null;
+      this._classBundleCache.set(url, payload);
+      return payload;
+    } catch (err) {
+      this._classBundleInFlight.delete(url);
+      log("character-creator: class bundle fetch failed", { url, err });
       return null;
     }
   }
@@ -783,18 +832,7 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     }).join("");
 
     const detail = chosen
-      ? `<div class="dauligor-detail">
-           <div class="dauligor-detail__pane">
-             <header class="dauligor-detail__header">
-               <h3 class="dauligor-detail__name">${escapeHtml(chosen.name)}</h3>
-               <div class="dauligor-detail__meta">Class · ${escapeHtml(chosen.sourceSlug.toUpperCase())}</div>
-             </header>
-             <div class="dauligor-detail__body">
-               ${chosen.summary ? `<p>${escapeHtml(truncate(chosen.summary, 700))}</p>` : ""}
-               <p class="dauligor-character-creator__hint">On <strong>Build Character</strong>, the class builder opens pre-set to <strong>${escapeHtml(chosen.name)}</strong> at level 1 so you can make any skill / option / feature choices in the full importer.</p>
-             </div>
-           </div>
-         </div>`
+      ? this._renderClassPreview(chosen, this._classBundleCache.get(chosen.bundleUrl) || null)
       : `<div class="dauligor-detail"><div class="dauligor-detail__pane dauligor-detail__empty">Select a class to preview it. Creation builds it at level 1.</div></div>`;
 
     return `
@@ -804,6 +842,152 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
           <div class="dauligor-character-creator__picker-list">${rows || `<p class="dauligor-character-creator__empty">No matches.</p>`}</div>
         </div>
         <div class="dauligor-character-creator__picker-detail">${detail}</div>
+      </div>`;
+  }
+
+  // Rich class preview — a module-themed port of the web app's
+  // ClassPreviewPane (src/components/compendium/ClassPreviewPane.tsx). The
+  // module's export bundle is shaped differently from the app's DB, so the
+  // level table's Features column is derived from `class.advancements`
+  // (granted/chosen features per level) rather than a features table, and
+  // spell-slot columns are deferred (they need the 5e slot tables recomputed).
+  _renderClassPreview(chosen, bundle) {
+    const sourceTag = escapeHtml((chosen.sourceSlug || "").toUpperCase());
+    if (!bundle) {
+      return `
+        <div class="dauligor-detail">
+          <div class="dauligor-detail__pane">
+            <header class="dauligor-detail__header">
+              <h3 class="dauligor-detail__name">${escapeHtml(chosen.name)}</h3>
+              <div class="dauligor-detail__meta">Class · ${sourceTag}</div>
+            </header>
+            <div class="dauligor-detail__body"><p class="dauligor-character-creator__loading"><i class="fas fa-spinner fa-spin"></i> Loading class details…</p></div>
+          </div>
+        </div>`;
+    }
+
+    const c = bundle.class || {};
+    const classSourceId = c.classSourceId ?? c.sourceId ?? null;
+    const img = c.previewImageUrl || c.imageUrl || c.cardImageUrl || chosen.img || "";
+    const hitDie = c.hitDie ? `d${c.hitDie}` : "—";
+    const isCaster = !!(c.spellcasting && (c.spellcasting.hasSpellcasting || c.spellcasting.ability));
+    const casterAbility = c.spellcasting?.ability
+      ? (ABILITY_ABBR[String(c.spellcasting.ability).toLowerCase()] || prettifySlug(c.spellcasting.ability))
+      : "";
+
+    // Features per level, from the class advancement chain.
+    const advByLevel = {};
+    for (const adv of (Array.isArray(c.advancements) ? c.advancements : [])) {
+      if (!FEATURE_ADV_TYPES.has(adv?.type)) continue;
+      const title = String(adv.title || adv.configuration?.title || "").trim();
+      const label = adv.type === "Subclass" ? "Subclass"
+        : adv.type === "AbilityScoreImprovement" ? "Ability Score Improvement"
+        : title;
+      if (!label || /equipment|starting/i.test(label)) continue;
+      const lvl = Number(adv.level) || 1;
+      (advByLevel[lvl] ||= new Set()).add(label);
+    }
+
+    // Class-level scaling columns only (exclude subclass scalings).
+    const scalings = (Array.isArray(bundle.scalingColumns) ? bundle.scalingColumns : [])
+      .filter((col) => !classSourceId || col.parentSourceId === classSourceId);
+
+    const headCols = scalings.map((col) => `<th>${escapeHtml(col.name || prettifySlug(col.identifier))}</th>`).join("");
+    const rows = Array.from({ length: 20 }, (_, i) => i + 1).map((lvl) => {
+      const feats = advByLevel[lvl] ? Array.from(advByLevel[lvl]) : [];
+      const featCell = feats.length ? feats.map(escapeHtml).join(", ") : `<span class="dauligor-character-creator__cp-dash">—</span>`;
+      const scaleCells = scalings.map((col) => {
+        let v = "—";
+        for (let l = lvl; l >= 1; l--) { const val = col.values?.[String(l)]; if (val != null && val !== "") { v = val; break; } }
+        return `<td class="dauligor-character-creator__cp-num">${escapeHtml(String(v))}</td>`;
+      }).join("");
+      return `<tr>
+        <td class="dauligor-character-creator__cp-num">${lvl}</td>
+        <td class="dauligor-character-creator__cp-num">+${PB_BY_LEVEL(lvl)}</td>
+        <td class="dauligor-character-creator__cp-feats">${featCell}</td>
+        ${scaleCells}
+      </tr>`;
+    }).join("");
+    const table = `
+      <div class="dauligor-character-creator__cp-table-wrap">
+        <table class="dauligor-character-creator__cp-table">
+          <thead><tr><th>Lvl</th><th>PB</th><th>Features</th>${headCols}</tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+
+    // Proficiencies.
+    const prof = c.proficiencies || {};
+    const summarize = (block, displayName) => {
+      if (displayName) return escapeHtml(displayName);
+      if (!block || typeof block !== "object") return "";
+      const parts = [...(block.categoryIds || []), ...(block.fixedIds || [])].map(prettifySlug);
+      return parts.length ? escapeHtml(parts.join(", ")) : "";
+    };
+    const skills = prof.skills || {};
+    const skillNames = (skills.optionIds || []).map((s) => SKILL_NAMES[s] || prettifySlug(s));
+    const skillLine = skills.choiceCount
+      ? `Choose ${skills.choiceCount}: ${escapeHtml(skillNames.join(", ") || "any")}`
+      : (skillNames.length ? escapeHtml(skillNames.join(", ")) : "");
+    const saves = (c.savingThrows || []).map((a) => ABILITY_ABBR[String(a).toLowerCase()] || prettifySlug(a)).join(", ");
+    const primary = (c.primaryAbility || []).map((a) => ABILITY_ABBR[String(a).toLowerCase()] || prettifySlug(a));
+    const profLine = (label, value) => value
+      ? `<div class="dauligor-character-creator__cp-prof"><span class="dauligor-character-creator__cp-prof-key">${escapeHtml(label)}</span><span>${value}</span></div>`
+      : "";
+    const profBox = `
+      <div class="dauligor-character-creator__cp-side">
+        <h4 class="dauligor-character-creator__cp-side-title">Proficiencies</h4>
+        ${profLine("Armor", summarize(prof.armor, prof.armorDisplayName) || "None")}
+        ${profLine("Weapons", summarize(prof.weapons, prof.weaponsDisplayName) || "None")}
+        ${profLine("Tools", summarize(prof.tools, prof.toolsDisplayName) || "None")}
+        ${profLine("Saves", saves)}
+        ${profLine("Skills", skillLine)}
+        ${primary.length ? profLine("Multiclass", `${escapeHtml(primary.join(" or "))} 13+`) : ""}
+      </div>`;
+
+    // Subclasses + tags.
+    const subs = (Array.isArray(bundle.subclasses) ? bundle.subclasses : []).map((s) => escapeHtml(s.name || "")).filter(Boolean);
+    const subBox = subs.length
+      ? `<div class="dauligor-character-creator__cp-side">
+           <h4 class="dauligor-character-creator__cp-side-title">Subclasses (${subs.length})</h4>
+           <div class="dauligor-character-creator__cp-subs">${subs.map((n) => `<span class="dauligor-character-creator__cp-sub">${n}</span>`).join("")}</div>
+         </div>`
+      : "";
+    const tags = (c.tagIds || []).map(prettifySlug).filter(Boolean);
+    const tagBox = tags.length
+      ? `<div class="dauligor-character-creator__cp-tags">${tags.map((t) => `<span class="dauligor-character-creator__cp-tag">${escapeHtml(t)}</span>`).join("")}</div>`
+      : "";
+    // Descriptions are BBCode ([b]…[/b]); strip those tags too (truncate's
+    // stripHtml only handles <…>).
+    const desc = c.description ? truncate(String(c.description).replace(/\[\/?[^\]]+\]/g, " "), 600) : "";
+    const headerStyle = img
+      ? ` style="background-image: linear-gradient(to top, var(--dauligor-panel) 35%, rgba(0,0,0,0.25)), url('${escapeHtml(img)}')"`
+      : "";
+
+    return `
+      <div class="dauligor-character-creator__cp">
+        <header class="dauligor-character-creator__cp-header"${headerStyle}>
+          <div class="dauligor-character-creator__cp-heading">
+            <h3 class="dauligor-character-creator__cp-name">${escapeHtml(chosen.name)}</h3>
+            <span class="dauligor-character-creator__cp-source">${sourceTag}</span>
+          </div>
+          <div class="dauligor-character-creator__cp-badges">
+            <span class="dauligor-character-creator__cp-badge">Hit Die ${hitDie}</span>
+            ${isCaster ? `<span class="dauligor-character-creator__cp-badge">Caster${casterAbility ? ` · ${casterAbility}` : ""}</span>` : ""}
+          </div>
+        </header>
+        <div class="dauligor-character-creator__cp-grid">
+          <div class="dauligor-character-creator__cp-main">
+            ${table}
+            ${desc ? `<div class="dauligor-character-creator__cp-section"><h4 class="dauligor-character-creator__cp-side-title">Description</h4><p>${escapeHtml(desc)}</p></div>` : ""}
+            ${tagBox}
+          </div>
+          <aside class="dauligor-character-creator__cp-aside">
+            ${profBox}
+            ${subBox}
+          </aside>
+        </div>
+        <p class="dauligor-character-creator__hint">On <strong>Build Character</strong>, the class builder opens pre-set to <strong>${escapeHtml(chosen.name)}</strong> at level 1 for skill / option / feature choices.</p>
       </div>`;
   }
 
@@ -969,9 +1153,20 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
   _pickClass(entryId, sourceSlug) {
     const entry = this._classes.entries.find((e) => e.entryId === entryId && e.sourceSlug === sourceSlug);
     if (!entry) return;
-    this._choices.class = { entryId: entry.entryId, sourceSlug: entry.sourceSlug, sourceId: entry.sourceId, name: entry.name, img: entry.img, summary: entry.summary };
+    this._choices.class = {
+      entryId: entry.entryId, sourceSlug: entry.sourceSlug, sourceId: entry.sourceId,
+      name: entry.name, img: entry.img, summary: entry.summary, bundleUrl: entry.bundleUrl,
+    };
     this._renderBody();
     this._renderFooter();
+    // Lazy-load the full bundle for the rich preview; re-render when it lands.
+    if (entry.bundleUrl) {
+      this._fetchClassBundle(entry.bundleUrl).then((b) => {
+        if (b && this._tab === "create" && this._view === "class" && this._choices.class?.bundleUrl === entry.bundleUrl) {
+          this._renderBody();
+        }
+      });
+    }
   }
 
   // ── rendering: footer ────────────────────────────────────────────────
