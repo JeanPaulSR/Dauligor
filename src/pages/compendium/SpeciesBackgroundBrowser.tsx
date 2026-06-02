@@ -285,13 +285,11 @@ export default function SpeciesBackgroundBrowser({
       emptyMessage={`No ${cfg.plural.toLowerCase()} yet${isAdmin ? ` — import some from the ${cfg.singular} Manager.` : '.'}`}
       trailingActions={isAdmin ? (
         <>
-          {kind === 'background' && (
-            <Link to="/compendium/background-features/manage">
-              <Button type="button" variant="outline" size="sm" className="h-8 border-gold/20 text-gold hover:bg-gold/5">
-                Features
-              </Button>
-            </Link>
-          )}
+          <Link to={kind === 'species' ? '/compendium/species-features/manage' : '/compendium/background-features/manage'}>
+            <Button type="button" variant="outline" size="sm" className="h-8 border-gold/20 text-gold hover:bg-gold/5">
+              Features
+            </Button>
+          </Link>
           <Link to={cfg.managePath}>
             <Button type="button" variant="outline" size="sm" className="h-8 border-gold/20 text-gold hover:bg-gold/5">
               {cfg.singular} Manager

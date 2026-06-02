@@ -28,19 +28,40 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 
 /**
- * BackgroundFeatureEditor
+ * CompendiumFeatureEditor
  * ───────────────────────
- * Admin editor for the dedicated `background_features` table (migration
- * 20260601-1400) — the special feature(s) a background grants (e.g.
- * "Shelter of the Faithful"). First-class content of their own (design
- * decision 2026-06-01); a background references them via an ItemGrant
- * (wired in a later milestone). 2014-style features are hand-authored
- * here. Pattern E (CompendiumEditorShell), camelCase columns →
- * direct upsertDocument / fetchDocument (no normalize/denormalize); the
- * only boundary rename is tags (column) ↔ tagIds (form).
+ * Admin editor for the dedicated feature content types granted by
+ * backgrounds + species — `background_features` (migration 20260601-1400)
+ * and `species_features` (20260601-1500). One component, keyed by `kind`,
+ * mirroring SpeciesBackgroundEditor. These are first-class content of
+ * their own (e.g. "Shelter of the Faithful", "Breath Weapon"); a
+ * background/species references them via ItemGrant (wired later).
+ * Pattern E shell; camelCase columns → direct upsertDocument /
+ * fetchDocument (no normalize/denormalize); only tags (column) ↔ tagIds
+ * (form) is renamed inline. 2014-style features are hand-authored here.
  *
- * Route: /compendium/background-features/manage (admin / content-creator).
+ * Routes: /compendium/background-features/manage,
+ *         /compendium/species-features/manage  (admin / content-creator).
  */
+
+export type FeatureKind = 'background' | 'species';
+
+const KIND_CFG = {
+  background: {
+    collection: 'backgroundFeatures',
+    singular: 'Background Feature', plural: 'Background Features',
+    backPath: '/compendium/backgrounds', backLabel: 'Back To Backgrounds',
+    formId: 'background-feature-editor-form', storageFolder: 'background-features',
+    owner: 'background', placeholderName: 'e.g. Shelter of the Faithful', placeholderPage: 'e.g. 127',
+  },
+  species: {
+    collection: 'speciesFeatures',
+    singular: 'Species Feature', plural: 'Species Features',
+    backPath: '/compendium/races', backLabel: 'Back To Species',
+    formId: 'species-feature-editor-form', storageFolder: 'species-features',
+    owner: 'species', placeholderName: 'e.g. Breath Weapon', placeholderPage: 'e.g. 35',
+  },
+} as const;
 
 type FeatureForm = {
   id?: string;
@@ -68,9 +89,9 @@ const NOOP_CYCLE_TAG = () => { /* no tag axes */ };
 const NOOP_SET_TAG_STATES: React.Dispatch<React.SetStateAction<Record<string, number>>> = () => { /* no tag axes */ };
 const EMPTY_TAG_STATES: Record<string, number> = {};
 const AXIS_KEYS = ['source'] as const;
-const COLLECTION = 'backgroundFeatures';
 
-export default function BackgroundFeatureEditor({ userProfile }: { userProfile: any }) {
+export default function CompendiumFeatureEditor({ userProfile, kind }: { userProfile: any; kind: FeatureKind }) {
+  const cfg = KIND_CFG[kind];
   const isAdmin = userProfile?.role === 'admin';
   const isContentCreator = !!userProfile?.permissions &&
     Object.prototype.hasOwnProperty.call(userProfile.permissions, 'content-creator');
@@ -112,7 +133,7 @@ export default function BackgroundFeatureEditor({ userProfile }: { userProfile: 
     (async () => {
       try {
         const [rows, sourceRows, tagRows, tagGroupRows] = await Promise.all([
-          fetchCollection<any>(COLLECTION, { orderBy: 'name ASC' }),
+          fetchCollection<any>(cfg.collection, { orderBy: 'name ASC' }),
           fetchCollection<any>('sources', { orderBy: 'name ASC' }),
           fetchCollection<any>('tags', { orderBy: 'name ASC' }),
           fetchCollection<any>('tagGroups', { orderBy: 'name ASC' }),
@@ -127,12 +148,12 @@ export default function BackgroundFeatureEditor({ userProfile }: { userProfile: 
         setTagGroups(tagGroupRows.map((row: any) => ({ id: String(row.id), name: String(row.name || '') })));
         setLoading(false);
       } catch (err) {
-        console.error('[BackgroundFeatureEditor] load failed:', err);
+        console.error(`[CompendiumFeatureEditor:${kind}] load failed:`, err);
         if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [canManage]);
+  }, [canManage, cfg.collection, kind]);
 
   useEffect(() => {
     if (editingId) return;
@@ -144,9 +165,8 @@ export default function BackgroundFeatureEditor({ userProfile }: { userProfile: 
   const sourceAbbrevById = useMemo(() => Object.fromEntries(sources.map((s) => [s.id, s.abbreviation || s.shortName || s.name || s.id])), [sources]);
 
   const resetForm = () => {
-    const initial = makeInitialForm(sources);
     setEditingId(null);
-    setFormData(initial);
+    setFormData(makeInitialForm(sources));
   };
 
   useEffect(() => {
@@ -172,22 +192,22 @@ export default function BackgroundFeatureEditor({ userProfile }: { userProfile: 
     if (cached) { hydrate(cached); return; }
     (async () => {
       try {
-        const row = await fetchDocument<any>(COLLECTION, editingId);
+        const row = await fetchDocument<any>(cfg.collection, editingId);
         if (!active || !row) return;
         hydrate(row);
       } catch (err) {
-        console.error('[BackgroundFeatureEditor] load row failed:', err);
+        console.error(`[CompendiumFeatureEditor:${kind}] load row failed:`, err);
       }
     })();
     return () => { active = false; };
-  }, [editingId, entries, sources]);
+  }, [editingId, entries, sources, cfg.collection, kind]);
 
   const refreshEntries = async () => {
     try {
-      const rows = await fetchCollection<any>(COLLECTION, { orderBy: 'name ASC' });
+      const rows = await fetchCollection<any>(cfg.collection, { orderBy: 'name ASC' });
       setEntries(rows);
     } catch (err) {
-      console.error('[BackgroundFeatureEditor] refresh failed:', err);
+      console.error(`[CompendiumFeatureEditor:${kind}] refresh failed:`, err);
     }
   };
 
@@ -210,14 +230,14 @@ export default function BackgroundFeatureEditor({ userProfile }: { userProfile: 
       };
       const wasCreate = !editingId;
       const entryId = editingId || crypto.randomUUID();
-      await upsertDocument(COLLECTION, entryId, { ...payload, createdAt: formData.createdAt || new Date().toISOString() });
-      toast.success(`Feature ${wasCreate ? 'created' : 'updated'}`);
+      await upsertDocument(cfg.collection, entryId, { ...payload, createdAt: formData.createdAt || new Date().toISOString() });
+      toast.success(`${cfg.singular} ${wasCreate ? 'created' : 'updated'}`);
       await refreshEntries();
       resetForm();
     } catch (error) {
-      console.error('[BackgroundFeatureEditor] save failed:', error);
-      toast.error('Failed to save feature');
-      reportClientError(error, editingId ? OperationType.UPDATE : OperationType.CREATE, `${COLLECTION}/${editingId || '(new)'}`);
+      console.error(`[CompendiumFeatureEditor:${kind}] save failed:`, error);
+      toast.error(`Failed to save ${cfg.singular.toLowerCase()}`);
+      reportClientError(error, editingId ? OperationType.UPDATE : OperationType.CREATE, `${cfg.collection}/${editingId || '(new)'}`);
     } finally {
       setSaving(false);
     }
@@ -225,16 +245,16 @@ export default function BackgroundFeatureEditor({ userProfile }: { userProfile: 
 
   const handleDelete = async () => {
     if (!editingId) return;
-    if (!window.confirm('Delete this background feature?')) return;
+    if (!window.confirm(`Delete this ${cfg.singular.toLowerCase()}?`)) return;
     try {
-      await deleteDocument(COLLECTION, editingId);
-      toast.success('Feature deleted');
+      await deleteDocument(cfg.collection, editingId);
+      toast.success(`${cfg.singular} deleted`);
       await refreshEntries();
       resetForm();
     } catch (error) {
-      console.error('[BackgroundFeatureEditor] delete failed:', error);
-      toast.error('Failed to delete feature');
-      reportClientError(error, OperationType.DELETE, `${COLLECTION}/${editingId}`);
+      console.error(`[CompendiumFeatureEditor:${kind}] delete failed:`, error);
+      toast.error(`Failed to delete ${cfg.singular.toLowerCase()}`);
+      reportClientError(error, OperationType.DELETE, `${cfg.collection}/${editingId}`);
     }
   };
 
@@ -265,14 +285,14 @@ export default function BackgroundFeatureEditor({ userProfile }: { userProfile: 
   const editorSubTabs: EditorSubTab[] = useMemo(() => [
     {
       key: 'basics', label: 'Basics', layout: 'fill',
-      render: () => <BasicsFields formData={formData} setFormData={setFormData} sources={sources} editingId={editingId} />,
+      render: () => <BasicsFields formData={formData} setFormData={setFormData} sources={sources} editingId={editingId} cfg={cfg} />,
     },
     {
       key: 'effects', label: 'Effects',
       render: () => (
         <div className="border-t border-gold/10 pt-4">
           <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold mb-2">Active Effects</h3>
-          <p className="text-[10px] text-ink/40 italic mb-3">Optional — most background features are passive prose. Add effects only for ones that mechanically change the character.</p>
+          <p className="text-[10px] text-ink/40 italic mb-3">Optional — most features are passive prose. Add effects only for ones that mechanically change the character.</p>
           <ActiveEffectEditor
             effects={formData.effects}
             onChange={(effects: any[]) => setFormData((prev) => ({ ...prev, effects }))}
@@ -281,7 +301,7 @@ export default function BackgroundFeatureEditor({ userProfile }: { userProfile: 
         </div>
       ),
     },
-  ], [formData, sources, editingId]);
+  ], [formData, sources, editingId, cfg]);
 
   const tagsSubTabs: TagsSubTab[] = useMemo(() => [{
     key: 'tags',
@@ -319,9 +339,9 @@ export default function BackgroundFeatureEditor({ userProfile }: { userProfile: 
 
   return (
     <CompendiumEditorShell<any>
-      entityName={{ singular: 'Background Feature', plural: 'Background Features' }}
-      backPath="/compendium/backgrounds"
-      backLabel="Back To Backgrounds"
+      entityName={{ singular: cfg.singular, plural: cfg.plural }}
+      backPath={cfg.backPath}
+      backLabel={cfg.backLabel}
       modes={modes}
       defaultModeKey="manual-editor"
       manualEditorModeKey="manual-editor"
@@ -336,7 +356,7 @@ export default function BackgroundFeatureEditor({ userProfile }: { userProfile: 
       getRowId={(row) => String(row.id)}
       search={search}
       onSearchChange={setSearch}
-      searchPlaceholder="Search feature name, identifier, or source"
+      searchPlaceholder={`Search ${cfg.singular.toLowerCase()} name, identifier, or source`}
       activeFilterCount={activeFilterCount}
       isFilterOpen={isFilterOpen}
       setIsFilterOpen={setIsFilterOpen}
@@ -360,35 +380,35 @@ export default function BackgroundFeatureEditor({ userProfile }: { userProfile: 
           axisClear={cyclers.axisClear}
           search={search}
           setSearch={setSearch}
-          searchPlaceholder="Search feature name, identifier, or source"
+          searchPlaceholder={`Search ${cfg.singular.toLowerCase()} name, identifier, or source`}
           activeFilterCount={activeFilterCount}
           resetAll={() => { setSearch(''); resetAxisFilters(); }}
           embedded
         />
       }
-      filterTitle="Filter Background Features"
+      filterTitle={`Filter ${cfg.plural}`}
       identityName={formData.name}
       identitySourceAbbrev={formData.sourceId ? String(sourceAbbrevById[formData.sourceId] || formData.sourceId) : undefined}
       identitySourceFullName={formData.sourceId ? String(sourceNameById[formData.sourceId] || formData.sourceId) : undefined}
-      identitySubtitle="Background Feature"
+      identitySubtitle={cfg.singular}
       onSave={(e) => void handleSave(e)}
       onDelete={editingId ? handleDelete : undefined}
       onReset={resetForm}
       saving={saving}
-      formId="background-feature-editor-form"
+      formId={cfg.formId}
       editorSubTabs={editorSubTabs}
       tagsSubTabs={tagsSubTabs}
       tagsSuperTabCount={formData.tagIds.length}
-      renderPreview={(id) => {
-        if (!id && !formData.name) {
-          return <div className="px-6 py-12 text-center text-ink/50">Select or create a background feature to preview it here.</div>;
+      renderPreview={() => {
+        if (!editingId && !formData.name) {
+          return <div className="px-6 py-12 text-center text-ink/50">Select or create a {cfg.singular.toLowerCase()} to preview it here.</div>;
         }
         return (
           <div className="p-5 space-y-3">
             <div className="flex items-center gap-3">
               {formData.imageUrl ? <img src={formData.imageUrl} alt="" className="h-12 w-12 rounded border border-gold/20 object-cover" /> : null}
               <div>
-                <h2 className="font-serif text-lg font-bold text-ink leading-tight">{formData.name || 'Untitled Feature'}</h2>
+                <h2 className="font-serif text-lg font-bold text-ink leading-tight">{formData.name || `Untitled ${cfg.singular}`}</h2>
                 <div className="text-[11px] text-ink/55 flex items-center gap-2">
                   {formData.sourceId ? <span className="font-bold text-gold/80">{sourceAbbrevById[formData.sourceId] || ''}</span> : null}
                   {formData.identifier ? <span className="font-mono">{formData.identifier}</span> : null}
@@ -399,7 +419,7 @@ export default function BackgroundFeatureEditor({ userProfile }: { userProfile: 
               <div className="text-[11px] text-ink/60">{formData.effects.length} active effect{formData.effects.length === 1 ? '' : 's'}</div>
             )}
             <p className="text-xs text-ink/45 italic border-t border-gold/10 pt-3">
-              Authored as standalone content; a background grants it via an ItemGrant (wiring coming in the next milestone).
+              Authored as standalone content; a {cfg.owner} grants it via an ItemGrant (wiring coming in a later milestone).
             </p>
           </div>
         );
@@ -415,18 +435,20 @@ function BasicsFields({
   setFormData,
   sources,
   editingId,
+  cfg,
 }: {
   formData: FeatureForm;
   setFormData: React.Dispatch<React.SetStateAction<FeatureForm>>;
   sources: any[];
   editingId: string | null;
+  cfg: (typeof KIND_CFG)[FeatureKind];
 }) {
   return (
     <div className="space-y-4">
       <div className="grid gap-3 md:grid-cols-[80px_minmax(0,1fr)] shrink-0">
         <ImageUpload
           currentImageUrl={formData.imageUrl}
-          storagePath={`images/background-features/${editingId || 'draft'}/`}
+          storagePath={`images/${cfg.storageFolder}/${editingId || 'draft'}/`}
           onUpload={(url) => setFormData((prev) => ({ ...prev, imageUrl: url }))}
           imageType="icon"
           compact
@@ -439,7 +461,7 @@ function BasicsFields({
               value={formData.name}
               onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
               className="h-8 bg-background/50 border-gold/10 focus:border-gold text-sm"
-              placeholder="e.g. Shelter of the Faithful"
+              placeholder={cfg.placeholderName}
               required
             />
           </div>
@@ -469,7 +491,7 @@ function BasicsFields({
               value={formData.page}
               onChange={(e) => setFormData((prev) => ({ ...prev, page: e.target.value }))}
               className="h-8 bg-background/50 border-gold/10 focus:border-gold text-sm"
-              placeholder="e.g. 127"
+              placeholder={cfg.placeholderPage}
             />
           </div>
         </div>

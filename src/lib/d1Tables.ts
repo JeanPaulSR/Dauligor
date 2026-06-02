@@ -46,6 +46,7 @@ export const D1_TABLE_MAP: Record<string, string> = {
   // Background features — the special feature(s) a background grants
   // (migration 20260601-1400). Dedicated content type, granted via ItemGrant.
   backgroundFeatures: 'background_features',
+  speciesFeatures: 'species_features',
   // Admin-managed taxonomy that groups feats into player-facing
   // buckets (General / Fighting Style / Epic Boon / Origin / …).
   // Authored via /admin/feat-categories; feats reference rows here

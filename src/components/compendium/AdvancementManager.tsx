@@ -1111,11 +1111,16 @@ function AdvancementManager({
                     <SelectContent>
                       {Object.entries(ADVANCEMENT_INFO)
                         .filter(([key]) => key !== 'Subclass')
-                        // HitPoints + Size are class / race-shaped concerns —
-                        // hide them when the manager is mounted on a feat
-                        // editor. The Subclass type is already filtered above
-                        // (it's surfaced as an explicit class-side toggle).
-                        .filter(([key]) => !isFeatContext || (key !== 'HitPoints' && key !== 'Size'))
+                        // HitPoints is a class/subclass concern. Size belongs
+                        // to classes AND species (a species confers a size) —
+                        // so it shows for class + race, but not feat/background.
+                        // The Subclass type is already filtered above (surfaced
+                        // as an explicit class-side toggle).
+                        .filter(([key]) => {
+                          if (key === 'HitPoints') return !isFeatContext;
+                          if (key === 'Size') return !isFeatContext || parentContext === 'race';
+                          return true;
+                        })
                         .map(([key, info]) => (
                           <SelectItem key={key} value={key}>{info.label}</SelectItem>
                         ))}
