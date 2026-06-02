@@ -3,6 +3,8 @@ import { AlertTriangle, BookOpen, Download, FileJson, ImageOff, Layers3, Upload 
 import { toast } from 'sonner';
 import { reportClientError, OperationType } from '../../lib/firebase';
 import { fetchCollection, upsertDocument, upsertDocumentBatch } from '../../lib/d1';
+import { matchesSingleAxisFilter, matchesMultiAxisFilter } from '../../lib/spellFilters';
+import { useAxisFilters } from '../../hooks/useAxisFilters';
 import { cn } from '../../lib/utils';
 import {
   buildSpeciesBackgroundCandidates,
@@ -10,25 +12,50 @@ import {
   type SpeciesBackgroundImportKind,
   type SpeciesBackgroundImportCandidate,
 } from '../../lib/speciesBackgroundImport';
+import { FilterBar } from './FilterBar';
+import { SectionFilterPanel, type FilterSection } from './SectionFilterPanel';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
-import { Input } from '../ui/input';
 
 /**
  * Foundry-import workbench for Species + Backgrounds (mode inside
- * SpeciesBackgroundEditor). Mirrors SpellImportWorkbench — the working
- * reference for image capture — trimmed to what these tables need.
+ * SpeciesBackgroundEditor). Mirrors SpellImportWorkbench / FeatImportWorkbench
+ * — the working references — including the shared <FilterBar> +
+ * <SectionFilterPanel> for search + filtering (Source + Status axes) and a
+ * feat-style detail panel.
  *
- * The detail pane shows the resolved image prominently so the importer
- * can confirm at a glance that `imageUrl` was captured (the thing that
- * silently broke for feats). A "Missing image" filter surfaces any rows
- * whose Foundry item had no `img`.
+ * The detail pane shows the resolved image prominently + its URL so the
+ * importer can confirm at a glance that `imageUrl` was captured. The Status
+ * axis lets you isolate Resolved / Unresolved / Missing-image / Already-imported
+ * candidates and then Import Visible.
  */
 
 type SourceRecord = { id: string; name?: string; abbreviation?: string; shortName?: string; slug?: string; rules?: string; [key: string]: any };
 type UploadedBatch = { id: string; fileName: string; payload: any };
-type StatusFilter = 'all' | 'resolved' | 'unresolved' | 'missingImage' | 'existing';
+
+// SectionFilterPanel needs tag-axis handlers even with no tag-kind axes.
+// Stable module-level no-ops so memoised axes don't re-key.
+const NOOP_CYCLE_TAG = () => { /* no tag axes here */ };
+const NOOP_SET_TAG_STATES: React.Dispatch<React.SetStateAction<Record<string, number>>> = () => { /* no tag axes here */ };
+const EMPTY_TAG_STATES: Record<string, number> = {};
+const AXIS_KEYS = ['source', 'status'] as const;
+
+// Match-status flags — surfaced via the Status axis (multi-flag membership).
+const STATUS_VALUES: ReadonlyArray<{ value: string; label: string }> = [
+  { value: 'resolved', label: 'Resolved source' },
+  { value: 'unresolved', label: 'Unresolved source' },
+  { value: 'missingImage', label: 'Missing image' },
+  { value: 'existing', label: 'Already imported' },
+];
+
+function statusFlagsOf(c: SpeciesBackgroundImportCandidate): Set<string> {
+  const flags = new Set<string>();
+  flags.add(c.sourceResolved ? 'resolved' : 'unresolved');
+  if (!c.imageUrl) flags.add('missingImage');
+  if (c.existingEntryId) flags.add('existing');
+  return flags;
+}
 
 export default function SpeciesBackgroundImportWorkbench({
   userProfile,
@@ -47,9 +74,11 @@ export default function SpeciesBackgroundImportWorkbench({
   const [uploadedBatches, setUploadedBatches] = useState<UploadedBatch[]>([]);
   const [selectedCandidateId, setSelectedCandidateId] = useState('');
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const { axisFilters, cyclers, activeFilterCount, resetAll: resetAxisFilters } = useAxisFilters(AXIS_KEYS);
 
   const loadExisting = async () => {
     const rows = await fetchCollection<any>(meta.collection, { orderBy: 'name ASC' });
@@ -75,6 +104,10 @@ export default function SpeciesBackgroundImportWorkbench({
     return () => { cancelled = true; };
   }, [isAdmin, meta.collection, meta.singular]);
 
+  // sources is loaded for buildSpeciesBackgroundCandidates' source-matching;
+  // the Source filter axis is derived from the matched sources actually present.
+  void sources;
+
   const candidates = useMemo(
     () => uploadedBatches.flatMap((batch) =>
       buildSpeciesBackgroundCandidates(kind, batch.payload, batch.fileName, sources, existingEntries)),
@@ -91,10 +124,8 @@ export default function SpeciesBackgroundImportWorkbench({
   const visibleCandidates = useMemo(() => {
     const lowered = search.trim().toLowerCase();
     return candidates.filter((c) => {
-      if (statusFilter === 'resolved' && !c.sourceResolved) return false;
-      if (statusFilter === 'unresolved' && c.sourceResolved) return false;
-      if (statusFilter === 'missingImage' && c.imageUrl) return false;
-      if (statusFilter === 'existing' && !c.existingEntryId) return false;
+      if (!matchesSingleAxisFilter(c.matchedSourceId || '', axisFilters.source)) return false;
+      if (!matchesMultiAxisFilter(statusFlagsOf(c), axisFilters.status)) return false;
       if (lowered) {
         const hit = c.name.toLowerCase().includes(lowered)
           || c.identifier.toLowerCase().includes(lowered)
@@ -104,7 +135,27 @@ export default function SpeciesBackgroundImportWorkbench({
       }
       return true;
     });
-  }, [candidates, search, statusFilter]);
+  }, [candidates, search, axisFilters]);
+
+  // Filter axes — Source (only the matched sources present in the load) +
+  // Status (resolved / unresolved / missing image / already imported).
+  const filterAxes = useMemo<FilterSection[]>(() => {
+    const srcMap = new Map<string, string>();
+    for (const c of candidates) {
+      if (c.matchedSourceId) srcMap.set(c.matchedSourceId, c.matchedSourceLabel || c.matchedSourceId);
+    }
+    const axes: FilterSection[] = [];
+    if (srcMap.size) {
+      axes.push({
+        key: 'source', name: 'Source', kind: 'axis',
+        values: Array.from(srcMap.entries())
+          .sort((a, b) => a[1].localeCompare(b[1]))
+          .map(([value, label]) => ({ value, label })),
+      });
+    }
+    axes.push({ key: 'status', name: 'Status', kind: 'axis', values: STATUS_VALUES.map((v) => ({ ...v })) });
+    return axes;
+  }, [candidates]);
 
   useEffect(() => {
     if (!visibleCandidates.length) { setSelectedCandidateId(''); return; }
@@ -195,19 +246,11 @@ export default function SpeciesBackgroundImportWorkbench({
     return <div className="px-6 py-12 text-center text-ink/50">Foundry import is admin-only.</div>;
   }
 
-  const FILTERS: Array<[StatusFilter, string, number | null]> = [
-    ['all', 'All', null],
-    ['resolved', 'Resolved source', batchSummary.total - batchSummary.unresolved],
-    ['unresolved', 'Unresolved source', batchSummary.unresolved],
-    ['missingImage', 'Missing image', batchSummary.missingImage],
-    ['existing', 'Already imported', batchSummary.existing],
-  ];
-
   return (
     <div className="h-full flex flex-col">
       <Card className="border-gold/20 bg-card/50 overflow-hidden h-full flex flex-col">
         <CardContent className="p-0 flex-1 flex flex-col min-h-0">
-          {/* Header */}
+          {/* Header — title + load/import actions + inline stats */}
           <div className="border-b border-gold/10 bg-card px-5 py-3 shrink-0">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-sm font-bold uppercase tracking-[0.22em] text-ink">{meta.plural} — Foundry Import</h2>
@@ -249,30 +292,51 @@ export default function SpeciesBackgroundImportWorkbench({
               </div>
             ) : (
               <>
-                <div className="flex flex-wrap items-center gap-2 shrink-0">
-                  <Input
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder={`Search ${meta.plural.toLowerCase()} name, source, or identifier`}
-                    className="h-8 max-w-xs bg-background/50 border-gold/10 focus:border-gold text-sm"
-                    autoComplete="off"
-                    spellCheck={false}
-                  />
-                  <div className="flex flex-wrap gap-1">
-                    {FILTERS.map(([value, label, count]) => (
-                      <button
-                        key={value}
-                        type="button"
-                        onClick={() => setStatusFilter(value)}
-                        className={cn(
-                          'rounded-md border px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors',
-                          statusFilter === value ? 'border-gold bg-gold/10 text-gold' : 'border-gold/15 bg-background/40 text-ink/55 hover:border-gold/35 hover:text-gold',
-                        )}
+                {/* Shared FilterBar — search + Filters modal (Source + Status axes) */}
+                <div className="shrink-0">
+                  <FilterBar
+                    search={search}
+                    setSearch={setSearch}
+                    isFilterOpen={isFilterOpen}
+                    setIsFilterOpen={setIsFilterOpen}
+                    activeFilterCount={activeFilterCount}
+                    resetFilters={() => { setSearch(''); resetAxisFilters(); }}
+                    searchPlaceholder={`Search ${meta.plural.toLowerCase()} name, source, or identifier`}
+                    filterTitle={`Filter ${meta.plural}`}
+                    resetLabel="Reset Filters"
+                    trailingActions={
+                      <div
+                        className="text-[11px] font-mono tabular-nums text-ink/55 whitespace-nowrap px-1"
+                        title={`${visibleCandidates.length} of ${candidates.length} shown`}
                       >
-                        {label}{count != null && count > 0 ? ` (${count})` : ''}
-                      </button>
-                    ))}
-                  </div>
+                        {visibleCandidates.length} / {candidates.length}
+                      </div>
+                    }
+                    renderFilters={
+                      <SectionFilterPanel
+                        axes={filterAxes}
+                        axisFilters={axisFilters}
+                        tagStates={EMPTY_TAG_STATES}
+                        setTagStates={NOOP_SET_TAG_STATES}
+                        cycleAxisState={cyclers.cycleAxisState}
+                        cycleAxisStateReverse={cyclers.cycleAxisStateReverse}
+                        cycleTagState={NOOP_CYCLE_TAG}
+                        cycleTagStateReverse={NOOP_CYCLE_TAG}
+                        cycleAxisCombineMode={cyclers.cycleAxisCombineMode}
+                        cycleAxisCombineModeReverse={cyclers.cycleAxisCombineModeReverse}
+                        cycleAxisExclusionMode={cyclers.cycleAxisExclusionMode}
+                        cycleAxisExclusionModeReverse={cyclers.cycleAxisExclusionModeReverse}
+                        axisIncludeAll={cyclers.axisIncludeAll}
+                        axisExcludeAll={cyclers.axisExcludeAll}
+                        axisClear={cyclers.axisClear}
+                        search=""
+                        setSearch={() => { /* candidate search lives on FilterBar */ }}
+                        activeFilterCount={activeFilterCount}
+                        resetAll={() => { setSearch(''); resetAxisFilters(); }}
+                        embedded
+                      />
+                    }
+                  />
                 </div>
 
                 <div className="flex gap-4 flex-1 min-h-0">
@@ -307,28 +371,30 @@ export default function SpeciesBackgroundImportWorkbench({
                     </div>
                   </div>
 
-                  {/* Detail */}
+                  {/* Detail — feat-importer-style: header, image + facts grid, warnings, description */}
                   <div className="flex-1 min-w-0 min-h-0 overflow-y-auto custom-scrollbar pr-1">
                     {selectedCandidate ? (
                       <Card className="border-gold/10 bg-background/25 overflow-hidden">
                         <CardContent className="p-0">
-                          <div className="border-b border-gold/10 px-5 py-4 flex items-start gap-4">
-                            <DetailImage src={selectedCandidate.imageUrl} alt={selectedCandidate.name} />
-                            <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <h3 className="font-serif text-2xl font-bold text-ink">{selectedCandidate.name}</h3>
-                                {selectedCandidate.matchedSourceLabel ? (
-                                  <Badge className="border-gold/20 bg-gold/10 text-gold">{selectedCandidate.matchedSourceLabel}</Badge>
-                                ) : (
-                                  <Badge className="border-blood/30 bg-blood/15 text-blood">{selectedCandidate.sourceBook || 'No source'}</Badge>
-                                )}
-                                {selectedCandidate.sourcePage ? <span className="text-xs uppercase tracking-widest text-ink/40">p{selectedCandidate.sourcePage}</span> : null}
+                          <div className="border-b border-gold/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.02),transparent)] px-6 py-5">
+                            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                              <div className="space-y-1 min-w-0">
+                                <div className="flex items-center gap-3 flex-wrap">
+                                  <h3 className="font-serif text-3xl font-bold text-ink break-words">{selectedCandidate.name}</h3>
+                                  {selectedCandidate.matchedSourceLabel ? (
+                                    <Badge className="border-gold/20 bg-gold/10 text-gold">{selectedCandidate.matchedSourceLabel}</Badge>
+                                  ) : (
+                                    <Badge className="border-blood/30 bg-blood/15 text-blood">{selectedCandidate.sourceBook || 'No source'}</Badge>
+                                  )}
+                                  {selectedCandidate.sourcePage ? (
+                                    <span className="text-xs uppercase tracking-widest text-ink/40">p{selectedCandidate.sourcePage}</span>
+                                  ) : null}
+                                </div>
+                                <p className="font-serif italic text-ink/70">{selectedCandidate.summary || meta.singular}</p>
                               </div>
-                              <div className="mt-1 font-mono text-[11px] text-ink/45">{selectedCandidate.identifier}</div>
                               <Button
                                 type="button"
-                                size="sm"
-                                className="mt-3 gap-2 btn-gold-solid"
+                                className="gap-2 btn-gold-solid shrink-0"
                                 onClick={handleImportSelected}
                                 disabled={saving}
                               >
@@ -338,10 +404,28 @@ export default function SpeciesBackgroundImportWorkbench({
                             </div>
                           </div>
 
-                          <div className="px-5 py-4 space-y-4">
+                          <div className="border-b border-gold/10 px-6 py-5">
+                            <div className="grid gap-6 lg:grid-cols-[126px_minmax(0,1fr)]">
+                              <DetailImage src={selectedCandidate.imageUrl} alt={selectedCandidate.name} />
+                              <div className="space-y-3">
+                                <div className="grid gap-y-3 text-sm md:grid-cols-2 md:gap-x-8">
+                                  {selectedCandidate.facts.map(([label, value]) => (
+                                    <FactRow key={label} label={label} value={value} />
+                                  ))}
+                                  <FactRow label="Identifier" value={selectedCandidate.identifier} />
+                                </div>
+                                <div>
+                                  <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-gold/70">Image URL</div>
+                                  <div className="mt-1 break-all font-mono text-[10px] text-ink/55">{selectedCandidate.imageUrl || '— none —'}</div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="space-y-4 px-6 py-5">
                             {selectedCandidate.importWarnings.length ? (
-                              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
-                                <div className="mb-1.5 flex items-center gap-2 font-bold uppercase tracking-widest text-xs">
+                              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">
+                                <div className="mb-2 flex items-center gap-2 font-bold uppercase tracking-widest text-xs">
                                   <AlertTriangle className="h-4 w-4" /> Notes
                                 </div>
                                 <ul className="space-y-1 list-disc pl-5 text-[12px]">
@@ -349,20 +433,8 @@ export default function SpeciesBackgroundImportWorkbench({
                                 </ul>
                               </div>
                             ) : null}
-
-                            <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-xs">
-                              {selectedCandidate.facts.map(([label, value]) => (
-                                <React.Fragment key={label}>
-                                  <dt className="font-bold uppercase tracking-widest text-[10px] text-gold/70 pt-0.5">{label}</dt>
-                                  <dd className="text-ink/85">{value}</dd>
-                                </React.Fragment>
-                              ))}
-                              <dt className="font-bold uppercase tracking-widest text-[10px] text-gold/70 pt-0.5">Image URL</dt>
-                              <dd className="text-ink/60 break-all font-mono text-[10px]">{selectedCandidate.imageUrl || '— none —'}</dd>
-                            </dl>
-
                             <div
-                              className="prose prose-sm max-w-none text-ink/85 border-t border-gold/10 pt-3"
+                              className="prose prose-sm max-w-none prose-p:text-ink/90 prose-strong:text-ink prose-em:text-ink/80 prose-li:text-ink/85 prose-headings:text-ink"
                               dangerouslySetInnerHTML={{ __html: selectedCandidate.descriptionHtml || '<p>No description.</p>' }}
                             />
                           </div>
@@ -400,13 +472,22 @@ function CandidateThumb({ src }: { src: string }) {
 function DetailImage({ src, alt }: { src: string; alt: string }) {
   if (!src) {
     return (
-      <div className="h-[88px] w-[88px] shrink-0 rounded-lg border border-amber-500/30 bg-amber-500/5 flex flex-col items-center justify-center gap-1">
-        <ImageOff className="h-6 w-6 text-amber-400/60" />
+      <div className="h-[126px] w-[126px] shrink-0 rounded-lg border border-amber-500/30 bg-amber-500/5 flex flex-col items-center justify-center gap-1">
+        <ImageOff className="h-7 w-7 text-amber-400/60" />
         <span className="text-[9px] uppercase tracking-widest text-amber-400/60">no image</span>
       </div>
     );
   }
-  return <img src={src} alt={alt} className="h-[88px] w-[88px] shrink-0 rounded-lg border border-gold/20 object-cover" />;
+  return <img src={src} alt={alt} className="h-[126px] w-[126px] shrink-0 rounded-lg border border-gold/20 object-cover" />;
+}
+
+function FactRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-gold/70">{label}</div>
+      <div className="mt-1 text-sm text-ink/90">{value || '—'}</div>
+    </div>
+  );
 }
 
 function InlineStat({ icon: Icon, label, value, tone }: { icon: any; label: string; value: number; tone?: 'warn' }) {
