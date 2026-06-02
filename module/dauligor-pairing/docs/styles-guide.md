@@ -26,7 +26,9 @@ CSS cascade depends on load order, so the `styles[]` array order is deliberate:
 12. `character-sheet.css`
 13. `directory-tools.css`
 14. `gm-console.css`
-15. `responsive.css` — **all `@media` blocks, loaded last** so they override
+15. `character-creator.css`
+16. `launcher.css`
+17. `responsive.css` — **all `@media` blocks, loaded last** so they override
 
 Components 3–14 are BEM-isolated (`.dauligor-<block>__element`), so their order
 relative to each other rarely matters. `tokens`/`base` first and `responsive`
@@ -50,7 +52,14 @@ last are the load-order rules that *do* matter.
 | `character-sheet`, `class-prepare-button`, `pairing` | `character-sheet.css` | the alt character sheet + the neutral Prepare button |
 | `directory-tools`, `spell-tab-tools` | `directory-tools.css` | injected sidebar / sheet-tab buttons |
 | `gm-console` | `gm-console.css` | the GM console window |
+| `character-creator` | `character-creator.css` | the Character Creator walkthrough wizard |
+| `launcher` | `launcher.css` | the Dauligor Options / Actor Tools hub window (tile menu) |
 | all `@media` | `responsive.css` | responsive overrides for every window |
+
+> New blocks must also be added to the **token roots** in `tokens.css` (the
+> vars-only list) so `var(--dauligor-…)` resolves on a standalone window —
+> `character-creator` + `launcher` are registered there. Forgetting this is
+> why a new window can render with the right markup but no theme.
 
 **Fast lookup:** to find a class, `grep -rn "dauligor-<block>__" styles/`. The
 block prefix maps to a file via the table above.
