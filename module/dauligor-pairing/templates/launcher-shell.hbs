@@ -1,8 +1,11 @@
-<section class="dauligor-launcher__shell">
-  {{!-- Optional caption under the window title. Rendered by _renderAll(). --}}
-  <div data-region="intro"></div>
+<div class="dauligor-launcher__shell">
+  {{!-- Caption under the title (fixed, non-scrolling). Filled by _renderAll(). --}}
+  <div class="dauligor-launcher__intro" data-region="intro"></div>
 
-  {{!-- Action tiles grid. _renderAll() fills this from config.actions and
-       binds click handlers. --}}
-  <div class="dauligor-launcher__grid" data-region="grid"></div>
-</section>
+  {{!-- Scroll region fills the rest of the fixed-height window (min-height:0
+       chain). The tile grid sits inside at its natural height and scrolls if
+       it ever exceeds — it never compresses, so tiles can't overlap. --}}
+  <div class="dauligor-launcher__scroll">
+    <div class="dauligor-launcher__grid" data-region="grid"></div>
+  </div>
+</div>

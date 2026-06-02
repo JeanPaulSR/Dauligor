@@ -79,22 +79,19 @@ export class DauligorLauncherApp extends HandlebarsApplicationMixin(ApplicationV
   }
 
   constructor(config = {}) {
-    // Fixed numeric height from the tile count (NOT "auto", which this AppV2
-    // setup ignores). The shell is a plain block, so it never compresses.
+    // Fixed numeric height (NOT "auto" — this AppV2 setup ignores it). Follows
+    // the same window model as the importer/feat-browser: `dauligor-importer-app`
+    // + `dauligor-importer-window` make `.window-content` a flex column with
+    // overflow:hidden; the shell fills it via height:100% and scrolls its grid
+    // internally (min-height:0 chain). See .dauligor-launcher__* in launcher.css.
     const initialHeight = launcherHeight(Array.isArray(config.actions) ? config.actions.length : 1);
     super({
       id: `${MODULE_ID}-launcher`,
-      // NOTE: deliberately NOT `dauligor-importer-app` / `dauligor-importer-window`.
-      // Those classes force the window-content to flex-column + overflow:hidden +
-      // padding:0 for the big full-height wizards; on this small hub that collapses
-      // + clips the content (everything overlaps). The launcher owns its own layout
-      // via `.dauligor-launcher__shell`. `.dauligor-launcher` is a registered token
-      // root (tokens.css), so the palette still resolves.
-      classes: ["dauligor-launcher"],
+      classes: ["dauligor-importer-app", "dauligor-launcher"],
       window: {
         title: config.title || "Dauligor",
         resizable: false,
-        contentClasses: ["dauligor-launcher-window"],
+        contentClasses: ["dauligor-importer-window"],
       },
       position: { width: 460, height: initialHeight },
     });
@@ -146,7 +143,8 @@ export class DauligorLauncherApp extends HandlebarsApplicationMixin(ApplicationV
   _renderAll() {
     const intro = this._config.intro;
     if (this._introRegion) {
-      this._introRegion.innerHTML = intro ? `<p class="dauligor-launcher__intro">${escapeHtml(intro)}</p>` : "";
+      this._introRegion.textContent = intro || "";
+      this._introRegion.style.display = intro ? "" : "none";
     }
 
     const actions = Array.isArray(this._config.actions) ? this._config.actions : [];
