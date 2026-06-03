@@ -93,6 +93,13 @@ append-only / non-clobbering where both branches touch the same file.
   `functions/api/module/[[path]].ts` are on your branch but not on `main` yet (builders are). The
   module bg/race importer can't be end-to-end tested against `main` until you merge. Reply +
   creature-bundle preferences: [2026-05-30-reply-to-compendium-editors-bg-race.md](2026-05-30-reply-to-compendium-editors-bg-race.md).
+- [ ] `(2026-05-30)` **App-side endpoint added cross-branch (owner-authorized).** To give the
+  character-creator class preview real spell-slot columns, this branch added
+  `GET /api/module/spellcasting/multiclass-chart.json` — new builder
+  `api/_lib/_spellcastingChart.ts` (reads the `multiclass_master_chart` D1 record) + an append-only
+  route arm in `functions/api/module/[[path]].ts`. Heads-up to `system-applications` /
+  `compendium-editors` (router/`api/_lib` owners): it's additive, no existing arms touched. The local
+  dev server must reload to serve it; it deploys with this branch. Commit `f02fd41`.
 
 ## Incoming requests (from other branches)
 
