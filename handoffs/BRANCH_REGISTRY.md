@@ -41,5 +41,6 @@ Removed entries land here briefly so other agents can see what just changed befo
 
 | Branch | Merged | Touched files |
 |---|---|---|
+| `compendium-editors` → Backgrounds | 2026-06-03 → `fd46b4e` | Backgrounds proficiencies/features/prerequisites + feat-style view; shared `ProficienciesEditor` + `src/lib/proficiencySelection.ts` (ClassEditor migrated onto it, export byte-identical); `src/lib/foundryHtmlCleanup.ts` `slug{Display}` mop-up; `functions/api/module/[[path]].ts` gained the `background-features` arm **and carried foundry-module's `spellcasting/multiclass-chart` arm to main** (resolves the 2026-06-02 cross-branch handoff — that endpoint is now in prod); 8 migrations (`20260601-1200`…`1500`, `20260602-1200`…`1500`) applied to remote D1. Plus the class-editor dirty-check fix. _Branch stays **active** — the broad compendium-editor scope continues._ |
 | `claude/class-slug-routes` | 2026-05-27 → `a3ebb4f` | `src/lib/useClassRouteId.ts` (new), `src/App.tsx`, `src/pages/compendium/{ClassEditor,ClassList,ClassView,SpellList,SubclassEditor}.tsx`, `src/pages/sources/SourceDetail.tsx` |
 | `claude/phase1-foundation` | 2026-05-27 → `2b7dea4` | `worker/migrations/20260527-{1400,1410,1420}_*.sql` (new), `module/dauligor-pairing/scripts/foundry-id.js` (new), `docs/roadmap.md` |

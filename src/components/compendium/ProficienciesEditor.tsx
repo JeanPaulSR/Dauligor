@@ -17,9 +17,11 @@ import {
  * Operates on the class proficiency model (per kind: `{choiceCount, fixedIds,
  * optionIds, categoryIds}`). Render only the kinds you need via `types`.
  *
- * NOTE: weapon melee/ranged "pills" (a weapons-only refinement) are NOT yet
- * ported here — they land when the class editor migrates onto this component.
- * Backgrounds don't grant weapons, so this is a no-op for them.
+ * Weapons support Melee/Ranged "pills" (toggle every melee- or ranged-type
+ * weapon in a category at once) via the `renderCategoryExtra` hook. The class
+ * editor (main + multiclass grids) and the background editor both consume this
+ * component; backgrounds render only skills/tools/languages, so the weapon
+ * pills are simply unused there.
  */
 
 type Option = { id: string; name: string; categoryId?: string };

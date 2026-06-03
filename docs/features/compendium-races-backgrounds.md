@@ -1,6 +1,6 @@
 # Compendium — Species & Backgrounds
 
-> **Status:** ✅ Dedicated tables + editors + Foundry exporters + importers + public browsers all shipped (migration `20260601-1200`). Tables start empty; populate them via each editor's admin-only **Foundry Import** tab.
+> **Status:** ✅ Dedicated tables + editors + Foundry exporters + importers + public browsers all shipped (migration `20260601-1200`). Backgrounds additionally carry **structured proficiencies, prerequisites, and owned features** (migrations `20260602-1200`…`1500`) — see §3a. Tables start empty; populate them via each editor's admin-only **Foundry Import** tab.
 >
 > **Naming:** the user-facing entity is **"Species"** (the D&D 2024 rename of "Race"). The table is `species`, the editor + sidebar say "Species", but the **Foundry export `type` stays `"race"`** for dnd5e compatibility, and the route URL stays `/compendium/races`.
 >
@@ -33,14 +33,16 @@ Two dedicated tables, created by [`worker/migrations/20260601-1200_backgrounds_s
 
 **`species`** — `id`, `name`, `identifier`, `sourceId`, `page`, `description`, `advancements` (JSON), `movement` (JSON `{walk,fly,swim,climb,burrow,hover,units}`), `senses` (JSON `{darkvision,blindsight,tremorsense,truesight,units,special}`), `creatureType` (JSON `{value,subtype,swarm,custom}`), `tags` (JSON), `imageUrl`, `contentHash`, `createdAt`, `updatedAt`.
 
-**`backgrounds`** — `id`, `name`, `identifier`, `sourceId`, `page`, `description`, `advancements` (JSON), `startingEquipment` (JSON EquipmentEntryData tree), `wealth` (formula string), `tags` (JSON), `imageUrl`, `contentHash`, `createdAt`, `updatedAt`.
+**`backgrounds`** — `id`, `name`, `identifier`, `sourceId`, `page`, `description`, `advancements` (JSON), `startingEquipment` (JSON EquipmentEntryData tree), `wealth` (formula string), `prerequisite` (plain text), `prerequisiteTree` (JSON Requirement tree), `proficiencies` (JSON — the shared class proficiency model: `{skills,tools,languages}`, each `{choiceCount,fixedIds,optionIds,categoryIds}`), `tags` (JSON), `imageUrl`, `contentHash`, `createdAt`, `updatedAt`. (`prerequisite`/`proficiencies`/`prerequisiteTree` added by migrations `20260602-1200`/`1300`/`1400`.)
+
+**`background_features`** / **`species_features`** (migrations `20260601-1400`/`1500`) — feat-shaped content tables (`id`, `name`, `identifier`, `sourceId`, `page`, `description`, `advancements`/`activities`/`effects`/`uses`/`tags` JSON, `imageUrl`, …). `background_features` also has **`parentBackgroundId`** (migration `20260602-1500`, FK → `backgrounds(id)` ON DELETE CASCADE) so a background can OWN its feature(s); a NULL parent is a standalone catalog feature.
 
 Both carry a **source-scoped unique index** `…_source_identifier_uniq ON (COALESCE(sourceId,''), identifier)` — two sources may both ship "soldier"; one source may not ship it twice (same pattern as feats/items).
 
 ### Plumbing
 
 - **`src/lib/d1Tables.ts`** — `D1_TABLE_MAP` aliases `backgrounds`/`species` to themselves.
-- **`src/lib/d1.ts`** — both tables are in `PERSISTENT_TABLES` (read-heavy, sessionStorage-cached); the JSON columns `startingEquipment`/`movement`/`senses`/`creatureType` are added to `queryD1`'s `jsonFields` auto-parse list (`tags`/`advancements` were already there).
+- **`src/lib/d1.ts`** — `backgrounds`, `species`, `background_features`, `species_features` are all in `PERSISTENT_TABLES` (read-heavy, sessionStorage-cached); the JSON columns `startingEquipment`/`movement`/`senses`/`creatureType`/`proficiencies`/`prerequisiteTree` are in `queryD1`'s `jsonFields` auto-parse list (`tags`/`advancements`/`uses`/`activities`/`effects` were already there). **Rule-4 reminder:** any inline remap reading these must use the `typeof X === 'string' ? JSON.parse(X) : (X ?? default)` passthrough.
 - **No `compendium.ts` mapping.** Because the columns are already camelCase, the editor reads/writes through `fetchDocument` / `upsertDocument` **directly** — it does NOT run `normalizeCompendiumData` / `denormalizeCompendiumData` (those are snake↔camel mappers for the legacy tables). The only boundary rename is `tags` (column) ↔ `tagIds` (form), done inline.
 
 ---
@@ -58,7 +60,7 @@ export default function RaceEditor({ userProfile }) {
 It's a **Pattern E** editor built on [`CompendiumEditorShell`](../../src/components/compendium/CompendiumEditorShell.tsx) (3-pane list | editor | preview, super-tabs Editor/Tags). `kind` selects:
 
 - the target table (`species` / `backgrounds`),
-- the type-specific Editor sub-tab — **Traits** (movement / senses / creature type) for species, **Details** (wealth / starting equipment) for backgrounds,
+- the type-specific Editor sub-tabs — **Traits** (movement / senses / creature type) for species; **Details** (prerequisite + wealth + starting equipment), **Proficiencies** (the shared `ProficienciesEditor` — skills/tools/languages), and **Features** for backgrounds (see §3a),
 - the `AdvancementManager` `parentContext` (`'race'` / `'background'`).
 
 Shared sub-tabs: **Basics** (image / name / identifier / source / page / description), **Advancement** (`AdvancementManager` with the feats/features/option-group/option-item catalogs + the row's own scaling columns), **Scaling** (`ScalingColumnsPanel`, `parentType='race'|'background'` — for ScaleValue traits like Dragonborn breath), and the **Tags** super-tab (`TagPicker`).
@@ -68,6 +70,16 @@ Shared sub-tabs: **Basics** (image / name / identifier / source / page / descrip
 - The admin-only **Foundry-Import** workbench mode is wired (see §5).
 - **Starting equipment** has no structured tree editor yet (the `wealth` field is editable; existing `startingEquipment` entries round-trip unchanged). The EquipmentEntryData tree is populated by the importer.
 
+### 3a. Background proficiencies, prerequisites & features (backgrounds only)
+
+Added 2026-06-02/03 (migrations `20260602-1200`…`1500`):
+
+- **Proficiencies** — a dedicated **Proficiencies** sub-tab backed by the shared [`ProficienciesEditor`](../../src/components/compendium/ProficienciesEditor.tsx) (the same grid the class editor uses, whose helpers now live in [`proficiencySelection.ts`](../../src/lib/proficiencySelection.ts)). Stored in the `proficiencies` column on the class proficiency model (`{skills,tools,languages}`, each `{choiceCount,fixedIds,optionIds,categoryIds}`; `fixedIds`/`optionIds` = skills/tools/languages table ROW ids). The importer fills it from the prose `[ul]` block ([`backgroundProficiencies.ts`](../../src/lib/backgroundProficiencies.ts) → `proficienciesFromEntries`); the view renders structured-first (`resolveBackgroundDisplay`), falling back to parsing the prose block for rows not yet re-imported. No 2024 ability-score / origin-feat modelling — 2014-focused.
+- **Prerequisites** — a free-text `prerequisite` plus an optional structured `prerequisiteTree` (a Requirement tree), authored with the feats' [`RequirementsEditor`](../../src/components/compendium/RequirementsEditor.tsx) and rendered via the shared `resolveDetailPrereq` (italic, under the name — same treatment feats get).
+- **Features** — a **Features** sub-tab ([`BackgroundFeaturesTab`](../../src/components/compendium/BackgroundFeaturesTab.tsx)) authoring rows in `background_features` OWNED by the background (`parentBackgroundId`, ON DELETE CASCADE). The standalone catalog [`CompendiumFeatureEditor`](../../src/pages/compendium/CompendiumFeatureEditor.tsx) still handles un-owned features.
+
+**Display transform:** proficiency values + descriptions render through the canonical `cleanFoundryHtml(bbcodeToHtml(...))` pipeline (same as feats/spells), which gained a `slug{Display}` mop-up so leftover `&Reference[…]{Display}` / `@type[…]{Display}` enricher braces resolve to their label — a shared fix that also improves feat/spell/item display + import.
+
 ---
 
 ## 4. Foundry export — live read-through
@@ -75,7 +87,7 @@ Shared sub-tabs: **Basics** (image / name / identifier / source / page / descrip
 Both endpoints are public GET, served live (no R2 cache), and now read the **dedicated tables**:
 
 - `api/_lib/_raceExport.ts` → `buildRaceItemBundle` → `type:"race"` + `system.movement` / `system.senses` / `system.type` (from `creatureType`).
-- `api/_lib/_backgroundExport.ts` → `buildBackgroundItemBundle` → `type:"background"` + `system.startingEquipment` / `system.wealth`.
+- `api/_lib/_backgroundExport.ts` → `buildBackgroundItemBundle` → `type:"background"` + `system.startingEquipment` / `system.wealth`, plus **`Trait` advancements** synthesized from the structured `proficiencies` (row id → trait identifier; `choiceCount` with an empty pool → whole-category "choose N of any"), and an **`ItemGrant`** per owned `background_features` row — the feature items are embedded in the bundle's `features[]` and each is also served standalone at `/api/module/background-features/<id>.json` ([`api/_lib/_backgroundFeatureExport.ts`](../../api/_lib/_backgroundFeatureExport.ts), a `feat` item with `system.type.value="background"`).
 
 Both share [`api/_lib/_speciesBackgroundShared.ts`](../../api/_lib/_speciesBackgroundShared.ts) → `buildSpeciesBackgroundItem`, which builds the common `system` block: `identifier`, `description` (BBCode → HTML), `advancement` (array → dnd5e keyed-object map, with ScaleValue normalization against the row's `scaling_columns`), and `source` (resolved from the `sourceId` FK). Flags preserve the feat-export keys (`featType` = the Foundry type, `featSubtype: ""`, `featSpellSourceId`).
 

@@ -1,23 +1,24 @@
 -- Add a structured `proficiencies` column to `backgrounds`.
 --
--- Backgrounds grant skill / tool / language proficiencies (and, in the 2024
--- rules, ability-score increases + an origin feat). The 5etools-sourced data
--- carries these only as prose in the description's `[ul]` block, which we were
--- re-parsing on every render. This column stores them as STRUCTURED data,
--- populated once at import and editable via the dedicated Proficiencies section
--- — the source of truth the view renders from and the exporter turns into real
--- dnd5e advancements (Trait / AbilityScoreImprovement / ItemGrant).
+-- Backgrounds grant skill / tool / language proficiencies. The 5etools-sourced
+-- data carries these only as prose in the description's `[ul]` block, which we
+-- were re-parsing on every render. This column stores them as STRUCTURED data,
+-- populated once at import and editable via the shared Proficiencies picker —
+-- the source of truth the view renders from and the exporter turns into real
+-- dnd5e `Trait` advancements.
 --
--- Shape (JSON; see src/lib/backgroundProficiencies.ts):
+-- Shape (JSON; the SHARED class proficiency model — see
+-- src/lib/backgroundProficiencies.ts + src/lib/proficiencySelection.ts):
 --   {
---     abilityScores: string[],                       // ability keys (2024)
---     feat: string,                                  // origin feat id/slug (2024)
---     skills:    { granted: string[], choices: [{count, pool: string[]}] },
---     tools:     { granted: string[], choices: [{count, pool: string[]}] },
---     languages: { granted: string[], choices: [{count, pool: string[]}] }
+--     skills:    { choiceCount, fixedIds[], optionIds[], categoryIds[] },
+--     tools:     { choiceCount, fixedIds[], optionIds[], categoryIds[] },
+--     languages: { choiceCount, fixedIds[], optionIds[], categoryIds[] }
 --   }
--- granted/pool hold the skills/tools/languages table identifiers (the
--- dnd5e-aligned keys: his, cartographer, common). pool [] = "any of category".
+-- fixedIds/optionIds hold skills/tools/languages table ROW ids; the exporter
+-- maps row id -> trait identifier (his / cartographer / common). choiceCount > 0
+-- with an empty optionIds pool = "choose N of any" (expands to the whole
+-- category on export). 2024-only ability-score increases + an origin feat are
+-- intentionally NOT modelled — the catalog is 2014-focused.
 --
 -- Default '{}' (empty object) — pre-existing rows read as "no structured
 -- proficiencies yet" and the view falls back to parsing the prose block until

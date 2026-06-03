@@ -17,9 +17,11 @@ import { Button } from '../ui/button';
  * Features are stored in `background_features` OWNED by this background
  * (`parentBackgroundId`, migration 20260602-1500) and saved independently of
  * the background form (each Add/Edit/Delete writes immediately) — so the
- * background must be saved first to have a stable id. Foundry export of these
- * (ItemGrant + a feature export endpoint) is a separate, planned step; this tab
- * is the authoring surface.
+ * background must be saved first to have a stable id. Foundry export is wired:
+ * each owned feature becomes an `ItemGrant` advancement on the background and a
+ * `feat`-type item served at `/api/module/background-features/<id>.json` (and
+ * embedded in the background bundle's `features[]`). See
+ * `api/_lib/_backgroundFeatureExport.ts` + `api/_lib/_backgroundExport.ts`.
  *
  * Intentionally lightweight (name + identifier + image + description). The
  * standalone CompendiumFeatureEditor remains for richer catalog authoring.
