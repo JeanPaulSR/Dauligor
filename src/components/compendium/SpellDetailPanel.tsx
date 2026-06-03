@@ -80,6 +80,11 @@ type Props = {
    *  refreshes the pane — the panel reads the *persisted* row, so an
    *  in-place UPDATE to the same id only reflects once we re-fetch. */
   refreshKey?: number;
+  /** Pre-loaded raw spell row (snake_case, as stored in D1). When provided the
+   *  panel renders from it directly instead of fetching by id — used by the
+   *  proposal spell editor to preview an in-block draft, which has no persisted
+   *  live row (create) or whose live row doesn't yet reflect the draft (update). */
+  spellData?: Record<string, any> | null;
 };
 
 export default function SpellDetailPanel({
@@ -90,6 +95,7 @@ export default function SpellDetailPanel({
   size = 'normal',
   bottomSlot,
   refreshKey,
+  spellData,
 }: Props) {
   const navigate = useNavigate();
   const [sources, setSources] = useState<SourceRecord[]>([]);
@@ -162,6 +168,9 @@ export default function SpellDetailPanel({
   // `refreshKey` lets the editor force a re-read after it persists the row.
   useEffect(() => {
     if (!spellId) return;
+    // Caller supplied the row (e.g. the proposal editor previewing an in-block
+    // draft, which has no persisted live row) — render from it; skip the fetch.
+    if (spellData) return;
 
     let active = true;
     setLoading(true);
@@ -169,29 +178,10 @@ export default function SpellDetailPanel({
       fetchDocument<any>('spells', spellId),
       fetchClassesForSpell(spellId),
     ])
-      .then(([spellData, memberships]) => {
+      .then(([fetchedRow, memberships]) => {
         if (!active) return;
-        if (spellData) {
-          // `foundry_data` is auto-parsed by d1.ts now (jsonFields list),
-          // but tolerate the string case for cache coherence with older
-          // sessions. Both `foundryShell` and `foundryDocument.system`
-          // are aliases for the same parsed JSON — the system block.
-          const parsedFoundryData = typeof spellData.foundry_data === 'string'
-            ? (() => { try { return JSON.parse(spellData.foundry_data); } catch { return null; } })()
-            : (spellData.foundry_data ?? null);
-          const mapped: SpellRecord = {
-            ...spellData,
-            sourceId: spellData.source_id,
-            imageUrl: spellData.image_url,
-            tagIds: typeof spellData.tags === 'string' ? safeJsonArray(spellData.tags) : (spellData.tags ?? []),
-            foundryDocument: { system: parsedFoundryData },
-            foundryShell: parsedFoundryData,
-            requiredTags: typeof spellData.required_tags === 'string'
-              ? safeJsonArray(spellData.required_tags).map(String)
-              : (Array.isArray(spellData.required_tags) ? spellData.required_tags.map(String) : []),
-            prerequisiteText: spellData.prerequisite_text || '',
-          };
-          setSpellsById(prev => ({ ...prev, [spellId]: mapped }));
+        if (fetchedRow) {
+          setSpellsById(prev => ({ ...prev, [spellId]: mapRawSpellRow(spellId, fetchedRow) }));
         }
         setMembershipsBySpellId(prev => ({ ...prev, [spellId]: memberships }));
       })
@@ -201,7 +191,7 @@ export default function SpellDetailPanel({
       .finally(() => { if (active) setLoading(false); });
 
     return () => { active = false; };
-  }, [spellId, refreshKey]);
+  }, [spellId, refreshKey, spellData]);
 
   const sourceById = useMemo(
     () => Object.fromEntries(sources.map(s => [s.id, s])) as Record<string, SourceRecord>,
@@ -213,11 +203,18 @@ export default function SpellDetailPanel({
     [tags]
   );
 
+  // When the caller supplies a raw row, map it the same way the fetch path does
+  // so the preview renders identically without a server round-trip.
+  const providedSpell = useMemo<SpellRecord | null>(
+    () => (spellId && spellData ? mapRawSpellRow(spellId, spellData) : null),
+    [spellId, spellData],
+  );
+
   if (!spellId) {
     return <div className="px-8 py-20 text-center text-ink/45">{emptyMessage}</div>;
   }
 
-  const spell = spellsById[spellId] || null;
+  const spell = providedSpell || spellsById[spellId] || null;
   const memberships = membershipsBySpellId[spellId];
 
   if (loading && !spell) {
@@ -529,6 +526,32 @@ function SpellInfoRow({ label, value }: { label: string; value: string }) {
       <div className="mt-1 text-sm text-ink/90">{value || '—'}</div>
     </div>
   );
+}
+
+// Map a raw spell row (snake_case as stored in D1, or a proposal draft's
+// proposed_payload — same shape) into the SpellRecord the panel renders. Used
+// by both the fetch path and the caller-supplied `spellData` path so the
+// preview is identical either way. `foundry_data` is auto-parsed by d1.ts now
+// (jsonFields), but tolerate the string case for older cached sessions; both
+// `foundryShell` and `foundryDocument.system` alias the parsed system block.
+function mapRawSpellRow(spellId: string, raw: any): SpellRecord {
+  const parsedFoundryData = typeof raw?.foundry_data === 'string'
+    ? (() => { try { return JSON.parse(raw.foundry_data); } catch { return null; } })()
+    : (raw?.foundry_data ?? raw?.foundryData ?? null);
+  return {
+    ...raw,
+    id: spellId,
+    sourceId: raw?.source_id ?? raw?.sourceId,
+    imageUrl: raw?.image_url ?? raw?.imageUrl,
+    tagIds: typeof raw?.tags === 'string' ? safeJsonArray(raw.tags) : (raw?.tags ?? []),
+    foundryDocument: { system: parsedFoundryData },
+    foundryShell: parsedFoundryData,
+    requiredTags: typeof raw?.required_tags === 'string'
+      ? safeJsonArray(raw.required_tags).map(String)
+      : (Array.isArray(raw?.required_tags) ? raw.required_tags.map(String)
+        : (Array.isArray(raw?.requiredTags) ? raw.requiredTags.map(String) : [])),
+    prerequisiteText: raw?.prerequisite_text ?? raw?.prerequisiteText ?? '',
+  };
 }
 
 function safeJsonArray(raw: string): any[] {

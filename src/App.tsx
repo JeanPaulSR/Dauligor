@@ -5,7 +5,7 @@
 
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { auth, onAuthStateChanged, User } from './lib/firebase';
+import { onAuthChange, getSessionToken, type Identity } from './lib/auth';
 import { WikiPreviewContext, type WikiPreviewCampaign } from './lib/wikiPreviewContext';
 import { fetchDocument, upsertDocument, fetchCollection, checkFoundationUpdate, clearCache } from './lib/d1';
 import { setCurrentUserRole } from './lib/currentUser';
@@ -42,7 +42,6 @@ import SubclassEditor from './pages/compendium/SubclassEditor';
 import ScalingEditor from './pages/compendium/scaling/ScalingEditor';
 import SpellcastingScalingEditor from './pages/compendium/scaling/SpellcastingScalingEditor';
 import SpellsKnownScalingEditor from './pages/compendium/scaling/SpellsKnownScalingEditor';
-import UniqueOptionGroupList from './pages/compendium/UniqueOptionGroupList';
 import UniqueOptionGroupEditor from './pages/compendium/UniqueOptionGroupEditor';
 import UniqueOptionGroupBrowser from './pages/compendium/UniqueOptionGroupBrowser';
 import SystemPagesList from './pages/compendium/SystemPagesList';
@@ -102,7 +101,7 @@ function RouteAwareFooter() {
 }
 
 export default function App() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<Identity | null>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [previewMode, setPreviewMode] = useState(false);
@@ -156,7 +155,7 @@ export default function App() {
           setLastFoundationTimestamp(currentTimestamp);
           
           // Optionally refresh the current profile as well if it might be affected
-          if (user) loadProfile(user);
+          if (user) loadProfile();
         } else if (!lastFoundationTimestamp && currentTimestamp) {
           setLastFoundationTimestamp(currentTimestamp);
         }
@@ -168,7 +167,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, [user, lastFoundationTimestamp]);
 
-  const loadProfile = async (firebaseUser: User) => {
+  const loadProfile = async () => {
     try {
       // GET /api/me does all of the work that used to live here:
       //   - the SELECT * FROM users WHERE id = ? lookup
@@ -180,9 +179,9 @@ export default function App() {
       // Server-side because letting the client decide which profile
       // fields to upsert was the H6 role-self-promotion vector. With
       // this migration the client never writes to `users.role` again.
-      const idToken = await firebaseUser.getIdToken();
+      const idToken = await getSessionToken();
       const res = await fetch('/api/me', {
-        headers: { Authorization: `Bearer ${idToken}` },
+        headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
       });
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}));
@@ -199,16 +198,19 @@ export default function App() {
 
   const refreshProfile = async () => {
     if (user) {
-      await loadProfile(user);
+      await loadProfile();
     }
   };
 
   useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
-      setUser(firebaseUser);
-      if (firebaseUser) {
-        loadProfile(firebaseUser);
+    const unsubscribeAuth = onAuthChange((identity) => {
+      setUser(identity);
+      if (identity) {
+        loadProfile();
       } else {
+        // NOTE: deliberately do NOT clearCache() here — the D1 cache holds shared
+        // content (compendium/lore), so it persists across logout/login to avoid
+        // re-fetching everything on each sign-in.
         setUserProfile(null);
         setLoading(false);
       }
@@ -374,12 +376,16 @@ export default function App() {
                       <SpellsEditor userProfile={effectiveProfile} />
                     </ProposalEditorWrapper>
                   } />
-                  {/* Option Groups — hybrid: list (no wrapper, just
-                      navigation) → per-group editor (wrapped, takes
-                      both entity types for the queue). */}
+                  {/* Option Groups — hybrid: the 3-pane browser is the
+                      group picker (wrapped + enableFocusMode so the In
+                      Block / Full Catalog toggle filters the Groups pane
+                      to the user's block work), then the per-group editor
+                      (wrapped, takes both entity types for the queue).
+                      Same browser component as the admin /compendium route;
+                      it goes proposal-aware purely on the client. */}
                   <Route path="/proposals/edit/option-groups" element={
-                    <ProposalEditorWrapper entityType={['unique_option_group', 'unique_option_item']}>
-                      <UniqueOptionGroupList userProfile={effectiveProfile} />
+                    <ProposalEditorWrapper entityType={['unique_option_group', 'unique_option_item']} enableFocusMode>
+                      <UniqueOptionGroupBrowser userProfile={effectiveProfile} />
                     </ProposalEditorWrapper>
                   } />
                   <Route path="/proposals/edit/option-groups/new" element={

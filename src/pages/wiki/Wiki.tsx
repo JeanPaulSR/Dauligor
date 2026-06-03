@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Plus, BookOpen, MapPin, History, Users, Sparkles, Trash2, Shield, Package, Library, Building, Flag, Sword, Zap, Mountain, Dna, Ship, Home, Biohazard, Swords, Scroll, Footprints, Languages, Coins, Layers, Flame, Scale, ListChecks, Hammer, Quote, Crown, Wand2, FlaskConical, Heart, LayoutGrid, List, Folder, FileText, ChevronRight, ChevronDown } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { getSessionToken } from "../../lib/auth";
 
 export default function Wiki({ userProfile }: { userProfile: any }) {
   const navigate = useNavigate();
@@ -53,7 +54,7 @@ export default function Wiki({ userProfile }: { userProfile: any }) {
         // Replaces the raw `fetchCollection('lore', { where:
         // "status = 'published'" })` pattern which both leaked dm_notes
         // and trusted the client to enforce the draft filter.
-        const idToken = await auth.currentUser?.getIdToken();
+        const idToken = await getSessionToken();
         const res = await fetch('/api/lore/articles?orderBy=title%20ASC', {
           headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
         });

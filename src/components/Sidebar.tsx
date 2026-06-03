@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { auth } from '../lib/firebase';
 import { ScrollArea } from './ui/scroll-area';
 import { Button } from './ui/button';
 import {
@@ -11,6 +10,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
+import { getSessionToken } from "../lib/auth";
 
 export default function Sidebar({ 
   userProfile, 
@@ -62,7 +62,7 @@ export default function Sidebar({
           // a member of it, so the member-or-staff gate on the server
           // always admits. 404 here would mean the campaign was
           // deleted; degrade silently.
-          const idToken = await auth.currentUser?.getIdToken();
+          const idToken = await getSessionToken();
           const res = await fetch(`/api/campaigns/${encodeURIComponent(userProfile.active_campaign_id)}`, {
             headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
           });
@@ -116,7 +116,7 @@ export default function Sidebar({
         // `?limit=` keep the response minimal — same payload shape as
         // the previous `SELECT id, name, level FROM characters …` raw
         // query, just gated and column-scoped on the server.
-        const idToken = await auth.currentUser?.getIdToken();
+        const idToken = await getSessionToken();
         const res = await fetch('/api/me/characters?fields=id,name,level&limit=5', {
           headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
         });

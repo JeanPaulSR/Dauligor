@@ -23,10 +23,10 @@
 // `lore_articles` / `lore_secrets` from this module — the proxy's
 // PROTECTED_READ_TABLES gate blocks the latter anyway.
 
-import { auth } from "./firebase";
+import { getSessionToken } from "./auth";
 
 async function authHeader(): Promise<Record<string, string>> {
-  const token = await auth.currentUser?.getIdToken();
+  const token = await getSessionToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 

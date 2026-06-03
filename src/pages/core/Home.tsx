@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
-import { auth } from '../../lib/firebase';
 import {
   fetchCampaignHomeBlocks,
   defaultHomeBlocks,
   type HomeBlock,
 } from '../../lib/campaignHome';
 import CampaignHomeBlocks from '../../components/campaign/CampaignHomeBlocks';
+import { getSessionToken } from "../../lib/auth";
 
 /**
  * Home page. Renders entirely through the campaign-homepage block system so that
@@ -28,7 +28,7 @@ export default function Home({ userProfile }: { userProfile: any }) {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const idToken = await auth.currentUser?.getIdToken();
+        const idToken = await getSessionToken();
 
         // Active campaign + its recommended lore (per-route endpoints; the lore
         // read enforces draft visibility server-side). Only signed-in users with

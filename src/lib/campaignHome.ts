@@ -10,7 +10,7 @@
 // campaigns API (`/api/campaigns/:id/home-blocks`) — reads admit any campaign
 // member, writes are staff-only — so no generic-proxy table grant is needed.
 
-import { auth } from './firebase';
+import { getSessionToken } from "./auth";
 
 export type HomeBlockType =
   | 'hero'
@@ -369,6 +369,10 @@ export function parseHomeBlock(row: any): HomeBlock | null {
       return { id, blockType: 'recommended', title: s(config.title),
         source: config.source === 'specific' ? 'specific' : 'auto', ref: asRef(config.ref),
         layout: config.layout === 'stacked' ? 'stacked' : 'side' };
+    case 'callout':
+      return { id, blockType: 'callout', title: s(config.title), body: s(config.body),
+        buttonLabel: s(config.buttonLabel), buttonLink: s(config.buttonLink),
+        style: config.style === 'plain' ? 'plain' : 'soft' };
     case 'entity-row':
       return { id, blockType: 'entity-row', title: s(config.title), showHeading: config.showHeading !== false,
         source: config.source === 'auto' ? 'auto' : 'manual', refs: asRefArray(config.refs),
@@ -413,7 +417,7 @@ export function serializeHomeBlock(block: HomeBlock): { id: string; block_type: 
 }
 
 async function authHeaders(): Promise<Record<string, string>> {
-  const token = await auth.currentUser?.getIdToken();
+  const token = await getSessionToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
@@ -425,7 +429,10 @@ export async function fetchCampaignHomeBlocks(campaignId: string): Promise<HomeB
   if (!res.ok) return [];
   const body = await res.json().catch(() => ({}));
   const rows: any[] = Array.isArray(body?.blocks) ? body.blocks : [];
-  return rows.map(parseHomeBlock).filter((b): b is HomeBlock => b !== null);
+  // `filter(Boolean)` (not `!== null`) so an unparseable block — which returns
+  // `undefined` from the switch's implicit fall-through — is dropped rather than
+  // surviving to crash the renderer. Matches how container children are filtered.
+  return rows.map(parseHomeBlock).filter((b): b is HomeBlock => Boolean(b));
 }
 
 /** Replace a campaign's entire homepage layout. Staff-only (server-enforced).

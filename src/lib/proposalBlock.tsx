@@ -47,6 +47,7 @@ import {
 } from 'react';
 import { auth } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
+import { getIdentity, getSessionToken } from "./auth";
 
 const LS_KEY = 'dauligor:active-block-id';
 // The active-block id is persisted PER USER. A global key let one account's
@@ -70,6 +71,13 @@ export type DraftRevision = {
   entity_id: string | null;
   operation: 'create' | 'update' | 'delete';
   proposed_payload: Record<string, any> | null;
+  /**
+   * Live row state captured when this draft was authored (UPDATE/DELETE).
+   * Null for CREATE (no live row yet). Drives the before→after diff in the
+   * creator's own block review (BlockReviewBody) — same FieldDiff the admin
+   * sees. The server returns it on every draft row; we just carry it through.
+   */
+  snapshot_at_proposal: Record<string, any> | null;
   notes_from_proposer: string | null;
   proposed_at: string;
   /**
@@ -133,7 +141,7 @@ export function useBlock(): BlockContextValue {
 }
 
 async function authedFetch(input: string, init?: RequestInit): Promise<Response> {
-  const idToken = await auth.currentUser?.getIdToken();
+  const idToken = await getSessionToken();
   if (!idToken) throw new Error('Not signed in.');
   return fetch(input, {
     ...init,
@@ -160,10 +168,10 @@ function hydrateBundle(raw: any): ProposalBundle {
 export function BlockProvider({ children }: { children: ReactNode }) {
   // Signed-in user id — drives per-account scoping of the active block.
   const [currentUid, setCurrentUid] = useState<string | null>(
-    () => auth.currentUser?.uid ?? null,
+    () => getIdentity()?.uid ?? null,
   );
   const [activeBundleId, setActiveBundleId] = useState<string | null>(
-    () => storedBlockId(auth.currentUser?.uid ?? null),
+    () => storedBlockId(getIdentity()?.uid ?? null),
   );
   const [activeBundle, setActiveBundle] = useState<ProposalBundle | null>(null);
   const [drafts, setDrafts] = useState<DraftRevision[]>([]);
@@ -185,7 +193,7 @@ export function BlockProvider({ children }: { children: ReactNode }) {
   const persist = useCallback((id: string | null) => {
     setActiveBundleId(id);
     try {
-      const uid = auth.currentUser?.uid ?? null;
+      const uid = getIdentity()?.uid ?? null;
       if (!uid) return; // no signed-in user → nothing to persist against
       if (id) window.localStorage.setItem(keyFor(uid), id);
       else window.localStorage.removeItem(keyFor(uid));
@@ -297,6 +305,7 @@ export function BlockProvider({ children }: { children: ReactNode }) {
           entity_id: d.entity_id,
           operation: d.operation,
           proposed_payload: d.proposed_payload ?? null,
+          snapshot_at_proposal: d.snapshot_at_proposal ?? null,
           notes_from_proposer: d.notes_from_proposer ?? null,
           proposed_at: d.proposed_at,
           cascade_parent_revision_id: d.cascade_parent_revision_id ?? null,

@@ -1,21 +1,24 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
+import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
-import { Dialog, DialogContent } from '../../components/ui/dialog';
 import {
   Repeat,
   ChevronLeft,
+  ChevronRight,
   Trash2,
   Save,
   Plus,
   Edit,
 } from 'lucide-react';
 import { fetchCollection, fetchDocument, upsertDocument, deleteDocument } from '../../lib/d1';
+import { cn } from '../../lib/utils';
 import { denormalizeCompendiumData } from '../../lib/compendium';
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
 import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
+import { useBlockDraftedList } from '../../hooks/useBlockDraftedList';
 import { actionLabel, applyProposalWrite } from '../../lib/proposalAware';
 import { useProposalReview, resolveReviewPayload } from '../../lib/proposalReview';
 import { DeletedEntityBanner } from '../../components/proposals/TombstoneRow';
@@ -79,10 +82,52 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
   const id = rawId && rawId !== 'null' && rawId !== 'undefined' ? rawId : undefined;
   const navigate = useNavigate();
   const location = useLocation();
+  // Route-aware: the proposal route (/proposals/edit/option-groups/*)
+  // mounts this editor inside <ProposalEditorWrapper>, which renders a
+  // sticky "PROPOSAL EDITOR" strip above the editor body; the admin-
+  // direct route (/compendium/unique-options/*) has none. Declared up
+  // here (ahead of the fullscreen layout math) because the pane-height
+  // chrome budget below has to account for that strip.
+  const isProposalRoute = location.pathname.startsWith('/proposals/edit/');
+
+  // ─── Fullscreen fixed-height layout (mirrors the browser / Spells) ─
+  // Lock the body so the page itself doesn't scroll; each pane gets a
+  // fixed height and scrolls internally. On <lg the 3-pane grid stacks
+  // and we drop the fixed height so the panes flow naturally (mobile).
+  const isLg = useMediaQuery('(min-width: 1024px)');
+  useEffect(() => {
+    document.body.classList.add('spell-list-fullscreen');
+    return () => document.body.classList.remove('spell-list-fullscreen');
+  }, []);
+  // Chrome budget subtracted from the viewport to size each pane. The
+  // proposal route stacks the wrapper's sticky "PROPOSAL EDITOR" strip
+  // (+ its space-y-4 gap) above us, so the 3-pane row has less vertical
+  // room — bump the budget there so the bottom of the Option editor pane
+  // (its Close / Update Option footer) stays inside the locked viewport
+  // instead of being clipped below the fold. Mirrors
+  // CompendiumEditorShell's `chromeOffset = proposalMode ? 320 : 200`.
+  const chromeOffset = isProposalRoute ? 270 : 150;
+  const [paneHeight, setPaneHeight] = useState<number>(() =>
+    typeof window === 'undefined' ? 720 : Math.max(420, window.innerHeight - chromeOffset),
+  );
+  useEffect(() => {
+    const onResize = () => setPaneHeight(Math.max(420, window.innerHeight - chromeOffset));
+    onResize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [chromeOffset]);
+  // Only impose the fixed pane height at lg+ (where panes sit side by
+  // side); below that one pane shows at a time (drilldown) and fills the
+  // locked viewport.
+  const paneStyle = isLg ? { height: `${paneHeight}px` } : undefined;
+  // <lg single-pane drilldown — mirrors the browse page convention
+  // (Group → Options → Option editor). At lg+ all three panes show.
+  type EditorPane = 'group' | 'options' | 'editor';
+  const [narrowView, setNarrowView] = useState<EditorPane>('group');
   // Route-aware basePath — admin route writes through upsertDocument
   // directly; proposal route wraps with ProposalEditorWrapper and the
-  // accumulators below queue into the active block.
-  const isProposalRoute = location.pathname.startsWith('/proposals/edit/');
+  // accumulators below queue into the active block. (isProposalRoute is
+  // declared above, alongside the fullscreen layout math.)
   const basePath = isProposalRoute ? '/proposals/edit/option-groups' : '/compendium/unique-options';
   const groupWriter = useProposalAccumulator('unique_option_group', userProfile);
   const itemWriter = useProposalAccumulator('unique_option_item', userProfile);
@@ -112,10 +157,11 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
   const [sourceId, setSourceId] = useState('');
   const [groupClassIds, setGroupClassIds] = useState<string[]>([]);
 
-  // Items State
+  // Items State. The option being edited lives in the inline 3rd pane
+  // (Group | Options | Option editor) — `editingItem != null` IS the
+  // "editor open" signal; there's no separate modal-open flag anymore.
   const [items, setItems] = useState<any[]>([]);
   const [editingItem, setEditingItem] = useState<any>(null);
-  const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [classes, setClasses] = useState<any[]>([]);
   // Lookups consumed by <RequirementsEditor>. Loaded once on mount alongside
   // the group's own data — keeps the option modal's leaf pickers populated
@@ -200,6 +246,49 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
       languageNameById: profMap('language'),
     };
   }, [classes, subclasses, spellRules, allOptionGroups, proficiencyPools]);
+
+  // Overlay the active block's drafted options for THIS group onto the
+  // live `items` so a proposed option persists in the Options column
+  // across reopens — not just optimistically in-session. loadAll fetches
+  // only LIVE rows, so without this a queued CREATE shows in the block
+  // but vanishes from the column on reload. Keyed on `group_id`; the
+  // sentinel parentId keeps it from sweeping in other groups' drafts
+  // before this group has an id. Returns `items` untouched outside a
+  // wrapper (admin route).
+  const displayItems = useBlockDraftedList<any>('unique_option_item', items, {
+    parentId: effectiveId || '__no_group__',
+    parentKey: 'group_id',
+  });
+  // Normalize like loadAll does — appended draft rows arrive with a raw
+  // (string) requirements_tree + snake-case flags; parse so the list-row
+  // renderer and the level sort read the same typed shape as live rows.
+  // parseRequirementTree is idempotent (loadAll already parses live rows).
+  const optionRows = useMemo(
+    () =>
+      displayItems.map((it: any) => ({
+        ...it,
+        requirementsTree: parseRequirementTree(it.requirementsTree ?? it.requirements_tree),
+        levelPrereqIsTotal: Boolean(it.levelPrereqIsTotal ?? it.level_prereq_is_total),
+      })),
+    [displayItems],
+  );
+
+  // Options list ordered by level prerequisite (ascending), then name.
+  // The effective level is the flat `level_prerequisite` column OR, for
+  // tree-authored / migrated items, the tree's top-level `level` leaf —
+  // so the order matches what the row actually displays.
+  const sortedItems = useMemo(() => {
+    const effectiveLevel = (it: any): number => {
+      const leaf = extractTopLevelLevelLeaf(it.requirementsTree ?? null);
+      if (leaf) return Number(leaf.minLevel) || 0;
+      return Number(it.level_prerequisite ?? it.levelPrerequisite) || 0;
+    };
+    return [...optionRows].sort((a, b) => {
+      const la = effectiveLevel(a), lb = effectiveLevel(b);
+      if (la !== lb) return la - lb;
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    });
+  }, [optionRows]);
 
   useEffect(() => {
     const loadAll = async () => {
@@ -572,8 +661,12 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
           : [...items, newItem].sort((a, b) => a.name.localeCompare(b.name));
         return { ...g, items: nextItems };
       }));
+      // Clear the inline editor pane back to its placeholder after a
+      // successful save (the row is now in the Options list). On mobile,
+      // drop back to the Options list rather than sitting on an empty
+      // editor pane.
       setEditingItem(null);
-      setIsItemModalOpen(false);
+      if (!isLg) setNarrowView('options');
       toast.success(
         isProposalMode
           ? actionLabel(itemWriter.mode, editingItem?.id ? 'updated' : 'created')
@@ -616,7 +709,8 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
     }
   };
 
-  const openAddModal = () => {
+  // Open a blank option in the inline editor pane (was a modal).
+  const openAddItem = () => {
     setEditingItem({
       levelPrerequisite: 0,
       levelPrereqIsTotal: false,
@@ -624,16 +718,16 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
       requirementsTree: null,
     });
     setOptionTab('description');
-    setIsItemModalOpen(true);
+    if (!isLg) setNarrowView('editor');
   };
 
-  const openEditModal = (item: any) => {
+  const openEditItem = (item: any) => {
     // Migrate the legacy flat level gate into a tree `level` leaf so it's
     // visible + editable in the RequirementsEditor (save re-syncs the flat
     // column). No-op for items already authored via the tree.
     setEditingItem(migrateFlatLevelIntoTree({ ...item }));
     setOptionTab('description');
-    setIsItemModalOpen(true);
+    if (!isLg) setNarrowView('editor');
   };
 
   // In proposal mode the wrapper above already labels the page
@@ -645,7 +739,7 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
   return (
     <fieldset
       disabled={isGroupPendingDelete}
-      className="max-w-5xl mx-auto space-y-6 pb-20 border-0 m-0 disabled:opacity-95"
+      className="max-w-[1600px] mx-auto w-full flex flex-col gap-3 border-0 m-0 disabled:opacity-95 lg:h-[calc(100vh-90px)] lg:overflow-hidden pb-6 lg:pb-0"
     >
       {isGroupPendingDelete && (
         <DeletedEntityBanner
@@ -685,10 +779,25 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
         </div>
       </ProposalAwareEditorHeader>
 
-      <div className="grid lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
+      {/* Inline 3-pane editor: Group Details | Options list | Option editor.
+          Mirrors the browse surface so authoring an option no longer means
+          a modal context-switch. On <lg the panes stack vertically and the
+          page scrolls; at lg+ the row fills the locked viewport and each
+          pane scrolls internally. */}
+      <div className="flex-1 min-h-0 grid gap-4 lg:grid-cols-[minmax(300px,360px)_minmax(260px,320px)_1fr] items-stretch">
+        {/* Pane 1 — Group Details. The bordered card IS the pane so its
+            border reaches the bottom of the row (matching panes 2 & 3);
+            the inner content scrolls. On <lg only the active drilldown
+            pane shows (group → options → editor). */}
+        <div
+          className={cn(
+            'border border-gold/20 bg-card/50 flex-col lg:overflow-hidden lg:flex',
+            narrowView === 'group' ? 'flex' : 'hidden',
+          )}
+          style={paneStyle}
+        >
           {/* Group Info */}
-          <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
+          <div className="p-4 space-y-4 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
             <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-gold border-b border-gold/10 pb-2">Group Details</h2>
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="space-y-1">
@@ -720,7 +829,6 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
               onChange={setDescription}
               placeholder="Describe what these options represent..."
               minHeight="60px"
-              className="italic"
               label="Description"
             />
             {/* Class Restrictions (group-level).
@@ -743,23 +851,49 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
               />
             </div>
           </div>
-
-          {/* Individual Options */}
+          {/* Mobile-only forward nav to the Options pane (drilldown). */}
           {effectiveId && (
-            <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
-              <div className="section-header">
-                <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Individual Options</h2>
-                <Button
-                  size="sm"
-                  onClick={openAddModal}
-                  className="h-6 gap-1 btn-gold"
-                >
-                  <Plus className="w-3 h-3" /> Add Option
-                </Button>
-              </div>
+            <button
+              type="button"
+              onClick={() => setNarrowView('options')}
+              className="lg:hidden shrink-0 flex items-center justify-between gap-2 border-t border-gold/15 bg-background/35 px-4 py-2.5 text-gold hover:bg-gold/5 transition-colors"
+            >
+              <span className="text-xs font-bold uppercase tracking-widest">Options · {optionRows.length}</span>
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          )}
+        </div>
 
-              <div className="divide-y divide-gold/10">
-                {items.map((item) => {
+        {/* Pane 2 — Options list */}
+        {effectiveId && (
+          <div
+            className={cn(
+              'border border-gold/20 bg-card/50 flex-col lg:overflow-hidden lg:flex lg:max-h-none',
+              narrowView === 'options' ? 'flex' : 'hidden',
+            )}
+            style={paneStyle}
+          >
+            {/* Mobile back-nav to Group Details. */}
+            <button
+              type="button"
+              onClick={() => setNarrowView('group')}
+              className="lg:hidden shrink-0 flex items-center gap-2 border-b border-gold/15 bg-background/35 px-3 py-2 text-gold hover:bg-gold/5 transition-colors text-xs"
+            >
+              <ChevronLeft className="w-4 h-4" /> Group Details
+            </button>
+            <div className="section-header p-4 pb-3 shrink-0 border-b border-gold/10">
+              <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Options</h2>
+              <Button
+                size="sm"
+                onClick={openAddItem}
+                className="h-6 gap-1 btn-gold"
+              >
+                <Plus className="w-3 h-3" /> Add Option
+              </Button>
+            </div>
+
+            <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 pt-2 divide-y divide-gold/10">
+                {sortedItems.map((item) => {
                   // List-row summary. Renders the three prereq surfaces
                   // (flat level, flat string, tree) into one " · "-joined
                   // line. The tree gets fully formatted via
@@ -777,8 +911,13 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                   const treeText = item.requirementsTree
                     ? formatRequirementText(item.requirementsTree, requirementsTextLookup)
                     : '';
+                  const isEditing = editingItem?.id === item.id;
                   return (
-                  <div key={item.id} className="py-2 flex items-center justify-between group">
+                  <div
+                    key={item.id}
+                    onClick={() => openEditItem(item)}
+                    className={`py-2 px-2 -mx-2 flex items-center justify-between group cursor-pointer rounded transition-colors ${isEditing ? 'bg-gold/10' : 'hover:bg-gold/5'}`}
+                  >
                     <div className="flex items-center gap-3">
                       {item.iconUrl && (
                         <img src={item.iconUrl} alt="" className="w-6 h-6 object-contain opacity-70 shrink-0" />
@@ -807,33 +946,58 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                         )}
                       </div>
                     </div>
+                    {/* Whole row is click-to-edit; only Delete needs its own
+                        handler (stopPropagation so it doesn't also open the
+                        editor). */}
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                      <Button variant="ghost" size="sm" onClick={() => openEditModal(item)} className="h-6 w-6 p-0 text-gold">
-                        <Edit className="w-3 h-3" />
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => handleDeleteItem(item.id)} className="h-6 w-6 p-0 text-blood">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => { e.stopPropagation(); handleDeleteItem(item.id); }}
+                        className="h-6 w-6 p-0 text-blood"
+                      >
                         <Trash2 className="w-3 h-3" />
                       </Button>
                     </div>
                   </div>
                   );
                 })}
-                {items.length === 0 && (
+                {sortedItems.length === 0 && (
                   <p className="py-4 text-center text-xs text-ink/30 italic">No options added yet.</p>
                 )}
+            </div>
+          </div>
+        )}
+
+        {/* Pane 3 — Option editor (inline; was a modal). Shows a
+            placeholder until an option is added/selected. The tab content
+            below is the same editor body that used to live in the dialog. */}
+        {effectiveId && (
+          <div
+            className={cn(
+              'border border-gold/20 bg-card/50 flex-col h-[78vh] min-h-[480px] lg:h-auto overflow-hidden lg:flex',
+              narrowView === 'editor' ? 'flex' : 'hidden',
+            )}
+            style={paneStyle}
+          >
+          {/* Mobile back-nav to the Options list. */}
+          <button
+            type="button"
+            onClick={() => setNarrowView('options')}
+            className="lg:hidden shrink-0 flex items-center gap-2 border-b border-gold/15 bg-background/35 px-3 py-2 text-gold hover:bg-gold/5 transition-colors text-xs"
+          >
+            <ChevronLeft className="w-4 h-4" /> Options
+          </button>
+          {!editingItem ? (
+            <div className="flex-1 flex items-center justify-center px-6 py-16 text-center">
+              <div className="space-y-2 max-w-xs">
+                <Edit className="w-7 h-7 text-gold/20 mx-auto" />
+                <p className="text-sm text-ink/50 font-serif italic">
+                  Select an option to edit, or click <span className="text-gold not-italic font-semibold">Add Option</span> to create one.
+                </p>
               </div>
             </div>
-          )}
-        </div>
-      </div>
-
-      {/* Item Edit Modal */}
-      <Dialog open={isItemModalOpen} onOpenChange={(open) => {
-        setIsItemModalOpen(open);
-        if (!open) setEditingItem(null);
-      }}>
-        <DialogContent className="dialog-content max-w-[95vw] lg:max-w-6xl flex flex-col h-[90vh]">
-          {editingItem && (
+          ) : (
             <>
               <FeatureModalHero
                 iconUrl={editingItem?.iconUrl || ''}
@@ -861,7 +1025,7 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                   placeholder="Enter the full text of the feature..."
                   minHeight="400px"
                   maxHeight="100%"
-                  className="italic h-full min-h-0"
+                  className="h-full min-h-0"
                   label="Description"
                 />
               </div>
@@ -1138,24 +1302,26 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                 <Button
                   type="button"
                   variant="ghost"
-                  onClick={() => { setIsItemModalOpen(false); setEditingItem(null); }}
+                  onClick={() => setEditingItem(null)}
                   className="label-text opacity-70 hover:opacity-100"
                 >
-                  Cancel
+                  Close
                 </Button>
                 <Button
                   type="button"
+                  size="sm"
                   onClick={handleSaveItem}
                   disabled={!editingItem?.name}
-                  className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2 px-8 label-text"
+                  className="btn-gold-solid gap-2 px-8"
                 >
                   {editingItem?.id ? 'Update Option' : 'Add Option'}
                 </Button>
               </div>
             </>
           )}
-        </DialogContent>
-      </Dialog>
+          </div>
+        )}
+      </div>
       <ConfirmDialog
         open={deleteGroupConfirmOpen}
         onOpenChange={setDeleteGroupConfirmOpen}

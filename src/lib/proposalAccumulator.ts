@@ -43,13 +43,13 @@
 // =============================================================================
 
 import { createContext, useCallback, useContext, useMemo } from 'react';
-import { auth } from './firebase';
 import {
   useEntityWriter,
   type ProposalEntityType,
   type WriterApi,
   type WriterMode,
 } from './proposalAware';
+import { getSessionToken } from "./auth";
 
 export type QueuedChange = {
   /** Stable local id for tracking + future Drop Edits operations. */
@@ -462,7 +462,7 @@ export async function postQueuedChanges(
       `Submit Changes drains up to 50 revisions at once; queue has ${queue.length}. Split into smaller batches.`,
     );
   }
-  const idToken = await auth.currentUser?.getIdToken();
+  const idToken = await getSessionToken();
   if (!idToken) throw new Error('Not signed in.');
   const auth_header = `Bearer ${idToken}`;
 

@@ -105,10 +105,31 @@ async function callWorker(
   });
 }
 
+// Listing is staff-gated, with ONE read-only exception: any signed-in user may
+// list the shared `icons/` folder, so content-creators can browse + select
+// icons for their proposals (selecting just records a public URL — no upload or
+// management). Every other prefix stays staff-only.
+function isIconsListPrefix(prefix: string | null): boolean {
+  if (!prefix) return false;
+  const p = prefix.replace(/^\/+/, "");
+  return p === "icons" || p === "icons/" || p.startsWith("icons/");
+}
+
+async function authorizeList(req: NodeLikeRequest): Promise<void> {
+  try {
+    await requireImageManagerAccess(req.headers.authorization);
+    return; // staff — may list anything
+  } catch (staffErr) {
+    const prefix = getRequestQuery(req).get("prefix");
+    if (!isIconsListPrefix(prefix)) throw staffErr;
+    await requireAuthenticatedUser(req.headers.authorization); // must be signed in
+  }
+}
+
 export async function handleR2List(req: NodeLikeRequest, res: NodeLikeResponse) {
   try {
     const search = getRequestQuery(req);
-    await requireImageManagerAccess(req.headers.authorization);
+    await authorizeList(req);
     const { apiSecret } = getWorkerConfig();
     const workerResponse = await fetch(buildWorkerUrl("/list", search), {
       method: "GET",

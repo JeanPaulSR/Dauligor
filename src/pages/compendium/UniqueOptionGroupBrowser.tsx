@@ -20,28 +20,46 @@
 // optional `:id` param to deep-link/preselect a group (so the old
 // /compendium/unique-options/:id view URLs still resolve).
 //
-// Browse-only: all reads via the d1 helpers, no proposal flow. The proposal
-// authoring surface (/proposals/edit/option-groups) is a separate concern and
-// keeps using the wrapped UniqueOptionGroupList.
+// Dual-route surface:
+//   - /compendium/unique-options              → admin browse (no wrapper).
+//   - /proposals/edit/option-groups           → content-creator group picker,
+//     mounted inside <ProposalEditorWrapper enableFocusMode>. There the Edit /
+//     New links target the proposal editor, the active block's draft groups are
+//     overlaid (the "in this block" badge), and the wrapper's In Block / Full
+//     Catalog toggle filters the Groups pane to the user's block work vs the
+//     whole catalog — the SAME focus-mode system SpellsEditor uses.
+//
+// All reads go through the d1 helpers; all WRITES still happen in the wrapped
+// UniqueOptionGroupEditor this surface links into. The browser itself stays
+// read-only browse + navigation, so the proposal-mode adoption added no
+// backend / endpoint / accumulator changes — purely a UI upgrade.
 // =============================================================================
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
-import { Input } from '../../components/ui/input';
 import BBCodeRenderer from '../../components/BBCodeRenderer';
 import {
-  Plus, Search, Repeat, BookOpen, Edit, ChevronRight, CornerLeftUp, Layers,
+  Plus, Repeat, BookOpen, Edit, ChevronRight, CornerLeftUp, Layers,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { fetchCollection, fetchDocument } from '../../lib/d1';
 import { denormalizeCompendiumData } from '../../lib/compendium';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
+import { useAxisFilters, type AxisState } from '../../hooks/useAxisFilters';
+import { matchesSingleAxisFilter, matchesMultiAxisFilter } from '../../lib/spellFilters';
+import { useProposalContextOptional } from '../../lib/proposalAccumulator';
+import { useDraftedEntityIds } from '../../hooks/useDraftedEntityIds';
+import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
+import { useBlockDraftedList } from '../../hooks/useBlockDraftedList';
+import { FilterBar } from '../../components/compendium/FilterBar';
+import { SectionFilterPanel, type FilterSection } from '../../components/compendium/SectionFilterPanel';
 import {
   parseRequirementTree,
   resolveDetailPrereq,
+  extractTopLevelLevelLeaf,
   type Requirement,
   type RequirementFormatLookup,
 } from '../../lib/requirements';
@@ -65,8 +83,10 @@ type ItemRow = {
   icon_url?: string | null;
   usesMax?: string | number | null;
   usesRecovery?: string | null;
-  level_prereq?: number | null;
-  levelPrereq?: number | null;
+  // NB: the column is `level_prerequisite` → denormalizes to
+  // `levelPrerequisite` (NOT `levelPrereq`). Read those exact keys.
+  level_prerequisite?: number | null;
+  levelPrerequisite?: number | null;
   level_prereq_is_total?: boolean | null;
   levelPrereqIsTotal?: boolean | null;
   // Free-text prerequisite override (the `string_prerequisite` column).
@@ -91,15 +111,63 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
     Object.prototype.hasOwnProperty.call(userProfile.permissions, 'content-creator');
   const canManage = isAdmin || isContentCreator;
 
+  // ─── Proposal-mode awareness ────────────────────────────────────
+  // At /proposals/edit/option-groups this browser is the content-
+  // creator's group picker, mounted inside <ProposalEditorWrapper
+  // enableFocusMode>. Outside that route (admin /compendium/unique-
+  // options) proposalContext is null and every flag below is inert, so
+  // the admin surface is unchanged.
+  const location = useLocation();
+  const isProposalRoute = location.pathname.startsWith('/proposals/edit/');
+  const proposalContext = useProposalContextOptional();
+  const focusMode = proposalContext?.focusMode ?? 'drafts';
+  const focusModeEnabled = proposalContext?.focusModeEnabled ?? false;
+  // Route-aware link targets — proposal route points Edit/New at the
+  // wrapped editor; admin route keeps its /compendium/* targets.
+  const editGroupHref = (gid: string) =>
+    isProposalRoute
+      ? `/proposals/edit/option-groups/edit/${gid}`
+      : `/compendium/unique-options/edit/${gid}`;
+  const newGroupHref = isProposalRoute
+    ? '/proposals/edit/option-groups/new'
+    : '/compendium/unique-options/new';
+  // "My work in this block" signals for the In Block focus filter:
+  // groups carrying any group-level draft (CREATE/UPDATE/DELETE) plus
+  // groups that contain a drafted option item. Empty outside a wrapper.
+  const draftedGroupIds = useDraftedEntityIds('unique_option_group');
+  const itemDrafts = useProposalEntityDrafts('unique_option_item');
+  const groupIdsWithDraftedItems = useMemo(() => {
+    const s = new Set<string>();
+    for (const payload of itemDrafts.byId.values()) {
+      const gid = (payload as any).group_id ?? (payload as any).groupId;
+      if (gid) s.add(String(gid));
+    }
+    return s;
+  }, [itemDrafts]);
+
   // ─── Data ───────────────────────────────────────────────────────
   const [groups, setGroups] = useState<GroupRow[]>([]);
   const [groupsLoading, setGroupsLoading] = useState(true);
   const [search, setSearch] = useState('');
+  // Class id → name, for the Groups class-restriction filter axis.
+  const [classNameById, setClassNameById] = useState<Record<string, string>>({});
 
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(routeGroupId ?? null);
   const [items, setItems] = useState<ItemRow[]>([]);
   const [itemsLoading, setItemsLoading] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+
+  // Every option row, bucketed by group_id (built from the catalog-wide
+  // fetch the requirement lookup already loads — no extra query). Powers
+  // (a) the top search matching a group by any contained option's name,
+  // and (b) the Level / Traits axes filtering to groups that CONTAIN a
+  // matching option.
+  const [allItemsByGroup, setAllItemsByGroup] = useState<Record<string, any[]>>({});
+
+  // One filter surface for the whole browser (top toolbar), matching the
+  // Spells / Feats layout. Source + Class are group-level; Level + Traits
+  // are option-level (a group passes if any contained option matches).
+  const browserFilters = useAxisFilters(['source', 'class', 'level', 'traits'] as const);
 
   // Foundation lookups (sources + name maps for requirement formatting).
   const [sourceNameById, setSourceNameById] = useState<Record<string, string>>({});
@@ -116,15 +184,22 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
     document.body.classList.add('spell-list-fullscreen');
     return () => document.body.classList.remove('spell-list-fullscreen');
   }, []);
+  // Chrome budget subtracted from the viewport to size the panes. The
+  // proposal route stacks the wrapper's sticky "PROPOSAL EDITOR" strip
+  // (+ the In Block / Full Catalog toggle) above us, so bump the budget
+  // there to keep the panes inside the locked viewport instead of
+  // spilling below the fold. Matches UniqueOptionGroupEditor /
+  // CompendiumEditorShell's proposal-mode offset bump.
+  const chromeOffset = isProposalRoute ? 260 : 140;
   const [paneHeight, setPaneHeight] = useState<number>(() =>
-    typeof window === 'undefined' ? 720 : Math.max(420, window.innerHeight - 140),
+    typeof window === 'undefined' ? 720 : Math.max(420, window.innerHeight - chromeOffset),
   );
   useEffect(() => {
-    const onResize = () => setPaneHeight(Math.max(420, window.innerHeight - 140));
+    const onResize = () => setPaneHeight(Math.max(420, window.innerHeight - chromeOffset));
     onResize();
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, []);
+  }, [chromeOffset]);
 
   // ─── Load groups + foundation once ──────────────────────────────
   useEffect(() => {
@@ -169,6 +244,18 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
           ) as Record<string, string>;
         setGroups(groupRows);
         setSourceNameById(Object.fromEntries(sourceRows.map((s) => [s.id, s.name])));
+        setClassNameById(byId(classRows));
+        // Bucket the catalog-wide option rows by group_id (denormalized so
+        // camelCase fields — levelPrerequisite / isRepeatable / activities — are
+        // present for the Level/Traits axes + the search-includes-options).
+        const itemsByGroup: Record<string, any[]> = {};
+        for (const raw of (allItems as any[])) {
+          const denorm = denormalizeCompendiumData(raw);
+          const gid = String(denorm.groupId ?? denorm.group_id ?? '');
+          if (!gid) continue;
+          (itemsByGroup[gid] ??= []).push(denorm);
+        }
+        setAllItemsByGroup(itemsByGroup);
         setReqLookup({
           classNameById: byId(classRows),
           subclassNameById: byId(subclassRows),
@@ -291,17 +378,201 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
     );
   }, [selectedGroupId, selectedItemId, groups, items]);
 
-  const filteredGroups = useMemo(
-    () => groups.filter((g) => (g.name || '').toLowerCase().includes(search.toLowerCase())),
-    [groups, search],
+  // ─── Shared filter helpers ──────────────────────────────────────
+  const levelBucket = (lvl: number | null | undefined): string => {
+    const n = Number(lvl) || 0;
+    if (n <= 0) return 'none';
+    if (n <= 4) return '1-4';
+    if (n <= 9) return '5-9';
+    if (n <= 13) return '10-13';
+    return '14+';
+  };
+  // The Level / Traits axis values an option satisfies (for option-level
+  // filtering + group-containment).
+  const optionTraits = (it: any): Set<string> => {
+    const traits = new Set<string>();
+    if (it.isRepeatable ?? it.is_repeatable) traits.add('repeatable');
+    const acts = it.activities;
+    if (Array.isArray(acts) ? acts.length : acts) traits.add('activities');
+    const fx = it.effects;
+    if (Array.isArray(fx) ? fx.length : fx) traits.add('effects');
+    return traits;
+  };
+  const optionPassesOptAxes = (it: any): boolean => {
+    if (!matchesSingleAxisFilter(levelBucket(it.levelPrerequisite ?? it.level_prerequisite), browserFilters.axisFilters.level)) return false;
+    if (!matchesMultiAxisFilter(optionTraits(it), browserFilters.axisFilters.traits)) return false;
+    return true;
+  };
+
+  // ─── One filter surface: Source + Class (group-level), Level +
+  //     Traits (option-level). Only values present in the catalog show. ──
+  const browserAxes: PaneAxis[] = useMemo(() => {
+    const sourceIds = new Set<string>();
+    const classIds = new Set<string>();
+    for (const g of groups) {
+      const sid = g.source_id ?? g.sourceId;
+      if (sid) sourceIds.add(sid);
+      for (const cid of (g.class_ids ?? g.classIds ?? [])) classIds.add(cid);
+    }
+    const buckets = new Set<string>();
+    let anyRepeatable = false, anyActivities = false, anyEffects = false;
+    for (const list of Object.values(allItemsByGroup)) {
+      for (const it of list) {
+        buckets.add(levelBucket(it.levelPrerequisite ?? it.level_prerequisite));
+        const t = optionTraits(it);
+        if (t.has('repeatable')) anyRepeatable = true;
+        if (t.has('activities')) anyActivities = true;
+        if (t.has('effects')) anyEffects = true;
+      }
+    }
+    const axes: PaneAxis[] = [];
+    if (sourceIds.size) {
+      axes.push({
+        key: 'source', label: 'Source',
+        values: [...sourceIds].map((id) => ({ value: id, label: sourceNameById[id] ?? id }))
+          .sort((a, b) => a.label.localeCompare(b.label)),
+      });
+    }
+    if (classIds.size) {
+      axes.push({
+        key: 'class', label: 'Class Restriction', multi: true,
+        values: [...classIds].map((id) => ({ value: id, label: classNameById[id] ?? id }))
+          .sort((a, b) => a.label.localeCompare(b.label)),
+      });
+    }
+    const LEVEL_ORDER = ['none', '1-4', '5-9', '10-13', '14+'];
+    const LEVEL_LABEL: Record<string, string> = {
+      none: 'No level', '1-4': 'Lv 1–4', '5-9': 'Lv 5–9', '10-13': 'Lv 10–13', '14+': 'Lv 14+',
+    };
+    if (buckets.size) {
+      axes.push({
+        key: 'level', label: 'Option Level',
+        values: LEVEL_ORDER.filter((b) => buckets.has(b)).map((b) => ({ value: b, label: LEVEL_LABEL[b] })),
+      });
+    }
+    const traitVals: { value: string; label: string }[] = [];
+    if (anyRepeatable) traitVals.push({ value: 'repeatable', label: 'Repeatable' });
+    if (anyActivities) traitVals.push({ value: 'activities', label: 'Has Activities' });
+    if (anyEffects) traitVals.push({ value: 'effects', label: 'Has Effects' });
+    if (traitVals.length) axes.push({ key: 'traits', label: 'Option Traits', multi: true, values: traitVals });
+    return axes;
+  }, [groups, allItemsByGroup, sourceNameById, classNameById]);
+
+  // Whether the option-level axes (Level / Traits) are actively filtering.
+  const optAxesActive = useMemo(() =>
+    Object.keys(browserFilters.axisFilters.level?.states ?? {}).length > 0 ||
+    Object.keys(browserFilters.axisFilters.traits?.states ?? {}).length > 0,
+    [browserFilters.axisFilters],
   );
+
+  // Active block's draft groups overlaid onto the live list: CREATE-draft
+  // groups (no live row yet) get appended + tagged `__draft`; UPDATE drafts
+  // overlay their payload; DELETE drafts get tagged `__pendingDelete`.
+  // Returns `groups` untouched outside a wrapper (admin route).
+  const displayGroups = useBlockDraftedList<GroupRow>('unique_option_group', groups);
+
+  const filteredGroups = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return displayGroups.filter((g) => {
+      // In Block focus: when the wrapper's toggle is on "In Block", keep
+      // only the groups this block touches — CREATE drafts, group-level
+      // drafts, or groups that contain a drafted option. "Full Catalog"
+      // (and the admin route, where focusModeEnabled is false) show all.
+      if (focusModeEnabled && focusMode === 'drafts') {
+        const mine =
+          (g as any).__draft === true ||
+          draftedGroupIds.has(g.id) ||
+          groupIdsWithDraftedItems.has(g.id);
+        if (!mine) return false;
+      }
+      // Group-level axes.
+      const sid = g.source_id ?? g.sourceId ?? null;
+      if (!matchesSingleAxisFilter(sid, browserFilters.axisFilters.source)) return false;
+      const gClassIds = new Set<string>(g.class_ids ?? g.classIds ?? []);
+      if (!matchesMultiAxisFilter(gClassIds, browserFilters.axisFilters.class)) return false;
+      const groupItems = allItemsByGroup[g.id] ?? [];
+      // Option-level axes — group passes if it CONTAINS a matching option.
+      if (optAxesActive && !groupItems.some(optionPassesOptAxes)) return false;
+      // Search matches the group name OR any contained option's name.
+      if (q) {
+        const nameHit = (g.name || '').toLowerCase().includes(q);
+        const itemHit = groupItems.some((it) => String(it.name || '').toLowerCase().includes(q));
+        if (!nameHit && !itemHit) return false;
+      }
+      return true;
+    });
+  }, [displayGroups, search, browserFilters.axisFilters, allItemsByGroup, optAxesActive, focusModeEnabled, focusMode, draftedGroupIds, groupIdsWithDraftedItems]);
+
   const selectedGroup = useMemo(
-    () => groups.find((g) => g.id === selectedGroupId) ?? null,
-    [groups, selectedGroupId],
+    () => displayGroups.find((g) => g.id === selectedGroupId) ?? null,
+    [displayGroups, selectedGroupId],
   );
+
+  // Overlay the active block's drafted options for the selected group onto
+  // the live `items` so a proposed (not-yet-approved) option shows in the
+  // Options pane here too — the same gap the editor had (the load fetches
+  // only LIVE rows). Keyed on group_id; sentinel parentId before a group is
+  // picked. Returns `items` untouched outside a wrapper (admin route).
+  const browserItemRows = useBlockDraftedList<ItemRow>('unique_option_item', items, {
+    parentId: selectedGroupId || '__no_group__',
+    parentKey: 'group_id',
+  });
+  // Normalize appended draft rows (raw string requirements_tree + snake-case
+  // flags) to the typed shape the row + detail renderers expect, matching
+  // the live-load mapping. parseRequirementTree is idempotent.
+  const optionRows = useMemo(
+    () =>
+      browserItemRows.map((it) => ({
+        ...it,
+        requirementsTree: parseRequirementTree(
+          (it as any).requirementsTree ?? (it as any).requirements_tree,
+        ),
+        levelPrereqIsTotal: Boolean(
+          (it as any).levelPrereqIsTotal ?? (it as any).level_prereq_is_total,
+        ),
+      })) as ItemRow[],
+    [browserItemRows],
+  );
+
+  // Options of the selected group, narrowed by the SAME top search +
+  // the option-level axes (so a search that surfaced a group by its
+  // contained option also highlights the matching options within it).
+  const filteredItems = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return optionRows.filter((it) => {
+      if (!optionPassesOptAxes(it)) return false;
+      // Only narrow by search text when the group itself didn't match the
+      // query (so searching a group name still shows all its options).
+      if (q) {
+        const groupNameHit = (selectedGroup?.name || '').toLowerCase().includes(q);
+        if (!groupNameHit && !(it.name || '').toLowerCase().includes(q)) return false;
+      }
+      return true;
+    });
+  }, [optionRows, search, browserFilters.axisFilters, selectedGroup]);
+
+  // Order the option list. When the group is level-restricted (any option
+  // carries a level prereq, flat OR via the tree's top-level `level` leaf)
+  // sort by that level ascending, then name — same as the editor's
+  // sortedItems. Otherwise keep the alphabetical order they loaded in.
+  const sortedItems = useMemo(() => {
+    const effectiveLevel = (it: any): number => {
+      const leaf = extractTopLevelLevelLeaf((it.requirementsTree as Requirement | null) ?? null);
+      if (leaf) return Number(leaf.minLevel) || 0;
+      return Number(it.levelPrerequisite ?? it.level_prerequisite) || 0;
+    };
+    const anyLevelRestricted = filteredItems.some((it) => effectiveLevel(it) > 0);
+    if (!anyLevelRestricted) return filteredItems;
+    return [...filteredItems].sort((a, b) => {
+      const la = effectiveLevel(a), lb = effectiveLevel(b);
+      if (la !== lb) return la - lb;
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    });
+  }, [filteredItems]);
+
   const selectedItem = useMemo(
-    () => items.find((it) => it.id === selectedItemId) ?? null,
-    [items, selectedItemId],
+    () => optionRows.find((it) => it.id === selectedItemId) ?? null,
+    [optionRows, selectedItemId],
   );
 
   const handleSelectGroup = (gid: string) => {
@@ -321,25 +592,53 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
   }, [selectedGroup, sourceNameById]);
 
   return (
-    // max-width cap + center so the 3-pane row doesn't sprawl across an
-    // ultrawide monitor (the detail pane is the only one that wants to grow,
-    // and even it reads better with a bounded measure).
-    <div className="flex flex-col mx-auto w-full max-w-[1400px]" style={{ height: `${paneHeight + 56}px` }}>
-      {/* ── Toolbar ─────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-3 px-1 pb-3 shrink-0">
-        <div className="flex items-center gap-3 min-w-0">
-          <Repeat className="w-5 h-5 text-gold shrink-0" />
-          <h1 className="text-lg font-serif font-bold text-ink uppercase tracking-tight truncate">
-            Modular Options
-          </h1>
-        </div>
-        {canManage && (
-          <Link to="/compendium/unique-options/new">
-            <Button size="sm" className="btn-gold-solid gap-2">
-              <Plus className="w-4 h-4" /> New Group
-            </Button>
-          </Link>
-        )}
+    // Full-width fullscreen surface (no title chrome, no max-width cap) —
+    // matches the Spells / Feats layout: the page IS the search + filter
+    // bar over the panes.
+    <div className="flex flex-col w-full" style={{ height: `${paneHeight + 64}px` }}>
+      {/* ── Top filter bar (matches Spells / Feats): one search + one
+          Filters button, with Edit / New Group in the trailing slot to
+          the right of Filters. Search matches a group by its name OR by
+          any option it contains; Filters carries Source / Class (group) +
+          Option Level / Traits (group passes if it contains a match). ── */}
+      <div className="pb-3 shrink-0">
+        <BrowserFilterBar
+          search={search}
+          setSearch={setSearch}
+          placeholder="Search groups or options…"
+          filterTitle="Filter Modular Options"
+          axes={browserAxes}
+          axisFilters={browserFilters.axisFilters}
+          cyclers={browserFilters.cyclers}
+          activeFilterCount={browserFilters.activeFilterCount}
+          resetAll={browserFilters.resetAll}
+          trailingActions={canManage ? (
+            <>
+              {selectedGroup ? (
+                <Link to={editGroupHref(selectedGroup.id)}>
+                  <Button size="sm" variant="outline" className="h-8 gap-2 border-gold/30 text-gold hover:bg-gold/10">
+                    <Edit className="w-4 h-4" /> Edit Group
+                  </Button>
+                </Link>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled
+                  className="h-8 gap-2 border-gold/20 text-ink/30 cursor-not-allowed"
+                  title="Select a group to edit"
+                >
+                  <Edit className="w-4 h-4" /> Edit Group
+                </Button>
+              )}
+              <Link to={newGroupHref}>
+                <Button size="sm" className="h-8 btn-gold-solid gap-2">
+                  <Plus className="w-4 h-4" /> New Group
+                </Button>
+              </Link>
+            </>
+          ) : undefined}
+        />
       </div>
 
       {/* ── 3-pane row ──────────────────────────────────────────── */}
@@ -353,22 +652,27 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
           )}
           style={{ height: `${paneHeight}px` }}
         >
-          <div className="border-b border-gold/10 bg-background/35 p-2.5 shrink-0">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/30" />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search groups…"
-                className="pl-8 h-8 text-xs bg-background/50 border-gold/10 focus:border-gold"
-              />
-            </div>
+          <div className="border-b border-gold/10 bg-background/35 px-3 py-2 shrink-0">
+            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-gold/70">
+              Groups · {filteredGroups.length}{filteredGroups.length !== displayGroups.length ? ` / ${displayGroups.length}` : ''}
+            </span>
           </div>
           <CardContent className="p-0 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
             {groupsLoading ? (
               <div className="px-4 py-12 text-center text-ink/45 text-sm">Loading…</div>
             ) : filteredGroups.length === 0 ? (
-              <div className="px-4 py-12 text-center text-ink/40 italic text-sm">No groups found.</div>
+              focusModeEnabled && focusMode === 'drafts' ? (
+                <div className="px-4 py-12 text-center text-ink/55 text-sm space-y-1.5">
+                  <p className="font-semibold text-ink/70">Nothing in this block yet</p>
+                  <p className="text-xs text-ink/45 italic leading-relaxed">
+                    Use <span className="text-gold not-italic font-semibold">New Group</span> to start one, or
+                    switch to <span className="text-gold not-italic font-semibold">Full Catalog</span> to edit an
+                    existing group.
+                  </p>
+                </div>
+              ) : (
+                <div className="px-4 py-12 text-center text-ink/40 italic text-sm">No groups found.</div>
+              )
             ) : (
               <div className="divide-y divide-gold/5">
                 {filteredGroups.map((group) => {
@@ -423,20 +727,13 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
               <CornerLeftUp className="w-3.5 h-3.5 rotate-90" /> Groups
             </Button>
           </div>
-          <div className="border-b border-gold/10 bg-background/35 px-3 py-2 shrink-0 flex items-center justify-between gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-gold/70 truncate">
-              {selectedGroup ? `Options · ${items.length}` : 'Options'}
-            </span>
-            {canManage && selectedGroup && (
-              <Link
-                to={`/compendium/unique-options/edit/${selectedGroup.id}`}
-                className="text-[10px] inline-flex items-center gap-1 text-ink/50 hover:text-gold transition-colors uppercase tracking-widest"
-                title="Edit this group"
-              >
-                <Edit className="w-3 h-3" /> Edit
-              </Link>
-            )}
-          </div>
+          {selectedGroup && (
+            <div className="border-b border-gold/10 bg-background/35 px-3 py-2 shrink-0">
+              <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-gold/70 truncate block">
+                Options · {filteredItems.length}{filteredItems.length !== items.length ? ` / ${items.length}` : ''}
+              </span>
+            </div>
+          )}
           <CardContent className="p-0 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
             {!selectedGroup ? (
               <div className="px-4 py-12 text-center text-ink/40 italic text-sm">
@@ -448,12 +745,28 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
               <div className="px-4 py-12 text-center text-ink/40 italic text-sm">
                 No options in this group yet.
               </div>
+            ) : filteredItems.length === 0 ? (
+              <div className="px-4 py-12 text-center text-ink/40 italic text-sm">
+                No options match the filter.
+              </div>
             ) : (
               <div className="divide-y divide-gold/5">
-                {items.map((item) => {
+                {sortedItems.map((item) => {
                   const selected = item.id === selectedItemId;
-                  const level = item.levelPrereq ?? item.level_prereq ?? null;
                   const icon = item.iconUrl ?? item.icon_url ?? null;
+                  // Requirement summary — same chain feats use: the
+                  // free-text `string_prerequisite` override wins, else
+                  // the structured tree formatted via resolveDetailPrereq.
+                  let reqText: string | null = null;
+                  try {
+                    reqText = resolveDetailPrereq(
+                      {
+                        freeText: item.stringPrerequisite ?? item.string_prerequisite ?? null,
+                        tree: item.requirementsTree ?? null,
+                      },
+                      reqLookup,
+                    ) || null;
+                  } catch { reqText = null; }
                   return (
                     <button
                       key={item.id}
@@ -472,10 +785,9 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
                         )}>
                           {item.name || 'Unnamed option'}
                         </span>
-                        {level !== null && level !== undefined && (
-                          <span className="text-[10px] text-ink/45">
-                            {(item.levelPrereqIsTotal ?? item.level_prereq_is_total)
-                              ? `Character Lv ${level}` : `Class Lv ${level}`}
+                        {reqText && (
+                          <span className="block truncate text-[10px] text-ink/45" title={reqText}>
+                            {reqText}
                           </span>
                         )}
                       </span>
@@ -514,6 +826,97 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
     </div>
   );
 }
+
+// ─── Top filter bar ───────────────────────────────────────────────
+// The single page-top search + filter, using the SAME components as
+// Spells / Feats: the real <FilterBar> (search input + Filters button +
+// trailingActions slot) whose Filters button opens the centered modal
+// containing <SectionFilterPanel embedded> — collapsible sections, 3-state
+// chips, per-section AND/OR/XOR, chip-label search, Show All / Hide All.
+// Page-level actions (Edit / New Group) ride in `trailingActions`, right
+// of the Filters button, exactly like SpellList / FeatList.
+type PaneAxis = {
+  key: string;
+  label: string;
+  multi?: boolean; // multi-valued (an entity can satisfy several) vs single
+  values: { value: string; label: string }[];
+};
+function BrowserFilterBar({
+  search, setSearch, placeholder, filterTitle,
+  axes, axisFilters, cyclers, activeFilterCount, resetAll, trailingActions,
+}: {
+  search: string;
+  setSearch: (v: string) => void;
+  placeholder: string;
+  filterTitle: string;
+  axes: PaneAxis[];
+  axisFilters: Record<string, AxisState>;
+  cyclers: ReturnType<typeof useAxisFilters>['cyclers'];
+  activeFilterCount: number;
+  resetAll: () => void;
+  trailingActions?: React.ReactNode;
+}) {
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+
+  // Map our PaneAxis list → the FilterSection shape SectionFilterPanel
+  // reads. All axes are 'axis' kind (no tag-group hierarchy here).
+  const sections: FilterSection[] = useMemo(
+    () => axes.map((a) => ({
+      key: a.key,
+      name: a.label,
+      kind: 'axis' as const,
+      axisKey: a.key,
+      values: a.values.map((v) => ({ value: v.value, label: v.label })),
+    })),
+    [axes],
+  );
+
+  return (
+    <FilterBar
+      hideFilters={sections.length === 0}
+      search={search}
+      setSearch={setSearch}
+      isFilterOpen={isFilterOpen}
+      setIsFilterOpen={setIsFilterOpen}
+      activeFilterCount={activeFilterCount}
+      resetFilters={resetAll}
+      searchPlaceholder={placeholder}
+      filterTitle={filterTitle}
+      trailingActions={trailingActions}
+      renderFilters={
+        <SectionFilterPanel
+          embedded
+          axes={sections}
+          axisFilters={axisFilters}
+          tagStates={EMPTY_TAG_STATES}
+          setTagStates={NOOP_SET_TAG_STATES}
+          cycleAxisState={cyclers.cycleAxisState}
+          cycleAxisStateReverse={cyclers.cycleAxisStateReverse}
+          cycleTagState={NOOP_CYCLE_TAG}
+          cycleTagStateReverse={NOOP_CYCLE_TAG}
+          cycleAxisCombineMode={cyclers.cycleAxisCombineMode}
+          cycleAxisCombineModeReverse={cyclers.cycleAxisCombineModeReverse}
+          cycleAxisExclusionMode={cyclers.cycleAxisExclusionMode}
+          cycleAxisExclusionModeReverse={cyclers.cycleAxisExclusionModeReverse}
+          axisIncludeAll={cyclers.axisIncludeAll}
+          axisExcludeAll={cyclers.axisExcludeAll}
+          axisClear={cyclers.axisClear}
+          search={search}
+          setSearch={setSearch}
+          searchPlaceholder={placeholder}
+          activeFilterCount={activeFilterCount}
+          resetAll={resetAll}
+        />
+      }
+    />
+  );
+}
+
+// No tag-kind axes in this browser — SectionFilterPanel still requires
+// the tag prop pair, so supply inert handlers (matches FeatList).
+const NOOP_CYCLE_TAG = () => { /* no tag axes */ };
+const NOOP_SET_TAG_STATES: React.Dispatch<React.SetStateAction<Record<string, number>>> = () => { /* no tag axes */ };
+const EMPTY_TAG_STATES: Record<string, number> = {};
 
 // ─── Option list-row icon ─────────────────────────────────────────
 // Shows the option's icon_url when present; otherwise a small neutral
@@ -616,7 +1019,7 @@ function OptionDetail({
   }
 
   // Option selected — full detail.
-  const level = item.levelPrereq ?? item.level_prereq ?? null;
+  const level = item.levelPrerequisite ?? item.level_prerequisite ?? null;
   const isTotalLevel = item.levelPrereqIsTotal ?? item.level_prereq_is_total ?? false;
   const usesMax = item.usesMax ?? null;
   const usesRecovery = item.usesRecovery ?? null;

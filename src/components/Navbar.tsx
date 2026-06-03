@@ -1,11 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { 
-  auth, 
-  usernameToEmail, 
-  signInWithEmailAndPassword, 
-  signOut 
-} from '../lib/firebase';
+import { login, logout, getSessionToken } from '../lib/auth';
 import { useWikiPreview } from '../lib/wikiPreviewContext';
 
 import { Button } from './ui/button';
@@ -56,7 +51,7 @@ export default function Navbar({
         // the campaigns they're a member of. Replaces the previous
         // pattern that pulled the entire campaigns table + every
         // member row to figure out the same thing client-side.
-        const idToken = await auth.currentUser?.getIdToken();
+        const idToken = await getSessionToken();
         const res = await fetch('/api/campaigns', {
           headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
         });
@@ -83,7 +78,7 @@ export default function Navbar({
       // `{ ..., role: 'admin' }` into the payload and the server had no
       // column allow-list to drop it. Now the server only honors the
       // allow-listed fields and the client cannot reach `role` at all.
-      const idToken = await auth.currentUser?.getIdToken();
+      const idToken = await getSessionToken();
       const res = await fetch('/api/me', {
         method: 'PATCH',
         headers: {
@@ -105,11 +100,10 @@ export default function Navbar({
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    
-    const email = usernameToEmail(authData.username);
 
     try {
-      await signInWithEmailAndPassword(auth, email, authData.password);
+      // Native-first login (Firebase fallback + adopt handled inside auth.login).
+      await login(authData.username, authData.password);
       setIsAuthOpen(false);
       setAuthData({ username: '', password: '' });
     } catch (err: any) {
@@ -125,7 +119,7 @@ export default function Navbar({
   };
 
   const handleLogout = async () => {
-    await signOut(auth);
+    await logout();
     navigate('/');
   };
 
@@ -221,15 +215,15 @@ export default function Navbar({
               <DropdownMenuTrigger render={
                 <Button variant="ghost" className="relative h-10 w-10 rounded-full border border-gold/20">
                   <Avatar className="h-9 w-9">
-                    <AvatarImage src={userProfile?.avatar_url || user.photoURL} alt={user.displayName} />
-                    <AvatarFallback className="bg-gold/10 text-gold">{user.displayName?.[0]}</AvatarFallback>
+                    <AvatarImage src={userProfile?.avatar_url || undefined} alt={userProfile?.display_name || userProfile?.username || 'User'} />
+                    <AvatarFallback className="bg-gold/10 text-gold">{(userProfile?.display_name || userProfile?.username)?.[0]?.toUpperCase()}</AvatarFallback>
                   </Avatar>
                 </Button>
               } />
               <DropdownMenuContent align="end" className="w-56 p-1">
                 <div className="flex items-center justify-start gap-2 p-3 bg-background/50">
                   <div className="flex flex-col space-y-1 leading-none">
-                    <p className="font-medium">{userProfile?.display_name || user.displayName}</p>
+                    <p className="font-medium">{userProfile?.display_name || userProfile?.username}</p>
                     <p className="text-xs text-muted-foreground">@{userProfile?.username || 'user'}</p>
                     <div className="flex items-center gap-1 mt-1">
                       <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase font-bold ${(userProfile?.role === 'admin' || userProfile?.role === 'co-dm') ? 'bg-gold/20 text-gold' : 'bg-ink/10 text-ink/40'}`}>

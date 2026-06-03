@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Button } from '../../components/ui/button';
 import { AlertTriangle, Trash2, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
-import { auth } from '../../lib/firebase';
+import { getSessionToken } from "../../lib/auth";
 
 /**
  * Character-specific error boundary.
@@ -81,7 +81,7 @@ function CharacterErrorFallback({
       // their broken character via this boundary would 403. The new
       // endpoint allows owner OR DM and lets the D1 FK cascade clear
       // every character_* child row.
-      const idToken = await auth.currentUser?.getIdToken();
+      const idToken = await getSessionToken();
       const res = await fetch(`/api/characters/${encodeURIComponent(id)}`, {
         method: 'DELETE',
         headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},

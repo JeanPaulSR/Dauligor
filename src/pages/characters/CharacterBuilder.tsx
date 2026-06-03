@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useKeyboardSave } from "../../hooks/useKeyboardSave";
-import { auth, reportClientError, OperationType } from "../../lib/firebase";
+import { reportClientError, OperationType } from "../../lib/firebase";
 import {
   upsertDocument,
   fetchCollection,
@@ -195,6 +195,7 @@ import {
 } from "../../lib/characterTags";
 import { cn } from "../../lib/utils";
 import { toast } from "sonner";
+import { getSessionToken } from "../../lib/auth";
 
 const getModifier = (score: number) => {
   const mod = Math.floor((score - 10) / 2);
@@ -3821,7 +3822,7 @@ export default function CharacterBuilder({
           // signed-in user could load any character by id. The server
           // returns the same reconstructed character shape we used to
           // build via the local rebuildCharacterFromSql call.
-          const idToken = await auth.currentUser?.getIdToken();
+          const idToken = await getSessionToken();
           const res = await fetch(`/api/characters/${encodeURIComponent(id)}`, {
             headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
           });
@@ -3872,7 +3873,7 @@ export default function CharacterBuilder({
           // `fetchCollection("campaigns")` behavior. Players would
           // see only their own; this branch is gated on isStaff so
           // that distinction doesn't matter here.
-          const campIdToken = await auth.currentUser?.getIdToken();
+          const campIdToken = await getSessionToken();
           const campRes = await fetch('/api/campaigns', {
             headers: campIdToken ? { Authorization: `Bearer ${campIdToken}` } : {},
           });
@@ -4101,7 +4102,7 @@ export default function CharacterBuilder({
       // mutations into the batch, and the endpoint enforces owner-or-DM
       // access — closes the H5 leak where any signed-in user could
       // overwrite or delete any character.
-      const idToken = await auth.currentUser?.getIdToken();
+      const idToken = await getSessionToken();
       const saveRes = await fetch(`/api/characters/${encodeURIComponent(charId)}`, {
         method: "PUT",
         headers: {
@@ -4154,7 +4155,7 @@ export default function CharacterBuilder({
       // through requireStaffAccess so non-staff owners would 403 on
       // their own delete, and (b) had no ownership check anyway. Both
       // problems go away here.
-      const idToken = await auth.currentUser?.getIdToken();
+      const idToken = await getSessionToken();
       const res = await fetch(`/api/characters/${encodeURIComponent(id)}`, {
         method: "DELETE",
         headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},

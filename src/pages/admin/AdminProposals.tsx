@@ -17,7 +17,6 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { toast } from 'sonner';
-import { auth } from '../../lib/firebase';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
@@ -27,6 +26,16 @@ import {
 import { Textarea } from '../../components/ui/textarea';
 import { Inbox, Check, X, AlertTriangle, Undo2, ChevronRight, ChevronLeft, Tags as TagsIcon, ListChecks, Sparkles, Layers, BookOpen, Wand2, Shield, Award, Star, Package, Boxes, Repeat, Columns3, Zap } from 'lucide-react';
 import { formatSqliteLocal } from '../../lib/sqliteTimestamps';
+// Shared "Option C" review primitives — one copy, used here and by the
+// creator-side BlockReviewBody. See BlockReviewPane.tsx.
+import {
+  BlockReviewPane,
+  OperationBadge,
+  StatusBadge,
+  ENTITY_LABEL,
+  describePayloadSummary,
+} from '../../components/proposals/BlockReviewPane';
+import { getSessionToken } from "../../lib/auth";
 
 type EntityType =
   | 'tag'
@@ -95,31 +104,9 @@ const ENTITY_ICON: Record<EntityType, any> = {
   feature: Zap,
 };
 
-const ENTITY_LABEL: Record<EntityType, string> = {
-  tag: 'Tag',
-  tag_group: 'Tag Group',
-  spell_rule: 'Spell Rule',
-  spell_rule_application: 'Rule Application',
-  spell: 'Spell',
-  class: 'Class',
-  subclass: 'Subclass',
-  feat: 'Feat',
-  item: 'Item',
-  unique_option_group: 'Option Group',
-  unique_option_item: 'Option Item',
-  scaling_column: 'Scaling Column',
-  feature: 'Feature',
-};
-
-function describePayloadSummary(p: Proposal): string {
-  const payload = p.proposed_payload;
-  const name = payload && typeof payload === 'object' ? payload.name : undefined;
-  const slug = payload && typeof payload === 'object' ? payload.slug : undefined;
-  if (typeof name === 'string') return name;
-  if (typeof slug === 'string') return slug;
-  if (p.entity_id) return p.entity_id;
-  return '(no preview)';
-}
+// ENTITY_LABEL + describePayloadSummary now live in BlockReviewPane.tsx
+// (shared with the creator-side review). ENTITY_ICON above stays local —
+// only the admin bundle-list breakdown uses it.
 
 // Bundle row returned by GET /api/admin/proposals/bundles. Shape mirrors
 // the SQL aggregation in functions/api/admin/proposals/[[path]].ts.
@@ -201,7 +188,7 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
   const [revertingId, setRevertingId] = useState<string | null>(null);
 
   const authedFetch = useCallback(async (input: string, init?: RequestInit) => {
-    const idToken = await auth.currentUser?.getIdToken();
+    const idToken = await getSessionToken();
     if (!idToken) throw new Error('Not signed in.');
     return fetch(input, {
       ...init,
@@ -895,91 +882,11 @@ function BundleRowDisplay({
 }
 
 // ── Field-level diff for the split-pane detail (replaces the raw-JSON dump) ──
-const HIDDEN_FIELDS = new Set(['updated_at', 'created_at', 'added_at']);
-function isObjVal(v: any): boolean { return v !== null && typeof v === 'object'; }
-function fmtFieldVal(v: any): string {
-  if (v === null || v === undefined || v === '') return '—';
-  if (typeof v === 'string') return v;
-  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
-  try { return JSON.stringify(v, null, 2); } catch { return String(v); }
-}
-function FieldValue({ value }: { value: any }) {
-  if (isObjVal(value)) {
-    return (
-      <pre className="text-[11px] leading-snug whitespace-pre-wrap break-words font-mono bg-background/40 rounded p-2 max-h-44 overflow-y-auto mt-1">
-        {fmtFieldVal(value)}
-      </pre>
-    );
-  }
-  return <span className="break-words whitespace-pre-wrap">{fmtFieldVal(value)}</span>;
-}
-
-function FieldDiff({ proposal }: { proposal: Proposal }) {
-  const after = isObjVal(proposal.proposed_payload) ? (proposal.proposed_payload as Record<string, any>) : {};
-  const before = isObjVal(proposal.snapshot_at_proposal) ? (proposal.snapshot_at_proposal as Record<string, any>) : null;
-
-  if (proposal.operation === 'delete') {
-    const data = before ?? after;
-    const keys = Object.keys(data).filter((k) => !HIDDEN_FIELDS.has(k));
-    return (
-      <div>
-        <p className="text-sm text-blood/80 mb-3">Approving this <b>deletes</b> the entity below.</p>
-        <dl className="space-y-2">
-          {keys.map((k) => (
-            <div key={k} className="text-sm">
-              <dt className="text-[10px] uppercase tracking-widest text-ink/40">{k}</dt>
-              <dd className="text-ink/70"><FieldValue value={data[k]} /></dd>
-            </div>
-          ))}
-        </dl>
-      </div>
-    );
-  }
-
-  const keys = Object.keys(after).filter((k) => !HIDDEN_FIELDS.has(k));
-  const isUpdate = proposal.operation === 'update' && !!before;
-  const changedKeys = keys.filter((k) => !isUpdate || JSON.stringify(after[k]) !== JSON.stringify(before![k]));
-  const sameKeys = isUpdate ? keys.filter((k) => JSON.stringify(after[k]) === JSON.stringify(before![k])) : [];
-
-  return (
-    <div className="space-y-4">
-      <dl className="space-y-2.5">
-        {changedKeys.map((k) => (
-          <div key={k} className={`text-sm rounded p-2.5 ${isUpdate ? 'bg-emerald-700/[0.06] border border-emerald-700/20' : 'border border-gold/10'}`}>
-            <dt className="text-[10px] uppercase tracking-widest text-ink/45 flex items-center gap-2">
-              {k}
-              {isUpdate && <span className="text-[9px] text-emerald-700 font-bold normal-case tracking-normal">changed</span>}
-            </dt>
-            {isUpdate && (
-              <dd className="text-blood/70 line-through opacity-80 mt-1"><FieldValue value={before![k]} /></dd>
-            )}
-            <dd className={`mt-1 ${isUpdate ? 'text-emerald-800' : 'text-ink/80'}`}><FieldValue value={after[k]} /></dd>
-          </div>
-        ))}
-        {isUpdate && changedKeys.length === 0 && (
-          <p className="text-sm text-ink/50 italic">No field changes (only timestamps differ).</p>
-        )}
-      </dl>
-      {sameKeys.length > 0 && (
-        <details className="text-sm">
-          <summary className="cursor-pointer text-xs text-ink/45 hover:text-ink/70">
-            {sameKeys.length} unchanged field{sameKeys.length === 1 ? '' : 's'}
-          </summary>
-          <dl className="space-y-2 mt-2 opacity-60">
-            {sameKeys.map((k) => (
-              <div key={k}>
-                <dt className="text-[10px] uppercase tracking-widest text-ink/40">{k}</dt>
-                <dd className="text-ink/60"><FieldValue value={after[k]} /></dd>
-              </div>
-            ))}
-          </dl>
-        </details>
-      )}
-    </div>
-  );
-}
-
-// ── Split-pane block review (Option C): grouped rail + field-diff detail ──
+// ── Split-pane block review (Option C) ──
+// The split-pane core (rail + FieldDiff) lives in BlockReviewPane.tsx and is
+// shared with the creator-side review. This wrapper supplies the admin chrome:
+// the bundle header (proposer + counts + atomic Approve/Reject block) and the
+// per-revision Approve-this / Reject-this footer (only for still-pending rows).
 function BlockReview({
   bundle, revisions, loading, approvingBlockId,
   onApproveBlock, onRejectBlock, onApproveRevision, onRejectRevision,
@@ -993,29 +900,6 @@ function BlockReview({
   onApproveRevision: (p: Proposal) => void;
   onRejectRevision: (p: Proposal) => void;
 }) {
-  const [selId, setSelId] = useState<string | null>(null);
-  useEffect(() => {
-    if (revisions.length && !revisions.some((r) => r.id === selId)) setSelId(revisions[0].id);
-    if (!revisions.length) setSelId(null);
-  }, [revisions, selId]);
-
-  const idx = revisions.findIndex((r) => r.id === selId);
-  const sel = idx >= 0 ? revisions[idx] : null;
-  const go = (delta: number) => {
-    const n = idx + delta;
-    if (n >= 0 && n < revisions.length) setSelId(revisions[n].id);
-  };
-
-  // Group the rail by entity type, preserving first-seen order.
-  const groups = useMemo(() => {
-    const m = new Map<EntityType, Proposal[]>();
-    for (const r of revisions) {
-      if (!m.has(r.entity_type)) m.set(r.entity_type, []);
-      m.get(r.entity_type)!.push(r);
-    }
-    return Array.from(m.entries());
-  }, [revisions]);
-
   return (
     <Card className="border-gold/10 overflow-hidden">
       <CardHeader>
@@ -1056,100 +940,27 @@ function BlockReview({
         </div>
       </CardHeader>
 
-      <div className="flex flex-col md:flex-row border-t border-gold/10 min-h-[460px]">
-        {/* Left rail — changes grouped by type */}
-        <div className="md:w-72 shrink-0 border-b md:border-b-0 md:border-r border-gold/10 bg-gold/[0.03] overflow-y-auto max-h-[72vh]">
-          {loading ? (
-            <p className="text-ink/50 italic text-center py-12 text-sm">Loading…</p>
-          ) : revisions.length === 0 ? (
-            <p className="text-ink/50 italic text-center py-12 text-sm">No revisions in this block.</p>
-          ) : (
-            groups.map(([type, items]) => (
-              <div key={type}>
-                <p className="px-3 pt-3 pb-1 text-[10px] uppercase tracking-widest text-gold/70">
-                  {ENTITY_LABEL[type]} · {items.length}
-                </p>
-                {items.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => setSelId(p.id)}
-                    className={`w-full text-left px-3 py-2 flex items-center gap-2 border-l-2 transition-colors ${
-                      p.id === selId ? 'bg-gold/10 border-gold' : 'border-transparent hover:bg-gold/5'
-                    }`}
-                  >
-                    <OperationBadge operation={p.operation} />
-                    <span className="text-sm truncate flex-1 min-w-0">{describePayloadSummary(p)}</span>
-                    {p.status !== 'pending' && <StatusBadge status={p.status} />}
-                  </button>
-                ))}
-              </div>
-            ))
-          )}
-        </div>
-
-        {/* Right detail — field-level diff of the selected change */}
-        <div className="flex-1 min-w-0 overflow-y-auto max-h-[72vh] p-5">
-          {sel ? (
-            <div className="space-y-4">
-              <div className="flex items-center gap-3 flex-wrap">
-                <OperationBadge operation={sel.operation} />
-                <h3 className="text-base font-medium flex-1 min-w-0 truncate">
-                  {ENTITY_LABEL[sel.entity_type]} · {describePayloadSummary(sel)}
-                </h3>
-                <StatusBadge status={sel.status} />
-                <div className="flex items-center gap-1">
-                  <Button size="xs" variant="outline" onClick={() => go(-1)} disabled={idx <= 0} className="px-2">
-                    <ChevronLeft className="w-3.5 h-3.5" />
-                  </Button>
-                  <span className="text-[11px] text-ink/50 tabular-nums px-1">{idx + 1} / {revisions.length}</span>
-                  <Button size="xs" variant="outline" onClick={() => go(1)} disabled={idx >= revisions.length - 1} className="px-2">
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
-              </div>
-              <p className="text-xs text-ink/55">
-                by{' '}
-                <span className="font-medium text-ink/75">
-                  {sel.proposer_display_name || sel.proposer_username || sel.proposed_by_user_id}
-                </span>
-                {' · '}{formatSqliteLocal(sel.proposed_at)}
-              </p>
-              {sel.notes_from_proposer && (
-                <div className="p-3 rounded bg-gold/5 border border-gold/10 text-sm">
-                  <p className="text-[10px] uppercase tracking-widest text-gold/70 mb-1">Notes from proposer</p>
-                  <p className="whitespace-pre-wrap">{sel.notes_from_proposer}</p>
-                </div>
-              )}
-              {sel.rejection_reason && (
-                <div className="p-3 rounded bg-blood/5 border border-blood/10 text-sm">
-                  <p className="text-[10px] uppercase tracking-widest text-blood/70 mb-1">Rejection reason</p>
-                  <p className="whitespace-pre-wrap">{sel.rejection_reason}</p>
-                </div>
-              )}
-
-              <FieldDiff proposal={sel} />
-
-              {sel.status === 'pending' && (
-                <div className="flex justify-end gap-2 pt-3 border-t border-gold/10">
-                  <Button
-                    variant="outline"
-                    onClick={() => onRejectRevision(sel)}
-                    className="gap-1.5 border-blood/30 text-blood hover:bg-blood/10"
-                  >
-                    <X className="w-3.5 h-3.5" /> Reject this
-                  </Button>
-                  <Button onClick={() => onApproveRevision(sel)} className="gap-1.5 bg-emerald-700 text-white hover:bg-emerald-800">
-                    <Check className="w-3.5 h-3.5" /> Approve this
-                  </Button>
-                </div>
-              )}
-            </div>
-          ) : (
-            <p className="text-ink/50 italic text-center py-16">Select a change on the left to review it.</p>
-          )}
-        </div>
-      </div>
+      <BlockReviewPane
+        revisions={revisions}
+        loading={loading}
+        emptyLabel="No revisions in this block."
+        renderRevisionActions={(sel) =>
+          sel.status === 'pending' ? (
+            <>
+              <Button
+                variant="outline"
+                onClick={() => onRejectRevision(sel as Proposal)}
+                className="gap-1.5 border-blood/30 text-blood hover:bg-blood/10"
+              >
+                <X className="w-3.5 h-3.5" /> Reject this
+              </Button>
+              <Button onClick={() => onApproveRevision(sel as Proposal)} className="gap-1.5 bg-emerald-700 text-white hover:bg-emerald-800">
+                <Check className="w-3.5 h-3.5" /> Approve this
+              </Button>
+            </>
+          ) : null
+        }
+      />
     </Card>
   );
 }
@@ -1258,32 +1069,7 @@ function ProposalRow({
   );
 }
 
-function OperationBadge({ operation }: { operation: Operation }) {
-  const classes: Record<Operation, string> = {
-    create: 'bg-emerald-700/15 text-emerald-700 border-emerald-700/30',
-    update: 'bg-archive-blue/15 text-archive-blue border-archive-blue/30',
-    delete: 'bg-blood/15 text-blood border-blood/30',
-  };
-  return (
-    <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded border ${classes[operation]}`}>
-      {operation}
-    </span>
-  );
-}
-
-function StatusBadge({ status }: { status: Status }) {
-  const classes: Record<Status, string> = {
-    pending: 'bg-gold/10 text-gold border-gold/30',
-    approved: 'bg-emerald-700/10 text-emerald-700 border-emerald-700/30',
-    rejected: 'bg-blood/10 text-blood border-blood/30',
-    withdrawn: 'bg-ink/5 text-ink/50 border-ink/20',
-  };
-  return (
-    <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded border ${classes[status]}`}>
-      {status}
-    </span>
-  );
-}
+// OperationBadge + StatusBadge now imported from BlockReviewPane.tsx.
 
 function ProposalDetailDialog({
   proposal, onClose, onApprove, onReject, onRevert, reverting,

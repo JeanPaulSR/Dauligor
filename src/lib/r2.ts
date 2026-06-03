@@ -1,4 +1,4 @@
-import { auth } from "./firebase";
+import { getSessionToken, isAuthenticated } from "./auth";
 
 export interface R2Object {
   key: string;
@@ -13,11 +13,11 @@ export interface R2ListResult {
 }
 
 async function getAuthHeaders() {
-  if (!auth.currentUser) {
+  if (!isAuthenticated()) {
     throw new Error("You must be signed in to manage images.");
   }
 
-  const idToken = await auth.currentUser.getIdToken();
+  const idToken = await getSessionToken();
   return {
     Authorization: `Bearer ${idToken}`,
   };

@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Accounts → Cloudflare — Status & Local Testing</title>
+<style>
+  :root{
+    --parchment:#f5f5f0; --parchment-deep:#ece8dd; --gold:#c5a059; --gold-deep:#9c7b38;
+    --blood:#8b0000; --ink:#1f1c17; --ink-soft:#4a4438; --line:#d8cfb8;
+    --good:#3f6f3f; --warn:#9c6b1f; --panel:#fbf9f3;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--parchment);color:var(--ink);font-family:"Inter","Segoe UI",system-ui,sans-serif;line-height:1.6;padding:0 0 5rem}
+  .wrap{max-width:1020px;margin:0 auto;padding:0 1.5rem}
+  header.hero{background:linear-gradient(160deg,#26221b,#3a3328);color:#f2ead6;border-bottom:3px solid var(--gold);padding:2.5rem 0 2rem;margin-bottom:2rem}
+  h1,h2,h3,h4{font-family:"Cormorant Garamond","Georgia",serif;font-weight:600;line-height:1.15}
+  header.hero h1{font-size:2.4rem;margin:.2rem 0 .4rem;color:#f4ecd6}
+  .kicker{text-transform:uppercase;letter-spacing:.28em;font-size:.72rem;color:var(--gold);font-weight:600}
+  .sub{color:#d8cdb2;font-size:1.05rem;max-width:72ch}
+  h2{font-size:1.8rem;margin:2.4rem 0 .4rem;color:#2a2419;border-bottom:1px solid var(--line);padding-bottom:.35rem}
+  h2 .num{color:var(--gold-deep);font-size:1.15rem;vertical-align:.15em;margin-right:.5rem}
+  h3{font-size:1.25rem;margin:1.4rem 0 .3rem;color:#332c20}
+  p{margin:.5rem 0 .9rem}
+  code{background:var(--parchment-deep);border:1px solid var(--line);padding:.05rem .35rem;font-family:"JetBrains Mono","Consolas",monospace;font-size:.85em;color:#5a3a12}
+  pre{background:#26221b;color:#ecdfc2;padding:.9rem 1.1rem;overflow:auto;border-left:3px solid var(--gold);font-family:"JetBrains Mono","Consolas",monospace;font-size:.82rem;line-height:1.55;margin:.6rem 0}
+  pre code{background:none;border:none;color:inherit;padding:0}
+  .banner{display:flex;gap:1rem;align-items:flex-start;background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--gold);padding:.9rem 1.1rem;margin:1.2rem 0}
+  .banner.good{border-left-color:var(--good)}
+  .banner.warn{border-left-color:var(--warn)}
+  .banner .tag{font-weight:700;color:var(--gold-deep);white-space:nowrap;font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;padding-top:.15rem}
+  .banner.good .tag{color:var(--good)} .banner.warn .tag{color:var(--warn)}
+  table{width:100%;border-collapse:collapse;margin:1rem 0;font-size:.92rem;background:var(--panel)}
+  th,td{text-align:left;padding:.5rem .7rem;border:1px solid var(--line);vertical-align:top}
+  th{background:var(--parchment-deep);font-family:"Cormorant Garamond",serif;font-size:1.05rem}
+  .pill{display:inline-block;font-size:.7rem;font-weight:700;padding:.08rem .5rem;border-radius:999px;letter-spacing:.03em;text-transform:uppercase}
+  .pill.done{background:#dfe9df;color:var(--good);border:1px solid #a7c4a7}
+  .pill.todo{background:#f6ead2;color:var(--warn);border:1px solid #ddc28a}
+  .pill.fb{background:#f3dede;color:var(--blood);border:1px solid #d9a7a7}
+  ol.steps{counter-reset:step;list-style:none;padding-left:0;margin:1rem 0}
+  ol.steps>li{counter-increment:step;position:relative;padding:.2rem 0 1.1rem 3rem;border-left:2px solid var(--line);margin-left:1rem}
+  ol.steps>li::before{content:counter(step);position:absolute;left:-1.05rem;top:0;width:2rem;height:2rem;background:#26221b;color:var(--gold);border:2px solid var(--gold);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:"Cormorant Garamond",serif;font-size:1.1rem;font-weight:700}
+  ol.steps>li:last-child{border-left-color:transparent}
+  ol.steps h4{margin:.1rem 0 .3rem;font-size:1.1rem}
+  .flow{background:var(--panel);border:1px solid var(--line);padding:1rem 1.1rem;margin:1rem 0;font-family:"JetBrains Mono",monospace;font-size:.8rem;line-height:1.8;color:var(--ink-soft)}
+  .flow b{color:var(--blood)} .flow .cf{color:var(--good);font-weight:700}
+  ul{margin:.4rem 0 1rem;padding-left:1.3rem} li{margin:.25rem 0}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+  @media(max-width:720px){.two{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-top:3px solid var(--gold);padding:.9rem 1.1rem}
+  .card.bad{border-top-color:var(--blood)}
+  .card h4{margin:.1rem 0 .4rem;font-size:1.15rem}
+  footer{margin-top:3rem;border-top:1px solid var(--line);padding-top:1rem;font-size:.84rem;color:var(--ink-soft)}
+  .lead{font-size:1.06rem;color:var(--ink-soft)}
+  kbd{background:#26221b;color:#ecdfc2;border-radius:3px;padding:.05rem .4rem;font-size:.8em;font-family:monospace}
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <div class="kicker">Dauligor · The Archive · Auth Platform</div>
+    <h1>Accounts on Cloudflare — Status &amp; Local Testing</h1>
+    <p class="sub">Where the "move accounts off Firebase" work stands today, and exactly how to drive it against your local dev stack.</p>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <h2><span class="num">§1</span> The project in one breath</h2>
+  <p class="lead">Dauligor / "The Archive" runs entirely on Cloudflare now — Pages + a Worker + D1 (SQLite) + R2 — <em>except</em> that user passwords still lived in Firebase Authentication. This project moves passwords into D1 as scrypt hashes and has the Worker issue its own session tokens, so the whole stack is one stack. It ships in phases; each is additive and reversible, and <strong>Firebase keeps working the entire time</strong> until the final cleanup.</p>
+
+  <div class="banner good"><div class="tag">Where we are</div><div>The foundation, the login backend, and the <strong>full client flip</strong> are built, verified, and committed (on branch <code>claude/kind-wright-2cb7a2</code>, not pushed). The current state is <strong>safe to deploy as-is</strong> — it does nothing visible until its secret + DB column exist, then native login simply becomes available.</div></div>
+
+  <h2><span class="num">§2</span> What's done vs. what's left</h2>
+  <table>
+    <thead><tr><th>Phase</th><th>Status</th><th>What it gives you</th></tr></thead>
+    <tbody>
+      <tr><td><strong>1 · Schema + hashing</strong></td><td><span class="pill done">done</span></td><td><code>users.password_hash</code> migration + scrypt hash/verify (<code>@noble/hashes</code>).</td></tr>
+      <tr><td><strong>2 · Login backend</strong></td><td><span class="pill done">done</span></td><td><code>POST /api/auth/login</code> + <code>/adopt</code>; Worker-issued 30-day JWTs; every API gate accepts <em>either</em> a native token or a Firebase token during the window.</td></tr>
+      <tr><td><strong>3a · Client flip</strong></td><td><span class="pill done">done</span></td><td>Whole UI moved onto <code>src/lib/auth.ts</code>; native-first login with Firebase fallback + silent account migration; <code>POST /api/auth/change-password</code>.</td></tr>
+      <tr><td><strong>3b · Polish</strong></td><td><span class="pill todo">later</span></td><td>Sliding-token refresh endpoint; require current password on change.</td></tr>
+      <tr><td><strong>4 · Admin CRUD → D1</strong></td><td><span class="pill todo">later</span></td><td>Admin "create / delete / sign-in-link" stop using Firebase Identity Toolkit.</td></tr>
+      <tr><td><strong>5 · Remove Firebase</strong></td><td><span class="pill todo">later</span></td><td>Drop the dual-token branch, the <code>firebase</code> dependency, and the service-account secret entirely.</td></tr>
+    </tbody>
+  </table>
+
+  <h2><span class="num">§3</span> How login works now</h2>
+  <div class="flow">
+    <b>LOGIN</b> (user types username + password)<br>
+    &nbsp;1. client → <span class="cf">POST /api/auth/login</span><br>
+    &nbsp;&nbsp;&nbsp;• adopted account → <span class="cf">200 + native JWT</span> stored in localStorage. Done, no Firebase.<br>
+    &nbsp;&nbsp;&nbsp;• not adopted yet → <b>401</b>, so the client…<br>
+    &nbsp;2. …falls back to <b>Firebase</b> sign-in, then fires <span class="cf">POST /api/auth/adopt</span><br>
+    &nbsp;&nbsp;&nbsp;→ writes the scrypt hash to D1 so the <b>next</b> login is native.<br>
+    <br>
+    <b>EVERY REQUEST</b> carries <code>Authorization: Bearer &lt;token&gt;</code> from <code>getSessionToken()</code><br>
+    &nbsp;→ the server verifies it (our HS256 secret OR Firebase JWKS) and reads the role from D1.
+  </div>
+  <p>Net effect: <strong>accounts migrate themselves</strong> the first time each person signs in. No reset email, no disruption. The native token lives in <code>localStorage</code> under <code>dauligor:authToken</code>.</p>
+
+  <h2><span class="num">§4</span> Testing against your local server</h2>
+  <p class="lead">Your local stack is the main checkout's dev launcher — app on <code>:3001</code>, worker on <code>:8788</code>. Three one-time prerequisites, then a five-minute walkthrough.</p>
+
+  <h3>Prerequisites (one-time)</h3>
+  <ol class="steps">
+    <li>
+      <h4>Get this code into your running checkout</h4>
+      <p>The commits live on <code>claude/kind-wright-2cb7a2</code>. From the <strong>main checkout</strong> (<code>E:\DnD\Professional\Dev\Dauligor</code>), fast-forward your active branch onto them:</p>
+      <pre><code>git merge --ff-only claude/kind-wright-2cb7a2</code></pre>
+      <p>It's a clean fast-forward — nothing to resolve.</p>
+    </li>
+    <li>
+      <h4>Set the signing secret</h4>
+      <p>Native auth is disabled until <code>AUTH_JWT_SECRET</code> exists (without it, login just falls back to Firebase). Add a line to the repo-root <code>.env</code>:</p>
+      <pre><code># .env  (repo root — read by the dev server)
+AUTH_JWT_SECRET=pick-a-long-random-string-at-least-32-chars</code></pre>
+      <p>Any long random value is fine locally. (For production this becomes a Cloudflare Pages + Worker secret — not needed for local testing.)</p>
+    </li>
+    <li>
+      <h4>Add the password column to your local D1</h4>
+      <p>The login query reads <code>users.password_hash</code>; apply the migration to your local database once:</p>
+      <pre><code>cd worker
+npx wrangler d1 execute dauligor-db --local \
+  --file=migrations/20260531-1200_users_password_credentials.sql</code></pre>
+    </li>
+    <li>
+      <h4>Start (or restart) the stack</h4>
+      <p>From the repo root. A <strong>full restart is required</strong> — <code>.env</code> and server changes aren't hot-reloaded:</p>
+      <pre><code>node scripts/dev-sysapp.mjs   # app → http://localhost:3001 , worker → :8788</code></pre>
+    </li>
+  </ol>
+
+  <h3>The walkthrough (in the browser)</h3>
+  <ol class="steps">
+    <li>
+      <h4>First login = silent migration</h4>
+      <p>Open <kbd>http://localhost:3001</kbd> and log in with an existing user's <strong>username + their current password</strong>. Behind the scenes: native login returns 401 (no hash yet) → Firebase fallback succeeds → <code>/adopt</code> writes the scrypt hash. You're in, exactly as before.</p>
+    </li>
+    <li>
+      <h4>Log out, then log in again — now it's native</h4>
+      <p>This second login uses the freshly-written hash. To <em>prove</em> it went native, open DevTools:</p>
+      <ul>
+        <li><strong>Network</strong> → <code>POST /api/auth/login</code> returns <code>200</code> with a <code>token</code> (and no Firebase request follows).</li>
+        <li><strong>Application → Local Storage → localhost:3001</strong> → key <code>dauligor:authToken</code> now holds a JWT.</li>
+      </ul>
+    </li>
+    <li>
+      <h4>Change your password (native)</h4>
+      <p>Go to <strong>Settings → Security</strong>, set a new password, save. Then log out and log in with the <em>new</em> password — it works, and the old one no longer does. (This exercises the new <code>POST /api/auth/change-password</code>.)</p>
+    </li>
+    <li>
+      <h4>Click around</h4>
+      <p>Open the wiki, a character sheet, the compendium, the admin pages. Every authenticated call now pulls its token from <code>getSessionToken()</code> — if those load normally, the 44-file sweep is good.</p>
+    </li>
+  </ol>
+
+  <h3>Prefer the command line?</h3>
+  <p>Once a user is adopted (or seeded with a hash), you can hit the endpoint directly:</p>
+  <pre><code># after the user is adopted — returns { token, profile }
+curl -X POST http://localhost:3001/api/auth/login \
+  -H "content-type: application/json" \
+  -d '{"username":"YOURNAME","password":"YOURPASS"}'
+
+# before adoption (no hash yet) this returns 401 by design —
+# log in once via the UI to trigger the adopt, then retry.</code></pre>
+
+  <h2><span class="num">§5</span> If something's off</h2>
+  <div class="two">
+    <div class="card bad"><h4>Login says "Native auth is not configured" (503)</h4><p><code>AUTH_JWT_SECRET</code> isn't set, or the stack wasn't restarted after editing <code>.env</code>. Re-check step 2 + 4. Until fixed, login silently uses Firebase (the app still works).</p></div>
+    <div class="card bad"><h4>A 500 mentioning <code>password_hash</code></h4><p>The migration (step 3) hasn't been applied to your <strong>local</strong> D1. Run it, then retry.</p></div>
+    <div class="card bad"><h4>Logged out unexpectedly / 401 on everything</h4><p>Clear <code>dauligor:authToken</code> from Local Storage and log in again. A token older than 30 days is auto-dropped — re-login issues a fresh one.</p></div>
+    <div class="card bad"><h4>Worker 500s (<code>ECONNREFUSED</code>)</h4><p>The worker (:8788) died but the app (:3001) stayed up. Restart <code>dev-sysapp.mjs</code>; both must be live.</p></div>
+  </div>
+
+  <div class="banner warn"><div class="tag">Note</div><div>This is all <strong>local</strong>. Nothing is deployed and nothing is pushed. Production go-live additionally needs the remote D1 migration applied and <code>AUTH_JWT_SECRET</code> set as a Cloudflare secret — both gated on your explicit go-ahead.</div></div>
+
+  <footer>
+    <p>Draft · 2026-05-31 · branch <code>claude/kind-wright-2cb7a2</code> (builds on <code>dauligor-applications</code>) · local read-aid. Companion: <code>docs/_drafts/auth-cloudflare-migration-plan-2026-05-31.html</code> (full design) · <code>handoffs/dauligor-applications/2026-05-31-firebase-auth-exit-phases-1-2.md</code> (pickup notes).</p>
+  </footer>
+</div>
+</body>
+</html>

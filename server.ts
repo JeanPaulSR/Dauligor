@@ -13,7 +13,7 @@ import {
 } from "./api/_lib/r2-proxy.js";
 import { handleD1Query } from "./api/_lib/d1-proxy.js";
 import { executeD1QueryInternal, loadUserRoleFromD1 } from "./api/_lib/d1-internal.js";
-import { HttpError, getAdminServices, getCredentialErrorMessage } from "./api/_lib/firebase-admin.js";
+import { HttpError, verifyEitherToken } from "./api/_lib/firebase-admin.js";
 import { wrapPagesFunction } from "./api/_lib/pages-to-express.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -39,8 +39,8 @@ async function verifyAdminToken(authHeader: string | string[] | undefined): Prom
   const idToken = headerValue.slice("Bearer ".length);
   let decoded: any;
   try {
-    const { auth } = getAdminServices();
-    decoded = await auth.verifyIdToken(idToken);
+    // Accepts our native session token OR a Firebase ID token (migration window).
+    decoded = await verifyEitherToken(idToken);
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     throw new HttpError(401, `Invalid auth token: ${reason}`);
@@ -50,32 +50,6 @@ async function verifyAdminToken(authHeader: string | string[] | undefined): Prom
   if (!isAdmin) {
     throw new HttpError(403, "Admin access required.");
   }
-}
-
-function createTemporaryPassword(length = 14) {
-  const uppercase = "ABCDEFGHJKLMNPQRSTUVWXYZ";
-  const lowercase = "abcdefghijkmnpqrstuvwxyz";
-  const numbers = "23456789";
-  const symbols = "!@#$%*?";
-  const allChars = `${uppercase}${lowercase}${numbers}${symbols}`;
-
-  const required = [
-    uppercase[Math.floor(Math.random() * uppercase.length)],
-    lowercase[Math.floor(Math.random() * lowercase.length)],
-    numbers[Math.floor(Math.random() * numbers.length)],
-    symbols[Math.floor(Math.random() * symbols.length)],
-  ];
-
-  while (required.length < length) {
-    required.push(allChars[Math.floor(Math.random() * allChars.length)]);
-  }
-
-  for (let i = required.length - 1; i > 0; i -= 1) {
-    const swapIndex = Math.floor(Math.random() * (i + 1));
-    [required[i], required[swapIndex]] = [required[swapIndex], required[i]];
-  }
-
-  return required.join("");
 }
 
 async function startServer() {
@@ -112,45 +86,10 @@ async function startServer() {
     });
   });
 
-  app.post("/api/admin/users/:id/temporary-password", async (req, res) => {
-    try {
-      await verifyAdminToken(req.headers.authorization);
-
-      // Verify the target user exists in our D1 directory before resetting their
-      // Firebase Auth password. This guards against typos / stale UIDs.
-      const targetUserId = req.params.id;
-      const targetCheck = await executeD1QueryInternal({
-        sql: "SELECT id FROM users WHERE id = ? LIMIT 1",
-        params: [targetUserId],
-      });
-      if (!targetCheck.results?.length) {
-        return res.status(404).json({ error: "Target user profile not found." });
-      }
-
-      const temporaryPassword = createTemporaryPassword();
-      const { auth } = getAdminServices();
-      await auth.updateUser(targetUserId, { password: temporaryPassword });
-      // Note: the legacy Firestore write of `mustChangePassword` /
-      // `temporaryPasswordGeneratedAt` / `temporaryPasswordGeneratedBy` is gone.
-      // The temp-password lifecycle is now handled entirely by Firebase Auth
-      // and the returned password value below; D1 has no columns for it.
-
-      return res.json({
-        temporaryPassword,
-        generatedAt: new Date().toISOString(),
-      });
-    } catch (error) {
-      if (error instanceof HttpError) {
-        return res.status(error.status).json({ error: error.message });
-      }
-      console.error("Failed to generate temporary password:", error);
-      const message = error instanceof Error ? error.message : String(error);
-      const credentialMessage = getCredentialErrorMessage(error);
-      return res.status(credentialMessage ? 503 : 500).json({
-        error: credentialMessage ?? message,
-      });
-    }
-  });
+  // NOTE: /api/admin/users/:id/temporary-password is now served by the mounted
+  // Pages Function (functions/api/admin/users/[[path]].ts → handleTemporaryPassword),
+  // which writes a native scrypt hash to D1. The old Firebase-Identity-Toolkit
+  // dev route was removed so dev and prod don't drift.
 
   app.get("/api/r2/list", (req, res) => {
     void handleR2List(req, res);
@@ -410,6 +349,10 @@ async function startServer() {
   // the pipeline gracefully degrades without (cold path goes straight
   // to D1 every time, slower but functional).
   const pagesFunctions: Array<{ mount: string; modulePath: string }> = [
+    // Native auth (Firebase-exit migration). Unauthenticated login + the
+    // hash-on-next-login adopt endpoint. Prod auto-discovers it by file path;
+    // dev needs this explicit mount like every other Pages Function below.
+    { mount: "/api/auth", modulePath: "./functions/api/auth/[[path]].ts" },
     { mount: "/api/me", modulePath: "./functions/api/me/[[path]].ts" },
     { mount: "/api/admin/users", modulePath: "./functions/api/admin/users/[[path]].ts" },
     { mount: "/api/admin/worlds", modulePath: "./functions/api/admin/worlds/[[path]].ts" },

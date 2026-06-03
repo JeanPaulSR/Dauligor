@@ -1,8 +1,8 @@
 import { saveAs } from "file-saver";
 import { queryD1 } from "./d1";
-import { auth } from "./firebase";
 import { buildCharacterExport } from "./characterShared";
 import { slugify } from "./characterLogic";
+import { getSessionToken } from "./auth";
 
 /**
  * Client-side trigger for character export.
@@ -15,7 +15,7 @@ import { slugify } from "./characterLogic";
  * data isn't owner-scoped.
  */
 export async function exportCharacterJSON(characterId: string) {
-  const idToken = await auth.currentUser?.getIdToken();
+  const idToken = await getSessionToken();
   const res = await fetch(`/api/characters/${encodeURIComponent(characterId)}`, {
     headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
   });

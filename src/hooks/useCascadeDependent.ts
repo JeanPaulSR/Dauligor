@@ -32,10 +32,10 @@
 // =============================================================================
 
 import { useCallback, useMemo, useState } from 'react';
-import { auth } from '../lib/firebase';
 import { useBlock } from '../lib/proposalBlock';
 import { useProposalContextOptional } from '../lib/proposalAccumulator';
 import type { DraftRevision } from '../lib/proposalBlock';
+import { getSessionToken } from "../lib/auth";
 
 export interface CascadeDependentState {
   /** The drafts row for this dependent. */
@@ -109,7 +109,7 @@ export function useCascadeDependent(
 
   const patchDraft = useCallback(
     async (draftId: string, nextPayload: Record<string, any>) => {
-      const idToken = await auth.currentUser?.getIdToken();
+      const idToken = await getSessionToken();
       if (!idToken) throw new Error('Not signed in.');
       const res = await fetch(`/api/proposals/${encodeURIComponent(draftId)}`, {
         method: 'PATCH',

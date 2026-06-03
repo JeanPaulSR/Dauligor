@@ -34,7 +34,7 @@
  * cannot ask about another user's favorites.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { auth } from './firebase';
+import { getSessionToken, isAuthenticated } from "./auth";
 
 // Universal-favorites key (default scope: scope === null).
 const UNIVERSAL_LS_KEY = 'dauligor.spellFavorites';
@@ -90,8 +90,8 @@ function writeLocal(ids: Set<string>, scope: FavoriteScope) {
 // ---------------------------------------------------------------------------
 
 async function authHeaders(): Promise<HeadersInit | null> {
-  if (!auth.currentUser) return null;
-  const token = await auth.currentUser.getIdToken();
+  if (!isAuthenticated()) return null;
+  const token = await getSessionToken();
   return {
     Authorization: `Bearer ${token}`,
     'Content-Type': 'application/json',

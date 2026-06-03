@@ -15,6 +15,7 @@ import { matchesSingleAxisFilter, matchesMultiAxisFilter } from '../../lib/spell
 import { useAxisFilters } from '../../hooks/useAxisFilters';
 import { useItemFavorites } from '../../lib/itemFavorites';
 import ItemDetailPanel from '../../components/compendium/ItemDetailPanel';
+import { getIdentity } from "../../lib/auth";
 
 /**
  * Public items browser — thin wrapper around `CompendiumBrowserShell`.
@@ -125,7 +126,7 @@ export default function ItemList({ userProfile }: { userProfile: any }) {
   const { axisFilters, cyclers, activeFilterCount, resetAll: resetFilters } =
     useAxisFilters(AXIS_KEYS);
 
-  const [authUserId, setAuthUserId] = useState<string | null>(() => auth.currentUser?.uid ?? null);
+  const [authUserId, setAuthUserId] = useState<string | null>(() => getIdentity()?.uid ?? null);
   useEffect(() => {
     const unsub = auth.onAuthStateChanged((u) => setAuthUserId(u?.uid ?? null));
     return unsub;

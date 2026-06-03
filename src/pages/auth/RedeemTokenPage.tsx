@@ -19,7 +19,7 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { auth, signInWithCustomToken } from '../../lib/firebase';
+import { redeemToken } from '../../lib/auth';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 
@@ -45,7 +45,7 @@ export default function RedeemTokenPage() {
 
     (async () => {
       try {
-        await signInWithCustomToken(auth, token);
+        await redeemToken(token);
         if (cancelled) return;
         setStatus('success');
         // Give onAuthStateChanged in App.tsx a tick to fire and load the

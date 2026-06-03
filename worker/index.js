@@ -92,13 +92,19 @@ async function handleRequest(request, env) {
 
   const url = new URL(request.url);
 
-  // Public image serve (NO auth) — GET /images/<key> streams the R2 object.
-  // In prod, images.dauligor.com serves R2 directly so this is never hit; in
-  // local dev the worker IS the image host (the dev launcher sets
-  // R2_PUBLIC_URL to this worker), so uploaded images can actually render
-  // instead of 404-ing against the prod host. Read-only and scoped to the
-  // already-public `images/` prefix — exposes nothing that isn't public.
-  if (request.method === 'GET' && url.pathname.startsWith('/images/')) {
+  // Public image serve (NO auth) — GET /<prefix>/<key> streams the R2 object.
+  // In prod, images.dauligor.com serves the whole bucket directly so this is
+  // never hit; in local dev the worker IS the image host (the dev launcher
+  // sets R2_PUBLIC_URL to this worker), so library assets can actually render
+  // instead of 404-ing against the prod host. Read-only, scoped to the public
+  // asset prefixes the app references as image URLs: `images/` (uploads +
+  // generated art) plus the shared `icons/` + `tokens/` libraries — exposes
+  // nothing that isn't already public.
+  if (request.method === 'GET' && (
+    url.pathname.startsWith('/images/') ||
+    url.pathname.startsWith('/icons/') ||
+    url.pathname.startsWith('/tokens/')
+  )) {
     const key = decodeURIComponent(url.pathname.slice(1));
     const obj = await env.BUCKET.get(key);
     if (!obj) return jsonResponse({ error: 'Not found' }, 404);

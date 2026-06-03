@@ -1,4 +1,4 @@
-import { auth } from "./firebase";
+import { getSessionToken, isAuthenticated } from "./auth";
 import { toast } from "sonner";
 import { D1_TABLE_MAP, getTableName } from "./d1Tables";
 
@@ -156,9 +156,9 @@ export async function bumpFoundationUpdate() {
  * always gets the live value.
  */
 export async function checkFoundationUpdate(): Promise<string | null> {
-  if (!auth.currentUser) return null;
+  if (!isAuthenticated()) return null;
   try {
-    const token = await auth.currentUser.getIdToken();
+    const token = await getSessionToken();
     const res = await fetch('/api/me/foundation-update', {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
@@ -204,11 +204,11 @@ export async function setSystemMetadata<T = any>(key: string, value: T): Promise
 }
 
 async function getAuthHeaders() {
-  if (!auth.currentUser) {
+  if (!isAuthenticated()) {
     throw new Error("You must be signed in to access the compendium.");
   }
 
-  const idToken = await auth.currentUser.getIdToken();
+  const idToken = await getSessionToken();
   return {
     Authorization: `Bearer ${idToken}`,
     'Content-Type': 'application/json',

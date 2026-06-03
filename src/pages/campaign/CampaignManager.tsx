@@ -7,6 +7,7 @@ import { Shield, ChevronLeft, Calendar, Users, MapPin, Sparkles, Edit, FileText,
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ClassImageStyle, DEFAULT_DISPLAY } from '@/components/compendium/ClassImageEditor';
+import { getSessionToken } from "../../lib/auth";
 
 export default function CampaignManager({ userProfile }: { userProfile: any }) {
   const { id } = useParams();
@@ -35,7 +36,7 @@ export default function CampaignManager({ userProfile }: { userProfile: any }) {
         // Per-route campaign endpoint. Member-or-staff gate runs
         // server-side; non-members get a 404 (collapsed with "doesn't
         // exist" so probes can't enumerate ids).
-        const idToken = await auth.currentUser?.getIdToken();
+        const idToken = await getSessionToken();
         const campRes = await fetch(`/api/campaigns/${encodeURIComponent(id)}`, {
           headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
         });
@@ -52,7 +53,7 @@ export default function CampaignManager({ userProfile }: { userProfile: any }) {
           // drafts for non-staff. The visibility filter (campaign /
           // era scoping) still runs in JS below because the page does
           // its own client-side preview/era logic.
-          const idToken = await auth.currentUser?.getIdToken();
+          const idToken = await getSessionToken();
           const loreRes = await fetch('/api/lore/articles', {
             headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
           });

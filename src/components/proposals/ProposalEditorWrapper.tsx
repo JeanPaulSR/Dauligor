@@ -53,7 +53,6 @@ import {
 } from 'react';
 import { toast } from 'sonner';
 import { Send, FilePen, Library, Package } from 'lucide-react';
-import { auth } from '../../lib/firebase';
 import {
   ProposalAccumulatorContext,
   postQueuedChanges,
@@ -70,6 +69,7 @@ import type { FocusMode } from '../../lib/proposalAccumulator';
 import { useProposalReview } from '../../lib/proposalReview';
 import { ReviewBanner } from './ReviewBanner';
 import { cn } from '../../lib/utils';
+import { getSessionToken } from "../../lib/auth";
 
 const ENTITY_LABELS: Record<ProposalEntityType, string> = {
   tag: 'Tags',
@@ -438,7 +438,7 @@ export function ProposalEditorWrapper({
         : [];
       if (matchingDrafts.length === 0) return;
       try {
-        const idToken = await auth.currentUser?.getIdToken();
+        const idToken = await getSessionToken();
         if (!idToken) throw new Error('Not signed in.');
         // DELETE /api/proposals/:id (withdraw — drafts hard-delete server-side).
         await Promise.all(
