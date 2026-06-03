@@ -80,6 +80,40 @@ function prettifySlug(s) {
   return String(s ?? "").replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()).trim();
 }
 
+function ordinal(n) {
+  const v = n % 100;
+  const suffix = (v >= 11 && v <= 13) ? "th" : (["th", "st", "nd", "rd"][n % 10] || "th");
+  return `${n}${suffix}`;
+}
+
+// Dependency-free port of src/lib/spellcasting.ts. `progressionFormula` is
+// author-controlled DB content (e.g. "1 * level", "level / 2"), not user
+// input — we still whitelist the charset + identifiers before evaluating, so
+// this can't run arbitrary code.
+function effectiveCastingLevel(level, formula) {
+  if (!formula) return 0;
+  const expr = String(formula).toLowerCase().replace(/ciel/g, "ceil").replace(/\blevel\b/g, String(Number(level) || 0));
+  if (!/^[0-9+\-*/().,\s a-z]*$/.test(expr)) return 0;
+  const idents = expr.match(/[a-z]+/g) || [];
+  const ALLOWED = new Set(["floor", "ceil", "round", "min", "max", "abs"]);
+  if (idents.some((id) => !ALLOWED.has(id))) return 0;
+  try {
+    const mathExpr = expr.replace(/\b(floor|ceil|round|min|max|abs)\b/g, "Math.$1");
+    const v = Function(`"use strict"; return (${mathExpr});`)();
+    return Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+// Slot array (9 entries) for an effective caster level, from the master chart.
+function slotsForEffectiveLevel(effLevel, masterTable) {
+  if (!Array.isArray(masterTable) || effLevel <= 0) return [];
+  const target = Math.min(20, Math.max(1, effLevel));
+  const row = masterTable.find((r) => Number(r.level) === target);
+  return row && Array.isArray(row.slots) ? row.slots : [];
+}
+
 // ── tiny helpers (mirrors feat-browser-app) ─────────────────────────────
 
 function resolveApiHost() {
@@ -190,6 +224,11 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     // Full class-bundle cache for the rich class preview, keyed by bundle URL.
     this._classBundleCache = new Map();
     this._classBundleInFlight = new Set();
+    // Master multiclass spell-slot chart (fetched once from the app), used to
+    // derive the class preview's slot columns. Null = not loaded / unavailable
+    // → the preview simply omits the slot columns.
+    this._spellChart = null;
+    this._spellChartFetched = false;
 
     // Ephemeral per-step UI state.
     this._ui = {
@@ -452,6 +491,25 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     } catch (err) {
       this._classBundleInFlight.delete(url);
       log("character-creator: class bundle fetch failed", { url, err });
+      return null;
+    }
+  }
+
+  // Fetch the master multiclass spell-slot chart once (app endpoint). Stores
+  // the `levels` array on the instance; null on any failure so the preview
+  // degrades to no slot columns rather than erroring.
+  async _ensureSpellChart() {
+    if (this._spellChartFetched) return this._spellChart;
+    this._spellChartFetched = true;
+    try {
+      const res = await fetch(`${resolveApiHost()}/api/module/spellcasting/multiclass-chart.json`, { cache: "no-store" });
+      if (!res.ok) return null;
+      const payload = await res.json();
+      if (payload?.kind !== "dauligor.spellcasting-chart.v1") return null;
+      this._spellChart = Array.isArray(payload.levels) ? payload.levels : null;
+      return this._spellChart;
+    } catch (err) {
+      log("character-creator: spell chart fetch failed", err);
       return null;
     }
   }
@@ -834,6 +892,50 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
       </div>`;
   }
 
+  // Caster columns for the level table, in app-preview order: cantrips /
+  // spells-known (from the bundle's spellsKnownScalings), pact slots (from
+  // alternativeSpellcastingScalings), then the main spell-slot table for
+  // full/half casters (master chart + the class's progressionFormula). Each
+  // returned col is { header, value(level) }.
+  _buildCasterColumns(bundle) {
+    const sc = (bundle.class || {}).spellcasting || {};
+    const cols = [];
+
+    const sk = sc.spellsKnownSourceId ? bundle.spellsKnownScalings?.[sc.spellsKnownSourceId] : null;
+    if (sk?.levels) {
+      const lv = sk.levels;
+      const anyCantrips = Object.values(lv).some((l) => Number(l?.cantrips ?? l?.cantripsKnown) > 0);
+      const anySpells = Object.values(lv).some((l) => Number(l?.spellsKnown ?? l?.spells) > 0);
+      if (anyCantrips) cols.push({ header: "Cantrips", value: (lvl) => lv[String(lvl)]?.cantrips ?? lv[String(lvl)]?.cantripsKnown ?? "—" });
+      if (anySpells) cols.push({ header: "Spells Known", value: (lvl) => lv[String(lvl)]?.spellsKnown ?? lv[String(lvl)]?.spells ?? "—" });
+    }
+
+    const alt = sc.altProgressionSourceId ? bundle.alternativeSpellcastingScalings?.[sc.altProgressionSourceId] : null;
+    if (alt?.levels) {
+      const al = alt.levels;
+      cols.push({ header: "Pact Slots", value: (lvl) => al[String(lvl)]?.slotCount ?? "—" });
+      cols.push({ header: "Slot Lvl", value: (lvl) => { const sl = al[String(lvl)]?.slotLevel; return sl ? ordinal(Number(sl)) : "—"; } });
+    }
+
+    const progression = String(sc.progression || "").toLowerCase();
+    const chart = this._spellChart;
+    if ((sc.hasSpellcasting || sc.ability) && progression !== "pact" && sc.progressionFormula && Array.isArray(chart) && chart.length) {
+      const slotsByLevel = {};
+      let maxSpellLevel = 0;
+      for (let lvl = 1; lvl <= 20; lvl += 1) {
+        const slots = slotsForEffectiveLevel(effectiveCastingLevel(lvl, sc.progressionFormula), chart);
+        slotsByLevel[lvl] = slots;
+        for (let i = slots.length - 1; i >= 0; i -= 1) {
+          if (Number(slots[i]) > 0) { if (i + 1 > maxSpellLevel) maxSpellLevel = i + 1; break; }
+        }
+      }
+      for (let sl = 1; sl <= maxSpellLevel; sl += 1) {
+        cols.push({ header: ordinal(sl), value: (lvl) => { const v = Number(slotsByLevel[lvl]?.[sl - 1]) || 0; return v > 0 ? v : "—"; } });
+      }
+    }
+    return cols;
+  }
+
   // Rich class preview — a module-themed port of the web app's
   // ClassPreviewPane (src/components/compendium/ClassPreviewPane.tsx). The
   // module's export bundle is shaped differently from the app's DB, so the
@@ -866,24 +968,36 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     // class-advancement interpretation; no duplicate parse in the UI).
     const featsByLevel = getClassFeatureLabelsByLevel(c);
 
-    // Class-level scaling columns only (exclude subclass scalings).
+    // Columns after Features: class-level scaling columns, then caster columns
+    // (cantrips / spells-known / pact from the bundle + the main spell-slot
+    // table derived from the master chart). Each col is either a scaling
+    // (`scaling`) or a computed caster column (`value(level)`).
     const scalings = (Array.isArray(bundle.scalingColumns) ? bundle.scalingColumns : [])
       .filter((col) => !classSourceId || col.parentSourceId === classSourceId);
+    const allCols = [
+      ...scalings.map((col) => ({ header: col.name || prettifySlug(col.identifier), scaling: col })),
+      ...this._buildCasterColumns(bundle),
+    ];
 
-    const headCols = scalings.map((col) => `<th>${escapeHtml(col.name || prettifySlug(col.identifier))}</th>`).join("");
+    const headCols = allCols.map((col) => `<th>${escapeHtml(col.header)}</th>`).join("");
     const rows = Array.from({ length: 20 }, (_, i) => i + 1).map((lvl) => {
       const feats = featsByLevel[lvl] || [];
       const featCell = feats.length ? feats.map(escapeHtml).join(", ") : `<span class="dauligor-character-creator__cp-dash">—</span>`;
-      const scaleCells = scalings.map((col) => {
-        let v = "—";
-        for (let l = lvl; l >= 1; l--) { const val = col.values?.[String(l)]; if (val != null && val !== "") { v = val; break; } }
+      const cells = allCols.map((col) => {
+        let v;
+        if (col.scaling) {
+          v = "—";
+          for (let l = lvl; l >= 1; l--) { const val = col.scaling.values?.[String(l)]; if (val != null && val !== "") { v = val; break; } }
+        } else {
+          v = col.value(lvl);
+        }
         return `<td class="dauligor-character-creator__cp-num">${escapeHtml(String(v))}</td>`;
       }).join("");
       return `<tr>
         <td class="dauligor-character-creator__cp-num">${lvl}</td>
         <td class="dauligor-character-creator__cp-num">+${PB_BY_LEVEL(lvl)}</td>
         <td class="dauligor-character-creator__cp-feats">${featCell}</td>
-        ${scaleCells}
+        ${cells}
       </tr>`;
     }).join("");
     const table = `
@@ -1139,14 +1253,15 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     };
     this._renderBody();
     this._renderFooter();
-    // Lazy-load the full bundle for the rich preview; re-render when it lands.
-    if (entry.bundleUrl) {
-      this._fetchClassBundle(entry.bundleUrl).then((b) => {
-        if (b && this._tab === "create" && this._view === "class" && this._choices.class?.bundleUrl === entry.bundleUrl) {
-          this._renderBody();
-        }
-      });
-    }
+    // Lazy-load the full bundle + the spell chart for the rich preview;
+    // re-render when each lands.
+    const reRenderIfCurrent = () => {
+      if (this._tab === "create" && this._view === "class" && this._choices.class?.bundleUrl === entry.bundleUrl) {
+        this._renderBody();
+      }
+    };
+    if (entry.bundleUrl) this._fetchClassBundle(entry.bundleUrl).then((b) => { if (b) reRenderIfCurrent(); });
+    this._ensureSpellChart().then((chart) => { if (chart) reRenderIfCurrent(); });
   }
 
   // ── rendering: footer ────────────────────────────────────────────────

@@ -15,6 +15,7 @@
 //   /api/module/feats/<dbId>.json                      (live, no R2)
 //   /api/module/<source>/feats.json                    (live, no R2)
 //   /api/module/tags/catalog.json                      (live, no R2)
+//   /api/module/spellcasting/multiclass-chart.json     (live, no R2)
 //
 // Write endpoints (staff-only, POST):
 //   /api/module/queue-rebake     — queue a rebake (60-minute scheduled-for)
@@ -41,6 +42,7 @@ import { buildBackgroundItemBundle } from "../../../api/_lib/_backgroundExport.j
 import { buildRaceItemBundle } from "../../../api/_lib/_raceExport.js";
 import { buildItemBundle } from "../../../api/_lib/_itemExport.js";
 import { buildTagCatalog } from "../../../api/_lib/_tagCatalog.js";
+import { buildSpellcastingChartBundle } from "../../../api/_lib/_spellcastingChart.js";
 import { SERVER_EXPORT_FETCHERS } from "../../../api/_lib/d1-fetchers-server.js";
 import {
   classBundleKey,
@@ -450,6 +452,22 @@ export const onRequest = async (context: any): Promise<Response> => {
       && pathParts[1] === "catalog.json"
     ) {
       const result = await buildTagCatalog();
+      if (result) return serveLive(result);
+    }
+
+    // Master multiclass spell-slot chart — live read, no R2. URL:
+    //   /api/module/spellcasting/multiclass-chart.json
+    // The Foundry character-creator class preview fetches this once and
+    // derives a class's slot table by scaling character level through the
+    // class bundle's `spellcasting.progressionFormula` (the app's
+    // calculateEffectiveCastingLevel + getSpellSlotsForLevel flow). Cantrips /
+    // spells-known + pact slots already ride inside each class bundle.
+    else if (
+      pathParts.length === 2
+      && pathParts[0] === "spellcasting"
+      && pathParts[1] === "multiclass-chart.json"
+    ) {
+      const result = await buildSpellcastingChartBundle();
       if (result) return serveLive(result);
     }
   } catch (error) {
