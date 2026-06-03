@@ -277,7 +277,10 @@ export function buildSpeciesBackgroundCandidates(
     const savePayload: Record<string, any> = {
       name,
       identifier,
-      sourceId: matchedSourceId,
+      // Unresolved source MUST be NULL, not '' — backgrounds.sourceId /
+      // species.sourceId are FKs to sources(id). An empty string matches no row
+      // and fails the FK (NULL is allowed), aborting the entire batch import.
+      sourceId: matchedSourceId || null,
       page: page || null,
       imageUrl: imageUrl || null,
       description,

@@ -77,6 +77,9 @@ export default function SpeciesBackgroundImportWorkbench({
   const [profLookups, setProfLookups] = useState<ProficiencyLookups | undefined>(undefined);
   const [uploadedBatches, setUploadedBatches] = useState<UploadedBatch[]>([]);
   const [selectedCandidateId, setSelectedCandidateId] = useState('');
+  // Per-candidate manual source assignment (candidateId -> sourceId; '' = none).
+  // Lets the importer set a source for entries whose book didn't auto-match.
+  const [sourceOverrides, setSourceOverrides] = useState<Record<string, string>>({});
   const [search, setSearch] = useState('');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -122,9 +125,18 @@ export default function SpeciesBackgroundImportWorkbench({
     return () => { cancelled = true; };
   }, [isAdmin, meta.collection, meta.singular, kind]);
 
-  // sources is loaded for buildSpeciesBackgroundCandidates' source-matching;
-  // the Source filter axis is derived from the matched sources actually present.
-  void sources;
+  const sourceById = useMemo(
+    () => Object.fromEntries(sources.map((s) => [s.id, s])) as Record<string, SourceRecord>,
+    [sources],
+  );
+  // Effective source = the manual override (if the user set one) else the
+  // auto-matched source. '' means "no source" — imports as NULL (FK-safe).
+  const effectiveSourceId = (c: SpeciesBackgroundImportCandidate) =>
+    sourceOverrides[c.candidateId] ?? c.matchedSourceId ?? '';
+  const sourceLabelOf = (id: string) => {
+    const s = id ? sourceById[id] : undefined;
+    return s ? String(s.abbreviation || s.shortName || s.name || s.id) : '';
+  };
 
   const candidates = useMemo(
     () => uploadedBatches.flatMap((batch) =>
@@ -216,11 +228,27 @@ export default function SpeciesBackgroundImportWorkbench({
     const existing = existingEntries.find((e) => e.id === c.existingEntryId);
     const data: Record<string, any> = {
       ...c.savePayload,
+      // Apply any manual source assignment; '' (none) -> null so the FK holds.
+      sourceId: effectiveSourceId(c) || null,
       updatedAt: new Date().toISOString(),
       createdAt: existing?.createdAt || new Date().toISOString(),
     };
     Object.keys(data).forEach((k) => { if (data[k] === undefined) delete data[k]; });
     return data;
+  };
+
+  // Bulk-assign a source to every VISIBLE entry whose book didn't auto-match —
+  // handy when a whole unmatched book needs the same source in one go.
+  const assignSourceToUnresolvedVisible = (sourceId: string) => {
+    if (!sourceId) return;
+    const targets = visibleCandidates.filter((c) => !c.sourceResolved);
+    if (!targets.length) { toast.error('No unresolved entries in view.'); return; }
+    setSourceOverrides((prev) => {
+      const next = { ...prev };
+      for (const c of targets) next[c.candidateId] = sourceId;
+      return next;
+    });
+    toast.success(`Assigned ${sourceLabelOf(sourceId)} to ${targets.length} unresolved ${meta.plural.toLowerCase()}.`);
   };
 
   const handleImportSelected = async () => {
@@ -287,6 +315,19 @@ export default function SpeciesBackgroundImportWorkbench({
                 <Button type="button" size="sm" className="gap-2 h-8 btn-gold-solid" onClick={handleImportVisible} disabled={saving || !visibleCandidates.length}>
                   <Download className="h-3.5 w-3.5" /> Import Visible ({visibleCandidates.length})
                 </Button>
+                {batchSummary.unresolved > 0 ? (
+                  <select
+                    value=""
+                    onChange={(e) => { assignSourceToUnresolvedVisible(e.target.value); e.currentTarget.value = ''; }}
+                    className="h-8 rounded-md border border-gold/20 bg-background/40 px-2 text-xs text-ink outline-none hover:bg-gold/5 focus:border-gold"
+                    title="Assign a source to all unresolved entries currently in view"
+                  >
+                    <option value="">Set source for unresolved…</option>
+                    {sources.map((s) => (
+                      <option key={s.id} value={s.id}>{sourceLabelOf(s.id) || s.id}</option>
+                    ))}
+                  </select>
+                ) : null}
               </div>
             </div>
             <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-ink/70">
@@ -379,7 +420,7 @@ export default function SpeciesBackgroundImportWorkbench({
                               <div className="text-[10px] uppercase tracking-[0.16em] text-gold/70 truncate">{c.summary || '—'}</div>
                               <div className="mt-1 flex flex-wrap gap-1">
                                 {c.existingEntryId ? <Badge className="bg-sky-500/15 text-sky-200 border-sky-400/20 text-[9px] px-1 py-0">Saved</Badge> : null}
-                                {!c.sourceResolved ? <Badge className="bg-blood/20 text-blood border-blood/30 text-[9px] px-1 py-0">No source</Badge> : null}
+                                {!effectiveSourceId(c) ? <Badge className="bg-blood/20 text-blood border-blood/30 text-[9px] px-1 py-0">No source</Badge> : null}
                                 {!c.imageUrl ? <Badge className="bg-amber-500/15 text-amber-200 border-amber-400/20 text-[9px] px-1 py-0">No image</Badge> : null}
                               </div>
                             </div>
@@ -399,8 +440,8 @@ export default function SpeciesBackgroundImportWorkbench({
                               <div className="space-y-1 min-w-0">
                                 <div className="flex items-center gap-3 flex-wrap">
                                   <h3 className="font-serif text-3xl font-bold text-ink break-words">{selectedCandidate.name}</h3>
-                                  {selectedCandidate.matchedSourceLabel ? (
-                                    <Badge className="border-gold/20 bg-gold/10 text-gold">{selectedCandidate.matchedSourceLabel}</Badge>
+                                  {effectiveSourceId(selectedCandidate) ? (
+                                    <Badge className="border-gold/20 bg-gold/10 text-gold">{sourceLabelOf(effectiveSourceId(selectedCandidate))}</Badge>
                                   ) : (
                                     <Badge className="border-blood/30 bg-blood/15 text-blood">{selectedCandidate.sourceBook || 'No source'}</Badge>
                                   )}
@@ -435,6 +476,26 @@ export default function SpeciesBackgroundImportWorkbench({
                                 <div>
                                   <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-gold/70">Image URL</div>
                                   <div className="mt-1 break-all font-mono text-[10px] text-ink/55">{selectedCandidate.imageUrl || '— none —'}</div>
+                                </div>
+                                <div>
+                                  <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-gold/70">Source</div>
+                                  <select
+                                    value={effectiveSourceId(selectedCandidate)}
+                                    onChange={(e) => setSourceOverrides((prev) => ({ ...prev, [selectedCandidate.candidateId]: e.target.value }))}
+                                    className="mt-1 h-8 w-full max-w-sm rounded-md border border-gold/20 bg-background/40 px-2 text-sm text-ink outline-none focus:border-gold"
+                                  >
+                                    <option value="">— none (import without a source) —</option>
+                                    {sources.map((s) => (
+                                      <option key={s.id} value={s.id}>
+                                        {(s.abbreviation ? `${s.abbreviation} — ` : '') + (s.name || s.id)}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  {!selectedCandidate.sourceResolved && !effectiveSourceId(selectedCandidate) ? (
+                                    <p className="mt-1 text-[10px] text-blood">
+                                      Book "{selectedCandidate.sourceBook || '?'}" didn't match a source — pick one, or it imports without a source.
+                                    </p>
+                                  ) : null}
                                 </div>
                               </div>
                             </div>
