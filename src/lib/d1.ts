@@ -338,7 +338,7 @@ export async function queryD1<T>(sql: string, params: any[] = [], options: { noC
         // 20260601-1200). These tables don't route through compendium.ts
         // denormalize, so queryD1 is the only parse hook — without these the
         // editor reads them as raw JSON strings. (tags + advancements above.)
-        'startingEquipment', 'movement', 'senses', 'creatureType',
+        'startingEquipment', 'movement', 'senses', 'creatureType', 'prerequisiteTree',
       ];
       const parsedResults = (data.results || []).map((row: any) => {
         const parsed: any = { ...row };

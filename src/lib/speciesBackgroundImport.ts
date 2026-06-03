@@ -16,6 +16,8 @@
 import { slugify } from './utils';
 import { htmlToBbcode } from './bbcode';
 import { cleanFoundryHtml } from './foundryHtmlCleanup';
+import { parseBackgroundDetails } from './backgroundDetails';
+import { proficienciesFromEntries, type ProficiencyLookups } from './backgroundProficiencies';
 
 export type SpeciesBackgroundImportKind = 'species' | 'background';
 
@@ -232,6 +234,10 @@ export function buildSpeciesBackgroundCandidates(
   batchLabel: string,
   sources: SourceRecord[],
   existingEntries: ExistingRecord[],
+  /** Skill/tool/language name→id lookups — used to resolve the prose
+   *  proficiency block into the structured `proficiencies` field (backgrounds
+   *  only). Omit for species or when the vocab isn't loaded. */
+  profLookups?: ProficiencyLookups,
 ): SpeciesBackgroundImportCandidate[] {
   const meta = IMPORT_KIND_META[kind];
   const entries = Array.isArray((exportPayload as any)?.[meta.arrayKey])
@@ -314,6 +320,24 @@ export function buildSpeciesBackgroundCandidates(
       if (wealth) facts.push(['Wealth', wealth]);
       if (startingEquipment.length) facts.push(['Equipment', `${startingEquipment.length} entries`]);
       summary = wealth ? `Wealth ${wealth}` : 'Background';
+
+      // Lift the prose `[ul]` proficiency block into the STRUCTURED
+      // `proficiencies` field (resolving names → trait keys) and strip it from
+      // the stored description, so the view renders from structure instead of
+      // re-parsing prose. Best-effort: unresolved names are warned, not guessed.
+      const parsed = parseBackgroundDetails(description);
+      if (profLookups && parsed.entries.length > 0) {
+        const { proficiencies, unresolved } = proficienciesFromEntries(parsed.entries, profLookups);
+        savePayload.proficiencies = proficiencies;
+        savePayload.description = parsed.body;
+        const profCount = parsed.entries.filter((e) => !e.key.startsWith('x:')).length;
+        if (profCount) facts.push(['Proficiencies', `${profCount} line${profCount === 1 ? '' : 's'}`]);
+        if (unresolved.length) {
+          warnings.push(
+            `${unresolved.length} proficiency option${unresolved.length === 1 ? '' : 's'} couldn't be auto-matched (add them in the editor): ${unresolved.slice(0, 6).join(', ')}${unresolved.length > 6 ? '…' : ''}`,
+          );
+        }
+      }
     }
 
     return {

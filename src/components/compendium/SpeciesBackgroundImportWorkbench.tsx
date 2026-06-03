@@ -3,6 +3,7 @@ import { AlertTriangle, BookOpen, Download, FileJson, ImageOff, Layers3, Upload 
 import { toast } from 'sonner';
 import { reportClientError, OperationType } from '../../lib/firebase';
 import { fetchCollection, upsertDocument, upsertDocumentBatch } from '../../lib/d1';
+import { buildNameToId, type ProficiencyLookups } from '../../lib/backgroundProficiencies';
 import { matchesSingleAxisFilter, matchesMultiAxisFilter } from '../../lib/spellFilters';
 import { useAxisFilters } from '../../hooks/useAxisFilters';
 import { cn } from '../../lib/utils';
@@ -71,6 +72,9 @@ export default function SpeciesBackgroundImportWorkbench({
 
   const [sources, setSources] = useState<SourceRecord[]>([]);
   const [existingEntries, setExistingEntries] = useState<any[]>([]);
+  // Skill/tool/language name→id lookups for resolving the prose proficiency
+  // block into the structured field at import (backgrounds only).
+  const [profLookups, setProfLookups] = useState<ProficiencyLookups | undefined>(undefined);
   const [uploadedBatches, setUploadedBatches] = useState<UploadedBatch[]>([]);
   const [selectedCandidateId, setSelectedCandidateId] = useState('');
   const [search, setSearch] = useState('');
@@ -97,12 +101,26 @@ export default function SpeciesBackgroundImportWorkbench({
         if (cancelled) return;
         setSources(sourceRows);
         setExistingEntries(existingRows);
+        if (kind === 'background') {
+          const [sk, tl, lg] = await Promise.all([
+            fetchCollection<any>('skills', { orderBy: 'name ASC' }),
+            fetchCollection<any>('tools', { orderBy: 'name ASC' }),
+            fetchCollection<any>('languages', { orderBy: 'name ASC' }),
+          ]);
+          if (!cancelled) {
+            setProfLookups({
+              skills: buildNameToId(sk),
+              tools: buildNameToId(tl),
+              languages: buildNameToId(lg),
+            });
+          }
+        }
       } catch (err) {
         console.error(`[${meta.singular}Import] load failed:`, err);
       }
     })();
     return () => { cancelled = true; };
-  }, [isAdmin, meta.collection, meta.singular]);
+  }, [isAdmin, meta.collection, meta.singular, kind]);
 
   // sources is loaded for buildSpeciesBackgroundCandidates' source-matching;
   // the Source filter axis is derived from the matched sources actually present.
@@ -110,8 +128,8 @@ export default function SpeciesBackgroundImportWorkbench({
 
   const candidates = useMemo(
     () => uploadedBatches.flatMap((batch) =>
-      buildSpeciesBackgroundCandidates(kind, batch.payload, batch.fileName, sources, existingEntries)),
-    [uploadedBatches, sources, existingEntries, kind],
+      buildSpeciesBackgroundCandidates(kind, batch.payload, batch.fileName, sources, existingEntries, profLookups)),
+    [uploadedBatches, sources, existingEntries, kind, profLookups],
   );
 
   const batchSummary = useMemo(() => ({

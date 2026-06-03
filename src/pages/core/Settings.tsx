@@ -588,8 +588,26 @@ export default function Settings({ user, userProfile }: { user: any, userProfile
                       onPurge={() => handlePurge('spells', ['spells'])}
                       disabled={safetyLock !== 'PURGE' || isPurging}
                     />
-                    <MaintenanceCard 
-                      title="Tags & Taxonomy" 
+                    <MaintenanceCard
+                      title="Feats"
+                      description="Deletes all feat records (user favorites cascade). Use before a full feat re-import."
+                      onPurge={() => handlePurge('feats', ['feats'])}
+                      disabled={safetyLock !== 'PURGE' || isPurging}
+                    />
+                    <MaintenanceCard
+                      title="Species (Races)"
+                      description="Deletes all species records (user favorites cascade). Use before a full species re-import."
+                      onPurge={() => handlePurge('species', ['species'])}
+                      disabled={safetyLock !== 'PURGE' || isPurging}
+                    />
+                    <MaintenanceCard
+                      title="Backgrounds"
+                      description="Deletes all background records (user favorites cascade). Use before a full background re-import."
+                      onPurge={() => handlePurge('backgrounds', ['backgrounds'])}
+                      disabled={safetyLock !== 'PURGE' || isPurging}
+                    />
+                    <MaintenanceCard
+                      title="Tags & Taxonomy"
                       description="Deletes all tags and tag groups. This will disconnect tags from all existing items."
                       onPurge={() => handlePurge('tags', ['tags', 'tagGroups'])}
                       disabled={safetyLock !== 'PURGE' || isPurging}

@@ -4,6 +4,10 @@ import { ImageOff, Star } from 'lucide-react';
 import { getIdentity, onAuthChange } from '../../lib/auth';
 import { fetchCollection } from '../../lib/d1';
 import { bbcodeToHtml } from '../../lib/bbcode';
+import { cleanFoundryHtml } from '../../lib/foundryHtmlCleanup';
+import { resolveBackgroundDisplay, type ProficiencyVocab } from '../../lib/backgroundProficiencies';
+import { resolveDetailPrereq } from '../../lib/requirements';
+import BackgroundProficiencies from '../../components/compendium/BackgroundProficiencies';
 import { cn } from '../../lib/utils';
 import { useSpeciesBackgroundFavorites } from '../../lib/speciesBackgroundFavorites';
 import { Button } from '../../components/ui/button';
@@ -73,6 +77,9 @@ type Row = {
   creatureType?: any;
   wealth?: string;
   startingEquipment?: any[];
+  prerequisite?: string;
+  prerequisiteTree?: any;
+  proficiencies?: any;
   [k: string]: any;
 };
 
@@ -95,6 +102,11 @@ export default function SpeciesBackgroundBrowser({
 
   const [rows, setRows] = useState<Row[]>([]);
   const [sources, setSources] = useState<any[]>([]);
+  // Proficiency vocab (background detail panel only) → resolves stored
+  // identifiers back to display names.
+  const [profVocab, setProfVocab] = useState<{ skills: any[]; tools: any[]; languages: any[] }>(
+    { skills: [], tools: [], languages: [] },
+  );
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState('');
@@ -120,6 +132,14 @@ export default function SpeciesBackgroundBrowser({
         if (cancelled) return;
         setRows(entryRows);
         setSources(sourceRows);
+        if (kind === 'background') {
+          const [sk, tl, lg] = await Promise.all([
+            fetchCollection<any>('skills', { orderBy: 'name ASC' }),
+            fetchCollection<any>('tools', { orderBy: 'name ASC' }),
+            fetchCollection<any>('languages', { orderBy: 'name ASC' }),
+          ]);
+          if (!cancelled) setProfVocab({ skills: sk, tools: tl, languages: lg });
+        }
       } catch (err) {
         console.error(`[${cfg.singular}Browser] load failed:`, err);
       } finally {
@@ -127,12 +147,19 @@ export default function SpeciesBackgroundBrowser({
       }
     })();
     return () => { cancelled = true; };
-  }, [cfg.collection, cfg.singular]);
+  }, [cfg.collection, cfg.singular, kind]);
 
   const sourceById = useMemo(
     () => Object.fromEntries(sources.map((s) => [s.id, s])) as Record<string, any>,
     [sources],
   );
+  const displayVocab = useMemo<ProficiencyVocab>(() => ({
+    skills: profVocab.skills.map((s: any) => ({ id: String(s.id), name: String(s.name || '') })),
+    tools: profVocab.tools.map((t: any) => ({ id: String(t.id), name: String(t.name || ''), categoryId: String(t.category_id ?? '') })),
+    languages: profVocab.languages.map((l: any) => ({ id: String(l.id), name: String(l.name || ''), categoryId: String(l.category_id ?? '') })),
+    toolCategories: [],
+    languageCategories: [],
+  }), [profVocab]);
   const abbrevOf = (r: Row) => {
     const s = sourceById[String(r.sourceId ?? '')];
     return s ? String(s.abbreviation || s.shortName || s.name || '') : '';
@@ -278,6 +305,7 @@ export default function SpeciesBackgroundBrowser({
           row={selectedRow}
           kind={kind}
           sourceById={sourceById}
+          vocab={displayVocab}
           isFavorite={selectedRow ? isFavorite(selectedRow.id) : false}
           onToggleFavorite={toggleFavorite}
         />
@@ -316,16 +344,59 @@ function Thumb({ src }: { src?: string }) {
 
 // ─── Detail pane ────────────────────────────────────────────────────
 
+// Header art with an in-JS load probe → ImageOff fallback (so a 404'd CDN
+// icon degrades to a clean placeholder rather than a broken-image glyph).
+function DetailArt({ src, size = 96 }: { src?: string; size?: number }) {
+  const [status, setStatus] = useState<'idle' | 'loading' | 'loaded' | 'error'>(() => (src ? 'loading' : 'idle'));
+  useEffect(() => {
+    const next = String(src ?? '').trim();
+    if (!next) { setStatus('idle'); return; }
+    let cancelled = false;
+    setStatus('loading');
+    const img = new Image();
+    img.onload = () => { if (!cancelled) setStatus('loaded'); };
+    img.onerror = () => { if (!cancelled) setStatus('error'); };
+    img.src = next;
+    return () => { cancelled = true; };
+  }, [src]);
+
+  const style = { width: size, height: size };
+  if (status === 'loaded' && src) {
+    return (
+      <img
+        src={src}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        className="shrink-0 rounded-lg border border-gold/20 object-cover"
+        style={style}
+      />
+    );
+  }
+  return (
+    <div
+      className="shrink-0 rounded-lg border border-gold/10 bg-background/40 flex items-center justify-center"
+      style={style}
+    >
+      {status === 'loading'
+        ? <div className="h-7 w-7 rounded-full border-2 border-gold border-t-transparent animate-spin" />
+        : <ImageOff className="h-7 w-7 text-ink/20" />}
+    </div>
+  );
+}
+
 function SBDetail({
   row,
   kind,
   sourceById,
+  vocab,
   isFavorite,
   onToggleFavorite,
 }: {
   row: Row | null;
   kind: SpeciesBackgroundBrowserKind;
   sourceById: Record<string, any>;
+  vocab: ProficiencyVocab;
   isFavorite: boolean;
   onToggleFavorite: (id: string) => void;
 }) {
@@ -337,14 +408,29 @@ function SBDetail({
     );
   }
 
+  const isBackground = kind === 'background';
   const src = sourceById[String(row.sourceId ?? '')];
   const sourceAbbrev = src ? String(src.abbreviation || src.shortName || '') : '';
-  const sourceName = src ? String(src.name || '') : '';
-  const descHtml = row.description ? bbcodeToHtml(row.description) : '';
-  const advancements = Array.isArray(row.advancements) ? row.advancements : [];
+  const sourceName = src ? String(src.name || src.shortName || src.abbreviation || '') : '';
 
+  // Backgrounds: render the proficiency summary from the STRUCTURED field
+  // (Skill/Tool/Languages + 2024 Ability Scores/Feat), falling back to parsing
+  // the prose `[ul]` block for rows not yet re-imported. The description body
+  // renders block-free below.
+  const bgDisplay = isBackground ? resolveBackgroundDisplay(row, vocab) : null;
+  const prereqText = isBackground
+    ? resolveDetailPrereq({ freeText: row.prerequisite, tree: (row as any).prerequisiteTree ?? null }, {})
+    : '';
+  const bodyBbcode = bgDisplay ? bgDisplay.body : (row.description || '');
+  // Canonical compendium display transform (same path spells use): render the
+  // BBCode, then mop up any residual Foundry/5etools enricher artifacts.
+  const descHtml = bodyBbcode ? cleanFoundryHtml(bbcodeToHtml(bodyBbcode)) : '';
+  const advancements = !isBackground && Array.isArray(row.advancements) ? row.advancements : [];
+
+  // Species keep their stat-block facts; backgrounds surface everything via
+  // the proficiency section instead.
   const facts: Array<[string, string]> = [];
-  if (kind === 'species') {
+  if (!isBackground) {
     const v = String(row.creatureType?.value ?? '');
     const sub = String(row.creatureType?.subtype ?? '');
     const ct = (CREATURE_TYPE_LABELS[v] || v || '—');
@@ -359,76 +445,120 @@ function SBDetail({
       .map(([k, l]) => `${l} ${row.senses[k]} ${row.senses?.units || 'ft'}`);
     if (row.senses?.special) senses.push(String(row.senses.special));
     if (senses.length) facts.push(['Senses', senses.join(', ')]);
-  } else {
-    if (row.wealth) facts.push(['Starting wealth', `${row.wealth} gp`]);
-    const eq = Array.isArray(row.startingEquipment) ? row.startingEquipment.length : 0;
-    if (eq) facts.push(['Starting equipment', `${eq} ${eq === 1 ? 'entry' : 'entries'}`]);
   }
 
   return (
-    <div className="p-5 space-y-4">
-      <div className="flex items-start gap-4">
-        {row.imageUrl ? (
-          <img src={row.imageUrl} alt="" className="h-20 w-20 shrink-0 rounded-lg border border-gold/20 object-cover" />
-        ) : (
-          <div className="h-20 w-20 shrink-0 rounded-lg border border-gold/10 bg-background/40 flex items-center justify-center">
-            <ImageOff className="h-7 w-7 text-ink/20" />
+    // Flex column at full height so the source citation pins to the bottom
+    // (mt-auto), mirroring FeatDetailPanel's "body of text, not a card" shape.
+    <div className="flex flex-col min-h-full">
+      {/* Header: art left · name + prerequisite middle · source + favorite right */}
+      <div className="border-b border-gold/10 px-6 py-5">
+        <div className="flex items-start gap-5">
+          <DetailArt src={row.imageUrl} size={96} />
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <h2 className="font-serif text-3xl xl:text-4xl font-bold text-ink leading-tight break-words">
+              {row.name || 'Untitled'}
+            </h2>
+            {isBackground && prereqText ? (
+              <p className="italic text-ink/75 text-sm">
+                <span className="font-bold not-italic text-ink/55 mr-1">Prerequisite:</span>
+                {prereqText}
+              </p>
+            ) : null}
+            {row.identifier ? (
+              <p className="font-mono text-[11px] text-ink/45">{row.identifier}</p>
+            ) : null}
           </div>
-        )}
-        <div className="min-w-0 flex-1">
-          <h2 className="font-serif text-2xl font-bold text-ink leading-tight break-words">{row.name || 'Untitled'}</h2>
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-ink/55">
-            {sourceAbbrev ? <span className="font-bold text-gold/80" title={sourceName}>{sourceAbbrev}</span> : null}
-            {row.identifier ? <span className="font-mono">{row.identifier}</span> : null}
-            {row.page ? <span>· p.{row.page}</span> : null}
+          <div className="flex flex-col items-end gap-2 shrink-0">
+            {row.sourceId ? (
+              <Link
+                to={`/sources/view/${row.sourceId}`}
+                className="text-sm font-bold text-gold/70 hover:text-gold underline-offset-2 hover:underline transition-colors"
+                title={sourceName || sourceAbbrev}
+              >
+                {sourceAbbrev || '—'}
+                {row.page ? <span className="text-ink/35 font-normal ml-1">p{row.page}</span> : null}
+              </Link>
+            ) : (
+              <span className="text-sm font-bold text-gold/70">{sourceAbbrev || '—'}</span>
+            )}
+            <button
+              type="button"
+              onClick={() => onToggleFavorite(row.id)}
+              className={cn(
+                'shrink-0 inline-flex items-center justify-center h-9 w-9 rounded-full border transition-colors',
+                isFavorite
+                  ? 'border-gold/50 bg-gold/15 text-gold hover:bg-gold/25'
+                  : 'border-gold/20 text-ink/40 hover:border-gold/40 hover:text-gold',
+              )}
+              title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+              aria-pressed={isFavorite}
+            >
+              <Star className={cn('w-4 h-4', isFavorite && 'fill-gold/80')} />
+            </button>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => onToggleFavorite(row.id)}
-          className={cn(
-            'shrink-0 inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-bold uppercase tracking-widest transition-colors',
-            isFavorite ? 'border-gold/40 bg-gold/10 text-gold' : 'border-gold/15 text-ink/50 hover:border-gold/30 hover:text-gold',
-          )}
-          title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-        >
-          <Star className={cn('h-3.5 w-3.5', isFavorite && 'fill-gold/40')} />
-          {isFavorite ? 'Favorited' : 'Favorite'}
-        </button>
       </div>
 
-      {facts.length > 0 && (
-        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-xs">
-          {facts.map(([label, value]) => (
-            <React.Fragment key={label}>
-              <dt className="font-bold uppercase tracking-widest text-[10px] text-gold/70 pt-0.5">{label}</dt>
-              <dd className="text-ink/85">{value}</dd>
-            </React.Fragment>
-          ))}
-        </dl>
-      )}
-
-      {advancements.length > 0 && (
-        <div className="space-y-1.5">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-gold/70">Traits &amp; Advancements</div>
-          <div className="flex flex-wrap gap-1.5">
-            {advancements.map((adv: any, i: number) => (
-              <span key={adv?._id || i} className="rounded border border-gold/15 bg-gold/5 px-2 py-0.5 text-[11px] text-ink/80">
-                {String(adv?.title || adv?.type || 'Advancement')}
-              </span>
-            ))}
-          </div>
+      {/* Background proficiency summary */}
+      {isBackground && bgDisplay && bgDisplay.lines.length > 0 && (
+        <div className="border-b border-gold/10 px-6 py-4">
+          <BackgroundProficiencies entries={bgDisplay.lines} />
         </div>
       )}
 
-      {descHtml ? (
-        <div
-          className="prose prose-sm max-w-none text-ink/85 border-t border-gold/10 pt-3"
-          dangerouslySetInnerHTML={{ __html: descHtml }}
-        />
-      ) : (
-        <p className="text-xs text-ink/40 italic border-t border-gold/10 pt-3">No description.</p>
+      {/* Species stat-block facts + trait/advancement chips */}
+      {!isBackground && (facts.length > 0 || advancements.length > 0) && (
+        <div className="border-b border-gold/10 px-6 py-4 space-y-3">
+          {facts.length > 0 && (
+            <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-xs">
+              {facts.map(([label, value]) => (
+                <React.Fragment key={label}>
+                  <dt className="font-bold uppercase tracking-widest text-[10px] text-gold/70 pt-0.5">{label}</dt>
+                  <dd className="text-ink/85">{value}</dd>
+                </React.Fragment>
+              ))}
+            </dl>
+          )}
+          {advancements.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="text-[10px] font-bold uppercase tracking-widest text-gold/70">Traits &amp; Advancements</div>
+              <div className="flex flex-wrap gap-1.5">
+                {advancements.map((adv: any, i: number) => (
+                  <span key={adv?._id || i} className="rounded border border-gold/15 bg-gold/5 px-2 py-0.5 text-[11px] text-ink/80">
+                    {String(adv?.title || adv?.type || 'Advancement')}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       )}
+
+      {/* Description */}
+      <div className="px-6 py-5">
+        {descHtml ? (
+          <div
+            className="prose prose-sm max-w-none text-ink/85 prose-headings:text-ink prose-strong:text-ink"
+            dangerouslySetInnerHTML={{ __html: descHtml }}
+          />
+        ) : (
+          <p className="text-sm text-ink/40 italic">No description.</p>
+        )}
+      </div>
+
+      {/* Source citation pinned to the bottom */}
+      <div className="mt-auto border-t border-gold/10 px-6 py-3 text-[11px] text-ink/55">
+        <span className="font-bold uppercase tracking-widest text-[10px] text-gold/70 mr-2">Source</span>
+        {row.sourceId ? (
+          <Link to={`/sources/view/${row.sourceId}`} className="hover:text-gold underline-offset-2 hover:underline transition-colors">
+            {sourceName || sourceAbbrev || 'Unknown'}
+          </Link>
+        ) : (
+          <span className="italic text-ink/40">Homebrew / unset</span>
+        )}
+        {row.page ? <span className="text-ink/45">, p. {row.page}</span> : null}
+      </div>
     </div>
   );
 }

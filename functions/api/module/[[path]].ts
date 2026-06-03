@@ -39,6 +39,7 @@ import { buildSpellItemBundle } from "../../../api/_lib/_spellExport.js";
 import { buildSourceFeatListBundle } from "../../../api/_lib/_sourceFeatList.js";
 import { buildFeatItemBundle } from "../../../api/_lib/_featExport.js";
 import { buildBackgroundItemBundle } from "../../../api/_lib/_backgroundExport.js";
+import { buildBackgroundFeatureItemBundle } from "../../../api/_lib/_backgroundFeatureExport.js";
 import { buildRaceItemBundle } from "../../../api/_lib/_raceExport.js";
 import { buildItemBundle } from "../../../api/_lib/_itemExport.js";
 import { buildTagCatalog } from "../../../api/_lib/_tagCatalog.js";
@@ -387,6 +388,22 @@ export const onRequest = async (context: any): Promise<Response> => {
       const result = await buildBackgroundItemBundle(dbId, SERVER_EXPORT_FETCHERS);
       if (result) return serveLive(result);
       // Fall through to 404 if no background row matched.
+    }
+
+    // Per-background-feature full item — live read-through. URL:
+    //   /api/module/background-features/<dbId>.json
+    // A background's granted feature (the 2014 "Feature: …" block) exported as
+    // a Foundry feat item (system.type.value="background"). Also embedded
+    // inline in the owning background's bundle `features[]`.
+    else if (
+      pathParts.length === 2
+      && pathParts[0] === "background-features"
+      && pathParts[1].endsWith(".json")
+    ) {
+      const dbId = pathParts[1].replace(".json", "");
+      const result = await buildBackgroundFeatureItemBundle(dbId, SERVER_EXPORT_FETCHERS);
+      if (result) return serveLive(result);
+      // Fall through to 404 if no feature row matched.
     }
 
     // Per-race full item — live read-through. URL:

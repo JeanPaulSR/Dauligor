@@ -717,7 +717,12 @@ export function CompendiumEditorShell<TRow>(props: CompendiumEditorShellProps<TR
                         className={cn(
                           'mt-0 px-4 py-3 data-[state=inactive]:hidden',
                           isFill
-                            ? 'flex-1 min-h-0 flex flex-col gap-4'
+                            // `fill` lets a child grow into the remaining height
+                            // (the MarkdownEditor's fillContainer) AND scrolls
+                            // when the content + that child's min-height exceed
+                            // the pane — so the editor column always fills the
+                            // space and is scrollable, matching the list/preview.
+                            ? 'flex-1 min-h-0 flex flex-col gap-4 overflow-y-auto custom-scrollbar'
                             : 'flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-4',
                         )}
                       >
