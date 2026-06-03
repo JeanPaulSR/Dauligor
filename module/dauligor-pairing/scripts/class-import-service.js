@@ -6185,6 +6185,35 @@ export async function fetchClassCatalog(url) {
   };
 }
 
+// Advancement types that read as "features" in a level table (granted /
+// chosen features + the subclass and ASI milestones). HitPoints / Trait
+// (proficiencies — handled by baseClassHandler) / ScaleValue (→ scaling
+// columns) / equipment ItemChoices are excluded.
+const FEATURE_ADVANCEMENT_TYPES = new Set(["ItemGrant", "ItemChoice", "Subclass", "AbilityScoreImprovement"]);
+
+/**
+ * Group a class's feature advancements into display labels per level — the
+ * lightweight read used by the character-creator's class preview (the full
+ * import path resolves actual feature items). Lives here so class-advancement
+ * interpretation stays in the importer service rather than duplicated in the
+ * UI. Returns `{ [level: number]: string[] }`.
+ */
+export function getClassFeatureLabelsByLevel(classPayload) {
+  const byLevel = {};
+  for (const adv of (Array.isArray(classPayload?.advancements) ? classPayload.advancements : [])) {
+    if (!FEATURE_ADVANCEMENT_TYPES.has(adv?.type)) continue;
+    const title = String(adv.title || adv.configuration?.title || "").trim();
+    const label = adv.type === "Subclass" ? "Subclass"
+      : adv.type === "AbilityScoreImprovement" ? "Ability Score Improvement"
+      : title;
+    if (!label || /equipment|starting/i.test(label)) continue;
+    const lvl = Number(adv.level) || 1;
+    (byLevel[lvl] ||= []).push(label);
+  }
+  for (const lvl of Object.keys(byLevel)) byLevel[lvl] = [...new Set(byLevel[lvl])];
+  return byLevel;
+}
+
 /**
  * Fetch the per-class curated spell list from its dedicated endpoint.
  *

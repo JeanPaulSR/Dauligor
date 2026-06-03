@@ -29,6 +29,8 @@
 import { CHARACTER_CREATOR_TEMPLATE, MODULE_ID, SETTINGS } from "./constants.js";
 import { log, notifyInfo, notifyWarn } from "./utils.js";
 import { openDauligorImporter } from "./importer-app.js";
+import { getClassFeatureLabelsByLevel } from "./class-import-service.js";
+import { baseClassHandler, formatFoundryLabel } from "./importer-base-features.js";
 import {
   POINT_BUY,
   pointBuyCost,
@@ -73,19 +75,6 @@ const ABILITIES = [
 
 // 5e proficiency bonus by character level (+2 at 1–4, +3 at 5–8, …).
 const PB_BY_LEVEL = (lvl) => 2 + Math.floor((Math.max(1, Math.min(20, Number(lvl) || 1)) - 1) / 4);
-
-const ABILITY_ABBR = { str: "STR", dex: "DEX", con: "CON", int: "INT", wis: "WIS", cha: "CHA" };
-const SKILL_NAMES = {
-  acr: "Acrobatics", ani: "Animal Handling", arc: "Arcana", ath: "Athletics", dec: "Deception",
-  his: "History", ins: "Insight", itm: "Intimidation", inv: "Investigation", med: "Medicine",
-  nat: "Nature", prc: "Perception", prf: "Performance", per: "Persuasion", rel: "Religion",
-  slt: "Sleight of Hand", ste: "Stealth", sur: "Survival",
-};
-// Class-feature advancement types that read as "features" in the level table
-// (ItemGrant = granted, ItemChoice = chosen, Subclass + ASI as their own rows).
-// HitPoints / Trait (proficiencies) / ScaleValue (→ scaling columns) /
-// equipment ItemChoices are excluded.
-const FEATURE_ADV_TYPES = new Set(["ItemGrant", "ItemChoice", "Subclass", "AbilityScoreImprovement"]);
 
 function prettifySlug(s) {
   return String(s ?? "").replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()).trim();
@@ -794,7 +783,7 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
          </header>`
       : `<header class="dauligor-detail__header">
            <h3 class="dauligor-detail__name">${escapeHtml(chosen.name)}</h3>
-           <div class="dauligor-detail__meta">${kind === "background" ? "Background" : "Race"}</div>
+           <div class="dauligor-detail__meta">${kind === "background" ? "Background" : "Species"}</div>
          </header>`;
     return `
       <div class="dauligor-detail">
@@ -871,22 +860,11 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     const img = c.previewImageUrl || c.imageUrl || c.cardImageUrl || chosen.img || "";
     const hitDie = c.hitDie ? `d${c.hitDie}` : "—";
     const isCaster = !!(c.spellcasting && (c.spellcasting.hasSpellcasting || c.spellcasting.ability));
-    const casterAbility = c.spellcasting?.ability
-      ? (ABILITY_ABBR[String(c.spellcasting.ability).toLowerCase()] || prettifySlug(c.spellcasting.ability))
-      : "";
+    const casterAbility = c.spellcasting?.ability ? formatFoundryLabel(String(c.spellcasting.ability)) : "";
 
-    // Features per level, from the class advancement chain.
-    const advByLevel = {};
-    for (const adv of (Array.isArray(c.advancements) ? c.advancements : [])) {
-      if (!FEATURE_ADV_TYPES.has(adv?.type)) continue;
-      const title = String(adv.title || adv.configuration?.title || "").trim();
-      const label = adv.type === "Subclass" ? "Subclass"
-        : adv.type === "AbilityScoreImprovement" ? "Ability Score Improvement"
-        : title;
-      if (!label || /equipment|starting/i.test(label)) continue;
-      const lvl = Number(adv.level) || 1;
-      (advByLevel[lvl] ||= new Set()).add(label);
-    }
+    // Features per level — parsed by the importer service (single home for
+    // class-advancement interpretation; no duplicate parse in the UI).
+    const featsByLevel = getClassFeatureLabelsByLevel(c);
 
     // Class-level scaling columns only (exclude subclass scalings).
     const scalings = (Array.isArray(bundle.scalingColumns) ? bundle.scalingColumns : [])
@@ -894,7 +872,7 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
 
     const headCols = scalings.map((col) => `<th>${escapeHtml(col.name || prettifySlug(col.identifier))}</th>`).join("");
     const rows = Array.from({ length: 20 }, (_, i) => i + 1).map((lvl) => {
-      const feats = advByLevel[lvl] ? Array.from(advByLevel[lvl]) : [];
+      const feats = featsByLevel[lvl] || [];
       const featCell = feats.length ? feats.map(escapeHtml).join(", ") : `<span class="dauligor-character-creator__cp-dash">—</span>`;
       const scaleCells = scalings.map((col) => {
         let v = "—";
@@ -916,33 +894,35 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
         </table>
       </div>`;
 
-    // Proficiencies.
-    const prof = c.proficiencies || {};
-    const summarize = (block, displayName) => {
-      if (displayName) return escapeHtml(displayName);
-      if (!block || typeof block !== "object") return "";
-      const parts = [...(block.categoryIds || []), ...(block.fixedIds || [])].map(prettifySlug);
-      return parts.length ? escapeHtml(parts.join(", ")) : "";
+    // Proficiencies — reuse the importer's advancement parser (baseClassHandler)
+    // + label formatter (formatFoundryLabel) instead of a parallel parse. No
+    // actor in the workflow → the primary (non-multiclass) profile, and the
+    // same category-vs-fixed display the import overview uses.
+    const baseRows = baseClassHandler({ payload: { class: c } })?.advancements || [];
+    const byId = Object.fromEntries(baseRows.map((r) => [r.id, r]));
+    const profValue = (row) => {
+      if (!row) return "";
+      const cats = (row.categoryIds || []).map(formatFoundryLabel);
+      if (row.choiceCount > 0) {
+        const pool = cats.length ? cats : (row.options || []).map(formatFoundryLabel);
+        return pool.length ? `Choose ${row.choiceCount}: ${pool.join(", ")}` : `Choose ${row.choiceCount}`;
+      }
+      const guaranteed = cats.length ? cats : (row.fixed || []).map(formatFoundryLabel);
+      return guaranteed.join(", ");
     };
-    const skills = prof.skills || {};
-    const skillNames = (skills.optionIds || []).map((s) => SKILL_NAMES[s] || prettifySlug(s));
-    const skillLine = skills.choiceCount
-      ? `Choose ${skills.choiceCount}: ${escapeHtml(skillNames.join(", ") || "any")}`
-      : (skillNames.length ? escapeHtml(skillNames.join(", ")) : "");
-    const saves = (c.savingThrows || []).map((a) => ABILITY_ABBR[String(a).toLowerCase()] || prettifySlug(a)).join(", ");
-    const primary = (c.primaryAbility || []).map((a) => ABILITY_ABBR[String(a).toLowerCase()] || prettifySlug(a));
+    const primary = (c.primaryAbility || []).map((a) => formatFoundryLabel(String(a)));
     const profLine = (label, value) => value
-      ? `<div class="dauligor-character-creator__cp-prof"><span class="dauligor-character-creator__cp-prof-key">${escapeHtml(label)}</span><span>${value}</span></div>`
+      ? `<div class="dauligor-character-creator__cp-prof"><span class="dauligor-character-creator__cp-prof-key">${escapeHtml(label)}</span><span>${escapeHtml(value)}</span></div>`
       : "";
     const profBox = `
       <div class="dauligor-character-creator__cp-side">
         <h4 class="dauligor-character-creator__cp-side-title">Proficiencies</h4>
-        ${profLine("Armor", summarize(prof.armor, prof.armorDisplayName) || "None")}
-        ${profLine("Weapons", summarize(prof.weapons, prof.weaponsDisplayName) || "None")}
-        ${profLine("Tools", summarize(prof.tools, prof.toolsDisplayName) || "None")}
-        ${profLine("Saves", saves)}
-        ${profLine("Skills", skillLine)}
-        ${primary.length ? profLine("Multiclass", `${escapeHtml(primary.join(" or "))} 13+`) : ""}
+        ${profLine("Armor", profValue(byId["base-armor"]) || "None")}
+        ${profLine("Weapons", profValue(byId["base-weapons"]) || "None")}
+        ${profLine("Tools", profValue(byId["base-tools"]))}
+        ${profLine("Saves", profValue(byId["base-saves"]))}
+        ${profLine("Skills", profValue(byId["base-skills"]))}
+        ${primary.length ? profLine("Multiclass", `${primary.join(" or ")} 13+`) : ""}
       </div>`;
 
     // Subclasses + tags.
