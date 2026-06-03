@@ -293,11 +293,21 @@ function MarkdownEditor({
   // Sync TipTap content when BBCode changes externally or when switching modes
   useEffect(() => {
     if (!editor) return;
-    
+
     if (internalUpdateRef.current) {
       internalUpdateRef.current = false;
       return;
     }
+
+    // While the editor is focused the USER is typing, and the editor is the
+    // source of truth — never setContent here. setContent rebuilds the doc and
+    // resets the caret to the end. Fast typing (or holding a key, which
+    // auto-repeats) queues several deferred onChange echoes; the single
+    // `internalUpdateRef` boolean only masks the first, so a later stale echo
+    // would otherwise reach setContent mid-type and jump the caret to the end.
+    // External value changes (loading a different entry, Visual/Source toggle)
+    // happen while the editor is NOT focused, so they still sync through below.
+    if (editor.isFocused) return;
 
     const currentHtml = editor.getHTML();
     const newHtml = bbcodeToHtml(value, { editor: true });
