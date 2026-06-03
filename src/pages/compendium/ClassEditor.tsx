@@ -905,23 +905,33 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   useEffect(() => {
     if (allArmor.length === 0 && allWeapons.length === 0) return;
 
-    setProficiencies((prev: any) => {
-      const isArmorLegacyStr = typeof prev.armor === 'string';
-      const isWeaponLegacyStr = typeof prev.weapons === 'string';
+    // Only legacy-format rows (armor/weapons stored as a raw string) need the
+    // string -> structured-selection conversion. Modern rows are already
+    // objects, so this is a no-op for them (no setState, no re-baseline).
+    const isArmorLegacyStr = typeof proficiencies.armor === 'string';
+    const isWeaponLegacyStr = typeof proficiencies.weapons === 'string';
+    if (!isArmorLegacyStr && !isWeaponLegacyStr) return;
 
-      if (!isArmorLegacyStr && !isWeaponLegacyStr) return prev;
+    setProficiencies((prev: any) => ({
+      ...prev,
+      armor: typeof prev.armor === 'string'
+        ? { choiceCount: 0, optionIds: [], fixedIds: resolveLegacyProficiencyIds(prev.armor as string, allArmor) }
+        : prev.armor,
+      weapons: typeof prev.weapons === 'string'
+        ? { choiceCount: 0, optionIds: [], fixedIds: resolveLegacyProficiencyIds(prev.weapons as string, allWeapons) }
+        : prev.weapons
+    }));
 
-      return {
-        ...prev,
-        armor: isArmorLegacyStr
-          ? { choiceCount: 0, optionIds: [], fixedIds: resolveLegacyProficiencyIds(prev.armor as string, allArmor) }
-          : prev.armor,
-        weapons: isWeaponLegacyStr
-          ? { choiceCount: 0, optionIds: [], fixedIds: resolveLegacyProficiencyIds(prev.weapons as string, allWeapons) }
-          : prev.weapons
-      };
-    });
-  }, [allArmor, allWeapons]);
+    // This conversion is a programmatic normalization, NOT a user edit. The
+    // saved-state baseline (initialDataHash) is captured the moment the class
+    // finishes loading — BEFORE this effect runs (it waits on allArmor/allWeapons,
+    // which load on a separate track) — so it froze the legacy *string* shape.
+    // Comparing that against the converted *object* shape made isDirty report
+    // phantom "unsaved changes" on an untouched class, firing the leave-page
+    // guard. Invalidate the baseline so it re-captures the converted shape on the
+    // next commit; a genuine edit afterwards still flips isDirty.
+    setInitialDataHash('');
+  }, [allArmor, allWeapons, proficiencies]);
 
   const handleSaveFeature = async (e: React.FormEvent) => {
     e.preventDefault();
