@@ -126,7 +126,7 @@ function CharacterErrorFallback({
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="space-y-3 text-center">
-            <p className="text-ink/70 font-serif italic">
+            <p className="text-ink/75 font-serif italic">
               This character was likely created on an older schema. The
               sheet renderer hit a value it didn't expect.
             </p>
@@ -150,7 +150,7 @@ function CharacterErrorFallback({
               onClick={handleBack}
               variant="outline"
               disabled={busy}
-              className="border-gold/30 text-gold hover:bg-gold/5 uppercase tracking-widest text-xs font-black gap-2"
+              className="border-gold/35 text-gold hover:bg-gold/5 uppercase tracking-widest text-xs font-black gap-2"
             >
               <ArrowLeft className="w-4 h-4" /> Back to Character List
             </Button>

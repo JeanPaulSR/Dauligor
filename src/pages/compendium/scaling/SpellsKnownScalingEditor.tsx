@@ -139,22 +139,22 @@ export default function SpellsKnownScalingEditor({ userProfile }: { userProfile:
         </Button>
       </div>
 
-      <div className="p-4 border border-gold/20 bg-card/50 space-y-6">
+      <div className="p-4 border border-gold/25 bg-card/50 space-y-6">
         <div className="space-y-1">
-          <label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Progression Name</label>
+          <label className="text-[10px] font-bold uppercase tracking-widest text-ink/45">Progression Name</label>
           <div className="flex gap-4">
             <Input 
               value={name} 
               onChange={e => setName(e.target.value)} 
               placeholder="e.g. Sorcerer, Bard" 
-              className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold flex-1"
+              className="h-8 text-sm bg-background/50 border-gold/15 focus:border-gold flex-1"
               required
             />
             <div className="flex items-center gap-2">
-              <label className="text-[10px] font-bold uppercase tracking-widest text-ink/40 whitespace-nowrap">Copy From:</label>
+              <label className="text-[10px] font-bold uppercase tracking-widest text-ink/45 whitespace-nowrap">Copy From:</label>
               <select 
                 onChange={e => handleCopy(e.target.value)}
-                className="h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs"
+                className="h-8 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-xs"
                 value=""
               >
                 <option value="" disabled>Select scaling...</option>
@@ -168,13 +168,13 @@ export default function SpellsKnownScalingEditor({ userProfile }: { userProfile:
 
         <div className="space-y-4">
           <div className="section-header">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Level Progression</label>
-            <span className="text-[9px] text-ink/30 italic uppercase">Define cantrips and spells known for each level</span>
+            <label className="text-[10px] font-bold uppercase tracking-widest text-ink/45">Level Progression</label>
+            <span className="text-[9px] text-ink/35 italic uppercase">Define cantrips and spells known for each level</span>
           </div>
           
           <table className="w-full text-[10px] border-collapse">
             <thead>
-              <tr className="text-gold/60 uppercase tracking-tighter">
+              <tr className="text-gold/65 uppercase tracking-tighter">
                 <th className="p-1 text-left w-10">Lvl</th>
                 <th className="p-1 text-center">Cantrips Known</th>
                 <th className="p-1 text-center">Spells Known</th>
@@ -192,14 +192,14 @@ export default function SpellsKnownScalingEditor({ userProfile }: { userProfile:
 
                 return (
                   <tr key={level} className="hover:bg-gold/5 transition-colors">
-                    <td className="p-1 font-mono text-gold/40">{level}</td>
+                    <td className="p-1 font-mono text-gold/45">{level}</td>
                     <td className="p-1">
                       <Input 
                         type="number"
                         value={cantrips}
                         onChange={e => updateLevel(level, 'cantrips', e.target.value)}
                         placeholder={cantripsPlaceholder.toString()}
-                        className={`h-6 text-[10px] text-center bg-transparent border-gold/10 focus:border-gold ${isDefined && levelData.cantrips !== undefined ? 'text-gold font-bold' : 'text-ink/20'}`}
+                        className={`h-6 text-[10px] text-center bg-transparent border-gold/15 focus:border-gold ${isDefined && levelData.cantrips !== undefined ? 'text-gold font-bold' : 'text-ink/25'}`}
                       />
                     </td>
                     <td className="p-1">
@@ -208,7 +208,7 @@ export default function SpellsKnownScalingEditor({ userProfile }: { userProfile:
                         value={spellsKnown}
                         onChange={e => updateLevel(level, 'spellsKnown', e.target.value)}
                         placeholder={spellsKnownPlaceholder.toString()}
-                        className={`h-6 text-[10px] text-center bg-transparent border-gold/10 focus:border-gold ${isDefined && levelData.spellsKnown !== undefined ? 'text-gold font-bold' : 'text-ink/20'}`}
+                        className={`h-6 text-[10px] text-center bg-transparent border-gold/15 focus:border-gold ${isDefined && levelData.spellsKnown !== undefined ? 'text-gold font-bold' : 'text-ink/25'}`}
                       />
                     </td>
                   </tr>

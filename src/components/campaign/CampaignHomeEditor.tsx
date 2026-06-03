@@ -279,7 +279,7 @@ export default function CampaignHomeEditor({ campaignId, campaignName = '', full
 
   const actions = (
     <div className="flex items-center gap-2 shrink-0">
-      <Button onClick={handleRestoreDefault} disabled={saving} variant="outline" className="border-gold/20 text-ink/70 hover:text-gold">
+      <Button onClick={handleRestoreDefault} disabled={saving} variant="outline" className="border-gold/25 text-ink/75 hover:text-gold">
         Restore Default
       </Button>
       <Button onClick={handleSave} disabled={saving || !canSave} className="btn-gold-solid">
@@ -308,7 +308,7 @@ export default function CampaignHomeEditor({ campaignId, campaignName = '', full
             onAddInside={(cid) => setAddAt({ containerId: cid })}
           />
         </div>
-        <div className="p-2 border-t border-gold/20">
+        <div className="p-2 border-t border-gold/25">
           <Button onClick={() => setAddAt({ containerId: null })} className="btn-gold w-full h-8 text-xs">Add block</Button>
         </div>
       </div>
@@ -320,7 +320,7 @@ export default function CampaignHomeEditor({ campaignId, campaignName = '', full
         <div className="pane-head">Live preview · what players see</div>
         <div className="flex-grow overflow-y-auto custom-scrollbar p-4">
           {blocks.length === 0 ? (
-            <div className="empty-state h-full"><p className="description-text">No blocks — players see the default home page.</p><p className="label-text text-gold/40 mt-1">Add a block, or save to keep the default</p></div>
+            <div className="empty-state h-full"><p className="description-text">No blocks — players see the default home page.</p><p className="label-text text-gold/45 mt-1">Add a block, or save to keep the default</p></div>
           ) : (
             // Clicks are swallowed so preview links don't navigate away mid-edit.
             <div onClickCapture={(e) => e.preventDefault()}>
@@ -333,7 +333,7 @@ export default function CampaignHomeEditor({ campaignId, campaignName = '', full
       {fullscreen && <ResizeHandle onPointerDown={(e) => startResize('insp', e)} />}
 
       {/* Inspector */}
-      <div className="border-l border-gold/20 bg-gold/5 flex flex-col shrink-0" style={{ width: inspWidth }}>
+      <div className="border-l border-gold/25 bg-gold/5 flex flex-col shrink-0" style={{ width: inspWidth }}>
         <div className="pane-head">Inspector</div>
         <div className="flex-grow overflow-y-auto custom-scrollbar">
           {selected ? (
@@ -357,8 +357,8 @@ export default function CampaignHomeEditor({ campaignId, campaignName = '', full
   );
 
   const seedBanner = seededFromDefault && !dirty && (
-    <div className="px-3 py-2.5 border border-gold/20 bg-gold/5 shrink-0">
-      <p className="text-[12px] text-ink/70 leading-snug">
+    <div className="px-3 py-2.5 border border-gold/25 bg-gold/5 shrink-0">
+      <p className="text-[12px] text-ink/75 leading-snug">
         This is the <strong className="text-ink">default layout</strong>. Customize the blocks below, then <strong className="text-ink">Save</strong> to make it this campaign's homepage.
       </p>
     </div>
@@ -370,13 +370,13 @@ export default function CampaignHomeEditor({ campaignId, campaignName = '', full
   if (fullscreen) {
     return (
       <div className="h-[calc(100vh-4rem)] flex flex-col w-full px-3 sm:px-4 py-2 lg:py-3 gap-2">
-        <div className="flex items-center gap-3 shrink-0 pb-2 border-b border-gold/20">
-          <Button variant="ghost" onClick={() => onBack?.()} className="text-ink/60 hover:text-gold gap-2 px-2">
+        <div className="flex items-center gap-3 shrink-0 pb-2 border-b border-gold/25">
+          <Button variant="ghost" onClick={() => onBack?.()} className="text-ink/65 hover:text-gold gap-2 px-2">
             <ChevronLeft className="w-4 h-4" /> Back to Campaign Editor
           </Button>
           <div className="min-w-0 flex-1">
             <h2 className="text-lg font-serif font-bold text-ink truncate">
-              Homepage Layout{campaignName ? <span className="text-ink/40 font-normal">· {campaignName}</span> : null}
+              Homepage Layout{campaignName ? <span className="text-ink/45 font-normal">· {campaignName}</span> : null}
             </h2>
           </div>
           {actions}
@@ -414,12 +414,12 @@ function ResizeHandle({ onPointerDown }: { onPointerDown: (e: React.PointerEvent
       onPointerDown={onPointerDown}
       role="separator"
       aria-orientation="vertical"
-      className="group relative w-1.5 shrink-0 cursor-col-resize bg-gold/10 hover:bg-gold/30 transition-colors"
+      className="group relative w-1.5 shrink-0 cursor-col-resize bg-gold/15 hover:bg-gold/35 transition-colors"
       title="Drag to resize"
     >
       {/* Wider invisible hit-area + a centered grip dot-line on hover. */}
       <span className="absolute inset-y-0 -left-1 -right-1" />
-      <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-8 w-0.5 rounded bg-gold/40 opacity-0 group-hover:opacity-100 transition-opacity" />
+      <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-8 w-0.5 rounded bg-gold/45 opacity-0 group-hover:opacity-100 transition-opacity" />
     </div>
   );
 }
@@ -446,7 +446,7 @@ function BlockTree(p: TreeProps) {
   const { blocks, depth = 0 } = p;
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   return (
-    <div className={depth > 0 ? 'ml-3.5 border-l border-dashed border-gold/20 pl-1' : ''}>
+    <div className={depth > 0 ? 'ml-3.5 border-l border-dashed border-gold/25 pl-1' : ''}>
       {blocks.map((b) => {
         // `column` cells are rendered by their parent `columns` block as labeled
         // sections (ColumnsSections), never as a generic draggable row.
@@ -478,15 +478,15 @@ function BlockTree(p: TreeProps) {
               onClick={() => p.onSelect(b.id)}
               className={cn(
                 'flex items-center gap-1.5 px-1.5 py-1.5 cursor-pointer border border-transparent transition-colors text-xs',
-                sel ? 'bg-gold/20 border-r-[3px] border-r-gold text-gold font-semibold' : 'hover:bg-gold/10 text-ink/80',
+                sel ? 'bg-gold/25 border-r-[3px] border-r-gold text-gold font-semibold' : 'hover:bg-gold/15 text-ink/85',
                 p.dragId === b.id && 'opacity-40',
                 di === 'before' && 'shadow-[inset_0_2px_0_var(--gold)]',
                 di === 'after' && 'shadow-[inset_0_-2px_0_var(--gold)]',
               )}
             >
-              <GripVertical className="w-3.5 h-3.5 text-ink/30 shrink-0 cursor-grab" />
+              <GripVertical className="w-3.5 h-3.5 text-ink/35 shrink-0 cursor-grab" />
               {isC ? (
-                <button onClick={(e) => { e.stopPropagation(); setCollapsed((c) => ({ ...c, [b.id]: !c[b.id] })); }} className="w-3 text-ink/40 text-[9px] shrink-0">
+                <button onClick={(e) => { e.stopPropagation(); setCollapsed((c) => ({ ...c, [b.id]: !c[b.id] })); }} className="w-3 text-ink/45 text-[9px] shrink-0">
                   {collapsed[b.id] ? '▸' : '▾'}
                 </button>
               ) : <span className="w-3 shrink-0" />}
@@ -515,7 +515,7 @@ function BlockTree(p: TreeProps) {
           <div
             onDragOver={(e) => { if (!p.dragId) return; e.preventDefault(); e.stopPropagation(); p.onHover({ id: lastId, pos: 'after' }); }}
             onDrop={(e) => { if (!p.dragId) return; e.preventDefault(); e.stopPropagation(); p.onDrop(lastId, 'after'); }}
-            className={cn('h-7 mt-0.5 border border-dashed transition-colors', over ? 'border-gold bg-gold/10' : 'border-transparent')}
+            className={cn('h-7 mt-0.5 border border-dashed transition-colors', over ? 'border-gold bg-gold/15' : 'border-transparent')}
           />
         );
       })()}
@@ -524,10 +524,10 @@ function BlockTree(p: TreeProps) {
 }
 function NestZone({ block, active, isOver, onHover, onDrop, children }: { block: ContainerBlock; active: boolean; isOver: boolean; onHover: () => void; onDrop: () => void; children: React.ReactNode }) {
   return (
-    <div className="ml-3.5 border-l border-dashed border-gold/20 pl-1"
+    <div className="ml-3.5 border-l border-dashed border-gold/25 pl-1"
       onDragOver={(e) => { if (!active) return; e.preventDefault(); onHover(); }}
       onDrop={(e) => { if (!active) return; e.preventDefault(); onDrop(); }}>
-      <div className={cn('px-2 py-1 mb-0.5 text-[10px] italic border border-dashed', isOver ? 'border-gold text-gold bg-gold/10' : 'border-transparent text-ink/30')}>
+      <div className={cn('px-2 py-1 mb-0.5 text-[10px] italic border border-dashed', isOver ? 'border-gold text-gold bg-gold/15' : 'border-transparent text-ink/35')}>
         {block.children.length ? 'drop here to nest' : 'empty — drop a block here to nest it'}
       </div>
       {children}
@@ -541,7 +541,7 @@ function NestZone({ block, active, isOver, onHover, onDrop, children }: { block:
  *  nested BlockTree (with before/after reorder + the trailing drop zone). */
 function ColumnsSections({ columns, tree: p, depth }: { columns: ContainerBlock; tree: TreeProps; depth: number }) {
   return (
-    <div className="ml-3.5 border-l border-dashed border-gold/20 pl-1 space-y-1.5 mt-0.5">
+    <div className="ml-3.5 border-l border-dashed border-gold/25 pl-1 space-y-1.5 mt-0.5">
       {columns.children.map((col, ci) => {
         const active = p.dragId != null && p.dragId !== col.id && !isDescendant([columns], p.dragId, col.id);
         const over = p.dropInfo?.id === col.id && p.dropInfo.pos === 'into';
@@ -555,10 +555,10 @@ function ColumnsSections({ columns, tree: p, depth }: { columns: ContainerBlock;
             <div
               onDragOver={(e) => { if (!active) return; e.preventDefault(); e.stopPropagation(); p.onHover({ id: col.id, pos: 'into' }); }}
               onDrop={(e) => { if (!active) return; e.preventDefault(); e.stopPropagation(); p.onDrop(col.id, 'into'); }}
-              className={cn('ml-1 border-l border-dashed pl-1', over ? 'border-gold' : 'border-gold/20')}
+              className={cn('ml-1 border-l border-dashed pl-1', over ? 'border-gold' : 'border-gold/25')}
             >
               {colChildren.length === 0 ? (
-                <div className={cn('px-2 py-1 text-[10px] italic border border-dashed', over ? 'border-gold text-gold bg-gold/10' : 'border-transparent text-ink/30')}>
+                <div className={cn('px-2 py-1 text-[10px] italic border border-dashed', over ? 'border-gold text-gold bg-gold/15' : 'border-transparent text-ink/35')}>
                   empty — drop or “+ Add” a block
                 </div>
               ) : (
@@ -591,12 +591,12 @@ function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onA
 
   return (
     <div className="p-4 space-y-4">
-      <div className="flex items-center gap-1 pb-3 border-b border-gold/20">
+      <div className="flex items-center gap-1 pb-3 border-b border-gold/25">
         <span className="h3-title flex-1">{meta.label}</span>
-        <button disabled={i === 0} onClick={() => onMove(block.id, -1)} className="p-1.5 text-ink/40 hover:text-gold disabled:opacity-20" aria-label="Move up"><ChevronUp className="w-4 h-4" /></button>
-        <button disabled={i === n - 1} onClick={() => onMove(block.id, 1)} className="p-1.5 text-ink/40 hover:text-gold disabled:opacity-20" aria-label="Move down"><ChevronDown className="w-4 h-4" /></button>
-        <button onClick={() => onDuplicate(block.id)} className="p-1.5 text-ink/40 hover:text-gold" aria-label="Duplicate"><Copy className="w-4 h-4" /></button>
-        <button onClick={() => onRemove(block.id)} className="p-1.5 text-ink/40 hover:text-blood" aria-label="Delete"><Trash2 className="w-4 h-4" /></button>
+        <button disabled={i === 0} onClick={() => onMove(block.id, -1)} className="p-1.5 text-ink/45 hover:text-gold disabled:opacity-20" aria-label="Move up"><ChevronUp className="w-4 h-4" /></button>
+        <button disabled={i === n - 1} onClick={() => onMove(block.id, 1)} className="p-1.5 text-ink/45 hover:text-gold disabled:opacity-20" aria-label="Move down"><ChevronDown className="w-4 h-4" /></button>
+        <button onClick={() => onDuplicate(block.id)} className="p-1.5 text-ink/45 hover:text-gold" aria-label="Duplicate"><Copy className="w-4 h-4" /></button>
+        <button onClick={() => onRemove(block.id)} className="p-1.5 text-ink/45 hover:text-blood" aria-label="Delete"><Trash2 className="w-4 h-4" /></button>
       </div>
 
       {block.blockType === 'hero' && (<>
@@ -782,22 +782,22 @@ function EntityRefPicker({ mode, value, onChange }: {
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={() => reorder(idx)}
                       className="data-table-row grid grid-cols-[auto_1fr_auto_auto_auto] gap-2 items-center">
-                      <GripVertical className="w-3.5 h-3.5 text-ink/30 cursor-grab" />
-                      <span className={cn('text-xs font-serif truncate', !(r.title || r.name || r.id) && 'italic text-ink/40')} title={r.title || r.name}>
+                      <GripVertical className="w-3.5 h-3.5 text-ink/35 cursor-grab" />
+                      <span className={cn('text-xs font-serif truncate', !(r.title || r.name || r.id) && 'italic text-ink/45')} title={r.title || r.name}>
                         {r.title || r.name || (ph ? 'Empty card' : r.id)}
-                        {!!r.span && r.span > 1 && <span className="label-text ml-1.5 text-gold/70">×{r.span}</span>}
+                        {!!r.span && r.span > 1 && <span className="label-text ml-1.5 text-gold/75">×{r.span}</span>}
                       </span>
                       <span className="label-text">{kindLabel(r.kind)}</span>
-                      <button onClick={() => setEditIdx(expanded ? null : idx)} className={cn('text-ink/30 hover:text-gold', expanded && 'text-gold')} aria-label="Edit card">
+                      <button onClick={() => setEditIdx(expanded ? null : idx)} className={cn('text-ink/35 hover:text-gold', expanded && 'text-gold')} aria-label="Edit card">
                         <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', !expanded && '-rotate-90')} />
                       </button>
-                      <button onClick={() => { onChange(list.filter((_, j) => j !== idx)); if (expanded) setEditIdx(null); }} className="text-ink/30 hover:text-blood" aria-label="Remove"><X className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => { onChange(list.filter((_, j) => j !== idx)); if (expanded) setEditIdx(null); }} className="text-ink/35 hover:text-blood" aria-label="Remove"><X className="w-3.5 h-3.5" /></button>
                     </div>
                     {/* Per-card overrides: heading ("what it says"), description
                         ("what its description says"), and column span. Empty fields
                         fall back to the resolved entity / Placeholder · Coming Soon. */}
                     {expanded && (
-                      <div className="px-2 py-2 space-y-2 bg-gold/5 border-t border-gold/10">
+                      <div className="px-2 py-2 space-y-2 bg-gold/5 border-t border-gold/15">
                         <div className="space-y-1">
                           <label className="field-label">Card title</label>
                           <Input autoComplete="off" className="field-input text-xs" value={r.title || ''} placeholder={r.name || PLACEHOLDER_TITLE} onChange={(e) => updateAt(idx, { title: e.target.value })} />
@@ -808,12 +808,12 @@ function EntityRefPicker({ mode, value, onChange }: {
                         </div>
                         <div className="space-y-1">
                           <label className="field-label">Card width (columns)</label>
-                          <div className="flex border border-gold/20 w-fit">
+                          <div className="flex border border-gold/25 w-fit">
                             {[1, 2, 3, 4].map((n) => {
                               const active = (r.span || 1) === n;
                               return (
                                 <button key={n} onClick={() => updateAt(idx, { span: n })}
-                                  className={cn('w-8 text-[11px] py-1 transition-colors', n > 1 && 'border-l border-gold/10', active ? 'bg-gold text-white font-semibold' : 'bg-card text-ink/60 hover:bg-gold/5')}>
+                                  className={cn('w-8 text-[11px] py-1 transition-colors', n > 1 && 'border-l border-gold/15', active ? 'bg-gold text-[var(--primary-foreground)] font-semibold' : 'bg-card text-ink/65 hover:bg-gold/5')}>
                                   {n}
                                 </button>
                               );
@@ -840,7 +840,7 @@ function EntityRefPicker({ mode, value, onChange }: {
         <div className="data-table"><div className="data-table-row grid grid-cols-[1fr_auto_auto] gap-2 items-center">
           <span className="text-xs font-serif truncate" title={single.name}>{single.name || single.id}</span>
           <span className="label-text">{kindLabel(single.kind)}</span>
-          <button onClick={() => onChange(null)} className="text-ink/30 hover:text-blood" aria-label="Clear"><X className="w-3.5 h-3.5" /></button>
+          <button onClick={() => onChange(null)} className="text-ink/35 hover:text-blood" aria-label="Clear"><X className="w-3.5 h-3.5" /></button>
         </div></div>
       )}
 
@@ -850,19 +850,19 @@ function EntityRefPicker({ mode, value, onChange }: {
             {ENTITY_PICKER_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
           </select>
           <div className="relative flex-1">
-            <Search className="w-3.5 h-3.5 text-ink/30 absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Search className="w-3.5 h-3.5 text-ink/35 absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
             <Input autoComplete="off" className="field-input pl-7 text-xs" value={query} placeholder={`Search ${kindMeta.label.toLowerCase()}…`}
               onFocus={() => setOpen(true)} onChange={(e) => { setQuery(e.target.value); setOpen(true); }} />
           </div>
         </div>
         {open && (
           <div className="absolute left-0 right-0 top-[calc(100%+2px)] z-30 bg-card border border-gold max-h-56 overflow-y-auto custom-scrollbar shadow-lg">
-            {busy && <p className="px-3 py-2 text-[11px] text-ink/40 italic">Searching…</p>}
+            {busy && <p className="px-3 py-2 text-[11px] text-ink/45 italic">Searching…</p>}
             {!busy && results.length === 0 && !query.trim() && (
-              <p className="px-3 py-2 text-[11px] text-ink/40 italic">Type to search, or add a placeholder.</p>
+              <p className="px-3 py-2 text-[11px] text-ink/45 italic">Type to search, or add a placeholder.</p>
             )}
             {!busy && results.map((r, i) => (
-              <button key={`${r.kind}:${r.id}:${i}`} onClick={() => pick(r)} className="block w-full text-left px-3 py-1.5 text-xs hover:bg-gold/10 transition-colors flex items-center justify-between gap-2">
+              <button key={`${r.kind}:${r.id}:${i}`} onClick={() => pick(r)} className="block w-full text-left px-3 py-1.5 text-xs hover:bg-gold/15 transition-colors flex items-center justify-between gap-2">
                 <span className="truncate font-serif">{r.name || r.id}</span>
                 <span className="label-text shrink-0">{kindLabel(r.kind)}</span>
               </button>
@@ -872,9 +872,9 @@ function EntityRefPicker({ mode, value, onChange }: {
                 once something's typed, even when there are real matches. */}
             {!busy && query.trim() && (
               <button onClick={() => pick(makePlaceholderRef(query.trim()))}
-                className="block w-full text-left px-3 py-1.5 text-xs hover:bg-gold/10 transition-colors flex items-center justify-between gap-2 border-t border-gold/10">
-                <span className="truncate font-serif italic text-ink/70">Add “{query.trim()}” as placeholder</span>
-                <span className="label-text shrink-0 text-ink/30">Placeholder</span>
+                className="block w-full text-left px-3 py-1.5 text-xs hover:bg-gold/15 transition-colors flex items-center justify-between gap-2 border-t border-gold/15">
+                <span className="truncate font-serif italic text-ink/75">Add “{query.trim()}” as placeholder</span>
+                <span className="label-text shrink-0 text-ink/35">Placeholder</span>
               </button>
             )}
           </div>
@@ -901,7 +901,7 @@ function AddBlockPicker({ containerId, onPick, onClose }: { containerId: string 
       <div className="bg-card border border-gold w-full max-w-md max-h-[80vh] overflow-y-auto custom-scrollbar" onClick={(e) => e.stopPropagation()}>
         <div className="dialog-header flex items-center justify-between">
           <span className="dialog-title">{containerId ? 'Add block inside' : 'Add block'}</span>
-          <button onClick={onClose} className="text-ink/40 hover:text-blood"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} className="text-ink/45 hover:text-blood"><X className="w-4 h-4" /></button>
         </div>
         <div className="p-3 space-y-3">
           {groups.map(([gn, types]) => (
@@ -916,7 +916,7 @@ function AddBlockPicker({ containerId, onPick, onClose }: { containerId: string 
                       <Icon className="w-4 h-4 text-gold shrink-0 mt-0.5" />
                       <div className="min-w-0">
                         <div className="text-sm font-bold text-ink font-serif">{meta.label}</div>
-                        <div className="text-[11px] text-ink/50 leading-snug">{meta.description}</div>
+                        <div className="text-[11px] text-ink/55 leading-snug">{meta.description}</div>
                       </div>
                     </button>
                   );
@@ -938,10 +938,10 @@ function Seg({ label, value, options, onChange }: { label: string; value: string
   return (
     <div className="space-y-1.5">
       <label className="field-label">{label}</label>
-      <div className="flex border border-gold/20">
+      <div className="flex border border-gold/25">
         {options.map(([v, l], i) => (
           <button key={v} onClick={() => onChange(v)}
-            className={cn('flex-1 text-[11px] py-1.5 transition-colors', i > 0 && 'border-l border-gold/10', value === v ? 'bg-gold text-white font-semibold' : 'bg-card text-ink/60 hover:bg-gold/5')}>
+            className={cn('flex-1 text-[11px] py-1.5 transition-colors', i > 0 && 'border-l border-gold/15', value === v ? 'bg-gold text-[var(--primary-foreground)] font-semibold' : 'bg-card text-ink/65 hover:bg-gold/5')}>
             {l}
           </button>
         ))}
@@ -952,7 +952,7 @@ function Seg({ label, value, options, onChange }: { label: string; value: string
 function Toggle({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
   return (
     <button onClick={() => onChange(!value)} className="flex items-center gap-2.5 cursor-pointer">
-      <span className={cn('w-[34px] h-[19px] rounded-full relative transition-colors shrink-0', value ? 'bg-gold' : 'bg-ink/20')}>
+      <span className={cn('w-[34px] h-[19px] rounded-full relative transition-colors shrink-0', value ? 'bg-gold' : 'bg-ink/25')}>
         <span className={cn('absolute top-0.5 w-[15px] h-[15px] rounded-full bg-white transition-all', value ? 'left-[17px]' : 'left-0.5')} />
       </span>
       <span className="text-[12.5px]">{label}</span>
@@ -963,10 +963,10 @@ function Stepper({ label, value, min, max, onChange }: { label: string; value: n
   return (
     <div className="space-y-1.5">
       <label className="field-label">{label}</label>
-      <div className="inline-flex border border-gold/20">
-        <button onClick={() => onChange(Math.max(min, value - 1))} disabled={value <= min} className="px-3 py-1.5 text-ink/60 hover:bg-gold/10 hover:text-gold disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-ink/60" aria-label="Decrease">−</button>
-        <span className="px-4 py-1.5 text-sm border-x border-gold/20 min-w-[40px] text-center">{value}</span>
-        <button onClick={() => onChange(Math.min(max, value + 1))} disabled={value >= max} className="px-3 py-1.5 text-ink/60 hover:bg-gold/10 hover:text-gold disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-ink/60" aria-label="Increase">+</button>
+      <div className="inline-flex border border-gold/25">
+        <button onClick={() => onChange(Math.max(min, value - 1))} disabled={value <= min} className="px-3 py-1.5 text-ink/65 hover:bg-gold/15 hover:text-gold disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-ink/65" aria-label="Decrease">−</button>
+        <span className="px-4 py-1.5 text-sm border-x border-gold/25 min-w-[40px] text-center">{value}</span>
+        <button onClick={() => onChange(Math.min(max, value + 1))} disabled={value >= max} className="px-3 py-1.5 text-ink/65 hover:bg-gold/15 hover:text-gold disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-ink/65" aria-label="Increase">+</button>
       </div>
     </div>
   );

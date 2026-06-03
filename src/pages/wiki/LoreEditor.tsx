@@ -414,9 +414,9 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                 setFormData({ ...formData, category: cat.id });
                 setStep('edit');
               }}
-              className="group p-6 rounded-xl border border-gold/10 bg-card hover:border-gold/40 hover:bg-gold/5 transition-all text-left space-y-4"
+              className="group p-6 rounded-xl border border-gold/15 bg-card hover:border-gold/45 hover:bg-gold/5 transition-all text-left space-y-4"
             >
-              <div className="w-12 h-12 rounded-lg bg-gold/10 flex items-center justify-center text-gold group-hover:scale-110 transition-transform">
+              <div className="w-12 h-12 rounded-lg bg-gold/15 flex items-center justify-center text-gold group-hover:scale-110 transition-transform">
                 <cat.icon className="w-6 h-6" />
               </div>
               <div>
@@ -428,7 +428,7 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
         </div>
 
         <div className="flex justify-center pt-8">
-          <Button variant="ghost" onClick={() => navigate('/wiki')} className="text-ink/40">
+          <Button variant="ghost" onClick={() => navigate('/wiki')} className="text-ink/45">
             <ChevronLeft className="w-4 h-4 mr-2" /> Back to Wiki
           </Button>
         </div>
@@ -458,60 +458,60 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
             <Button
               variant="outline"
               onClick={() => setFormData({ ...formData, status: formData.status === 'published' ? 'draft' : 'published' })}
-              className={formData.status === 'draft' ? 'border-gold text-gold bg-gold/5' : 'text-ink/40'}
+              className={formData.status === 'draft' ? 'border-gold text-gold bg-gold/5' : 'text-ink/45'}
             >
               {formData.status === 'published' ? <Eye className="w-4 h-4 mr-2" /> : <EyeOff className="w-4 h-4 mr-2" />}
               {formData.status === 'published' ? 'Published' : 'Draft'}
             </Button>
-            <Button onClick={handleSave} disabled={saving} className="bg-gold text-white gap-2">
+            <Button onClick={handleSave} disabled={saving} className="bg-gold text-[var(--primary-foreground)] gap-2">
               <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save Article'}
             </Button>
           </div>
       </div>
 
       <Tabs defaultValue="content" className="space-y-6">
-        <TabsList className="bg-gold/5 border border-gold/10 p-1 flex overflow-x-auto custom-scrollbar">
-          <TabsTrigger value="content" className="data-[state=active]:bg-gold/20 data-[state=active]:text-gold">Content</TabsTrigger>
-          <TabsTrigger value="metadata" className="data-[state=active]:bg-gold/20 data-[state=active]:text-gold">Metadata</TabsTrigger>
-          <TabsTrigger value="notes" className="data-[state=active]:bg-gold/20 data-[state=active]:text-gold">Storyteller Notes</TabsTrigger>
-          <TabsTrigger value="secrets" className="data-[state=active]:bg-gold/20 data-[state=active]:text-gold">Secrets</TabsTrigger>
+        <TabsList className="bg-gold/5 border border-gold/15 p-1 flex overflow-x-auto custom-scrollbar">
+          <TabsTrigger value="content" className="data-[state=active]:bg-gold/25 data-[state=active]:text-gold">Content</TabsTrigger>
+          <TabsTrigger value="metadata" className="data-[state=active]:bg-gold/25 data-[state=active]:text-gold">Metadata</TabsTrigger>
+          <TabsTrigger value="notes" className="data-[state=active]:bg-gold/25 data-[state=active]:text-gold">Storyteller Notes</TabsTrigger>
+          <TabsTrigger value="secrets" className="data-[state=active]:bg-gold/25 data-[state=active]:text-gold">Secrets</TabsTrigger>
         </TabsList>
 
         <TabsContent value="content" className="space-y-6">
-          <Card className="border-gold/10">
+          <Card className="border-gold/15">
             <CardContent className="p-6 space-y-6">
               <div className="space-y-2">
-                <label className="label-text text-ink/40 flex items-center gap-2">
+                <label className="label-text text-ink/45 flex items-center gap-2">
                   <Type className="w-3 h-3" /> Article Title
                 </label>
                 <Input
                   value={formData.title}
                   onChange={e => setFormData({ ...formData, title: e.target.value })}
                   placeholder="The name of your subject..."
-                  className="h3-title h-14 border-gold/10 focus:border-gold"
+                  className="h3-title h-14 border-gold/15 focus:border-gold"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="label-text text-ink/40 flex items-center gap-2">
+                  <label className="label-text text-ink/45 flex items-center gap-2">
                     <Library className="w-3 h-3" /> Folder / Sub-category
                   </label>
                   <Input
                     value={formData.folder || ''}
                     onChange={e => setFormData({ ...formData, folder: e.target.value })}
                     placeholder="e.g. Major Cities, NPCs - Allies"
-                    className="border-gold/10 focus:border-gold"
+                    className="border-gold/15 focus:border-gold"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="label-text text-ink/40 flex items-center gap-2">
+                  <label className="label-text text-ink/45 flex items-center gap-2">
                     <LinkIcon className="w-3 h-3" /> Parent Article
                   </label>
                   <select
                     value={formData.parentId || ''}
                     onChange={e => setFormData({ ...formData, parentId: e.target.value })}
-                    className="flex h-10 w-full rounded-md border border-gold/10 bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex h-10 w-full rounded-md border border-gold/15 bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <option value="">None (Root Article)</option>
                     {allArticles.filter(a => a.id !== id).map(article => (
@@ -522,14 +522,14 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
               </div>
 
               <div className="space-y-2">
-                <label className="label-text text-ink/40 flex items-center gap-2">
+                <label className="label-text text-ink/45 flex items-center gap-2">
                   <FileText className="w-3 h-3" /> Excerpt
                 </label>
                 <textarea
                   value={formData.excerpt}
                   onChange={e => setFormData({ ...formData, excerpt: e.target.value })}
                   placeholder="A short summary for previews..."
-                  className="w-full h-20 p-3 rounded-md border border-gold/10 bg-background description-text text-sm italic"
+                  className="w-full h-20 p-3 rounded-md border border-gold/15 bg-background description-text text-sm italic"
                 />
               </div>
 
@@ -545,7 +545,7 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                 />
 
                 {suggestionOpen && (
-                  <div className="absolute top-8 left-0 z-50 w-64 bg-card border border-gold/20 rounded-md shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+                  <div className="absolute top-8 left-0 z-50 w-64 bg-card border border-gold/25 rounded-md shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
                     <Command className="bg-transparent">
                       <CommandInput
                         placeholder="Search articles..."
@@ -572,7 +572,7 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                                 <LinkIcon className="w-3 h-3 text-gold" />
                                 <div className="flex flex-col">
                                   <span className="text-xs font-medium">{article.title}</span>
-                                  <span className="text-[10px] text-ink/40 capitalize">{article.category}</span>
+                                  <span className="text-[10px] text-ink/45 capitalize">{article.category}</span>
                                 </div>
                               </CommandItem>
                             ))
@@ -580,7 +580,7 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                         </CommandGroup>
                       </CommandList>
                     </Command>
-                    <div className="p-1 border-t border-gold/10 bg-gold/5 flex justify-end">
+                    <div className="p-1 border-t border-gold/15 bg-gold/5 flex justify-end">
                       <Button variant="ghost" size="xs" onClick={() => setSuggestionOpen(false)} className="h-6 text-[10px]">Cancel</Button>
                     </div>
                   </div>
@@ -589,25 +589,25 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
 
               {/* Editor hints row */}
               <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
-                <span className="text-[10px] text-ink/30 flex items-center gap-1">
+                <span className="text-[10px] text-ink/35 flex items-center gap-1">
                   <LinkIcon className="w-2.5 h-2.5" />
-                  Press <kbd className="mx-1 px-1.5 py-0.5 text-[9px] bg-ink/5 border border-ink/10 rounded font-mono">Ctrl+Space</kbd> inside the editor to insert an article link
+                  Press <kbd className="mx-1 px-1.5 py-0.5 text-[9px] bg-ink/5 border border-ink/15 rounded font-mono">Ctrl+Space</kbd> inside the editor to insert an article link
                 </span>
                 <Popover>
                   <PopoverTrigger asChild>
-                    <span role="button" tabIndex={0} className="inline-flex items-center justify-center rounded-lg border bg-background hover:bg-muted h-6 gap-1 px-2 border-gold/20 text-gold/60 hover:text-gold text-[10px] gap-1.5 transition-all select-none cursor-pointer">
+                    <span role="button" tabIndex={0} className="inline-flex items-center justify-center rounded-lg border bg-background hover:bg-muted h-6 gap-1 px-2 border-gold/25 text-gold/65 hover:text-gold text-[10px] gap-1.5 transition-all select-none cursor-pointer">
                       <Globe className="w-2.5 h-2.5" /> Insert Era/Campaign Block
                     </span>
                   </PopoverTrigger>
                   <PopoverContent className="w-72 p-3 space-y-3" align="end">
-                    <p className="label-text text-[10px] text-ink/40">Wraps selected text in a conditional block. Only players in the matching era/campaign will see this content.</p>
+                    <p className="label-text text-[10px] text-ink/45">Wraps selected text in a conditional block. Only players in the matching era/campaign will see this content.</p>
                     {eras.length > 0 && (
                       <div className="space-y-1">
-                        <p className="text-[9px] uppercase font-bold tracking-widest text-gold/50">Era Blocks</p>
+                        <p className="text-[9px] uppercase font-bold tracking-widest text-gold/55">Era Blocks</p>
                         <div className="flex flex-wrap gap-1.5">
                           {eras.map((era: any) => (
                             <button key={era.id} type="button"
-                              className="px-2 py-1 rounded border border-gold/20 text-[10px] text-ink/70 hover:bg-gold/10 hover:text-gold transition-colors"
+                              className="px-2 py-1 rounded border border-gold/25 text-[10px] text-ink/75 hover:bg-gold/15 hover:text-gold transition-colors"
                               onClick={() => {
                                 const textarea = contentRef.current;
                                 if (!textarea) return;
@@ -627,7 +627,7 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                         <div className="flex flex-wrap gap-1.5">
                           {campaigns.map((camp: any) => (
                             <button key={camp.id} type="button"
-                              className="px-2 py-1 rounded border border-primary/20 text-[10px] text-ink/70 hover:bg-primary/10 hover:text-primary transition-colors"
+                              className="px-2 py-1 rounded border border-primary/20 text-[10px] text-ink/75 hover:bg-primary/10 hover:text-primary transition-colors"
                               onClick={() => {
                                 const textarea = contentRef.current;
                                 if (!textarea) return;
@@ -650,13 +650,13 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
         </TabsContent>
 
         <TabsContent value="notes" className="space-y-6">
-          <Card className="border-gold/10">
+          <Card className="border-gold/15">
             <CardContent className="p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="label-text text-gold flex items-center gap-2">
                   <Lock className="w-4 h-4" /> Storyteller Notes (Private)
                 </h2>
-                <Badge variant="outline" className="border-gold/20 text-gold/60 text-[10px]">STAFF ONLY</Badge>
+                <Badge variant="outline" className="border-gold/25 text-gold/65 text-[10px]">STAFF ONLY</Badge>
               </div>
               <MarkdownEditor
                 textareaRef={notesRef}
@@ -674,13 +674,13 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
         </TabsContent>
 
         <TabsContent value="secrets" className="space-y-6">
-          <Card className="border-gold/10">
+          <Card className="border-gold/15">
             <CardContent className="p-6 space-y-6">
               <div className="flex items-center justify-between">
                 <h2 className="label-text text-gold flex items-center gap-2">
                   <Sparkles className="w-4 h-4" /> Secrets & Revelations
                 </h2>
-                <Badge variant="outline" className="border-gold/20 text-gold/60 text-[10px]">CAMPAIGN SPECIFIC</Badge>
+                <Badge variant="outline" className="border-gold/25 text-gold/65 text-[10px]">CAMPAIGN SPECIFIC</Badge>
               </div>
 
               <div className="space-y-4">
@@ -690,7 +690,7 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                   const eligibleCampaigns = campaigns.filter(c => (isEditing ? editSecretData.eraIds : secret.eraIds).includes(c.eraId));
 
                   return (
-                    <div key={secret.id} className="p-4 rounded-lg border border-gold/10 bg-gold/5 space-y-4">
+                    <div key={secret.id} className="p-4 rounded-lg border border-gold/15 bg-gold/5 space-y-4">
                       <div className="flex items-center justify-between">
                         <div className="flex flex-wrap gap-1">
                           {isEditing ? (
@@ -724,7 +724,7 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                         <div className="flex items-center gap-2">
                           {isEditing ? (
                             <>
-                              <Button variant="ghost" size="sm" onClick={() => setEditingSecretId(null)} className="h-8 text-xs text-ink/40">Cancel</Button>
+                              <Button variant="ghost" size="sm" onClick={() => setEditingSecretId(null)} className="h-8 text-xs text-ink/45">Cancel</Button>
                               <Button size="sm" onClick={() => handleSaveSecret(secret.id)} className="h-8 bg-primary text-primary-foreground text-xs">Save</Button>
                             </>
                           ) : (
@@ -732,7 +732,7 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                               <Button variant="ghost" size="icon" onClick={() => {
                                 setEditingSecretId(secret.id);
                                 setEditSecretData({ content: secret.content, eraIds: secret.eraIds });
-                              }} className="h-6 w-6 text-gold/40 hover:text-gold">
+                              }} className="h-6 w-6 text-gold/45 hover:text-gold">
                                 <Edit className="w-3 h-3" />
                               </Button>
                               <Button variant="ghost" size="icon" onClick={() => handleDeleteSecret(secret.id)} className="h-6 w-6 text-blood/40 hover:text-blood">
@@ -748,15 +748,15 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                           value={editSecretData.content}
                           onChange={e => setEditSecretData({ ...editSecretData, content: e.target.value })}
                           placeholder="What is the secret?"
-                          className="w-full h-24 p-3 rounded-md border border-gold/10 bg-background description-text text-sm italic focus:ring-1 focus:ring-gold/20 outline-none"
+                          className="w-full h-24 p-3 rounded-md border border-gold/15 bg-background description-text text-sm italic focus:ring-1 focus:ring-gold/25 outline-none"
                         />
                       ) : (
                         <p className="description-text text-sm italic">"{secret.content}"</p>
                       )}
 
                       {!isEditing && (
-                        <div className="pt-2 border-t border-gold/10">
-                          <p className="label-text text-gold/40 mb-2">Reveal to Campaigns</p>
+                        <div className="pt-2 border-t border-gold/15">
+                          <p className="label-text text-gold/45 mb-2">Reveal to Campaigns</p>
                           <div className="flex flex-wrap gap-2">
                             {eligibleCampaigns.map(campaign => {
                               const isRevealed = secret.revealedCampaignIds.includes(campaign.id);
@@ -766,7 +766,7 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                                   variant="outline"
                                   size="xs"
                                   onClick={() => handleToggleSecretReveal(secret, campaign.id)}
-                                  className={`h-7 text-[10px] gap-1 transition-all duration-200 ${isRevealed ? 'bg-primary text-primary-foreground border-primary shadow-md scale-105 z-10 font-bold ring-2 ring-primary/20' : 'border-gold/10 text-gold/40 hover:bg-gold/5'}`}
+                                  className={`h-7 text-[10px] gap-1 transition-all duration-200 ${isRevealed ? 'bg-primary text-primary-foreground border-primary shadow-md scale-105 z-10 font-bold ring-2 ring-primary/20' : 'border-gold/15 text-gold/45 hover:bg-gold/5'}`}
                                 >
                                   {isRevealed ? <Unlock className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
                                   {campaign.name}
@@ -774,7 +774,7 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                               );
                             })}
                             {eligibleCampaigns.length === 0 && (
-                              <span className="text-[10px] text-gold/20 italic">No campaigns found for these Eras.</span>
+                              <span className="text-[10px] text-gold/25 italic">No campaigns found for these Eras.</span>
                             )}
                           </div>
                         </div>
@@ -783,11 +783,11 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                   );
                 })}
 
-                <div className="p-4 rounded-lg border border-dashed border-gold/20 space-y-4">
-                  <p className="label-text text-gold/60">Add New Secret</p>
+                <div className="p-4 rounded-lg border border-dashed border-gold/25 space-y-4">
+                  <p className="label-text text-gold/65">Add New Secret</p>
                   <div className="space-y-4">
                     <div className="space-y-2">
-                      <label className="label-text text-ink/40">Link to Eras</label>
+                      <label className="label-text text-ink/45">Link to Eras</label>
                       <div className="flex flex-wrap gap-2">
                         {eras.map(era => {
                           const isSelected = newSecret.eraIds.includes(era.id);
@@ -802,7 +802,7 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                                   : [...newSecret.eraIds, era.id];
                                 setNewSecret({ ...newSecret, eraIds: newEraIds });
                               }}
-                              className={`h-7 text-[10px] transition-all duration-200 ${isSelected ? 'bg-primary text-primary-foreground border-primary shadow-md scale-105 z-10 font-bold ring-2 ring-primary/20' : 'border-gold/20 text-gold/60 hover:bg-gold/5'}`}
+                              className={`h-7 text-[10px] transition-all duration-200 ${isSelected ? 'bg-primary text-primary-foreground border-primary shadow-md scale-105 z-10 font-bold ring-2 ring-primary/20' : 'border-gold/25 text-gold/65 hover:bg-gold/5'}`}
                             >
                               {era.name}
                             </Button>
@@ -812,12 +812,12 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                     </div>
 
                     <div className="space-y-2">
-                      <label className="label-text text-ink/40">Secret Content</label>
+                      <label className="label-text text-ink/45">Secret Content</label>
                       <textarea
                         value={newSecret.content}
                         onChange={e => setNewSecret({ ...newSecret, content: e.target.value })}
                         placeholder="What is the secret?"
-                        className="w-full h-24 p-3 rounded-md border border-gold/10 bg-background description-text text-sm italic focus:ring-1 focus:ring-gold/20 outline-none"
+                        className="w-full h-24 p-3 rounded-md border border-gold/15 bg-background description-text text-sm italic focus:ring-1 focus:ring-gold/25 outline-none"
                       />
                       <div className="flex justify-end">
                         <Button onClick={handleAddSecret} size="sm" className="h-8 bg-primary text-primary-foreground">
@@ -835,12 +835,12 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
         <TabsContent value="metadata" className="space-y-6">
 
           {/* Visibility Scope */}
-          <Card className="border-gold/10 bg-card/60">
+          <Card className="border-gold/15 bg-card/60">
             <CardHeader className="pb-2">
               <CardTitle className="label-text text-gold flex items-center gap-2">
                 <Globe className="w-4 h-4" /> Visibility Scope
               </CardTitle>
-              <p className="text-xs text-ink/40 mt-0.5">
+              <p className="text-xs text-ink/45 mt-0.5">
                 Leave empty to show this article to all players. Select eras or campaigns to restrict access.
               </p>
             </CardHeader>
@@ -848,22 +848,22 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
 
               {/* Era Scope — searchable multi-select */}
               <div className="space-y-2">
-                <label className="label-text text-xs text-ink/50 flex items-center gap-1.5">
+                <label className="label-text text-xs text-ink/55 flex items-center gap-1.5">
                   <Globe className="w-3 h-3" /> Era Scope
-                  <span className="font-normal text-ink/30">— visible to campaigns in these eras</span>
+                  <span className="font-normal text-ink/35">— visible to campaigns in these eras</span>
                 </label>
                 <Popover>
                   <PopoverTrigger asChild>
-                    <div role="button" tabIndex={0} className="w-full flex items-start gap-2 min-h-9 px-3 py-2 rounded-md border border-gold/10 bg-background/60 hover:border-gold/30 transition-colors text-left select-none cursor-pointer">
-                      <Globe className="w-3.5 h-3.5 text-ink/30 mt-0.5 shrink-0" />
+                    <div role="button" tabIndex={0} className="w-full flex items-start gap-2 min-h-9 px-3 py-2 rounded-md border border-gold/15 bg-background/60 hover:border-gold/35 transition-colors text-left select-none cursor-pointer">
+                      <Globe className="w-3.5 h-3.5 text-ink/35 mt-0.5 shrink-0" />
                       {(formData.visibilityEraIds?.length ?? 0) === 0 ? (
-                        <span className="text-xs text-ink/30 italic">All eras (no restriction)</span>
+                        <span className="text-xs text-ink/35 italic">All eras (no restriction)</span>
                       ) : (
                         <div className="flex flex-wrap gap-1">
                           {formData.visibilityEraIds.map((eId: string) => {
                             const era = eras.find((e: any) => e.id === eId);
                             return era ? (
-                              <span key={eId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gold/15 border border-gold/30 text-gold text-[10px] font-medium">
+                              <span key={eId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gold/15 border border-gold/35 text-gold text-[10px] font-medium">
                                 {era.name}
                                 <button type="button" onClick={(e) => { e.stopPropagation(); setFormData({ ...formData, visibilityEraIds: formData.visibilityEraIds.filter((i: string) => i !== eId) }); }} className="hover:text-blood">
                                   <X className="w-2.5 h-2.5" />
@@ -888,7 +888,7 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                                 const curr = formData.visibilityEraIds || [];
                                 setFormData({ ...formData, visibilityEraIds: selected ? curr.filter((i: string) => i !== era.id) : [...curr, era.id] });
                               }} className="flex items-center gap-2 cursor-pointer">
-                                <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${selected ? 'bg-gold border-gold' : 'border-gold/30'}`}>
+                                <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${selected ? 'bg-gold border-gold' : 'border-gold/35'}`}>
                                   {selected && <Check className="w-2.5 h-2.5 text-white" />}
                                 </div>
                                 <span className="text-xs">{era.name}</span>
@@ -905,16 +905,16 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
 
               {/* Campaign Scope — searchable multi-select */}
               <div className="space-y-2">
-                <label className="label-text text-xs text-ink/50 flex items-center gap-1.5">
+                <label className="label-text text-xs text-ink/55 flex items-center gap-1.5">
                   <Shield className="w-3 h-3" /> Campaign Scope
-                  <span className="font-normal text-ink/30">— visible only to these campaigns</span>
+                  <span className="font-normal text-ink/35">— visible only to these campaigns</span>
                 </label>
                 <Popover>
                   <PopoverTrigger asChild>
-                    <div role="button" tabIndex={0} className="w-full flex items-start gap-2 min-h-9 px-3 py-2 rounded-md border border-gold/10 bg-background/60 hover:border-gold/30 transition-colors text-left select-none cursor-pointer">
-                      <Shield className="w-3.5 h-3.5 text-ink/30 mt-0.5 shrink-0" />
+                    <div role="button" tabIndex={0} className="w-full flex items-start gap-2 min-h-9 px-3 py-2 rounded-md border border-gold/15 bg-background/60 hover:border-gold/35 transition-colors text-left select-none cursor-pointer">
+                      <Shield className="w-3.5 h-3.5 text-ink/35 mt-0.5 shrink-0" />
                       {(formData.visibilityCampaignIds?.length ?? 0) === 0 ? (
-                        <span className="text-xs text-ink/30 italic">All campaigns (no restriction)</span>
+                        <span className="text-xs text-ink/35 italic">All campaigns (no restriction)</span>
                       ) : (
                         <div className="flex flex-wrap gap-1">
                           {formData.visibilityCampaignIds.map((cId: string) => {
@@ -962,7 +962,7 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
 
               {/* Summary banner */}
               {(formData.visibilityEraIds?.length > 0 || formData.visibilityCampaignIds?.length > 0) && (
-                <div className="text-xs bg-gold/5 border border-gold/10 rounded-md px-3 py-2 text-ink/60 flex items-start gap-2">
+                <div className="text-xs bg-gold/5 border border-gold/15 rounded-md px-3 py-2 text-ink/65 flex items-start gap-2">
                   <Eye className="w-3 h-3 text-gold mt-0.5 shrink-0" />
                   <span>
                     {formData.visibilityCampaignIds?.length > 0
@@ -974,15 +974,15 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
             </CardContent>
           </Card>
 
-          <Card className="border-gold/10 bg-card/60">
+          <Card className="border-gold/15 bg-card/60">
             <CardHeader className="pb-2">
               <CardTitle className="label-text text-gold flex items-center gap-2">
                 <ImageIcon className="w-4 h-4" /> Article Images
               </CardTitle>
-              <p className="text-xs text-ink/40 mt-0.5">Adjust how each image is cropped and positioned across different views.</p>
+              <p className="text-xs text-ink/45 mt-0.5">Adjust how each image is cropped and positioned across different views.</p>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="bg-background/60 rounded-lg border border-gold/10 overflow-hidden p-4">
+              <div className="bg-background/60 rounded-lg border border-gold/15 overflow-hidden p-4">
                 <ClassImageEditor
                   imageUrl={formData.imageUrl || ''}
                   onImageUrlChange={(val) => setFormData({ ...formData, imageUrl: val })}
@@ -1005,8 +1005,8 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                 />
               </div>
 
-              <div className="space-y-6 pt-4 border-t border-gold/10">
-                <label className="label-text text-ink/40 flex items-center gap-2 mb-2">
+              <div className="space-y-6 pt-4 border-t border-gold/15">
+                <label className="label-text text-ink/45 flex items-center gap-2 mb-2">
                   <Tags className="w-3 h-3" /> Lore Tags
                 </label>
                 {tagGroups.map(group => {
@@ -1015,7 +1015,7 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
 
                   return (
                     <div key={group.id} className="space-y-2">
-                      <label className="label-text text-ink/60 uppercase tracking-widest">{group.name}</label>
+                      <label className="label-text text-ink/65 uppercase tracking-widest">{group.name}</label>
                       <div className="flex flex-wrap gap-1.5">
                         {groupTags.map(tag => {
                           const isSelected = formData.tags?.includes(tag.id);
@@ -1029,8 +1029,8 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                                 setFormData({ ...formData, tags: newTags });
                               }}
                               className={`px-2 py-1 text-[10px] font-bold uppercase tracking-widest transition-colors border ${isSelected
-                                  ? 'bg-gold text-white border-gold shadow-[0_0_10px_rgba(212,175,55,0.3)] scale-105'
-                                  : 'bg-background/50 text-ink/60 border-gold/20 hover:border-gold/50'
+                                  ? 'bg-gold text-[var(--primary-foreground)] border-gold shadow-[0_0_10px_rgba(212,175,55,0.3)] scale-105'
+                                  : 'bg-background/50 text-ink/65 border-gold/25 hover:border-gold/55'
                                 }`}
                             >
                               {tag.name}
@@ -1046,7 +1046,7 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                 )}
               </div>
 
-              <div className="pt-4 border-t border-gold/10 space-y-4">
+              <div className="pt-4 border-t border-gold/15 space-y-4">
                 <p className="label-text text-gold">Template Data</p>
 
                 {/* Character Template */}
@@ -1054,34 +1054,34 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                   <>
                     <div className="grid grid-cols-2 gap-2">
                       <div className="space-y-1">
-                        <label className="label-text text-ink/40">Race</label>
+                        <label className="label-text text-ink/45">Race</label>
                         <Input value={formData.metadata.race} onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, race: e.target.value } })} className="h-8 text-xs" />
                       </div>
                       <div className="space-y-1">
-                        <label className="label-text text-ink/40">Alignment</label>
+                        <label className="label-text text-ink/45">Alignment</label>
                         <Input value={formData.metadata.alignment} onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, alignment: e.target.value } })} className="h-8 text-xs" />
                       </div>
                     </div>
                     <div className="space-y-1">
-                      <label className="label-text text-ink/40">Occupation</label>
+                      <label className="label-text text-ink/45">Occupation</label>
                       <Input value={formData.metadata.occupation} onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, occupation: e.target.value } })} className="h-8 text-xs" />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div className="space-y-1">
-                        <label className="label-text text-ink/40">Gender</label>
+                        <label className="label-text text-ink/45">Gender</label>
                         <Input value={formData.metadata.gender} onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, gender: e.target.value } })} className="h-8 text-xs" />
                       </div>
                       <div className="space-y-1">
-                        <label className="label-text text-ink/40">Pronouns</label>
+                        <label className="label-text text-ink/45">Pronouns</label>
                         <Input value={formData.metadata.pronouns} onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, pronouns: e.target.value } })} className="h-8 text-xs" />
                       </div>
                     </div>
                     <div className="space-y-1">
-                      <label className="label-text text-ink/40">Life Status</label>
+                      <label className="label-text text-ink/45">Life Status</label>
                       <select
                         value={formData.metadata.lifeStatus}
                         onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, lifeStatus: e.target.value } })}
-                        className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background text-xs"
+                        className="w-full h-8 px-2 rounded-md border border-gold/15 bg-background text-xs"
                       >
                         <option value="Alive">Alive</option>
                         <option value="Dead">Dead</option>
@@ -1096,28 +1096,28 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                 {(formData.category === 'building' || formData.category === 'settlement' || formData.category === 'geography' || formData.category === 'country') && (
                   <>
                     <div className="space-y-1">
-                      <label className="text-[10px] text-ink/40">Type</label>
+                      <label className="text-[10px] text-ink/45">Type</label>
                       <Input value={formData.metadata.locationType} onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, locationType: e.target.value } })} className="h-8 text-xs" placeholder="City, Ruins, etc" />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] text-ink/40">Parent Location</label>
+                      <label className="text-[10px] text-ink/45">Parent Location</label>
                       <Input value={formData.metadata.parentLocation} onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, parentLocation: e.target.value } })} className="h-8 text-xs" placeholder="Region, Continent..." />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] text-ink/40">Ruler / Owner</label>
+                      <label className="text-[10px] text-ink/45">Ruler / Owner</label>
                       <Input value={formData.metadata.ruler} onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, ruler: e.target.value } })} className="h-8 text-xs" />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] text-ink/40">Owning Organization</label>
+                      <label className="text-[10px] text-ink/45">Owning Organization</label>
                       <Input value={formData.metadata.owningOrganization} onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, owningOrganization: e.target.value } })} className="h-8 text-xs" />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div className="space-y-1">
-                        <label className="text-[10px] text-ink/40">Population</label>
+                        <label className="text-[10px] text-ink/45">Population</label>
                         <Input value={formData.metadata.population} onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, population: e.target.value } })} className="h-8 text-xs" />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] text-ink/40">Founding Date</label>
+                        <label className="text-[10px] text-ink/45">Founding Date</label>
                         <Input value={formData.metadata.foundingDate} onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, foundingDate: e.target.value } })} className="h-8 text-xs" />
                       </div>
                     </div>
@@ -1128,25 +1128,25 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                 {(formData.category === 'organization' || formData.category === 'religion') && (
                   <>
                     <div className="space-y-1">
-                      <label className="text-[10px] text-ink/40">Leader</label>
+                      <label className="text-[10px] text-ink/45">Leader</label>
                       <Input value={formData.metadata.leader} onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, leader: e.target.value } })} className="h-8 text-xs" />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] text-ink/40">Headquarters</label>
+                      <label className="text-[10px] text-ink/45">Headquarters</label>
                       <Input value={formData.metadata.headquarters} onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, headquarters: e.target.value } })} className="h-8 text-xs" />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] text-ink/40">Motto</label>
+                      <label className="text-[10px] text-ink/45">Motto</label>
                       <Input value={formData.metadata.motto} onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, motto: e.target.value } })} className="h-8 text-xs italic" />
                     </div>
                     {formData.category === 'religion' && (
                       <>
                         <div className="space-y-1">
-                          <label className="text-[10px] text-ink/40">Domains</label>
+                          <label className="text-[10px] text-ink/45">Domains</label>
                           <Input value={formData.metadata.domains} onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, domains: e.target.value } })} className="h-8 text-xs" />
                         </div>
                         <div className="space-y-1">
-                          <label className="text-[10px] text-ink/40">Holy Symbol</label>
+                          <label className="text-[10px] text-ink/45">Holy Symbol</label>
                           <Input value={formData.metadata.holySymbol} onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, holySymbol: e.target.value } })} className="h-8 text-xs" />
                         </div>
                       </>

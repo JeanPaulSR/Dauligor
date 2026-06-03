@@ -314,18 +314,18 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
   if (!article) return <div className="text-center py-20 font-serif italic">This article has been lost to time.</div>;
 
   const PreviewBanner = isStaff && (
-    <div className={`flex items-center gap-3 px-4 py-2.5 rounded-lg border text-sm ${previewCampaign ? 'bg-primary/10 border-primary/30 text-primary' : 'bg-gold/5 border-gold/10 text-ink/40'}`}>
+    <div className={`flex items-center gap-3 px-4 py-2.5 rounded-lg border text-sm ${previewCampaign ? 'bg-primary/10 border-primary/30 text-primary' : 'bg-gold/5 border-gold/15 text-ink/45'}`}>
       <Eye className="w-4 h-4 shrink-0 text-gold" />
       <span className="label-text uppercase tracking-widest text-[10px] shrink-0">
         {previewCampaign ? `Previewing as: ${previewCampaign.name}` : 'Preview as Campaign:'}
       </span>
       <div className="flex-grow max-w-[220px]">
         <Popover>
-          <PopoverTrigger className="flex items-center justify-between w-full h-7 px-2 rounded border border-gold/10 bg-background/50 hover:bg-background/80 hover:border-gold/30 transition-colors text-left text-xs font-normal">
+          <PopoverTrigger className="flex items-center justify-between w-full h-7 px-2 rounded border border-gold/15 bg-background/50 hover:bg-background/80 hover:border-gold/35 transition-colors text-left text-xs font-normal">
             <span className="truncate">
               {previewCampaign ? previewCampaign.name : "None (Staff View)"}
             </span>
-            <ChevronDown className="w-3 h-3 text-ink/30 shrink-0" />
+            <ChevronDown className="w-3 h-3 text-ink/35 shrink-0" />
           </PopoverTrigger>
           <PopoverContent className="w-56 p-0" align="start">
             <Command>
@@ -386,8 +386,8 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
         <div className="max-w-6xl mx-auto space-y-8 pb-20 relative px-4">
           {PreviewBanner}
           <div className="text-center py-32 space-y-4 animate-in fade-in duration-300">
-            <Globe className="w-16 h-16 text-gold/10 mx-auto" />
-            <h2 className="font-serif text-xl text-ink/40 italic">This article is not available in your current campaign.</h2>
+            <Globe className="w-16 h-16 text-gold/15 mx-auto" />
+            <h2 className="font-serif text-xl text-ink/45 italic">This article is not available in your current campaign.</h2>
           </div>
         </div>
       );
@@ -397,8 +397,8 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
         <div className="max-w-6xl mx-auto space-y-8 pb-20 relative px-4">
           {PreviewBanner}
           <div className="text-center py-32 space-y-4 animate-in fade-in duration-300">
-            <Globe className="w-16 h-16 text-gold/10 mx-auto" />
-            <h2 className="font-serif text-xl text-ink/40 italic">This article belongs to a different era.</h2>
+            <Globe className="w-16 h-16 text-gold/15 mx-auto" />
+            <h2 className="font-serif text-xl text-ink/45 italic">This article belongs to a different era.</h2>
           </div>
         </div>
       );
@@ -447,7 +447,7 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
         {/* Hover Quick-Preview Popover */}
         {hoveredArticleId && hoveredArticleData && (
           <div
-            className="fixed z-[9999] w-72 bg-card border border-gold/20 rounded-xl shadow-2xl overflow-hidden pointer-events-none animate-in fade-in zoom-in-95 duration-150"
+            className="fixed z-[9999] w-72 bg-card border border-gold/25 rounded-xl shadow-2xl overflow-hidden pointer-events-none animate-in fade-in zoom-in-95 duration-150"
             style={{ left: Math.min(hoverPos.x + 16, window.innerWidth - 300), top: hoverPos.y - 10 }}
           >
             {hoveredArticleData.imageUrl && (
@@ -464,7 +464,7 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
               <p className="label-text text-gold text-[10px] uppercase tracking-widest">{hoveredArticleData.category}</p>
               <p className="font-serif font-semibold text-ink leading-tight">{hoveredArticleData.title}</p>
               {hoveredArticleData.excerpt && (
-                <p className="text-xs text-ink/60 italic line-clamp-3 mt-1">{hoveredArticleData.excerpt}</p>
+                <p className="text-xs text-ink/65 italic line-clamp-3 mt-1">{hoveredArticleData.excerpt}</p>
               )}
             </div>
           </div>
@@ -475,20 +475,20 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
 
         {/* Header Actions */}
         <div className="flex items-center justify-between bg-card/80 backdrop-blur-md border border-gold/15 p-3 rounded-xl shadow-lg">
-          <Button variant="ghost" onClick={() => navigate('/wiki')} className="text-ink/60">
+          <Button variant="ghost" onClick={() => navigate('/wiki')} className="text-ink/65">
             <ChevronLeft className="w-4 h-4 mr-2" /> Back to Lore
           </Button>
 
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" className="text-ink/40 hover:text-primary" onClick={() => window.print()}>
+            <Button variant="ghost" size="icon" className="text-ink/45 hover:text-primary" onClick={() => window.print()}>
               <Printer className="w-4 h-4" />
             </Button>
-            <Button variant="ghost" size="icon" className="text-ink/40 hover:text-gold">
+            <Button variant="ghost" size="icon" className="text-ink/45 hover:text-gold">
               <Share2 className="w-4 h-4" />
             </Button>
             {canEdit && (
               <>
-                <Button variant="outline" onClick={() => navigate(`/wiki/edit/${id}`)} className="border-gold/20 text-gold hover:bg-gold/5">
+                <Button variant="outline" onClick={() => navigate(`/wiki/edit/${id}`)} className="border-gold/25 text-gold hover:bg-gold/5">
                   <Edit className="w-4 h-4 mr-2" /> Edit Article
                 </Button>
                 {(userProfile?.role === 'admin' || userProfile?.role === 'co-dm') && (
@@ -517,32 +517,32 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
 
           <div className="p-6 md:p-10 space-y-8">
             {/* Title & Header Section */}
-            <div className="space-y-4 text-center pb-6 border-b border-gold/10">
+            <div className="space-y-4 text-center pb-6 border-b border-gold/15">
               <div className="flex items-center justify-center gap-2 flex-wrap">
                 <CategoryIcon className="w-4 h-4 text-gold" />
                 <span className="label-text text-gold text-xs">{article.category}</span>
                 {article.folder && (
                   <>
-                    <span className="text-ink/30 text-xs">/</span>
-                    <span className="label-text text-ink/50 text-xs">{article.folder}</span>
+                    <span className="text-ink/35 text-xs">/</span>
+                    <span className="label-text text-ink/55 text-xs">{article.folder}</span>
                   </>
                 )}
                 {parentArticle && (
                   <>
-                    <span className="text-ink/30 text-xs">/</span>
+                    <span className="text-ink/35 text-xs">/</span>
                     <Link to={`/wiki/article/${parentArticle.id}`} className="label-text text-gold hover:underline text-xs">
                       {parentArticle.title}
                     </Link>
                   </>
                 )}
                 {article.status === 'draft' && (
-                  <Badge variant="outline" className="border-gold/40 text-gold bg-gold/5 text-[10px] ml-2">DRAFT</Badge>
+                  <Badge variant="outline" className="border-gold/45 text-gold bg-gold/5 text-[10px] ml-2">DRAFT</Badge>
                 )}
               </div>
 
-              <h1 className="text-4xl md:text-5xl font-serif font-bold text-center tracking-wide text-gold/90 drop-shadow-sm">{article.title}</h1>
+              <h1 className="text-4xl md:text-5xl font-serif font-bold text-center tracking-wide text-gold/95 drop-shadow-sm">{article.title}</h1>
               {article.excerpt && (
-                <p className="text-lg md:text-xl font-serif italic text-ink/70 text-center max-w-2xl mx-auto leading-relaxed border-t border-b border-gold/10 py-3 mt-4">
+                <p className="text-lg md:text-xl font-serif italic text-ink/75 text-center max-w-2xl mx-auto leading-relaxed border-t border-b border-gold/15 py-3 mt-4">
                   "{article.excerpt}"
                 </p>
               )}
@@ -555,7 +555,7 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
                   ref={contentRef}
                   onMouseOver={handleContentMouseOver}
                   onMouseOut={handleContentMouseOut}
-                  className="prose prose-invert max-w-none prose-gold leading-relaxed font-sans text-ink/90"
+                  className="prose prose-invert max-w-none prose-gold leading-relaxed font-sans text-ink/95"
                 >
                   <BBCodeRenderer content={article.content} viewContext={viewContext} />
                 </div>
@@ -590,7 +590,7 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
                             <CardContent className="p-4 space-y-4">
                               <div className="flex items-start gap-4">
                                 <div className="mt-1">
-                                  {isRevealedToMe || isStaff ? <Unlock className="w-4 h-4 text-primary" /> : <Lock className="w-4 h-4 text-ink/40" />}
+                                  {isRevealedToMe || isStaff ? <Unlock className="w-4 h-4 text-primary" /> : <Lock className="w-4 h-4 text-ink/45" />}
                                 </div>
                                 <div className="flex-grow space-y-1">
                                   <div className="flex items-center gap-2 flex-wrap">
@@ -646,11 +646,11 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
                     <h2 className="label-text text-gold flex items-center gap-2">
                       <LinkIcon className="w-4 h-4" /> Mentioned In
                     </h2>
-                    <div className="flex flex-col gap-2 border-l-2 border-gold/20 pl-4">
+                    <div className="flex flex-col gap-2 border-l-2 border-gold/25 pl-4">
                       {mentions.map((mention) => (
                         <Link key={mention.id} to={`/wiki/article/${mention.id}`} className="text-gold hover:underline flex items-center gap-2">
                           <span className="font-serif italic">{mention.title}</span>
-                          <Badge variant="outline" className="border-gold/20 text-gold/60 text-[10px] scale-75 transform origin-left">
+                          <Badge variant="outline" className="border-gold/25 text-gold/65 text-[10px] scale-75 transform origin-left">
                             {mention.category}
                           </Badge>
                         </Link>
@@ -662,8 +662,8 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
                 {/* Unified Metadata / Details Card at the bottom of main column */}
                 {(hasMetadata || article.updatedAt || article.authorId) && (
                   <div className="mt-12">
-                    <Card className="border-gold/20 bg-gold/5 shadow-xl rounded">
-                      <CardHeader className="p-0 border-b border-gold/10">
+                    <Card className="border-gold/25 bg-gold/5 shadow-xl rounded">
+                      <CardHeader className="p-0 border-b border-gold/15">
                         <Button 
                           variant="ghost" 
                           onClick={() => setIsMetadataExpanded(!isMetadataExpanded)}
@@ -672,37 +672,37 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
                           <span className="label-text text-gold flex items-center gap-2 font-serif">
                             <Info className="w-4 h-4" /> Quick Reference & Metadata
                           </span>
-                          <ChevronDown className={`w-4 h-4 text-gold/60 transition-transform duration-200 ${isMetadataExpanded ? '' : '-rotate-90'}`} />
+                          <ChevronDown className={`w-4 h-4 text-gold/65 transition-transform duration-200 ${isMetadataExpanded ? '' : '-rotate-90'}`} />
                         </Button>
                       </CardHeader>
                       {isMetadataExpanded && (
                         <CardContent className="p-0">
-                          <div className="grid md:grid-cols-2 lg:grid-cols-3 divide-x divide-y divide-gold/10 animate-in fade-in duration-200">
+                          <div className="grid md:grid-cols-2 lg:grid-cols-3 divide-x divide-y divide-gold/15 animate-in fade-in duration-200">
                             {/* Dynamic Metadata Fields */}
                             {article.metadata && Object.entries(article.metadata).map(([key, value]) => {
                               if (!value) return null;
                               return (
                                 <div key={key} className="px-6 py-4 flex flex-col gap-1">
-                                  <span className="label-text text-[10px] tracking-wider uppercase text-ink/40">{key.replace(/([A-Z])/g, ' $1')}</span>
-                                  <span className="body-text text-sm text-ink/80">{value as string}</span>
+                                  <span className="label-text text-[10px] tracking-wider uppercase text-ink/45">{key.replace(/([A-Z])/g, ' $1')}</span>
+                                  <span className="body-text text-sm text-ink/85">{value as string}</span>
                                 </div>
                               );
                             })}
 
                             {/* System Metadata */}
                             <div className="px-6 py-4 flex flex-col gap-1">
-                              <span className="label-text text-ink/40 flex items-center gap-1">
+                              <span className="label-text text-ink/45 flex items-center gap-1">
                                 <Calendar className="w-3 h-3" /> Updated
                               </span>
-                              <span className="body-text text-sm text-ink/80">
+                              <span className="body-text text-sm text-ink/85">
                                 {new Date(article.updatedAt).toLocaleDateString()}
                               </span>
                             </div>
                             <div className="px-6 py-4 flex flex-col gap-1">
-                              <span className="label-text text-ink/40 flex items-center gap-1">
+                              <span className="label-text text-ink/45 flex items-center gap-1">
                                 <User className="w-3 h-3" /> Chronicler
                               </span>
-                              <span className="body-text text-sm text-ink/80">
+                              <span className="body-text text-sm text-ink/85">
                                 {article.authorId === userProfile?.id ? 'You' : 'Archive Staff'}
                               </span>
                             </div>
@@ -716,10 +716,10 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
 
               {/* Right Sidebar Column - collapsing if there's no info */}
               {hasSidebarContent && (
-                <div className="lg:col-span-1 space-y-6 bg-card/60 backdrop-blur-md p-5 rounded-xl border border-gold/10 h-fit select-none">
+                <div className="lg:col-span-1 space-y-6 bg-card/60 backdrop-blur-md p-5 rounded-xl border border-gold/15 h-fit select-none">
                   {/* Card Image */}
                   {article.cardImageUrl && (
-                    <div className="rounded-lg overflow-hidden border border-gold/10 shadow-lg">
+                    <div className="rounded-lg overflow-hidden border border-gold/15 shadow-lg">
                       <img 
                         src={article.cardImageUrl} 
                         alt={article.title} 
@@ -732,10 +732,10 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
                   {/* Tag Cloud */}
                   {hasTags && (
                     <div className="pt-2 space-y-2">
-                      <h4 className="text-[10px] font-bold uppercase tracking-widest text-gold/60">Tags</h4>
+                      <h4 className="text-[10px] font-bold uppercase tracking-widest text-gold/65">Tags</h4>
                       <div className="flex flex-wrap gap-1.5">
                         {article.tags?.map((tag: string) => (
-                          <Badge key={tag} variant="outline" className="bg-ink/5 border-transparent text-ink/40 hover:bg-ink/10 cursor-default text-[10px]">
+                          <Badge key={tag} variant="outline" className="bg-ink/5 border-transparent text-ink/45 hover:bg-ink/15 cursor-default text-[10px]">
                             <Tag className="w-3 h-3 mr-1" /> {tag}
                           </Badge>
                         ))}

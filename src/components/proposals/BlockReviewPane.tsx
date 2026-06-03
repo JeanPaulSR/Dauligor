@@ -123,10 +123,10 @@ export function OperationBadge({ operation }: { operation: ReviewOperation }) {
 export function StatusBadge({ status }: { status: ReviewStatus }) {
   const classes: Record<ReviewStatus, string> = {
     draft: 'bg-blood/10 text-blood border-blood/30',
-    pending: 'bg-gold/10 text-gold border-gold/30',
+    pending: 'bg-gold/15 text-gold border-gold/35',
     approved: 'bg-emerald-700/10 text-emerald-700 border-emerald-700/30',
     rejected: 'bg-blood/10 text-blood border-blood/30',
-    withdrawn: 'bg-ink/5 text-ink/50 border-ink/20',
+    withdrawn: 'bg-ink/5 text-ink/55 border-ink/25',
   };
   return (
     <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded border ${classes[status]}`}>
@@ -163,13 +163,13 @@ export function FieldDiff({
       <div>
         <p className="text-sm text-blood/80 mb-3">Approving this <b>deletes</b> the entry below.</p>
         {entries.length === 0 ? (
-          <p className="text-sm text-ink/50 italic">No further detail.</p>
+          <p className="text-sm text-ink/55 italic">No further detail.</p>
         ) : (
           <dl className="space-y-2.5">
             {entries.map(([k, v]) => (
               <div key={k} className="text-sm">
                 <dt className="text-[10px] uppercase tracking-widest text-ink/45">{humanizeFieldLabel(k)}</dt>
-                <dd className="text-ink/70 mt-0.5"><FriendlyValue fieldKey={k} value={v} refNames={refNames} entityType={revision.entity_type} /></dd>
+                <dd className="text-ink/75 mt-0.5"><FriendlyValue fieldKey={k} value={v} refNames={refNames} entityType={revision.entity_type} /></dd>
               </div>
             ))}
           </dl>
@@ -190,7 +190,7 @@ export function FieldDiff({
     return (
       <div className="space-y-4">
         {changedKeys.length === 0 ? (
-          <p className="text-sm text-ink/50 italic">No field changes (only metadata differs).</p>
+          <p className="text-sm text-ink/55 italic">No field changes (only metadata differs).</p>
         ) : (
           <dl className="space-y-2.5">
             {changedKeys.map((k) => (
@@ -211,14 +211,14 @@ export function FieldDiff({
         )}
         {sameKeys.length > 0 && (
           <details className="text-sm">
-            <summary className="cursor-pointer text-xs text-ink/45 hover:text-ink/70">
+            <summary className="cursor-pointer text-xs text-ink/45 hover:text-ink/75">
               {sameKeys.length} unchanged field{sameKeys.length === 1 ? '' : 's'}
             </summary>
             <dl className="space-y-2 mt-2 opacity-70">
               {sameKeys.map((k) => (
                 <div key={k}>
-                  <dt className="text-[10px] uppercase tracking-widest text-ink/40">{humanizeFieldLabel(k)}</dt>
-                  <dd className="text-ink/60 mt-0.5"><FriendlyValue fieldKey={k} value={after[k]} refNames={refNames} entityType={revision.entity_type} /></dd>
+                  <dt className="text-[10px] uppercase tracking-widest text-ink/45">{humanizeFieldLabel(k)}</dt>
+                  <dd className="text-ink/65 mt-0.5"><FriendlyValue fieldKey={k} value={after[k]} refNames={refNames} entityType={revision.entity_type} /></dd>
                 </div>
               ))}
             </dl>
@@ -233,13 +233,13 @@ export function FieldDiff({
   return (
     <div>
       {entries.length === 0 ? (
-        <p className="text-sm text-ink/50 italic">No details beyond the name.</p>
+        <p className="text-sm text-ink/55 italic">No details beyond the name.</p>
       ) : (
         <dl className="space-y-2.5">
           {entries.map(([k, v]) => (
-            <div key={k} className="text-sm rounded p-2.5 border border-gold/10">
+            <div key={k} className="text-sm rounded p-2.5 border border-gold/15">
               <dt className="text-[10px] uppercase tracking-widest text-ink/45">{humanizeFieldLabel(k)}</dt>
-              <dd className="mt-1 text-ink/80"><FriendlyValue fieldKey={k} value={v} refNames={refNames} entityType={revision.entity_type} /></dd>
+              <dd className="mt-1 text-ink/85"><FriendlyValue fieldKey={k} value={v} refNames={refNames} entityType={revision.entity_type} /></dd>
             </div>
           ))}
         </dl>
@@ -334,17 +334,17 @@ export function BlockReviewPane({
   const actions = sel && renderRevisionActions ? renderRevisionActions(sel) : null;
 
   return (
-    <div className={`flex flex-col md:flex-row border-t border-gold/10 ${minHeightClass}`}>
+    <div className={`flex flex-col md:flex-row border-t border-gold/15 ${minHeightClass}`}>
       {/* Left rail — changes grouped by type */}
-      <div className={`md:w-72 shrink-0 border-b md:border-b-0 md:border-r border-gold/10 bg-gold/[0.03] overflow-y-auto min-h-0 ${scrollMaxHeightClass}`}>
+      <div className={`md:w-72 shrink-0 border-b md:border-b-0 md:border-r border-gold/15 bg-gold/[0.03] overflow-y-auto min-h-0 ${scrollMaxHeightClass}`}>
         {loading ? (
-          <p className="text-ink/50 italic text-center py-12 text-sm">Loading…</p>
+          <p className="text-ink/55 italic text-center py-12 text-sm">Loading…</p>
         ) : revisions.length === 0 ? (
-          <p className="text-ink/50 italic text-center py-12 text-sm">{emptyLabel}</p>
+          <p className="text-ink/55 italic text-center py-12 text-sm">{emptyLabel}</p>
         ) : (
           groups.map(([type, items]) => (
             <div key={type}>
-              <p className="px-3 pt-3 pb-1 text-[10px] uppercase tracking-widest text-gold/70">
+              <p className="px-3 pt-3 pb-1 text-[10px] uppercase tracking-widest text-gold/75">
                 {ENTITY_LABEL[type]} · {items.length}
               </p>
               {items.map((p) => (
@@ -353,7 +353,7 @@ export function BlockReviewPane({
                   type="button"
                   onClick={() => setSelId(p.id)}
                   className={`w-full text-left px-3 py-2 flex items-center gap-2 border-l-2 transition-colors ${
-                    p.id === selId ? 'bg-gold/10 border-gold' : 'border-transparent hover:bg-gold/5'
+                    p.id === selId ? 'bg-gold/15 border-gold' : 'border-transparent hover:bg-gold/5'
                   }`}
                 >
                   <OperationBadge operation={p.operation} />
@@ -380,7 +380,7 @@ export function BlockReviewPane({
                 <Button size="xs" variant="outline" onClick={() => go(-1)} disabled={idx <= 0} className="px-2">
                   <ChevronLeft className="w-3.5 h-3.5" />
                 </Button>
-                <span className="text-[11px] text-ink/50 tabular-nums px-1">{idx + 1} / {revisions.length}</span>
+                <span className="text-[11px] text-ink/55 tabular-nums px-1">{idx + 1} / {revisions.length}</span>
                 <Button size="xs" variant="outline" onClick={() => go(1)} disabled={idx >= revisions.length - 1} className="px-2">
                   <ChevronRight className="w-3.5 h-3.5" />
                 </Button>
@@ -389,7 +389,7 @@ export function BlockReviewPane({
             {/* Per-revision actions sit at the TOP so they're reachable
                 immediately — no scrolling past a long field diff to find them. */}
             {actions && (
-              <div className="flex flex-wrap gap-2 pb-3 border-b border-gold/10">
+              <div className="flex flex-wrap gap-2 pb-3 border-b border-gold/15">
                 {actions}
               </div>
             )}
@@ -400,8 +400,8 @@ export function BlockReviewPane({
               </p>
             )}
             {sel.notes_from_proposer && (
-              <div className="p-3 rounded bg-gold/5 border border-gold/10 text-sm">
-                <p className="text-[10px] uppercase tracking-widest text-gold/70 mb-1">Notes from proposer</p>
+              <div className="p-3 rounded bg-gold/5 border border-gold/15 text-sm">
+                <p className="text-[10px] uppercase tracking-widest text-gold/75 mb-1">Notes from proposer</p>
                 <p className="whitespace-pre-wrap">{sel.notes_from_proposer}</p>
               </div>
             )}
@@ -415,7 +415,7 @@ export function BlockReviewPane({
             <FieldDiff revision={sel} refNames={refNames} />
           </div>
         ) : (
-          <p className="text-ink/50 italic text-center py-16">Select a change on the left to review it.</p>
+          <p className="text-ink/55 italic text-center py-16">Select a change on the left to review it.</p>
         )}
       </div>
     </div>

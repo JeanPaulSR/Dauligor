@@ -86,7 +86,7 @@ export function GrantSpellsConfigEditor({
 
       {cfg.resolverKind === 'explicit' ? (
         <div className="space-y-1">
-          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">
+          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/65">
             Spells {cfg.mode === 'choice' ? '(player picks from this pool)' : '(all granted)'}
           </Label>
           <EntityPicker
@@ -99,7 +99,7 @@ export function GrantSpellsConfigEditor({
         </div>
       ) : (
         <div className="space-y-1">
-          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">
+          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/65">
             Source Rule {cfg.mode === 'choice' ? '(player picks from rule matches)' : '(all matches granted)'}
           </Label>
           <EntityPicker
@@ -115,20 +115,20 @@ export function GrantSpellsConfigEditor({
 
       {cfg.mode === 'choice' ? (
         <div className="space-y-1">
-          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Choice Count</Label>
+          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/65">Choice Count</Label>
           <input
             type="number"
             min={1}
             value={cfg.count}
             onChange={e => updateField({ count: Math.max(1, Number(e.target.value) || 1) })}
-            className="w-24 h-9 px-3 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+            className="w-24 h-9 px-3 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm"
           />
-          <p className="text-[10px] text-ink/40">Player picks this many spells from the pool above.</p>
+          <p className="text-[10px] text-ink/45">Player picks this many spells from the pool above.</p>
         </div>
       ) : null}
 
       <div className="space-y-1">
-        <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Counts as a Spell of Class</Label>
+        <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/65">Counts as a Spell of Class</Label>
         <EntityPicker
           entities={classEntities}
           selectedIds={cfg.countsAsClassId ? [cfg.countsAsClassId] : []}
@@ -137,14 +137,14 @@ export function GrantSpellsConfigEditor({
           single
           maxHeightClass="max-h-28"
         />
-        <p className="text-[10px] text-ink/40">
+        <p className="text-[10px] text-ink/45">
           Determines spellcasting ability + slot pool. Leave empty for grants from feats / items / backgrounds —
           the spell will use whichever spellcasting class is active when cast.
         </p>
       </div>
 
       <div className="space-y-2">
-        <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Preparation</Label>
+        <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/65">Preparation</Label>
         <div className="grid grid-cols-1 gap-1.5">
           <ToggleRow
             label="Always prepared"
@@ -168,11 +168,11 @@ export function GrantSpellsConfigEditor({
       </div>
 
       <div className="space-y-1">
-        <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Default Preparation Mode</Label>
+        <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/65">Default Preparation Mode</Label>
         <select
           value={cfg.preparationMode}
           onChange={e => updateField({ preparationMode: e.target.value })}
-          className="w-full h-9 px-3 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+          className="w-full h-9 px-3 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm"
         >
           {PREP_MODES.map(m => (
             <option key={m.value} value={m.value}>{m.label}</option>
@@ -220,7 +220,7 @@ export function ExtendSpellListConfigEditor({
   return (
     <div className="space-y-4">
       <div className="space-y-1">
-        <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Source</Label>
+        <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/65">Source</Label>
         <select
           value={cfg.resolverKind}
           onChange={e => {
@@ -229,7 +229,7 @@ export function ExtendSpellListConfigEditor({
             else if (kind === 'explicit') updateField({ resolver: { kind: 'explicit', spellIds: cfg.resolver.spellIds || [] } });
             else updateField({ resolver: { kind: 'spellList', classId: cfg.resolver.classId || '' } });
           }}
-          className="w-full h-9 px-3 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+          className="w-full h-9 px-3 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm"
         >
           <option value="rule">From a Rule</option>
           <option value="spellList">Copy another class's spell list</option>
@@ -239,7 +239,7 @@ export function ExtendSpellListConfigEditor({
 
       {cfg.resolverKind === 'rule' ? (
         <div className="space-y-1">
-          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Rule</Label>
+          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/65">Rule</Label>
           <EntityPicker
             entities={ruleEntities}
             selectedIds={cfg.resolver.ruleId ? [cfg.resolver.ruleId] : []}
@@ -251,7 +251,7 @@ export function ExtendSpellListConfigEditor({
         </div>
       ) : cfg.resolverKind === 'spellList' ? (
         <div className="space-y-1">
-          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Source Class</Label>
+          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/65">Source Class</Label>
           <EntityPicker
             entities={classEntities}
             selectedIds={cfg.resolver.classId ? [cfg.resolver.classId] : []}
@@ -260,13 +260,13 @@ export function ExtendSpellListConfigEditor({
             single
             maxHeightClass="max-h-28"
           />
-          <p className="text-[10px] text-ink/40">
+          <p className="text-[10px] text-ink/45">
             Adds every spell from this class's master spell list. (Divine Soul Sorcerer copies Cleric's list.)
           </p>
         </div>
       ) : (
         <div className="space-y-1">
-          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Spells</Label>
+          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/65">Spells</Label>
           <EntityPicker
             entities={spellEntities}
             selectedIds={cfg.resolver.spellIds || []}
@@ -278,7 +278,7 @@ export function ExtendSpellListConfigEditor({
       )}
 
       <div className="space-y-2">
-        <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Apply To</Label>
+        <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/65">Apply To</Label>
         <div className="space-y-1">
           {SCOPE_OPTIONS.map(opt => {
             const active = cfg.scope === opt.value;
@@ -287,7 +287,7 @@ export function ExtendSpellListConfigEditor({
                 key={opt.value}
                 className={cn(
                   'flex gap-2 px-3 py-2 rounded border cursor-pointer transition-colors',
-                  active ? 'border-gold/60 bg-gold/[0.06]' : 'border-gold/15 hover:border-gold/30',
+                  active ? 'border-gold/65 bg-gold/[0.06]' : 'border-gold/15 hover:border-gold/35',
                 )}
               >
                 <input
@@ -309,7 +309,7 @@ export function ExtendSpellListConfigEditor({
 
       {cfg.scope === 'specific' ? (
         <div className="space-y-1">
-          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Target Class</Label>
+          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/65">Target Class</Label>
           <EntityPicker
             entities={classEntities}
             selectedIds={cfg.scopeClassId ? [cfg.scopeClassId] : []}
@@ -400,7 +400,7 @@ function ToggleRow({
   onChange: (next: boolean) => void;
 }) {
   return (
-    <label className="flex gap-2 px-3 py-2 rounded border border-gold/15 hover:border-gold/30 cursor-pointer">
+    <label className="flex gap-2 px-3 py-2 rounded border border-gold/15 hover:border-gold/35 cursor-pointer">
       <input
         type="checkbox"
         className="mt-1"
@@ -429,7 +429,7 @@ function ModeAndResolverPicker({
   return (
     <div className="grid grid-cols-2 gap-3">
       <div className="space-y-1">
-        <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Mode</Label>
+        <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/65">Mode</Label>
         <div className="flex gap-1.5">
           {(['fixed', 'choice'] as const).map(m => (
             <button
@@ -439,8 +439,8 @@ function ModeAndResolverPicker({
               className={cn(
                 'flex-1 h-9 rounded border text-xs font-bold uppercase tracking-wide transition-colors',
                 mode === m
-                  ? 'border-gold/60 bg-gold/15 text-gold'
-                  : 'border-gold/15 text-ink/55 hover:border-gold/30 hover:text-gold/80',
+                  ? 'border-gold/65 bg-gold/15 text-gold'
+                  : 'border-gold/15 text-ink/55 hover:border-gold/35 hover:text-gold/85',
               )}
             >
               {m === 'fixed' ? 'Fixed (auto-grant)' : 'Choice (player picks)'}
@@ -449,7 +449,7 @@ function ModeAndResolverPicker({
         </div>
       </div>
       <div className="space-y-1">
-        <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Source</Label>
+        <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/65">Source</Label>
         <div className="flex gap-1.5">
           {(['explicit', 'rule'] as const).map(k => (
             <button
@@ -459,8 +459,8 @@ function ModeAndResolverPicker({
               className={cn(
                 'flex-1 h-9 rounded border text-xs font-bold uppercase tracking-wide transition-colors',
                 resolverKind === k
-                  ? 'border-gold/60 bg-gold/15 text-gold'
-                  : 'border-gold/15 text-ink/55 hover:border-gold/30 hover:text-gold/80',
+                  ? 'border-gold/65 bg-gold/15 text-gold'
+                  : 'border-gold/15 text-ink/55 hover:border-gold/35 hover:text-gold/85',
               )}
             >
               {k === 'explicit' ? 'Specific Spells' : 'From a Rule'}

@@ -100,17 +100,17 @@ export default function SpellcastingTypeEditor({ userProfile }: { userProfile: a
       <div className="lg:col-span-1 space-y-6">
         <div className="space-y-2">
             <h2 className="label-text text-gold shrink-0">Spellcasting Type Creator</h2>
-            <p className="text-ink/60 font-serif italic">Define the scaling mathematical formula for slot determination (e.g. 1 * level vs floor(0.5 * level)).</p>
+            <p className="text-ink/65 font-serif italic">Define the scaling mathematical formula for slot determination (e.g. 1 * level vs floor(0.5 * level)).</p>
         </div>
 
-        <form onSubmit={handleSave} className="space-y-4 bg-card/50 p-6 rounded-lg border border-gold/10">
+        <form onSubmit={handleSave} className="space-y-4 bg-card/50 p-6 rounded-lg border border-gold/15">
           <div className="space-y-2">
             <label className="field-label">Display Name</label>
             <Input
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="e.g. Full-Caster"
-              className="h-9 bg-background/50 border-gold/10"
+              className="h-9 bg-background/50 border-gold/15"
               required
             />
           </div>
@@ -121,7 +121,7 @@ export default function SpellcastingTypeEditor({ userProfile }: { userProfile: a
               value={identifier}
               onChange={e => setIdentifier(e.target.value)}
               placeholder={slugify(name)}
-              className="h-9 bg-background/50 border-gold/10 placeholder:text-ink/20 font-mono"
+              className="h-9 bg-background/50 border-gold/15 placeholder:text-ink/25 font-mono"
             />
           </div>
 
@@ -131,7 +131,7 @@ export default function SpellcastingTypeEditor({ userProfile }: { userProfile: a
               value={foundryName}
               onChange={e => setFoundryName(e.target.value)}
               placeholder="e.g. full, half"
-              className="h-9 bg-background/50 border-gold/10 font-mono text-xs"
+              className="h-9 bg-background/50 border-gold/15 font-mono text-xs"
             />
           </div>
 
@@ -141,9 +141,9 @@ export default function SpellcastingTypeEditor({ userProfile }: { userProfile: a
               value={formula}
               onChange={e => setFormula(e.target.value)}
               placeholder="e.g. 1 * level, floor(0.5 * level)"
-              className="h-9 bg-background/50 border-gold/10 font-mono text-xs"
+              className="h-9 bg-background/50 border-gold/15 font-mono text-xs"
             />
-            <p className="text-[9px] text-gold/60 italic">Use 'level' as variable. Supported: floor(), ceil()</p>
+            <p className="text-[9px] text-gold/65 italic">Use 'level' as variable. Supported: floor(), ceil()</p>
           </div>
 
           <div className="flex gap-2 pt-2">
@@ -151,7 +151,7 @@ export default function SpellcastingTypeEditor({ userProfile }: { userProfile: a
               {editingItem ? 'Save Changes' : 'Create'}
             </Button>
             {editingItem && (
-              <Button type="button" variant="outline" onClick={resetForm} className="border-gold/20 text-gold/60 hover:text-gold hover:bg-gold/10">
+              <Button type="button" variant="outline" onClick={resetForm} className="border-gold/25 text-gold/65 hover:text-gold hover:bg-gold/15">
                 Cancel
               </Button>
             )}
@@ -164,12 +164,12 @@ export default function SpellcastingTypeEditor({ userProfile }: { userProfile: a
           {items.map(item => (
             <Card
               key={item.id}
-              className={`border-gold/10 bg-card/40 hover:bg-card/60 transition-all cursor-pointer group ${editingItem?.id === item.id ? 'ring-1 ring-gold shadow-sm' : ''}`}
+              className={`border-gold/15 bg-card/40 hover:bg-card/60 transition-all cursor-pointer group ${editingItem?.id === item.id ? 'ring-1 ring-gold shadow-sm' : ''}`}
               onClick={() => startEdit(item)}
             >
               <CardContent className="p-4 flex items-start gap-4">
-                <div className="w-10 h-10 rounded border border-gold/10 bg-background flex items-center justify-center shrink-0">
-                  <Calculator className="w-4 h-4 text-gold/60" />
+                <div className="w-10 h-10 rounded border border-gold/15 bg-background flex items-center justify-center shrink-0">
+                  <Calculator className="w-4 h-4 text-gold/65" />
                 </div>
 
                 <div className="flex-1 min-w-0">
@@ -182,11 +182,11 @@ export default function SpellcastingTypeEditor({ userProfile }: { userProfile: a
                     )}
                   </div>
                   <div className="mt-1 flex flex-col gap-1">
-                    <div className="flex items-center gap-1.5 font-mono text-[9px] text-gold/70">
-                      <span className="text-ink/40">Foundry:</span> {item.foundry_name || item.foundryName || '-'}
+                    <div className="flex items-center gap-1.5 font-mono text-[9px] text-gold/75">
+                      <span className="text-ink/45">Foundry:</span> {item.foundry_name || item.foundryName || '-'}
                     </div>
-                    <div className="flex items-center gap-1.5 font-mono text-[9px] text-gold/70">
-                      <span className="text-ink/40">Formula:</span> {item.formula || '-'}
+                    <div className="flex items-center gap-1.5 font-mono text-[9px] text-gold/75">
+                      <span className="text-ink/45">Formula:</span> {item.formula || '-'}
                     </div>
                   </div>
                 </div>
@@ -194,9 +194,9 @@ export default function SpellcastingTypeEditor({ userProfile }: { userProfile: a
             </Card>
           ))}
           {items.length === 0 && (
-            <div className="sm:col-span-2 p-12 border border-dashed border-gold/20 rounded-xl text-center">
-              <Calculator className="w-8 h-8 text-gold/20 mx-auto mb-3" />
-              <p className="text-ink/40 font-serif italic text-sm">No spellcasting types defined yet.</p>
+            <div className="sm:col-span-2 p-12 border border-dashed border-gold/25 rounded-xl text-center">
+              <Calculator className="w-8 h-8 text-gold/25 mx-auto mb-3" />
+              <p className="text-ink/45 font-serif italic text-sm">No spellcasting types defined yet.</p>
             </div>
           )}
         </div>

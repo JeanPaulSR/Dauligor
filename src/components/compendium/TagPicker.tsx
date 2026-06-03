@@ -112,27 +112,27 @@ export default function TagPicker({ tags, tagGroups, selectedIds, onChange, hint
 
   if (tags.length === 0) {
     return (
-      <div className="border border-gold/10 rounded-md p-4 bg-background/20">
-        <p className="text-xs text-ink/40 italic">{emptyHint}</p>
+      <div className="border border-gold/15 rounded-md p-4 bg-background/20">
+        <p className="text-xs text-ink/45 italic">{emptyHint}</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-3 border border-gold/10 rounded-md p-4 bg-background/20">
+    <div className="space-y-3 border border-gold/15 rounded-md p-4 bg-background/20">
       <div className="relative">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/40" />
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/45" />
         <Input
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           placeholder="Filter tags…"
-          className="h-8 pl-8 pr-7 text-xs bg-background/50 border-gold/10 focus:border-gold"
+          className="h-8 pl-8 pr-7 text-xs bg-background/50 border-gold/15 focus:border-gold"
         />
         {filter && (
           <button
             type="button"
             onClick={() => setFilter('')}
-            className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 text-ink/40 hover:text-ink"
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 text-ink/45 hover:text-ink"
             title="Clear filter"
           >
             <X className="w-3 h-3" />
@@ -142,7 +142,7 @@ export default function TagPicker({ tags, tagGroups, selectedIds, onChange, hint
 
       {selectedTagsOrdered.length > 0 && (
         <div className="space-y-1.5">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-ink/50">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-ink/55">
             Selected ({selectedTagsOrdered.length})
           </span>
           <div className="flex flex-wrap gap-1.5">
@@ -151,7 +151,7 @@ export default function TagPicker({ tags, tagGroups, selectedIds, onChange, hint
                 key={tag.id}
                 type="button"
                 onClick={() => toggleTag(tag.id)}
-                className="rounded border border-gold/60 bg-gold/15 text-gold px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide hover:bg-gold/25 inline-flex items-center gap-1"
+                className="rounded border border-gold/65 bg-gold/15 text-gold px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide hover:bg-gold/25 inline-flex items-center gap-1"
                 title="Remove from selection"
               >
                 {tag.parentTagId && <span className="opacity-60">↳</span>}
@@ -165,12 +165,12 @@ export default function TagPicker({ tags, tagGroups, selectedIds, onChange, hint
 
       <div className="space-y-1.5">
         {groupData.length === 0 ? (
-          <p className="text-xs text-ink/40 italic">No tags match "{filter}".</p>
+          <p className="text-xs text-ink/45 italic">No tags match "{filter}".</p>
         ) : groupData.map(({ group, groupTags, matching, selectedInGroup }) => {
           const isOpen = isFiltering || openGroups.has(group.id);
           const visibleTags = isFiltering ? matching : groupTags;
           return (
-            <div key={group.id} className="border border-gold/10 rounded bg-background/30 overflow-hidden">
+            <div key={group.id} className="border border-gold/15 rounded bg-background/30 overflow-hidden">
               <button
                 type="button"
                 onClick={() => { if (!isFiltering) toggleGroup(group.id); }}
@@ -182,20 +182,20 @@ export default function TagPicker({ tags, tagGroups, selectedIds, onChange, hint
                 <span className="flex items-center gap-2 min-w-0">
                   {!isFiltering && (
                     isOpen
-                      ? <ChevronDown className="w-3.5 h-3.5 text-ink/50 shrink-0" />
-                      : <ChevronRight className="w-3.5 h-3.5 text-ink/50 shrink-0" />
+                      ? <ChevronDown className="w-3.5 h-3.5 text-ink/55 shrink-0" />
+                      : <ChevronRight className="w-3.5 h-3.5 text-ink/55 shrink-0" />
                   )}
-                  <span className="text-[10px] uppercase tracking-widest font-bold text-ink/70 truncate">
+                  <span className="text-[10px] uppercase tracking-widest font-bold text-ink/75 truncate">
                     {group.name}
                   </span>
                 </span>
                 <span className="flex items-center gap-2 shrink-0">
                   {selectedInGroup > 0 && (
-                    <span className="text-[10px] font-bold tabular-nums bg-gold/15 text-gold border border-gold/30 px-1.5 py-0.5">
+                    <span className="text-[10px] font-bold tabular-nums bg-gold/15 text-gold border border-gold/35 px-1.5 py-0.5">
                       {selectedInGroup}
                     </span>
                   )}
-                  <span className="text-[10px] text-ink/40 tabular-nums">
+                  <span className="text-[10px] text-ink/45 tabular-nums">
                     {isFiltering && matching.length !== groupTags.length
                       ? `${matching.length} / ${groupTags.length}`
                       : groupTags.length}
@@ -240,8 +240,8 @@ export default function TagPicker({ tags, tagGroups, selectedIds, onChange, hint
                       className={cn(
                         'rounded border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-colors',
                         active
-                          ? 'border-gold/60 bg-gold/15 text-gold'
-                          : 'border-gold/15 text-ink/55 hover:border-gold/30 hover:text-gold/80',
+                          ? 'border-gold/65 bg-gold/15 text-gold'
+                          : 'border-gold/15 text-ink/55 hover:border-gold/35 hover:text-gold/85',
                       )}
                     >
                       {tag.name}
@@ -266,8 +266,8 @@ export default function TagPicker({ tags, tagGroups, selectedIds, onChange, hint
                                 className={cn(
                                   'inline-flex items-center justify-center h-[22px] w-[18px] -ml-0.5 rounded border transition-colors',
                                   expanded
-                                    ? 'border-gold/50 bg-gold/15 text-gold'
-                                    : 'border-gold/20 bg-background/40 text-ink/60 hover:border-gold/40 hover:text-gold',
+                                    ? 'border-gold/55 bg-gold/15 text-gold'
+                                    : 'border-gold/25 bg-background/40 text-ink/65 hover:border-gold/45 hover:text-gold',
                                 )}
                                 title={expanded
                                   ? `Hide ${root.name} subtags (${subs.length})`
@@ -294,7 +294,7 @@ export default function TagPicker({ tags, tagGroups, selectedIds, onChange, hint
                           key={`drawer-${root.id}`}
                           className="ml-3 pl-3 border-l border-gold/15 flex flex-wrap items-center gap-1.5"
                         >
-                          <span className="text-[10px] uppercase tracking-widest text-ink/40 mr-1">
+                          <span className="text-[10px] uppercase tracking-widest text-ink/45 mr-1">
                             {root.name}:
                           </span>
                           {subs.map(renderChip)}
@@ -321,7 +321,7 @@ export default function TagPicker({ tags, tagGroups, selectedIds, onChange, hint
         })}
       </div>
 
-      <p className="text-[10px] text-ink/40">{hint}</p>
+      <p className="text-[10px] text-ink/45">{hint}</p>
     </div>
   );
 }

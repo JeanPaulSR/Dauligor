@@ -106,7 +106,7 @@ const SOURCE_LABELS: Record<string, string> = {
 
 const SOURCE_COLORS: Record<string, string> = {
   dnd5e: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  custom: 'bg-gold/20 text-gold border-gold/30',
+  custom: 'bg-gold/25 text-gold border-gold/35',
   imported: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
 };
 
@@ -701,7 +701,7 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
 
   if (!isAdmin) {
     return (
-      <div className="text-center py-20 text-ink/40 font-serif italic">
+      <div className="text-center py-20 text-ink/45 font-serif italic">
         Access Denied. Admins only.
       </div>
     );
@@ -728,7 +728,7 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
               Status Conditions
             </h1>
           </div>
-          <p className="text-ink/60 font-serif italic">
+          <p className="text-ink/65 font-serif italic">
             Define the status conditions available in your game — default D&amp;D 5e conditions,
             custom homebrew conditions, and imported Foundry condition types.
           </p>
@@ -737,7 +737,7 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
               <span className="text-[10px] font-bold uppercase tracking-widest border border-blue-500/30 bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded">
                 {dnd5eCount} D&amp;D 5e
               </span>
-              <span className="text-[10px] font-bold uppercase tracking-widest border border-gold/30 bg-gold/10 text-gold px-2 py-0.5 rounded">
+              <span className="text-[10px] font-bold uppercase tracking-widest border border-gold/35 bg-gold/15 text-gold px-2 py-0.5 rounded">
                 {customCount} Custom / Imported
               </span>
             </div>
@@ -753,7 +753,7 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
               type="button"
               variant="outline"
               onClick={() => setShowImport(true)}
-              className="border-gold/20 text-gold/70 hover:text-gold hover:bg-gold/10 gap-2 text-xs"
+              className="border-gold/25 text-gold/75 hover:text-gold hover:bg-gold/15 gap-2 text-xs"
             >
               <Upload className="w-3.5 h-3.5" /> Import JSON
             </Button>
@@ -780,7 +780,7 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
       <Tabs
         value={activeTab}
         onValueChange={(v) => setActiveTab(v as 'conditions' | 'categories')}
-        className="border-b border-gold/10 pb-4"
+        className="border-b border-gold/15 pb-4"
       >
         <AccentTabsList
           active={activeTab}
@@ -820,7 +820,7 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
             width: '40px',
             minBreakpoint: 'always',
             render: (item) => (
-              <div className="w-8 h-8 rounded border border-gold/10 bg-background/50 flex items-center justify-center overflow-hidden">
+              <div className="w-8 h-8 rounded border border-gold/15 bg-background/50 flex items-center justify-center overflow-hidden">
                 {item.image_url ? (
                   <img
                     src={item.image_url}
@@ -828,7 +828,7 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
                     className="w-full h-full object-contain p-0.5"
                   />
                 ) : (
-                  <HeartPulse className="w-3.5 h-3.5 text-gold/40" />
+                  <HeartPulse className="w-3.5 h-3.5 text-gold/45" />
                 )}
               </div>
             ),
@@ -854,13 +854,13 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
                   (Array.isArray(item.changes) && item.changes.length > 0)) && (
                   <div className="flex items-center gap-2 flex-wrap mt-0.5">
                     {Array.isArray(item.implied_ids) && item.implied_ids.length > 0 && (
-                      <span className="text-[9px] text-ink/40 uppercase tracking-widest font-bold truncate">
+                      <span className="text-[9px] text-ink/45 uppercase tracking-widest font-bold truncate">
                         → {item.implied_ids.join(', ')}
                       </span>
                     )}
                     {Array.isArray(item.changes) && item.changes.length > 0 && (
-                      <span className="text-[9px] text-ink/40 font-bold uppercase tracking-widest flex items-center gap-0.5">
-                        <Zap className="w-2.5 h-2.5 text-gold/30" />
+                      <span className="text-[9px] text-ink/45 font-bold uppercase tracking-widest flex items-center gap-0.5">
+                        <Zap className="w-2.5 h-2.5 text-gold/35" />
                         {item.changes.length} change
                         {item.changes.length !== 1 ? 's' : ''}
                       </span>
@@ -877,7 +877,7 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
             sortable: true,
             minBreakpoint: 'sm',
             render: (item) => (
-              <div className="text-[10px] text-ink/50 font-mono truncate">
+              <div className="text-[10px] text-ink/55 font-mono truncate">
                 {item.identifier}
               </div>
             ),
@@ -905,7 +905,7 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
             sortable: true,
             minBreakpoint: 'md',
             render: (item) => (
-              <div className="text-[10px] text-ink/70 truncate">
+              <div className="text-[10px] text-ink/75 truncate">
                 {(item.category_id && categoryNameById.get(item.category_id)) || '—'}
               </div>
             ),
@@ -917,7 +917,7 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
             sortable: true,
             minBreakpoint: 'sm',
             render: (item) => (
-              <div className="text-[10px] text-ink/60 font-mono">
+              <div className="text-[10px] text-ink/65 font-mono">
                 {typeof item.order === 'number' ? item.order : '—'}
               </div>
             ),
@@ -966,8 +966,8 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
             loading={loading}
             emptyState={
               <div className="p-12 text-center">
-                <HeartPulse className="w-8 h-8 text-gold/20 mx-auto mb-3" />
-                <p className="text-ink/40 font-serif italic text-sm mb-4">
+                <HeartPulse className="w-8 h-8 text-gold/25 mx-auto mb-3" />
+                <p className="text-ink/45 font-serif italic text-sm mb-4">
                   No status conditions defined yet.
                 </p>
                 <Button
@@ -1231,7 +1231,7 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
                             Conditions this one implies (e.g., Paralyzed → Incapacitated).
                           </p>
                           {items.filter((i) => i.id !== editingItem?.id).length === 0 ? (
-                            <p className="text-[11px] text-ink/30 italic">
+                            <p className="text-[11px] text-ink/35 italic">
                               No other conditions to choose from yet.
                             </p>
                           ) : (
@@ -1249,8 +1249,8 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
                                       onClick={() => toggleImplied(i.identifier)}
                                       className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded border transition-colors ${
                                         active
-                                          ? 'bg-gold/20 border-gold/40 text-gold'
-                                          : 'bg-card border-gold/10 text-ink/40 hover:text-ink/70'
+                                          ? 'bg-gold/25 border-gold/45 text-gold'
+                                          : 'bg-card border-gold/15 text-ink/45 hover:text-ink/75'
                                       }`}
                                     >
                                       {i.name}
@@ -1269,7 +1269,7 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
                               variant="ghost"
                               size="sm"
                               onClick={addChange}
-                              className="h-7 px-2 text-gold/70 hover:text-gold text-xs"
+                              className="h-7 px-2 text-gold/75 hover:text-gold text-xs"
                             >
                               <Plus className="w-3.5 h-3.5 mr-1" /> Add change
                             </Button>
@@ -1278,7 +1278,7 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
                             Active Effect changes applied when this condition is set.
                           </p>
                           {(form.changes || []).length === 0 ? (
-                            <p className="text-[11px] text-ink/30 italic">
+                            <p className="text-[11px] text-ink/35 italic">
                               No mechanical changes defined.
                             </p>
                           ) : (
@@ -1292,7 +1292,7 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
                                         updateChange(idx, { key: e.target.value })
                                       }
                                       placeholder="system.attributes.movement.walk"
-                                      className="h-8 bg-background/50 border-gold/10 font-mono text-xs placeholder:text-ink/20"
+                                      className="h-8 bg-background/50 border-gold/15 font-mono text-xs placeholder:text-ink/25"
                                     />
                                     <div className="flex gap-1">
                                       <Select
@@ -1301,7 +1301,7 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
                                           updateChange(idx, { mode: Number(v) })
                                         }
                                       >
-                                        <SelectTrigger className="h-8 bg-background/50 border-gold/10 text-xs flex-1">
+                                        <SelectTrigger className="h-8 bg-background/50 border-gold/15 text-xs flex-1">
                                           <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -1318,7 +1318,7 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
                                           updateChange(idx, { value: e.target.value })
                                         }
                                         placeholder="value"
-                                        className="h-8 bg-background/50 border-gold/10 font-mono text-xs flex-1 placeholder:text-ink/20"
+                                        className="h-8 bg-background/50 border-gold/15 font-mono text-xs flex-1 placeholder:text-ink/25"
                                       />
                                     </div>
                                   </div>
@@ -1371,16 +1371,16 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
       {/* ── Import JSON modal ───────────────────────────────────────────────── */}
       {showImport && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-card border border-gold/20 rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[80vh]">
+          <div className="bg-card border border-gold/25 rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[80vh]">
 
-            <div className="flex items-center justify-between p-6 border-b border-gold/10 shrink-0">
+            <div className="flex items-center justify-between p-6 border-b border-gold/15 shrink-0">
               <div>
                 <h2 className="text-lg font-serif font-bold text-ink">
                   Import Status Conditions
                 </h2>
-                <p className="text-xs text-ink/50 mt-0.5">
+                <p className="text-xs text-ink/55 mt-0.5">
                   Paste a Foundry{' '}
-                  <code className="font-mono text-gold/70">conditionTypes</code>{' '}
+                  <code className="font-mono text-gold/75">conditionTypes</code>{' '}
                   object or an array of condition objects
                 </p>
               </div>
@@ -1389,7 +1389,7 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
                 variant="ghost"
                 size="sm"
                 onClick={() => { setShowImport(false); setImportJson(''); setImportError(''); }}
-                className="h-8 w-8 p-0 text-ink/40 hover:text-ink"
+                className="h-8 w-8 p-0 text-ink/45 hover:text-ink"
               >
                 <X className="w-4 h-4" />
               </Button>
@@ -1400,23 +1400,23 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
                 value={importJson}
                 onChange={e => { setImportJson(e.target.value); setImportError(''); }}
                 placeholder={`{\n  "blinded": { "label": "Blinded", "icon": "...", "reference": "..." },\n  "charmed": { "label": "Charmed", ... }\n}`}
-                className="w-full h-64 bg-background/50 border border-gold/10 rounded-lg p-3 font-mono text-xs text-ink/80 resize-none focus:outline-none focus:ring-1 focus:ring-gold/30 placeholder:text-ink/20"
+                className="w-full h-64 bg-background/50 border border-gold/15 rounded-lg p-3 font-mono text-xs text-ink/85 resize-none focus:outline-none focus:ring-1 focus:ring-gold/35 placeholder:text-ink/25"
               />
               {importError && (
                 <p className="text-xs text-red-400 font-semibold">{importError}</p>
               )}
-              <div className="bg-gold/5 border border-gold/10 rounded-lg p-3 space-y-1.5">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-gold/60">Accepted Formats</p>
-                <p className="text-[11px] text-ink/50 font-mono">
+              <div className="bg-gold/5 border border-gold/15 rounded-lg p-3 space-y-1.5">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gold/65">Accepted Formats</p>
+                <p className="text-[11px] text-ink/55 font-mono">
                   {'{ "blinded": { "label": "...", "icon": "...", "reference": "..." } }'}
                 </p>
-                <p className="text-[11px] text-ink/50 font-mono">
+                <p className="text-[11px] text-ink/55 font-mono">
                   {'[ { "id": "blinded", "name": "Blinded", "img": "..." } ]'}
                 </p>
               </div>
             </div>
 
-            <div className="flex gap-2 p-6 border-t border-gold/10 shrink-0">
+            <div className="flex gap-2 p-6 border-t border-gold/15 shrink-0">
               <Button
                 type="button"
                 onClick={handleImportJson}
@@ -1429,7 +1429,7 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
                 type="button"
                 variant="outline"
                 onClick={() => { setShowImport(false); setImportJson(''); setImportError(''); }}
-                className="border-gold/20 text-gold/60 hover:text-gold hover:bg-gold/10"
+                className="border-gold/25 text-gold/65 hover:text-gold hover:bg-gold/15"
               >
                 Cancel
               </Button>

@@ -186,7 +186,7 @@ export function SubclassPickerDialog({
         </DialogHeader>
 
         <div className="relative">
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/40" />
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/45" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -198,7 +198,7 @@ export function SubclassPickerDialog({
             <button
               type="button"
               onClick={() => setSearch('')}
-              className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-ink/40 hover:text-ink"
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-ink/45 hover:text-ink"
               title="Clear filter"
             >
               <X className="w-3 h-3" />
@@ -208,10 +208,10 @@ export function SubclassPickerDialog({
 
         <div className="max-h-[50vh] overflow-y-auto custom-scrollbar -mx-2 px-2">
           {loading ? (
-            <p className="text-center py-8 text-sm text-ink/40 italic">Loading…</p>
+            <p className="text-center py-8 text-sm text-ink/45 italic">Loading…</p>
           ) : step === 'class' ? (
             visibleClasses.length === 0 ? (
-              <p className="text-center py-8 text-sm text-ink/40 italic">No classes match.</p>
+              <p className="text-center py-8 text-sm text-ink/45 italic">No classes match.</p>
             ) : (
               <ul className="divide-y divide-gold/5">
                 {visibleClasses.map((c) => (
@@ -227,7 +227,7 @@ export function SubclassPickerDialog({
                           {c.name}
                         </span>
                       </div>
-                      <ChevronRight className="w-4 h-4 text-ink/30 shrink-0" />
+                      <ChevronRight className="w-4 h-4 text-ink/35 shrink-0" />
                     </button>
                   </li>
                 ))}
@@ -235,7 +235,7 @@ export function SubclassPickerDialog({
             )
           ) : visibleSubclasses.length === 0 ? (
             <div className="text-center py-8 space-y-2">
-              <p className="text-sm text-ink/40 italic">
+              <p className="text-sm text-ink/45 italic">
                 {subclasses.length === 0
                   ? 'No subclasses exist for this class yet.'
                   : 'No subclasses match.'}
@@ -262,7 +262,7 @@ export function SubclassPickerDialog({
                     className="w-full flex items-center justify-between gap-3 px-3 py-2 text-left hover:bg-gold/5 transition-colors"
                   >
                     <span className="text-sm font-medium text-ink truncate">{s.name}</span>
-                    <ChevronRight className="w-4 h-4 text-ink/30 shrink-0" />
+                    <ChevronRight className="w-4 h-4 text-ink/35 shrink-0" />
                   </button>
                 </li>
               ))}

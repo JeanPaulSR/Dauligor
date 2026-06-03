@@ -124,7 +124,7 @@ export default function Navbar({
   };
 
   return (
-    <nav className="bg-background border-b border-gold/20 sticky top-0 z-50 shadow-sm">
+    <nav className="bg-background border-b border-gold/25 sticky top-0 z-50 shadow-sm">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
         <div className="flex items-center gap-4">
           {/* Mobile Menu Trigger */}
@@ -134,7 +134,7 @@ export default function Navbar({
             className="px-2" 
             onClick={onMenuClick}
           >
-            <Menu className="w-5 h-5 text-ink/70" />
+            <Menu className="w-5 h-5 text-ink/75" />
           </Button>
 
           <Link to="/" className="flex items-center gap-2 group">
@@ -142,7 +142,7 @@ export default function Navbar({
           </Link>
           
           {user && (
-            <Badge variant="outline" className={`ml-2 uppercase text-[10px] font-bold ${(userProfile?.role === 'admin' || userProfile?.role === 'co-dm') ? 'border-gold text-gold bg-gold/5' : 'border-ink/20 text-ink/40'}`}>
+            <Badge variant="outline" className={`ml-2 uppercase text-[10px] font-bold ${(userProfile?.role === 'admin' || userProfile?.role === 'co-dm') ? 'border-gold text-gold bg-gold/5' : 'border-ink/25 text-ink/45'}`}>
               {(userProfile?.role || 'User').replace('-', ' ')} {previewMode && (userProfile?.role === 'admin' || userProfile?.role === 'co-dm') && '(Preview)'}
             </Badge>
           )}
@@ -155,19 +155,19 @@ export default function Navbar({
               {campaigns.length > 1 ? (
                 <DropdownMenu>
                   <DropdownMenuTrigger render={
-                    <Button variant="outline" size="sm" className="border-gold/20 text-ink/70 hover:text-gold hover:border-gold/50 gap-2 font-serif italic">
+                    <Button variant="outline" size="sm" className="border-gold/25 text-ink/75 hover:text-gold hover:border-gold/55 gap-2 font-serif italic">
                       <Swords className="w-4 h-4 text-gold" />
                       {activeCampaign.name}
                       <ChevronDown className="w-3 h-3 opacity-50" />
                     </Button>
                   } />
                   <DropdownMenuContent align="end" className="w-56">
-                    <div className="px-2 py-1.5 section-label text-gold/60">Switch Campaign</div>
+                    <div className="px-2 py-1.5 section-label text-gold/65">Switch Campaign</div>
                     {campaigns.map((campaign) => (
                       <DropdownMenuItem 
                         key={campaign.id} 
                         onClick={() => handleSwitchCampaign(campaign.id)}
-                        className={`cursor-pointer ${campaign.id === activeCampaign.id ? 'bg-gold/10 text-gold' : ''}`}
+                        className={`cursor-pointer ${campaign.id === activeCampaign.id ? 'bg-gold/15 text-gold' : ''}`}
                       >
                         {campaign.name}
                       </DropdownMenuItem>
@@ -175,8 +175,8 @@ export default function Navbar({
                   </DropdownMenuContent>
                 </DropdownMenu>
               ) : (
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-gold/10 bg-gold/5 text-ink/60 font-serif italic text-sm">
-                  <Swords className="w-4 h-4 text-gold/40" />
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-gold/15 bg-gold/5 text-ink/65 font-serif italic text-sm">
+                  <Swords className="w-4 h-4 text-gold/45" />
                   {activeCampaign.name}
                 </div>
               )}
@@ -188,7 +188,7 @@ export default function Navbar({
               variant="ghost" 
               size="sm" 
               onClick={() => setPreviewMode(!previewMode)}
-              className={`hidden sm:flex items-center gap-2 ${previewMode ? 'text-gold bg-gold/10' : 'text-ink/40'}`}
+              className={`hidden sm:flex items-center gap-2 ${previewMode ? 'text-gold bg-gold/15' : 'text-ink/45'}`}
             >
               {previewMode ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               {previewMode ? 'Exit Preview' : 'User Preview'}
@@ -213,10 +213,10 @@ export default function Navbar({
           {user ? (
             <DropdownMenu>
               <DropdownMenuTrigger render={
-                <Button variant="ghost" className="relative h-10 w-10 rounded-full border border-gold/20">
+                <Button variant="ghost" className="relative h-10 w-10 rounded-full border border-gold/25">
                   <Avatar className="h-9 w-9">
                     <AvatarImage src={userProfile?.avatar_url || undefined} alt={userProfile?.display_name || userProfile?.username || 'User'} />
-                    <AvatarFallback className="bg-gold/10 text-gold">{(userProfile?.display_name || userProfile?.username)?.[0]?.toUpperCase()}</AvatarFallback>
+                    <AvatarFallback className="bg-gold/15 text-gold">{(userProfile?.display_name || userProfile?.username)?.[0]?.toUpperCase()}</AvatarFallback>
                   </Avatar>
                 </Button>
               } />
@@ -226,7 +226,7 @@ export default function Navbar({
                     <p className="font-medium">{userProfile?.display_name || userProfile?.username}</p>
                     <p className="text-xs text-muted-foreground">@{userProfile?.username || 'user'}</p>
                     <div className="flex items-center gap-1 mt-1">
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase font-bold ${(userProfile?.role === 'admin' || userProfile?.role === 'co-dm') ? 'bg-gold/20 text-gold' : 'bg-ink/10 text-ink/40'}`}>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase font-bold ${(userProfile?.role === 'admin' || userProfile?.role === 'co-dm') ? 'bg-gold/25 text-gold' : 'bg-ink/15 text-ink/45'}`}>
                       {(userProfile?.role || 'User').replace('-', ' ')} {previewMode && (userProfile?.role === 'admin' || userProfile?.role === 'co-dm') && '(Preview)'}
                     </span>
                     </div>
@@ -312,7 +312,7 @@ export default function Navbar({
           ) : (
             <Dialog open={isAuthOpen} onOpenChange={setIsAuthOpen}>
               <DialogTrigger render={
-                <Button className="bg-gold hover:bg-gold/90 text-white gap-2">
+                <Button className="bg-gold hover:bg-gold/95 text-[var(--primary-foreground)] gap-2">
                   <LogIn className="w-4 h-4" />
                   Login
                 </Button>
@@ -344,10 +344,10 @@ export default function Navbar({
                     />
                   </div>
                   {error && <p className="text-xs text-blood bg-blood/5 p-2 rounded">{error}</p>}
-                  <Button type="submit" className="w-full bg-gold text-white">
+                  <Button type="submit" className="w-full bg-gold text-[var(--primary-foreground)]">
                     Login
                   </Button>
-                  <div className="text-center text-xs text-ink/40 italic">
+                  <div className="text-center text-xs text-ink/45 italic">
                     GM-managed access only. Contact your DM for credentials.
                   </div>
                 </form>

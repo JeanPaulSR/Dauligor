@@ -245,12 +245,12 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
   };
 
   if (!isStaff) {
-    return <div className="text-center py-20 font-serif italic text-ink/60">Access Denied</div>;
+    return <div className="text-center py-20 font-serif italic text-ink/65">Access Denied</div>;
   }
 
   if (loading) {
     return (
-      <div className="text-center py-20 font-serif italic text-ink/60">
+      <div className="text-center py-20 font-serif italic text-ink/65">
         Loading campaign editor...
       </div>
     );
@@ -260,7 +260,7 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
     <div className="max-w-6xl mx-auto space-y-8 pb-20">
       {/* Header Actions */}
       <div className="page-header">
-        <Button variant="ghost" onClick={() => navigate(-1)} className="text-ink/60 hover:text-gold transition-colors rounded">
+        <Button variant="ghost" onClick={() => navigate(-1)} className="text-ink/65 hover:text-gold transition-colors rounded">
           <ChevronLeft className="w-4 h-4 mr-2" /> Back
         </Button>
         <Button onClick={handleSave} disabled={saving} className="btn-gold-solid gap-2 rounded">
@@ -286,11 +286,11 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
                 }}
                 className={`flex items-center gap-3 px-4 py-3 rounded text-xs lg:text-sm font-bold transition-all text-left border ${
                   isActive 
-                    ? 'bg-gold/15 text-gold border-gold/30 shadow-sm' 
-                    : 'text-ink/60 border-transparent hover:bg-gold/5 hover:text-gold/80'
+                    ? 'bg-gold/15 text-gold border-gold/35 shadow-sm' 
+                    : 'text-ink/65 border-transparent hover:bg-gold/5 hover:text-gold/85'
                 }`}
               >
-                <tab.icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-gold' : 'text-ink/40'}`} />
+                <tab.icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-gold' : 'text-ink/45'}`} />
                 <span>{tab.label}</span>
               </button>
             );
@@ -302,7 +302,7 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
           {activeTab === 'info' && (
             <div className="space-y-6 animate-in fade-in duration-300">
               {/* Campaign Basic Details */}
-              <Card className="border-gold/10 bg-card/60 shadow-xl backdrop-blur-sm rounded">
+              <Card className="border-gold/15 bg-card/60 shadow-xl backdrop-blur-sm rounded">
                 <CardHeader>
                   <CardTitle className="h2-title flex items-center gap-2">
                     <LayoutGrid className="w-5 h-5 text-gold shrink-0" /> Campaign Info
@@ -323,7 +323,7 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
                   <div className="space-y-2">
                     <label className="field-label flex items-center gap-1.5">Description</label>
                     <textarea 
-                      className="w-full min-h-[100px] p-3 rounded border border-gold/10 bg-background/50 hover:border-gold/30 focus:border-gold/40 text-sm italic font-serif leading-relaxed text-ink/80 transition-colors"
+                      className="w-full min-h-[100px] p-3 rounded border border-gold/15 bg-background/50 hover:border-gold/35 focus:border-gold/45 text-sm italic font-serif leading-relaxed text-ink/85 transition-colors"
                       value={formData.description}
                       onChange={e => setFormData({ ...formData, description: e.target.value })}
                       placeholder="A brief overview of the adventure..."
@@ -336,7 +336,7 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
                         <Calendar className="w-3.5 h-3.5 text-gold shrink-0" /> Historical Era
                       </label>
                       <select 
-                        className="w-full h-10 px-3 rounded border border-gold/10 bg-background/50 hover:border-gold/30 text-sm font-serif italic text-ink/80 transition-colors"
+                        className="w-full h-10 px-3 rounded border border-gold/15 bg-background/50 hover:border-gold/35 text-sm font-serif italic text-ink/85 transition-colors"
                         value={formData.eraId}
                         onChange={e => setFormData({ ...formData, eraId: e.target.value })}
                       >
@@ -352,7 +352,7 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
                         <Sparkles className="w-3.5 h-3.5 text-gold shrink-0" /> Recommended Lore
                       </label>
                       <select 
-                        className="w-full h-10 px-3 rounded border border-gold/10 bg-background/50 hover:border-gold/30 text-sm font-serif italic text-ink/80 transition-colors"
+                        className="w-full h-10 px-3 rounded border border-gold/15 bg-background/50 hover:border-gold/35 text-sm font-serif italic text-ink/85 transition-colors"
                         value={formData.recommendedLoreId}
                         onChange={e => setFormData({ ...formData, recommendedLoreId: e.target.value })}
                       >
@@ -363,7 +363,7 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
                       </select>
                     </div>
                   </div>
-                   <div className="space-y-2 pt-2 border-t border-gold/10">
+                   <div className="space-y-2 pt-2 border-t border-gold/15">
                      <label className="field-label flex items-center gap-1.5">
                        <ImageIcon className="w-3.5 h-3.5 text-gold shrink-0" /> Custom Background Image
                      </label>
@@ -377,7 +377,7 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
                </Card>
 
               {/* Improved Player Assignment Design with Users Grid/Tags */}
-              <Card className="border-gold/10 bg-card/60 shadow-xl backdrop-blur-sm rounded">
+              <Card className="border-gold/15 bg-card/60 shadow-xl backdrop-blur-sm rounded">
                 <CardHeader>
                   <CardTitle className="h2-title flex items-center gap-2">
                     <Users className="w-4 h-4 text-gold shrink-0" /> Player Assignment
@@ -391,7 +391,7 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
                           Radix's `asChild`. With asChild the trigger renders its
                           own <button> around the child <Button> → nested buttons
                           (hydration error). render={<Button/>} makes them one. */}
-                      <PopoverTrigger render={<Button variant="outline" className="h-9 border-gold/20 text-gold hover:bg-gold/5 flex items-center gap-2 rounded" />}>
+                      <PopoverTrigger render={<Button variant="outline" className="h-9 border-gold/25 text-gold hover:bg-gold/5 flex items-center gap-2 rounded" />}>
                         <Users className="w-4 h-4" /> Add Player
                       </PopoverTrigger>
                       <PopoverContent className="w-72 p-0" align="start">
@@ -404,12 +404,12 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
                                 const selected = formData.playerIds.includes(u.id);
                                 return (
                                   <CommandItem key={u.id} onSelect={() => handleTogglePlayer(u.id)} className="flex items-center gap-2 cursor-pointer p-2 hover:bg-gold/5 transition-colors rounded">
-                                    <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${selected ? 'bg-gold border-gold' : 'border-gold/30'}`}>
+                                    <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${selected ? 'bg-gold border-gold' : 'border-gold/35'}`}>
                                       {selected && <Check className="w-2.5 h-2.5 text-white" />}
                                     </div>
                                     <div className="flex flex-col min-w-0">
                                       <span className="text-xs truncate font-bold text-ink">{u.displayName}</span>
-                                      <span className="text-[10px] text-ink/40 leading-none">@{u.username}</span>
+                                      <span className="text-[10px] text-ink/45 leading-none">@{u.username}</span>
                                     </div>
                                   </CommandItem>
                                 );
@@ -422,24 +422,24 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
                   </div>
 
                   {/* Active Grid of assigned players */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-1 border border-gold/10 bg-background/50 p-3 rounded">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-1 border border-gold/15 bg-background/50 p-3 rounded">
                     {formData.playerIds.length === 0 ? (
-                      <p className="text-xs text-ink/40 font-serif italic col-span-full">No active players assigned yet.</p>
+                      <p className="text-xs text-ink/45 font-serif italic col-span-full">No active players assigned yet.</p>
                     ) : (
                       formData.playerIds.map(uid => {
                         const u = allUsers.find(u => u.id === uid);
                         if (!u) return null;
                         return (
-                          <div key={uid} className="flex items-center justify-between p-2.5 rounded bg-gold/5 border border-gold/20 hover:border-gold/40 hover:bg-gold/10 transition-all duration-200">
+                          <div key={uid} className="flex items-center justify-between p-2.5 rounded bg-gold/5 border border-gold/25 hover:border-gold/45 hover:bg-gold/15 transition-all duration-200">
                             <div className="flex flex-col min-w-0">
                               <span className="text-xs font-bold text-gold truncate font-serif">{u.displayName}</span>
-                              <span className="text-[9px] text-ink/40">@{u.username}</span>
+                              <span className="text-[9px] text-ink/45">@{u.username}</span>
                             </div>
                             <Button 
                               size="icon" 
                               variant="ghost" 
                               onClick={() => handleTogglePlayer(uid)} 
-                              className="w-6 h-6 hover:bg-blood/10 hover:text-blood text-ink/40 rounded transition-colors"
+                              className="w-6 h-6 hover:bg-blood/10 hover:text-blood text-ink/45 rounded transition-colors"
                             >
                               <X className="w-3.5 h-3.5" />
                             </Button>
@@ -452,7 +452,7 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
               </Card>
 
               {/* Image Display Focusing Editor */}
-              <Card className="border-gold/10 bg-card/60 shadow-xl backdrop-blur-sm rounded">
+              <Card className="border-gold/15 bg-card/60 shadow-xl backdrop-blur-sm rounded">
                 <CardHeader>
                   <CardTitle className="label-text text-gold flex items-center gap-2">
                     <ImageIcon className="w-4 h-4 shrink-0" /> Campaign Images
@@ -460,7 +460,7 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
                   <p className="field-hint mt-0.5">Focus the imagery to match the aesthetic of your campaign views.</p>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="bg-background/60 rounded border border-gold/10 overflow-hidden p-4">
+                  <div className="bg-background/60 rounded border border-gold/15 overflow-hidden p-4">
                     <ClassImageEditor
                       imageUrl={formData.imageUrl || ''}
                       onImageUrlChange={(val) => setFormData({ ...formData, imageUrl: val })}
@@ -488,7 +488,7 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
           )}
 
           {activeTab === 'characters' && (
-            <Card className="border-gold/10 bg-card/60 shadow-xl backdrop-blur-sm rounded">
+            <Card className="border-gold/15 bg-card/60 shadow-xl backdrop-blur-sm rounded">
               <CardHeader>
                 <CardTitle className="h2-title flex items-center gap-2">
                   <Users className="w-5 h-5 text-gold" /> Player Characters
@@ -502,7 +502,7 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
           )}
 
           {activeTab === 'articles' && (
-            <Card className="border-gold/10 bg-card/60 shadow-xl backdrop-blur-sm rounded">
+            <Card className="border-gold/15 bg-card/60 shadow-xl backdrop-blur-sm rounded">
               <CardHeader>
                 <CardTitle className="h2-title flex items-center gap-2">
                   <FileText className="w-5 h-5 text-gold" /> Articles
@@ -516,7 +516,7 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
           )}
 
           {activeTab === 'maps' && (
-            <Card className="border-gold/10 bg-card/60 shadow-xl backdrop-blur-sm rounded">
+            <Card className="border-gold/15 bg-card/60 shadow-xl backdrop-blur-sm rounded">
               <CardHeader>
                 <CardTitle className="h2-title flex items-center gap-2">
                   <MapPin className="w-5 h-5 text-gold" /> Maps
@@ -530,7 +530,7 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
           )}
 
           {activeTab === 'sessions' && (
-            <Card className="border-gold/10 bg-card/60 shadow-xl backdrop-blur-sm rounded">
+            <Card className="border-gold/15 bg-card/60 shadow-xl backdrop-blur-sm rounded">
               <CardHeader>
                 <CardTitle className="h2-title flex items-center gap-2">
                   <Scroll className="w-5 h-5 text-gold" /> Session Notes
@@ -544,7 +544,7 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
           )}
 
           {activeTab === 'players' && (
-            <Card className="border-gold/10 bg-card/60 shadow-xl backdrop-blur-sm rounded">
+            <Card className="border-gold/15 bg-card/60 shadow-xl backdrop-blur-sm rounded">
               <CardHeader>
                 <CardTitle className="h2-title flex items-center gap-2">
                   <Users className="w-5 h-5 text-gold" /> Player Notes
@@ -558,7 +558,7 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
           )}
 
           {activeTab === 'timeline' && (
-            <Card className="border-gold/10 bg-card/60 shadow-xl backdrop-blur-sm rounded">
+            <Card className="border-gold/15 bg-card/60 shadow-xl backdrop-blur-sm rounded">
               <CardHeader>
                 <CardTitle className="h2-title flex items-center gap-2">
                   <History className="w-5 h-5 text-gold" /> Timeline

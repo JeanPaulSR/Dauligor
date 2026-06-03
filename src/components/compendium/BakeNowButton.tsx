@@ -113,7 +113,7 @@ export function BakeNowButton({
           <DialogHeader>
             <DialogTitle>Unsaved Changes</DialogTitle>
           </DialogHeader>
-          <p className="text-ink/80 text-sm font-sans">
+          <p className="text-ink/85 text-sm font-sans">
             You have unsaved changes. Would you like to save first and then bake the
             export? The bake uses whatever's in the database, not what's on screen.
           </p>

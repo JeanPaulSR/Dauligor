@@ -84,17 +84,17 @@ export default function ArmorMechanicsFields({ state, onChange }: Props) {
   const setPrice = (patch: Partial<ItemPrice>) => set('price', { ...state.price, ...patch });
 
   return (
-    <div className="space-y-4 border border-gold/10 rounded-md p-4 bg-background/20">
+    <div className="space-y-4 border border-gold/15 rounded-md p-4 bg-background/20">
       <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Armor Mechanics</h3>
 
       {/* ── AC + DEX CAP + MAGIC BONUS ────────────────────── */}
       <div className="grid md:grid-cols-4 gap-3">
         <div>
-          <Label className="text-[10px] uppercase text-ink/40">Armor Type</Label>
+          <Label className="text-[10px] uppercase text-ink/45">Armor Type</Label>
           <select
             value={state.armorType}
             onChange={(e) => set('armorType', e.target.value)}
-            className="w-full h-10 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+            className="w-full h-10 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm"
           >
             {ARMOR_TYPE_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>{o.label}</option>
@@ -102,56 +102,56 @@ export default function ArmorMechanicsFields({ state, onChange }: Props) {
           </select>
         </div>
         <div>
-          <Label className="text-[10px] uppercase text-ink/40">AC Value</Label>
+          <Label className="text-[10px] uppercase text-ink/45">AC Value</Label>
           <Input
             type="number"
             value={state.armorValue}
             onChange={(e) => set('armorValue', parseInt(e.target.value || '0', 10) || 0)}
-            className="bg-background/50 border-gold/10 focus:border-gold"
+            className="bg-background/50 border-gold/15 focus:border-gold"
             placeholder="10"
           />
         </div>
         <div>
-          <Label className="text-[10px] uppercase text-ink/40">Dex Cap</Label>
+          <Label className="text-[10px] uppercase text-ink/45">Dex Cap</Label>
           <Input
             type="number"
             value={state.armorDex ?? ''}
             onChange={(e) => set('armorDex', e.target.value === '' ? null : parseInt(e.target.value, 10) || 0)}
-            className="bg-background/50 border-gold/10 focus:border-gold"
+            className="bg-background/50 border-gold/15 focus:border-gold"
             placeholder="— = no cap"
           />
         </div>
         <div>
-          <Label className="text-[10px] uppercase text-ink/40">Magic Bonus</Label>
+          <Label className="text-[10px] uppercase text-ink/45">Magic Bonus</Label>
           <Input
             type="number"
             value={state.armorMagicalBonus}
             onChange={(e) => set('armorMagicalBonus', parseInt(e.target.value || '0', 10) || 0)}
-            className="bg-background/50 border-gold/10 focus:border-gold"
+            className="bg-background/50 border-gold/15 focus:border-gold"
             placeholder="0"
           />
         </div>
       </div>
-      <p className="text-[10px] text-ink/40">
+      <p className="text-[10px] text-ink/45">
         Total AC = AC Value + min(Dex modifier, Dex Cap) + Magic Bonus. Shields use AC Value as the bonus to base AC instead.
       </p>
 
       {/* ── STR REQ + STEALTH DISADVANTAGE ────────────────── */}
       <div className="grid md:grid-cols-2 gap-3">
         <div>
-          <Label className="text-[10px] uppercase text-ink/40">STR Requirement</Label>
+          <Label className="text-[10px] uppercase text-ink/45">STR Requirement</Label>
           <Input
             type="number"
             value={state.strength ?? ''}
             onChange={(e) => set('strength', e.target.value === '' ? null : parseInt(e.target.value, 10) || 0)}
-            className="bg-background/50 border-gold/10 focus:border-gold"
+            className="bg-background/50 border-gold/15 focus:border-gold"
             placeholder="— = none"
           />
         </div>
-        <label className="flex items-end justify-between gap-3 border border-gold/10 rounded-md p-3 h-[60px]">
+        <label className="flex items-end justify-between gap-3 border border-gold/15 rounded-md p-3 h-[60px]">
           <div>
-            <Label className="text-[10px] uppercase text-ink/40">Stealth Disadvantage</Label>
-            <p className="text-[10px] text-ink/30 mt-1">Disadvantage on Stealth checks while wearing</p>
+            <Label className="text-[10px] uppercase text-ink/45">Stealth Disadvantage</Label>
+            <p className="text-[10px] text-ink/35 mt-1">Disadvantage on Stealth checks while wearing</p>
           </div>
           <Checkbox
             checked={state.stealth}
@@ -162,31 +162,31 @@ export default function ArmorMechanicsFields({ state, onChange }: Props) {
 
       {/* ── BASE ITEM ─────────────────────────────────────── */}
       <div>
-        <Label className="text-[10px] uppercase text-ink/40">Base Item (SRD)</Label>
+        <Label className="text-[10px] uppercase text-ink/45">Base Item (SRD)</Label>
         <Input
           value={state.baseItem}
           onChange={(e) => set('baseItem', e.target.value)}
           placeholder="e.g. chainmail, plate, leather"
-          className="bg-background/50 border-gold/10 focus:border-gold font-mono text-xs"
+          className="bg-background/50 border-gold/15 focus:border-gold font-mono text-xs"
         />
       </div>
 
       {/* ── WEIGHT + PRICE ─────────────────────────────────── */}
       <div className="grid md:grid-cols-2 gap-3">
         <div>
-          <Label className="text-[10px] uppercase text-ink/40">Weight</Label>
+          <Label className="text-[10px] uppercase text-ink/45">Weight</Label>
           <div className="flex gap-2">
             <Input
               type="number"
               step="0.1"
               value={state.weight.value}
               onChange={(e) => setWeight({ value: parseFloat(e.target.value) || 0 })}
-              className="bg-background/50 border-gold/10 focus:border-gold"
+              className="bg-background/50 border-gold/15 focus:border-gold"
             />
             <select
               value={state.weight.units}
               onChange={(e) => setWeight({ units: e.target.value })}
-              className="h-10 px-3 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm w-20"
+              className="h-10 px-3 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm w-20"
             >
               {WEIGHT_UNIT_OPTIONS.map((u) => (
                 <option key={u} value={u}>{u}</option>
@@ -195,19 +195,19 @@ export default function ArmorMechanicsFields({ state, onChange }: Props) {
           </div>
         </div>
         <div>
-          <Label className="text-[10px] uppercase text-ink/40">Price</Label>
+          <Label className="text-[10px] uppercase text-ink/45">Price</Label>
           <div className="flex gap-2">
             <Input
               type="number"
               step="1"
               value={state.price.value}
               onChange={(e) => setPrice({ value: parseFloat(e.target.value) || 0 })}
-              className="bg-background/50 border-gold/10 focus:border-gold"
+              className="bg-background/50 border-gold/15 focus:border-gold"
             />
             <select
               value={state.price.denomination}
               onChange={(e) => setPrice({ denomination: e.target.value })}
-              className="h-10 px-3 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm w-20"
+              className="h-10 px-3 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm w-20"
             >
               {DENOMINATION_OPTIONS.map((d) => (
                 <option key={d} value={d}>{d}</option>
@@ -220,11 +220,11 @@ export default function ArmorMechanicsFields({ state, onChange }: Props) {
       {/* ── RARITY + ATTUNEMENT ────────────────────────────── */}
       <div className="grid md:grid-cols-2 gap-3">
         <div>
-          <Label className="text-[10px] uppercase text-ink/40">Rarity</Label>
+          <Label className="text-[10px] uppercase text-ink/45">Rarity</Label>
           <select
             value={state.rarity}
             onChange={(e) => set('rarity', e.target.value)}
-            className="w-full h-10 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+            className="w-full h-10 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm"
           >
             {RARITY_OPTIONS.map((r) => (
               <option key={r} value={r}>{r}</option>
@@ -232,11 +232,11 @@ export default function ArmorMechanicsFields({ state, onChange }: Props) {
           </select>
         </div>
         <div>
-          <Label className="text-[10px] uppercase text-ink/40">Attunement</Label>
+          <Label className="text-[10px] uppercase text-ink/45">Attunement</Label>
           <select
             value={state.attunement}
             onChange={(e) => set('attunement', e.target.value)}
-            className="w-full h-10 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+            className="w-full h-10 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm"
           >
             {ATTUNEMENT_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>{o.label}</option>

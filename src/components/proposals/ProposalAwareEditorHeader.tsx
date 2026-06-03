@@ -18,7 +18,7 @@
 // This component primarily exists to (a) lock the proposal-mode
 // container className string in ONE place — every editor needs the
 // exact same `flex items-center justify-between gap-2 pb-2 border-b
-// border-gold/10` and drift between them was a real source of bugs —
+// border-gold/15` and drift between them was a real source of bugs —
 // and (b) template the Back-button render so the icon + size + variant
 // don't get spelled inconsistently.
 //
@@ -79,7 +79,7 @@ export function ProposalAwareEditorHeader({
     <div
       className={
         isProposalMode
-          ? 'flex items-center justify-between gap-2 pb-2 border-b border-gold/10'
+          ? 'flex items-center justify-between gap-2 pb-2 border-b border-gold/15'
           : adminContainerClassName
       }
     >

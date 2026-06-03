@@ -428,7 +428,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
   }, [manualSpellsSearch, spells, draft?.manualSpells]);
 
   if (!canManageRules) {
-    return <div className="text-center py-20 text-ink/70">Access Denied.</div>;
+    return <div className="text-center py-20 text-ink/75">Access Denied.</div>;
   }
 
   // ------- Handlers -------
@@ -1119,14 +1119,14 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
     <div className="h-full flex flex-col gap-2 p-2">
       {/* Consolidated top toolbar: Back link + title chip +
           "How rules work" disclosure trigger + dirty banner. */}
-      <div className="shrink-0 flex items-center gap-3 bg-card p-2 rounded-lg border border-gold/10 shadow-sm flex-wrap">
+      <div className="shrink-0 flex items-center gap-3 bg-card p-2 rounded-lg border border-gold/15 shadow-sm flex-wrap">
         <Link to={backPath}>
           <Button variant="ghost" size="sm" className="h-8 text-gold gap-2 hover:bg-gold/5">
             <ChevronLeft className="w-4 h-4" />
             Back
           </Button>
         </Link>
-        <span className="text-xs font-bold uppercase tracking-[0.18em] text-gold/70 shrink-0">Spell Rules</span>
+        <span className="text-xs font-bold uppercase tracking-[0.18em] text-gold/75 shrink-0">Spell Rules</span>
         <span className="text-[11px] text-ink/45 tabular-nums">{rules.length} rules</span>
         <button
           type="button"
@@ -1148,7 +1148,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
           Keeps the toolbar slim by default; opens to a fixed-height
           strip with the full explainer. */}
       {howOpen ? (
-        <div className="shrink-0 px-4 py-3 bg-background/30 border border-gold/10 rounded-md text-xs text-ink/75 space-y-1.5">
+        <div className="shrink-0 px-4 py-3 bg-background/30 border border-gold/15 rounded-md text-xs text-ink/75 space-y-1.5">
           <p>
             <span className="text-gold font-bold">A rule</span> is a saved spell-curation pattern — a
             <span className="text-gold"> tag query</span> (e.g. "all spells tagged <em>Divine</em> at level 1+")
@@ -1160,8 +1160,8 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
             For classes, application contributes the rule's matches to
             the resolver-driven spell list on the next read. Manual
             additions / exclusions live on the rule itself
-            (<code className="text-gold/80">manual_spells</code> /
-            <code className="text-gold/80">manual_exclusions</code>),
+            (<code className="text-gold/85">manual_spells</code> /
+            <code className="text-gold/85">manual_exclusions</code>),
             not on a separate per-class table.
           </p>
         </div>
@@ -1175,17 +1175,17 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
             top while the rule rows scroll within the remaining
             height. */}
         <Card
-          className="border-gold/20 bg-card/50 overflow-hidden"
+          className="border-gold/25 bg-card/50 overflow-hidden"
           style={{ height: `${paneHeight}px` }}
         >
           <CardContent className="p-0 h-full flex flex-col">
-            <div className="border-b border-gold/10 px-4 py-3 flex items-center justify-between shrink-0">
+            <div className="border-b border-gold/15 px-4 py-3 flex items-center justify-between shrink-0">
               <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">All Rules ({rules.length})</h3>
               <Button
                 type="button"
                 size="sm"
                 onClick={handleNewRule}
-                className="h-7 px-2 text-[10px] uppercase tracking-[0.18em] bg-gold/15 text-gold border border-gold/30 hover:bg-gold/25"
+                className="h-7 px-2 text-[10px] uppercase tracking-[0.18em] bg-gold/15 text-gold border border-gold/35 hover:bg-gold/25"
               >
                 <Plus className="w-3 h-3 mr-1" /> New
               </Button>
@@ -1225,7 +1225,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                       )}>
                         {rule.name}
                       </div>
-                      <div className="text-[10px] text-ink/50">
+                      <div className="text-[10px] text-ink/55">
                         {apps === 0 ? <span className="italic">unapplied</span> : `applied to ${apps}`}
                       </div>
                     </button>
@@ -1241,7 +1241,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
             filters, manual spells, applied-to) stay reachable
             without a page-level scroll. */}
         <Card
-          className="border-gold/20 bg-card/50 overflow-hidden"
+          className="border-gold/25 bg-card/50 overflow-hidden"
           style={{ height: `${paneHeight}px` }}
         >
           <CardContent className="p-0 h-full overflow-y-auto custom-scrollbar">
@@ -1250,7 +1250,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                 Pick a rule from the list, or click <strong>New</strong> to create one.
               </div>
             ) : (
-              <div className="divide-y divide-gold/10">
+              <div className="divide-y divide-gold/15">
                 {/* Header / actions */}
                 <div className="px-6 py-4 flex items-center justify-between gap-3">
                   <div className="flex-1 min-w-0">
@@ -1258,7 +1258,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                       value={draft.name}
                       onChange={e => updateDraft({ name: e.target.value })}
                       placeholder="Rule name (e.g. Divine — Major)"
-                      className="h-9 text-base font-bold bg-background/40 border-gold/20"
+                      className="h-9 text-base font-bold bg-background/40 border-gold/25"
                     />
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
@@ -1268,7 +1268,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                         size="sm"
                         variant="outline"
                         onClick={() => setDeleteDialogOpen(true)}
-                        className="h-8 px-3 text-[10px] uppercase tracking-[0.18em] border-gold/20 text-ink/45 hover:bg-blood/10 hover:text-blood hover:border-blood/40"
+                        className="h-8 px-3 text-[10px] uppercase tracking-[0.18em] border-gold/25 text-ink/45 hover:bg-blood/10 hover:text-blood hover:border-blood/40"
                       >
                         <Trash2 className="w-3 h-3 mr-1" /> Delete
                       </Button>
@@ -1278,7 +1278,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                       size="sm"
                       onClick={handleSave}
                       disabled={saving || !draft.name.trim()}
-                      className="h-8 px-3 text-[10px] uppercase tracking-[0.18em] bg-gold/15 text-gold border border-gold/30 hover:bg-gold/25"
+                      className="h-8 px-3 text-[10px] uppercase tracking-[0.18em] bg-gold/15 text-gold border border-gold/35 hover:bg-gold/25"
                     >
                       <Save className="w-3 h-3 mr-1" /> {saving ? 'Saving…' : draft.id ? 'Save Changes' : 'Save Rule'}
                     </Button>
@@ -1286,12 +1286,12 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                 </div>
 
                 <div className="px-6 py-4 space-y-1">
-                  <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Description</Label>
+                  <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/65">Description</Label>
                   <Input
                     value={draft.description}
                     onChange={e => updateDraft({ description: e.target.value })}
                     placeholder="Short note about what this rule covers"
-                    className="bg-background/40 border-gold/20"
+                    className="bg-background/40 border-gold/25"
                   />
                 </div>
 
@@ -1299,7 +1299,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                 <div className="px-6 py-4 space-y-3">
                   <div className="flex items-center justify-between gap-3">
                     <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Tag Query</h3>
-                    <span className="text-[10px] text-ink/50">
+                    <span className="text-[10px] text-ink/55">
                       <span className="text-gold font-bold">{draftMatchCount}</span> spell{draftMatchCount === 1 ? '' : 's'} match (query + manual)
                     </span>
                   </div>
@@ -1325,7 +1325,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                             'inline-flex items-center rounded border transition-colors',
                             isActive
                               ? 'border-gold bg-gold/15 text-gold'
-                              : 'border-gold/20 bg-card/50 text-ink/65 hover:border-gold/45',
+                              : 'border-gold/25 bg-card/50 text-ink/65 hover:border-gold/45',
                           )}
                         >
                           <button
@@ -1346,8 +1346,8 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                               className={cn(
                                 'px-1.5 py-1 text-[10px] font-bold border-l transition-colors',
                                 isActive
-                                  ? 'border-gold/40 text-gold/70 hover:bg-blood/15 hover:text-blood'
-                                  : 'border-gold/20 text-ink/30 hover:bg-blood/10 hover:text-blood',
+                                  ? 'border-gold/45 text-gold/75 hover:bg-blood/15 hover:text-blood'
+                                  : 'border-gold/25 text-ink/35 hover:bg-blood/10 hover:text-blood',
                               )}
                             >
                               ✕
@@ -1360,7 +1360,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                       type="button"
                       onClick={addClause}
                       title="Add a new clause (OR with existing clauses)"
-                      className="inline-flex items-center gap-1 rounded border border-dashed border-gold/35 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-gold/70 hover:bg-gold/10 hover:border-gold transition-colors"
+                      className="inline-flex items-center gap-1 rounded border border-dashed border-gold/35 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-gold/75 hover:bg-gold/15 hover:border-gold transition-colors"
                     >
                       <Plus className="w-3 h-3" />
                       Add Clause
@@ -1390,8 +1390,8 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                       className={cn(
                         'inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-sm text-[10px] font-black tabular-nums',
                         queryActiveCount > 0
-                          ? 'bg-gold/20 text-gold border border-gold/40'
-                          : 'bg-card border border-gold/15 text-ink/40',
+                          ? 'bg-gold/25 text-gold border border-gold/45'
+                          : 'bg-card border border-gold/15 text-ink/45',
                       )}
                       title={`${queryActiveCount} chip${queryActiveCount === 1 ? '' : 's'} on this clause`}
                     >
@@ -1425,14 +1425,14 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                             keeps its own chevron for granular
                             collapse once the parent is opened. */}
                         <details className="group">
-                          <summary className="cursor-pointer list-none flex items-center justify-between border border-gold/15 rounded-md px-4 py-2 hover:border-gold/30 transition-colors">
-                            <span className="text-xs font-bold uppercase tracking-[0.2em] text-gold/80">
+                          <summary className="cursor-pointer list-none flex items-center justify-between border border-gold/15 rounded-md px-4 py-2 hover:border-gold/35 transition-colors">
+                            <span className="text-xs font-bold uppercase tracking-[0.2em] text-gold/85">
                               Normal Options
                               {queryActiveCount > 0 && (
-                                <span className="ml-2 text-gold/60">({queryActiveCount} chip{queryActiveCount === 1 ? '' : 's'})</span>
+                                <span className="ml-2 text-gold/65">({queryActiveCount} chip{queryActiveCount === 1 ? '' : 's'})</span>
                               )}
                             </span>
-                            <span className="text-[10px] text-ink/40 group-open:rotate-90 transition-transform">▶</span>
+                            <span className="text-[10px] text-ink/45 group-open:rotate-90 transition-transform">▶</span>
                           </summary>
                           <div className="mt-3 pl-1">
                             <SectionFilterPanel
@@ -1464,14 +1464,14 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                             level/school/source/buckets only; tags are
                             opt-in for the longer-tail queries. */}
                         <details className="group">
-                          <summary className="cursor-pointer list-none flex items-center justify-between border border-gold/15 rounded-md px-4 py-2 hover:border-gold/30 transition-colors">
-                            <span className="text-xs font-bold uppercase tracking-[0.2em] text-gold/80">
+                          <summary className="cursor-pointer list-none flex items-center justify-between border border-gold/15 rounded-md px-4 py-2 hover:border-gold/35 transition-colors">
+                            <span className="text-xs font-bold uppercase tracking-[0.2em] text-gold/85">
                               Advanced Options — Tags
                               {Object.keys(activeClause.tagStates ?? {}).length > 0 && (
-                                <span className="ml-2 text-gold/60">({Object.keys(activeClause.tagStates ?? {}).length} selected)</span>
+                                <span className="ml-2 text-gold/65">({Object.keys(activeClause.tagStates ?? {}).length} selected)</span>
                               )}
                             </span>
-                            <span className="text-[10px] text-ink/40 group-open:rotate-90 transition-transform">▶</span>
+                            <span className="text-[10px] text-ink/45 group-open:rotate-90 transition-transform">▶</span>
                           </summary>
                           <div className="mt-4 pl-1">
                             <SectionFilterPanel
@@ -1514,10 +1514,10 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                                 </span>
                               )}
                             </span>
-                            <span className="text-[10px] text-ink/40 group-open:rotate-90 transition-transform">▶</span>
+                            <span className="text-[10px] text-ink/45 group-open:rotate-90 transition-transform">▶</span>
                           </summary>
                           <div className="mt-4 space-y-3 pl-1">
-                            <p className="text-[10px] text-ink/40 leading-relaxed">
+                            <p className="text-[10px] text-ink/45 leading-relaxed">
                               Any spell carrying one of these tags is dropped from this rule's result
                               <em> after </em> the clauses above run — regardless of which clause matched it
                               or what include/exclude chips a tag has inside a clause. Use this for
@@ -1553,7 +1553,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                           </div>
                         </details>
                   </div>
-                  <p className="text-[10px] text-ink/40">
+                  <p className="text-[10px] text-ink/45">
                     The query selects spells by their attributes. Combine sections with AND (a spell must match every section that has any chips picked).
                   </p>
                 </div>
@@ -1565,16 +1565,16 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                       Manual Additions ({draft.manualSpells.length})
                     </h3>
                   </div>
-                  <p className="text-[10px] text-ink/40">
+                  <p className="text-[10px] text-ink/45">
                     Specific spells that always match this rule, even if the tag query doesn't pick them up.
                   </p>
                   <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink/40 pointer-events-none" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink/45 pointer-events-none" />
                     <Input
                       value={manualSpellsSearch}
                       onChange={e => setManualSpellsSearch(e.target.value)}
                       placeholder="Search spells to add…"
-                      className="pl-9 bg-background/40 border-gold/20"
+                      className="pl-9 bg-background/40 border-gold/25"
                       // Suppress the browser's "history" autofill dropdown
                       // on this filter input — the suggestions list is
                       // driven by `manualSpellSuggestions` (spell names
@@ -1590,7 +1590,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                       name="spell-rule-manual-spell-search"
                     />
                     {manualSpellSuggestions.length > 0 ? (
-                      <div className="absolute left-0 right-0 top-full mt-1 z-10 max-h-64 overflow-y-auto bg-card border border-gold/30 rounded-md shadow-lg divide-y divide-gold/10">
+                      <div className="absolute left-0 right-0 top-full mt-1 z-10 max-h-64 overflow-y-auto bg-card border border-gold/35 rounded-md shadow-lg divide-y divide-gold/15">
                         {manualSpellSuggestions.map(s => (
                           <button
                             key={s.id}
@@ -1599,10 +1599,10 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                               updateDraft({ manualSpells: [...draft.manualSpells, s.id] });
                               setManualSpellsSearch('');
                             }}
-                            className="w-full text-left px-3 py-2 text-sm text-ink hover:bg-gold/10 flex items-center justify-between"
+                            className="w-full text-left px-3 py-2 text-sm text-ink hover:bg-gold/15 flex items-center justify-between"
                           >
                             <span className="truncate">{s.name}</span>
-                            <span className="text-[10px] text-ink/50 shrink-0 ml-2">
+                            <span className="text-[10px] text-ink/55 shrink-0 ml-2">
                               {s.level === 0 ? 'C' : `L${s.level}`} · {SCHOOL_LABELS[s.school] || s.school}
                             </span>
                           </button>
@@ -1617,14 +1617,14 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                         return (
                           <span
                             key={id}
-                            className="inline-flex items-center gap-1 rounded-full border border-gold/30 bg-gold/10 pl-2 pr-1 py-0.5 text-[11px] text-gold"
+                            className="inline-flex items-center gap-1 rounded-full border border-gold/35 bg-gold/15 pl-2 pr-1 py-0.5 text-[11px] text-gold"
                           >
                             {s?.name || id}
                             <button
                               type="button"
                               onClick={() => updateDraft({ manualSpells: draft.manualSpells.filter(x => x !== id) })}
                               aria-label="Remove spell"
-                              className="rounded-full hover:bg-gold/20 p-0.5"
+                              className="rounded-full hover:bg-gold/25 p-0.5"
                             >
                               <X className="w-3 h-3" />
                             </button>
@@ -1633,7 +1633,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                       })}
                     </div>
                   ) : (
-                    <p className="text-xs text-ink/40 italic">No manual additions.</p>
+                    <p className="text-xs text-ink/45 italic">No manual additions.</p>
                   )}
                 </div>
 
@@ -1654,7 +1654,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                         variant="outline"
                         onClick={() => setApplyDialogOpen(true)}
                         disabled={!draft.id}
-                        className="h-7 px-2 text-[10px] uppercase tracking-[0.18em] border-gold/30 text-gold hover:bg-gold/10"
+                        className="h-7 px-2 text-[10px] uppercase tracking-[0.18em] border-gold/35 text-gold hover:bg-gold/15"
                         title={!draft.id ? 'Save the rule before linking it to consumers' : 'Apply this rule to a consumer'}
                       >
                         <Plus className="w-3 h-3 mr-1" /> Apply To…
@@ -1662,9 +1662,9 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                     </div>
                   </div>
                   {!draft.id ? (
-                    <p className="text-xs text-ink/40 italic">Save the rule first to link it to classes / feats / etc.</p>
+                    <p className="text-xs text-ink/45 italic">Save the rule first to link it to classes / feats / etc.</p>
                   ) : draftApplications.length === 0 ? (
-                    <p className="text-xs text-ink/40 italic">Not applied to anything yet.</p>
+                    <p className="text-xs text-ink/45 italic">Not applied to anything yet.</p>
                   ) : (
                     <div className="space-y-1">
                       {draftApplications.map(app => {
@@ -1674,16 +1674,16 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                         return (
                           <div
                             key={app.id}
-                            className="flex items-center gap-3 px-3 py-1.5 rounded border border-gold/15 hover:border-gold/30"
+                            className="flex items-center gap-3 px-3 py-1.5 rounded border border-gold/15 hover:border-gold/35"
                           >
-                            <span className="text-[10px] uppercase tracking-widest text-gold/60 shrink-0">
+                            <span className="text-[10px] uppercase tracking-widest text-gold/65 shrink-0">
                               {CONSUMER_LABELS[app.appliesToType]}
                             </span>
                             <span className="text-sm text-ink truncate flex-1">{label}</span>
                             <button
                               type="button"
                               onClick={() => handleUnapply(app)}
-                              className="text-[10px] uppercase tracking-widest text-ink/40 hover:text-blood"
+                              className="text-[10px] uppercase tracking-widest text-ink/45 hover:text-blood"
                             >
                               Remove
                             </button>
@@ -1695,7 +1695,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                 </div>
 
                 {draftDirty ? (
-                  <div className="px-6 py-3 bg-gold/[0.06] text-[10px] uppercase tracking-widest text-gold/80">
+                  <div className="px-6 py-3 bg-gold/[0.06] text-[10px] uppercase tracking-widest text-gold/85">
                     Unsaved changes
                   </div>
                 ) : null}
@@ -1715,7 +1715,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
               are supported by the data model and will become pickable here as Layer 2 lands.
             </DialogDescription>
           </DialogHeader>
-          <div className="max-h-72 overflow-y-auto custom-scrollbar divide-y divide-gold/10 -mx-4">
+          <div className="max-h-72 overflow-y-auto custom-scrollbar divide-y divide-gold/15 -mx-4">
             {classes.length === 0 ? (
               <p className="px-4 py-3 text-sm text-ink/45 italic">No classes loaded.</p>
             ) : (
@@ -1734,11 +1734,11 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                     }}
                     className={cn(
                       'w-full text-left px-4 py-2 text-sm flex items-center justify-between',
-                      alreadyApplied ? 'text-ink/30 cursor-not-allowed' : 'text-ink hover:bg-gold/10',
+                      alreadyApplied ? 'text-ink/35 cursor-not-allowed' : 'text-ink hover:bg-gold/15',
                     )}
                   >
                     <span>{c.name}</span>
-                    {alreadyApplied ? <span className="text-[10px] uppercase text-gold/50">already applied</span> : null}
+                    {alreadyApplied ? <span className="text-[10px] uppercase text-gold/55">already applied</span> : null}
                   </button>
                 );
               })
@@ -1749,7 +1749,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
               type="button"
               variant="outline"
               onClick={() => setApplyDialogOpen(false)}
-              className="border-gold/20 text-ink/70 hover:bg-gold/5"
+              className="border-gold/25 text-ink/75 hover:bg-gold/5"
             >
               Done
             </Button>
@@ -1777,7 +1777,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
               type="button"
               variant="outline"
               onClick={() => setDeleteDialogOpen(false)}
-              className="border-gold/20 text-ink/70 hover:bg-gold/5"
+              className="border-gold/25 text-ink/75 hover:bg-gold/5"
             >
               Cancel
             </Button>
@@ -1820,7 +1820,7 @@ function RuleFilterSection({
         <span className="h3-title uppercase text-ink">{title}</span>
         <div className="flex items-center gap-3">
           <button type="button" onClick={onIncludeAll} className="label-text hover:underline">Include All</button>
-          <span className="text-gold/20">|</span>
+          <span className="text-gold/25">|</span>
           <button type="button" onClick={onClear} className="label-text hover:underline">Clear</button>
         </div>
       </div>
@@ -1835,8 +1835,8 @@ function RuleFilterSection({
               className={cn(
                 'rounded border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-colors',
                 active
-                  ? 'border-gold/60 bg-gold/15 text-gold'
-                  : 'border-gold/15 text-ink/55 hover:border-gold/30 hover:text-gold/80',
+                  ? 'border-gold/65 bg-gold/15 text-gold'
+                  : 'border-gold/15 text-ink/55 hover:border-gold/35 hover:text-gold/85',
               )}
             >
               {label}

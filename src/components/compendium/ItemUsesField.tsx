@@ -95,7 +95,7 @@ export default function ItemUsesField({ uses, onChange, showAutoDestroy = true }
       <ActivitySection label="RECOVERY">
         <div className="space-y-2 py-2">
           {recovery.map((entry, idx) => (
-            <div key={idx} className="flex gap-2 items-center p-2.5 bg-gold/3 border border-gold/8 rounded">
+            <div key={idx} className="flex gap-2 items-center p-2.5 bg-gold/5 border border-gold/5 rounded">
               <SingleSelectSearch
                 value={entry.period || ''}
                 onChange={(val) => {
@@ -125,7 +125,7 @@ export default function ItemUsesField({ uses, onChange, showAutoDestroy = true }
                   next[idx] = { ...entry, formula: e.target.value };
                   patchRecovery(next);
                 }}
-                className="h-7 text-[10px] font-mono bg-background/40 border-gold/10 flex-1"
+                className="h-7 text-[10px] font-mono bg-background/40 border-gold/15 flex-1"
                 placeholder="1d4 or @prof"
               />
               <button
@@ -139,12 +139,12 @@ export default function ItemUsesField({ uses, onChange, showAutoDestroy = true }
             </div>
           ))}
           {recovery.length === 0 && (
-            <p className="text-center py-3 text-ink/30 italic text-[10px]">No recovery rules.</p>
+            <p className="text-center py-3 text-ink/35 italic text-[10px]">No recovery rules.</p>
           )}
           <button
             type="button"
             onClick={() => patchRecovery([...recovery, { period: '', type: '', formula: '' }])}
-            className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[10px] uppercase tracking-widest font-black text-gold/50 hover:text-gold border border-dashed border-gold/15 hover:border-gold/30 rounded transition-colors"
+            className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[10px] uppercase tracking-widest font-black text-gold/55 hover:text-gold border border-dashed border-gold/15 hover:border-gold/35 rounded transition-colors"
           >
             <Plus className="w-3 h-3" /> Add Recovery Rule
           </button>

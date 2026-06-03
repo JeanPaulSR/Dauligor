@@ -261,7 +261,7 @@ export default function TagClassifications({
 
   if (!isAdmin) {
     return (
-      <div className="text-center py-20 text-ink/50 italic">
+      <div className="text-center py-20 text-ink/55 italic">
         Tag classifications are admin-only.
       </div>
     );
@@ -270,7 +270,7 @@ export default function TagClassifications({
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
       <header className="space-y-2">
-        <div className="flex items-center gap-2 text-gold/60">
+        <div className="flex items-center gap-2 text-gold/65">
           <Link
             to="/compendium/tags"
             className="inline-flex items-center gap-1 text-xs hover:text-gold underline-offset-2 hover:underline"
@@ -288,7 +288,7 @@ export default function TagClassifications({
         <h1 className="text-3xl font-serif font-bold text-ink tracking-tight uppercase">
           Manage Tag Classifications
         </h1>
-        <p className="text-ink/60 font-serif italic max-w-3xl">
+        <p className="text-ink/65 font-serif italic max-w-3xl">
           Classifications are the slots that tell standard editors which
           tag groups apply to which entities. System slots ship with the
           app and can't be changed here. Custom slots are project-specific
@@ -297,29 +297,29 @@ export default function TagClassifications({
       </header>
 
       {/* System slots — read-only reference */}
-      <Card className="border-gold/20 bg-card overflow-hidden">
-        <div className="px-4 py-3 border-b border-gold/10 bg-gold/5">
+      <Card className="border-gold/25 bg-card overflow-hidden">
+        <div className="px-4 py-3 border-b border-gold/15 bg-gold/5">
           <h2 className="label-text text-gold">System Slots</h2>
-          <p className="text-[11px] text-ink/50 mt-0.5">
+          <p className="text-[11px] text-ink/55 mt-0.5">
             Hardcoded. Each slot surfaces this group on the listed editor /
             browser. Cannot be renamed or deleted.
           </p>
         </div>
-        <ul className="divide-y divide-gold/10">
+        <ul className="divide-y divide-gold/15">
           {SYSTEM_SLOTS.map((slot) => (
             <li key={slot.id} className="flex items-center justify-between gap-3 px-4 py-2">
               <div className="min-w-0 flex items-center gap-3">
-                <Layers className="w-3.5 h-3.5 text-gold/40 shrink-0" />
+                <Layers className="w-3.5 h-3.5 text-gold/45 shrink-0" />
                 <div className="min-w-0">
                   <div className="text-sm font-bold text-ink uppercase tracking-widest">
                     {slot.id}
                   </div>
-                  <div className="text-[11px] text-ink/50 truncate">
+                  <div className="text-[11px] text-ink/55 truncate">
                     {slot.help}
                   </div>
                 </div>
               </div>
-              <span className="text-[10px] uppercase tracking-widest text-ink/30 italic shrink-0">
+              <span className="text-[10px] uppercase tracking-widest text-ink/35 italic shrink-0">
                 System
               </span>
             </li>
@@ -329,19 +329,19 @@ export default function TagClassifications({
 
       {/* Custom slots — CRUD'd here, rename / delete propagate across
           every group that uses the slot. */}
-      <Card className="border-gold/20 bg-card overflow-hidden">
-        <div className="px-4 py-3 border-b border-gold/10 bg-gold/5">
+      <Card className="border-gold/25 bg-card overflow-hidden">
+        <div className="px-4 py-3 border-b border-gold/15 bg-gold/5">
           <h2 className="label-text text-gold">Custom Slots</h2>
-          <p className="text-[11px] text-ink/50 mt-0.5">
-            Computed from every tag group's <code className="text-gold/70">classifications</code>{' '}
+          <p className="text-[11px] text-ink/55 mt-0.5">
+            Computed from every tag group's <code className="text-gold/75">classifications</code>{' '}
             array. To <em>add</em> a custom slot, use the group editor's{' '}
-            <code className="text-gold/70">Show legacy add</code> disclosure
+            <code className="text-gold/75">Show legacy add</code> disclosure
             on any group's settings panel. Rename and delete propagate to
             every group using the slot.
           </p>
         </div>
         {loading ? (
-          <p className="text-[11px] italic text-ink/40 text-center py-6">
+          <p className="text-[11px] italic text-ink/45 text-center py-6">
             Loading…
           </p>
         ) : error ? (
@@ -349,11 +349,11 @@ export default function TagClassifications({
             {error}
           </p>
         ) : customSlots.length === 0 ? (
-          <p className="text-sm text-ink/40 italic text-center py-6">
+          <p className="text-sm text-ink/45 italic text-center py-6">
             No custom classifications yet — add one via the group editor.
           </p>
         ) : (
-          <ul className="divide-y divide-gold/10">
+          <ul className="divide-y divide-gold/15">
             {customSlots.map((slot) => {
               const isEditing = editingName === slot.name;
               return (
@@ -395,7 +395,7 @@ export default function TagClassifications({
                             setEditingDraft('');
                           }}
                           disabled={busy}
-                          className="h-7 w-7 p-0 text-ink/40 shrink-0"
+                          className="h-7 w-7 p-0 text-ink/45 shrink-0"
                           title="Cancel"
                         >
                           <X className="w-4 h-4" />
@@ -406,7 +406,7 @@ export default function TagClassifications({
                         <div className="text-sm font-bold text-ink uppercase tracking-widest">
                           {slot.name}
                         </div>
-                        <div className="text-[11px] text-ink/50 truncate">
+                        <div className="text-[11px] text-ink/55 truncate">
                           Used by {slot.groups.length} group
                           {slot.groups.length === 1 ? '' : 's'}:{' '}
                           {slot.groups
@@ -428,7 +428,7 @@ export default function TagClassifications({
                           setEditingName(slot.name);
                           setEditingDraft(slot.name);
                         }}
-                        className="h-7 text-[10px] gap-1 text-gold/70 hover:text-gold"
+                        className="h-7 text-[10px] gap-1 text-gold/75 hover:text-gold"
                       >
                         <Pencil className="w-3 h-3" /> Rename
                       </Button>

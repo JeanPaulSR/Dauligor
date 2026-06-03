@@ -67,17 +67,17 @@ export default function ToolMechanicsFields({ state, onChange }: Props) {
   const setPrice = (patch: Partial<ItemPrice>) => set('price', { ...state.price, ...patch });
 
   return (
-    <div className="space-y-4 border border-gold/10 rounded-md p-4 bg-background/20">
+    <div className="space-y-4 border border-gold/15 rounded-md p-4 bg-background/20">
       <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Tool Mechanics</h3>
 
       {/* ── TYPE + BASE ITEM + BONUS ──────────────────────── */}
       <div className="grid md:grid-cols-3 gap-3">
         <div>
-          <Label className="text-[10px] uppercase text-ink/40">Tool Type</Label>
+          <Label className="text-[10px] uppercase text-ink/45">Tool Type</Label>
           <select
             value={state.toolType}
             onChange={(e) => set('toolType', e.target.value)}
-            className="w-full h-10 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+            className="w-full h-10 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm"
           >
             {TOOL_TYPE_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>{o.label}</option>
@@ -85,44 +85,44 @@ export default function ToolMechanicsFields({ state, onChange }: Props) {
           </select>
         </div>
         <div>
-          <Label className="text-[10px] uppercase text-ink/40">Base Item (SRD)</Label>
+          <Label className="text-[10px] uppercase text-ink/45">Base Item (SRD)</Label>
           <Input
             value={state.baseItem}
             onChange={(e) => set('baseItem', e.target.value)}
             placeholder="e.g. alchemist, lute, smith"
-            className="bg-background/50 border-gold/10 focus:border-gold font-mono text-xs"
+            className="bg-background/50 border-gold/15 focus:border-gold font-mono text-xs"
           />
         </div>
         <div>
-          <Label className="text-[10px] uppercase text-ink/40">Flat Bonus</Label>
+          <Label className="text-[10px] uppercase text-ink/45">Flat Bonus</Label>
           <Input
             value={state.bonus}
             onChange={(e) => set('bonus', e.target.value)}
             placeholder="e.g. +2, 1d4"
-            className="bg-background/50 border-gold/10 focus:border-gold font-mono text-xs"
+            className="bg-background/50 border-gold/15 focus:border-gold font-mono text-xs"
           />
         </div>
       </div>
-      <p className="text-[10px] text-ink/40">
+      <p className="text-[10px] text-ink/45">
         Bonus is added flat to checks made with this tool. The default check ability comes from the proficiency's Ability field above.
       </p>
 
       {/* ── WEIGHT + PRICE ─────────────────────────────────── */}
       <div className="grid md:grid-cols-2 gap-3">
         <div>
-          <Label className="text-[10px] uppercase text-ink/40">Weight</Label>
+          <Label className="text-[10px] uppercase text-ink/45">Weight</Label>
           <div className="flex gap-2">
             <Input
               type="number"
               step="0.1"
               value={state.weight.value}
               onChange={(e) => setWeight({ value: parseFloat(e.target.value) || 0 })}
-              className="bg-background/50 border-gold/10 focus:border-gold"
+              className="bg-background/50 border-gold/15 focus:border-gold"
             />
             <select
               value={state.weight.units}
               onChange={(e) => setWeight({ units: e.target.value })}
-              className="h-10 px-3 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm w-20"
+              className="h-10 px-3 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm w-20"
             >
               {WEIGHT_UNIT_OPTIONS.map((u) => (
                 <option key={u} value={u}>{u}</option>
@@ -131,19 +131,19 @@ export default function ToolMechanicsFields({ state, onChange }: Props) {
           </div>
         </div>
         <div>
-          <Label className="text-[10px] uppercase text-ink/40">Price</Label>
+          <Label className="text-[10px] uppercase text-ink/45">Price</Label>
           <div className="flex gap-2">
             <Input
               type="number"
               step="1"
               value={state.price.value}
               onChange={(e) => setPrice({ value: parseFloat(e.target.value) || 0 })}
-              className="bg-background/50 border-gold/10 focus:border-gold"
+              className="bg-background/50 border-gold/15 focus:border-gold"
             />
             <select
               value={state.price.denomination}
               onChange={(e) => setPrice({ denomination: e.target.value })}
-              className="h-10 px-3 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm w-20"
+              className="h-10 px-3 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm w-20"
             >
               {DENOMINATION_OPTIONS.map((d) => (
                 <option key={d} value={d}>{d}</option>
@@ -156,11 +156,11 @@ export default function ToolMechanicsFields({ state, onChange }: Props) {
       {/* ── RARITY + ATTUNEMENT ────────────────────────────── */}
       <div className="grid md:grid-cols-2 gap-3">
         <div>
-          <Label className="text-[10px] uppercase text-ink/40">Rarity</Label>
+          <Label className="text-[10px] uppercase text-ink/45">Rarity</Label>
           <select
             value={state.rarity}
             onChange={(e) => set('rarity', e.target.value)}
-            className="w-full h-10 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+            className="w-full h-10 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm"
           >
             {RARITY_OPTIONS.map((r) => (
               <option key={r} value={r}>{r}</option>
@@ -168,11 +168,11 @@ export default function ToolMechanicsFields({ state, onChange }: Props) {
           </select>
         </div>
         <div>
-          <Label className="text-[10px] uppercase text-ink/40">Attunement</Label>
+          <Label className="text-[10px] uppercase text-ink/45">Attunement</Label>
           <select
             value={state.attunement}
             onChange={(e) => set('attunement', e.target.value)}
-            className="w-full h-10 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+            className="w-full h-10 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm"
           >
             {ATTUNEMENT_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>{o.label}</option>

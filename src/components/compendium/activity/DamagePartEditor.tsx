@@ -81,7 +81,7 @@ export default function DamagePartEditor({
   return (
     <div className="py-2 space-y-3">
       {parts.map((part, idx) => (
-        <div key={idx} className="p-3 border border-gold/10 bg-gold/3 rounded relative group">
+        <div key={idx} className="p-3 border border-gold/15 bg-gold/5 rounded relative group">
           {/* Hover-only remove button anchored to the card corner.
               Trash2 to stay consistent with the rest of the editor. */}
           <Button
@@ -102,21 +102,21 @@ export default function DamagePartEditor({
               Number input cramped and pushed Bonus too far right. */}
           <div className="grid grid-cols-3 gap-3 mb-3">
             <div>
-              <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest mb-1">Number</p>
+              <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest mb-1">Number</p>
               <Input
                 type="number"
                 value={part.number ?? ''}
                 onChange={e => patchAt(idx, { number: parseInt(e.target.value) || null })}
-                className="h-8 bg-background/40 border-gold/10 text-center text-xs no-number-spin"
+                className="h-8 bg-background/40 border-gold/15 text-center text-xs no-number-spin"
               />
             </div>
             <div>
-              <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest mb-1">Die</p>
+              <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest mb-1">Die</p>
               <Select
                 value={part.denomination?.toString() || ''}
                 onValueChange={val => patchAt(idx, { denomination: parseInt(val) || null })}
               >
-                <SelectTrigger className="h-8 bg-background/40 border-gold/10 text-xs">
+                <SelectTrigger className="h-8 bg-background/40 border-gold/15 text-xs">
                   <SelectValue placeholder="—" />
                 </SelectTrigger>
                 <SelectContent>
@@ -127,11 +127,11 @@ export default function DamagePartEditor({
               </Select>
             </div>
             <div>
-              <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest mb-1">Bonus</p>
+              <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest mb-1">Bonus</p>
               <Input
                 value={part.bonus || ''}
                 onChange={e => patchAt(idx, { bonus: e.target.value })}
-                className="h-8 bg-background/40 border-gold/10 text-xs font-mono"
+                className="h-8 bg-background/40 border-gold/15 text-xs font-mono"
                 placeholder="+5 or @mod"
               />
             </div>
@@ -140,7 +140,7 @@ export default function DamagePartEditor({
           {/* Row 2: damage type chips. Multi-select via EntityPicker
               — same shared pattern used elsewhere. */}
           <div className="mb-3">
-            <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest mb-1.5">Damage Types</p>
+            <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest mb-1.5">Damage Types</p>
             <EntityPicker
               entities={DAMAGE_TYPE_OPTIONS.map(dt => ({ id: dt.value, name: dt.label }))}
               selectedIds={part.types || []}
@@ -153,7 +153,7 @@ export default function DamagePartEditor({
 
           {/* Row 3: custom formula toggle (replaces the dice roll
               entirely when enabled). */}
-          <div className="flex items-center gap-3 border-t border-gold/8 pt-2.5">
+          <div className="flex items-center gap-3 border-t border-gold/5 pt-2.5">
             <Checkbox
               id={`custom-${idx}`}
               checked={part.custom?.enabled}
@@ -164,7 +164,7 @@ export default function DamagePartEditor({
                 },
               })}
             />
-            <Label htmlFor={`custom-${idx}`} className="text-[9px] uppercase text-ink/60 font-black tracking-widest">
+            <Label htmlFor={`custom-${idx}`} className="text-[9px] uppercase text-ink/65 font-black tracking-widest">
               Custom Formula
             </Label>
             {part.custom?.enabled && (
@@ -176,7 +176,7 @@ export default function DamagePartEditor({
                     formula: e.target.value,
                   },
                 })}
-                className="h-7 flex-1 bg-background/40 border-gold/10 text-[9px] font-mono"
+                className="h-7 flex-1 bg-background/40 border-gold/15 text-[9px] font-mono"
                 placeholder="Formula…"
               />
             )}
@@ -192,16 +192,16 @@ export default function DamagePartEditor({
               dropdown and back to "" when patching the data. Without
               this, clicking the dropdown options did nothing because
               base-ui silently swallowed the change. */}
-          <div className="grid grid-cols-12 gap-2 border-t border-gold/8 mt-2.5 pt-2.5">
+          <div className="grid grid-cols-12 gap-2 border-t border-gold/5 mt-2.5 pt-2.5">
             <div className="col-span-4">
-              <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest mb-1">Scaling Mode</p>
+              <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest mb-1">Scaling Mode</p>
               <Select
                 value={part.scaling?.mode || '__none'}
                 onValueChange={val => patchAt(idx, {
                   scaling: { ...part.scaling, mode: val === '__none' ? '' : val },
                 })}
               >
-                <SelectTrigger className="h-7 bg-background/40 border-gold/10 text-[9px]">
+                <SelectTrigger className="h-7 bg-background/40 border-gold/15 text-[9px]">
                   <SelectValue placeholder="None" />
                 </SelectTrigger>
                 <SelectContent>
@@ -212,7 +212,7 @@ export default function DamagePartEditor({
               </Select>
             </div>
             <div className="col-span-8">
-              <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest mb-1">Scaling Dice / Formula</p>
+              <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest mb-1">Scaling Dice / Formula</p>
               <div className="flex gap-2">
                 <Input
                   type="number"
@@ -220,7 +220,7 @@ export default function DamagePartEditor({
                   onChange={e => patchAt(idx, {
                     scaling: { ...part.scaling, mode: part.scaling?.mode ?? '', number: parseInt(e.target.value) || 0 },
                   })}
-                  className="h-7 w-12 bg-background/40 border-gold/10 text-[9px] text-center no-number-spin"
+                  className="h-7 w-12 bg-background/40 border-gold/15 text-[9px] text-center no-number-spin"
                   placeholder="1"
                 />
                 <Input
@@ -228,7 +228,7 @@ export default function DamagePartEditor({
                   onChange={e => patchAt(idx, {
                     scaling: { ...part.scaling, mode: part.scaling?.mode ?? '', formula: e.target.value },
                   })}
-                  className="h-7 flex-1 bg-background/40 border-gold/10 text-[9px] font-mono"
+                  className="h-7 flex-1 bg-background/40 border-gold/15 text-[9px] font-mono"
                   placeholder="Formula…"
                 />
               </div>
@@ -245,12 +245,12 @@ export default function DamagePartEditor({
         <button
           type="button"
           onClick={addPart}
-          className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[10px] uppercase tracking-widest font-black text-gold/50 hover:text-gold border border-dashed border-gold/15 hover:border-gold/30 rounded transition-colors"
+          className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[10px] uppercase tracking-widest font-black text-gold/55 hover:text-gold border border-dashed border-gold/15 hover:border-gold/35 rounded transition-colors"
         >
           <Plus className="w-3 h-3" /> Add {partNoun}
         </button>
       ) : (
-        <p className="text-[10px] text-ink/40 border border-dashed border-gold/10 rounded p-3">
+        <p className="text-[10px] text-ink/45 border border-dashed border-gold/15 rounded p-3">
           Foundry heal activities use a single healing roll. This editor keeps one primary healing part.
         </p>
       )}

@@ -169,7 +169,7 @@ export default function SpellFilterShell({
   const showChips = showActiveChips && (filters.activeFilterCount > 0 || trimmed || extraChips);
 
   return (
-    <div className="bg-background border border-gold/20 rounded-md p-4 space-y-3">
+    <div className="bg-background border border-gold/25 rounded-md p-4 space-y-3">
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex-1 min-w-[280px]">
           <FilterBar
@@ -281,14 +281,14 @@ export default function SpellFilterShell({
 function FilterChip({ label, onRemove }: { label: React.ReactNode; onRemove: () => void }) {
   return (
     <span className={cn(
-      'inline-flex items-center gap-1 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest text-gold/90'
+      'inline-flex items-center gap-1 rounded-full border border-gold/35 bg-gold/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest text-gold/95'
     )}>
       {label}
       <button
         type="button"
         aria-label="Remove"
         onClick={onRemove}
-        className="ml-0.5 -mr-0.5 rounded-full hover:bg-gold/20 p-0.5 transition-colors"
+        className="ml-0.5 -mr-0.5 rounded-full hover:bg-gold/25 p-0.5 transition-colors"
       >
         <X className="w-2.5 h-2.5" />
       </button>

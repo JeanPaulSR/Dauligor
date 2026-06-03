@@ -1152,30 +1152,30 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
 
             <div className="grid gap-3 grid-cols-2 md:grid-cols-3">
               <ReviewFieldHighlight columnKey="name" className="space-y-0.5">
-                <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Name</Label>
+                <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/45">Name</Label>
                 <Input
                   value={formData.name}
                   onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
-                  className="h-8 bg-background/50 border-gold/10 focus:border-gold text-sm"
+                  className="h-8 bg-background/50 border-gold/15 focus:border-gold text-sm"
                   placeholder="e.g. Great Weapon Master"
                   required
                 />
               </ReviewFieldHighlight>
               <ReviewFieldHighlight columnKey="identifier" className="space-y-0.5">
-                <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Identifier</Label>
+                <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/45">Identifier</Label>
                 <Input
                   value={formData.identifier}
                   onChange={(e) => setFormData((prev) => ({ ...prev, identifier: e.target.value }))}
-                  className="h-8 bg-background/50 border-gold/10 focus:border-gold font-mono text-sm"
+                  className="h-8 bg-background/50 border-gold/15 focus:border-gold font-mono text-sm"
                   placeholder={slugify(formData.name || 'feat')}
                 />
               </ReviewFieldHighlight>
               <ReviewFieldHighlight columnKey="source_id" className="space-y-0.5">
-                <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Source</Label>
+                <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/45">Source</Label>
                 <select
                   value={formData.sourceId}
                   onChange={(e) => setFormData((prev) => ({ ...prev, sourceId: e.target.value }))}
-                  className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                  className="w-full h-8 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm"
                 >
                   <option value="">Select a source</option>
                   {sources.map((source) => (
@@ -1184,7 +1184,7 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
                 </select>
               </ReviewFieldHighlight>
               <ReviewFieldHighlight columnKey="feat_category_id" className="space-y-0.5">
-                <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Feat Category</Label>
+                <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/45">Feat Category</Label>
                 {/* Admin-managed taxonomy authored at
                     /admin/proficiencies → Feat Categories. Empty
                     option is the "no category assigned" sentinel; the
@@ -1195,7 +1195,7 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
                 <select
                   value={formData.featCategoryId}
                   onChange={(e) => setFormData((prev) => ({ ...prev, featCategoryId: e.target.value }))}
-                  className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                  className="w-full h-8 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm"
                 >
                   <option value="">— Uncategorized —</option>
                   {featCategories.map((c) => (
@@ -1224,11 +1224,11 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
       key: 'mechanics',
       label: 'Mechanics',
       render: () => (
-        <div className="space-y-4 border border-gold/10 rounded-md p-4 bg-background/20">
+        <div className="space-y-4 border border-gold/15 rounded-md p-4 bg-background/20">
           <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Foundry Feat Shell</h3>
           <div className="grid md:grid-cols-2 gap-4">
-            <label className="flex items-center justify-between gap-3 border border-gold/10 rounded-md p-3">
-              <span className="text-xs font-bold uppercase tracking-widest text-ink/60">Repeatable</span>
+            <label className="flex items-center justify-between gap-3 border border-gold/15 rounded-md p-3">
+              <span className="text-xs font-bold uppercase tracking-widest text-ink/65">Repeatable</span>
               <Checkbox
                 checked={!!formData.repeatable}
                 onCheckedChange={(checked) =>
@@ -1238,7 +1238,7 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
             </label>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
-                <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Uses Max</Label>
+                <Label className="text-xs font-bold uppercase tracking-widest text-ink/45">Uses Max</Label>
                 <Input
                   value={formData.uses.max || ''}
                   onChange={(e) =>
@@ -1247,12 +1247,12 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
                       uses: { ...prev.uses, max: e.target.value },
                     }))
                   }
-                  className="bg-background/50 border-gold/10 focus:border-gold font-mono"
+                  className="bg-background/50 border-gold/15 focus:border-gold font-mono"
                   placeholder="@prof"
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Uses Spent</Label>
+                <Label className="text-xs font-bold uppercase tracking-widest text-ink/45">Uses Spent</Label>
                 <Input
                   type="number"
                   min={0}
@@ -1263,21 +1263,21 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
                       uses: { ...prev.uses, spent: parseInt(e.target.value || '0', 10) || 0 },
                     }))
                   }
-                  className="bg-background/50 border-gold/10 focus:border-gold no-number-spin"
+                  className="bg-background/50 border-gold/15 focus:border-gold no-number-spin"
                 />
               </div>
             </div>
           </div>
-          <div className="space-y-2 border-t border-gold/8 pt-3">
+          <div className="space-y-2 border-t border-gold/5 pt-3">
             <div className="flex items-baseline justify-between">
-              <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Recovery Rules</Label>
-              <span className="text-[10px] text-ink/40">Lands at <code className="font-mono">system.uses.recovery[]</code></span>
+              <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/65">Recovery Rules</Label>
+              <span className="text-[10px] text-ink/45">Lands at <code className="font-mono">system.uses.recovery[]</code></span>
             </div>
             <div className="space-y-2">
               {formData.uses.recovery.map((entry, idx) => (
                 <div
                   key={idx}
-                  className="flex gap-2 items-center p-2.5 bg-gold/3 border border-gold/8 rounded"
+                  className="flex gap-2 items-center p-2.5 bg-gold/5 border border-gold/5 rounded"
                 >
                   <SingleSelectSearch
                     value={entry.period || ''}
@@ -1324,7 +1324,7 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
                         uses: { ...prev.uses, recovery: next },
                       }));
                     }}
-                    className="h-7 text-[10px] font-mono bg-background/40 border-gold/10 flex-1"
+                    className="h-7 text-[10px] font-mono bg-background/40 border-gold/15 flex-1"
                     placeholder="1d4 or @prof"
                   />
                   <button
@@ -1346,7 +1346,7 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
                 </div>
               ))}
               {formData.uses.recovery.length === 0 && (
-                <p className="text-center py-3 text-ink/30 italic text-[10px]">No recovery rules.</p>
+                <p className="text-center py-3 text-ink/35 italic text-[10px]">No recovery rules.</p>
               )}
               <button
                 type="button"
@@ -1362,14 +1362,14 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
                     },
                   }))
                 }
-                className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[10px] uppercase tracking-widest font-black text-gold/50 hover:text-gold border border-dashed border-gold/15 hover:border-gold/30 rounded transition-colors"
+                className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[10px] uppercase tracking-widest font-black text-gold/55 hover:text-gold border border-dashed border-gold/15 hover:border-gold/35 rounded transition-colors"
               >
                 <Plus className="w-3 h-3" /> Add Recovery Rule
               </button>
             </div>
           </div>
 
-          <p className="text-[10px] text-ink/40">
+          <p className="text-[10px] text-ink/45">
             This is for general feats first. Class and subclass features still primarily travel through the class feature pipeline, even though they import as Foundry <code className="font-mono">feat</code> items.
           </p>
         </div>
@@ -1379,7 +1379,7 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
       key: 'activities',
       label: 'Activities',
       render: () => (
-        <div className="border-t border-gold/10 pt-4">
+        <div className="border-t border-gold/15 pt-4">
           <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold mb-2">Activities</h3>
           <ActivityEditor
             activities={formData.activities}
@@ -1411,10 +1411,10 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
             : ft === 'background' ? 'Background Columns'
               : 'Feat Columns';
         return (
-          <div className="border-t border-gold/10 pt-4 space-y-3">
+          <div className="border-t border-gold/15 pt-4 space-y-3">
             <div className="flex items-baseline justify-between gap-3">
               <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Advancement</h3>
-              <span className="text-[10px] text-ink/40 italic">
+              <span className="text-[10px] text-ink/45 italic">
                 Default level <span className="font-mono">0</span> = always-on while feat is owned.
                 Set a level &gt; 0 to gate against the granting class's level (or character level
                 for standalone feats).
@@ -1482,9 +1482,9 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
                 // inert hint card until the user saves the feat.
                 // Without this, the entire feature was invisible to
                 // anyone who hadn't already saved a draft.
-                <div className="p-4 border border-gold/10 bg-card/30 rounded-xl space-y-2">
-                  <h2 className="text-[10px] font-bold uppercase tracking-[0.16em] text-gold/70">{scalingLabel}</h2>
-                  <p className="text-[11px] text-ink/50 italic leading-relaxed">
+                <div className="p-4 border border-gold/15 bg-card/30 rounded-xl space-y-2">
+                  <h2 className="text-[10px] font-bold uppercase tracking-[0.16em] text-gold/75">{scalingLabel}</h2>
+                  <p className="text-[11px] text-ink/55 italic leading-relaxed">
                     Save this {ft === 'race' ? 'race' : ft === 'background' ? 'background' : 'feat'} first
                     to add scaling columns. Columns appear here once the row
                     has a stable id to attach to.
@@ -1500,7 +1500,7 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
       key: 'effects',
       label: 'Effects',
       render: () => (
-        <div className="border-t border-gold/10 pt-4">
+        <div className="border-t border-gold/15 pt-4">
           <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold mb-2">Active Effects</h3>
           <ActiveEffectEditor
             effects={formData.effects}
@@ -1517,10 +1517,10 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
       key: 'prereqs',
       label: 'Prereqs',
       render: () => (
-        <div className="space-y-4 border border-gold/10 rounded-md p-4 bg-background/20">
+        <div className="space-y-4 border border-gold/15 rounded-md p-4 bg-background/20">
           <div className="flex items-baseline justify-between">
             <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Prerequisites</h3>
-            <span className="text-[10px] text-ink/40">
+            <span className="text-[10px] text-ink/45">
               Three layers · short text → free text → compound tree
             </span>
           </div>
@@ -1555,7 +1555,7 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
       label: (
         <>
           Tags {formData.tagIds.length > 0 && (
-            <span className="ml-1 text-gold/70">({formData.tagIds.length})</span>
+            <span className="ml-1 text-gold/75">({formData.tagIds.length})</span>
           )}
         </>
       ),
@@ -1602,7 +1602,7 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
             "truncate font-serif text-sm",
             drafted ? 'text-archive-blue font-semibold' : 'text-ink',
           )}>
-            {entry.name || <em className="text-ink/40">Untitled</em>}
+            {entry.name || <em className="text-ink/45">Untitled</em>}
           </span>
         );
       },
@@ -1633,7 +1633,7 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
       render: (entry: any) => {
         const srcAbbrev = String(sourceAbbrevById[entry.sourceId] || entry.sourceId || '—');
         return (
-          <span className="text-[10px] font-bold text-gold/80 text-center truncate">
+          <span className="text-[10px] font-bold text-gold/85 text-center truncate">
             {srcAbbrev}
           </span>
         );
@@ -1682,8 +1682,8 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
   const listEmptyContent = useMemo(() => {
     if (focusModeEnabled && focusMode === 'drafts') {
       return (
-        <div className="px-6 py-12 text-center text-ink/60 max-w-sm mx-auto space-y-2">
-          <p className="font-bold text-ink/80">No feats in this block yet.</p>
+        <div className="px-6 py-12 text-center text-ink/65 max-w-sm mx-auto space-y-2">
+          <p className="font-bold text-ink/85">No feats in this block yet.</p>
           <p className="text-xs leading-relaxed text-ink/55">
             Click <span className="font-bold text-gold">New Feat</span> above to
             author one from scratch.
@@ -1824,10 +1824,10 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
           ) : (
             <div className="h-full flex items-center justify-center px-6 py-12 text-center">
               <div className="space-y-2 max-w-xs">
-                <p className="text-sm text-ink/60 font-serif italic">
+                <p className="text-sm text-ink/65 font-serif italic">
                   Preview pane
                 </p>
-                <p className="text-[11px] text-ink/40 leading-relaxed">
+                <p className="text-[11px] text-ink/45 leading-relaxed">
                   Select a feat from the list to preview it as it
                   appears in the public compendium. Pending edits
                   don't reflect until you save.

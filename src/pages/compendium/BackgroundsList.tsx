@@ -30,9 +30,9 @@ export default function BackgroundsList({ userProfile }: { userProfile: any }) {
 
       <h1 className="h1-title">Backgrounds</h1>
 
-      <Card className="border-gold/10 bg-card/50">
+      <Card className="border-gold/15 bg-card/50">
         <CardContent className="space-y-4 px-6 py-10 text-center">
-          <p className="font-serif italic text-ink/70 text-lg">
+          <p className="font-serif italic text-ink/75 text-lg">
             The backgrounds compendium browser is coming soon.
           </p>
           <p className="text-sm text-ink/55 max-w-xl mx-auto">
@@ -44,14 +44,14 @@ export default function BackgroundsList({ userProfile }: { userProfile: any }) {
           </p>
           <div className="pt-2 flex flex-wrap items-center justify-center gap-2">
             <Link to="/compendium">
-              <Button variant="outline" size="sm" className="gap-2 border-gold/20 text-gold hover:bg-gold/5">
+              <Button variant="outline" size="sm" className="gap-2 border-gold/25 text-gold hover:bg-gold/5">
                 <ChevronLeft className="h-4 w-4" />
                 Back to Compendium
               </Button>
             </Link>
             {canManage && (
               <Link to="/compendium/backgrounds/manage">
-                <Button type="button" variant="outline" size="sm" className="h-8 border-gold/20 text-gold hover:bg-gold/5">
+                <Button type="button" variant="outline" size="sm" className="h-8 border-gold/25 text-gold hover:bg-gold/5">
                   Background Manager
                 </Button>
               </Link>

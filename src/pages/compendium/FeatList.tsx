@@ -418,7 +418,7 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
           <div className="min-w-0 flex items-center gap-1">
             <span className="truncate font-semibold text-[12px] text-ink">{feat.name}</span>
             {starred && (
-              <Star className="w-2.5 h-2.5 text-gold/70 fill-gold/40 shrink-0" aria-label="Favorite" />
+              <Star className="w-2.5 h-2.5 text-gold/75 fill-gold/45 shrink-0" aria-label="Favorite" />
             )}
           </div>
         );
@@ -433,7 +433,7 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
         return label ? (
           <span className="text-[11px] text-ink truncate" title={label}>{label}</span>
         ) : (
-          <span className="text-[11px] text-ink/40">—</span>
+          <span className="text-[11px] text-ink/45">—</span>
         );
       },
     },
@@ -462,7 +462,7 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
         return display ? (
           <span className="text-[11px] text-ink truncate" title={display}>{display}</span>
         ) : (
-          <span className="text-[11px] text-ink/40">—</span>
+          <span className="text-[11px] text-ink/45">—</span>
         );
       },
     },
@@ -471,7 +471,7 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
       label: 'Source',
       width: 'minmax(50px,1.7fr)',
       render: (feat) => (
-        <span className="text-[11px] font-bold text-gold/80 justify-self-center">
+        <span className="text-[11px] font-bold text-gold/85 justify-self-center">
           {renderSourceAbbreviation(feat)}
         </span>
       ),
@@ -575,11 +575,11 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
         onClick={onSelect}
         className={cn(
           'w-full grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 px-3 py-2 text-left transition-colors',
-          selected ? 'bg-gold/10' : 'hover:bg-gold/5',
+          selected ? 'bg-gold/15' : 'hover:bg-gold/5',
         )}
       >
         <span className="truncate text-sm text-ink">{feat.name}</span>
-        <span className="text-[10px] font-bold text-gold/70">{sourceLabel}</span>
+        <span className="text-[10px] font-bold text-gold/75">{sourceLabel}</span>
         <span
           role="button"
           tabIndex={0}
@@ -591,7 +591,7 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
               toggleStar();
             }
           }}
-          className="text-gold/80 hover:text-blood shrink-0 cursor-pointer"
+          className="text-gold/85 hover:text-blood shrink-0 cursor-pointer"
           title="Remove from favorites"
           aria-label="Remove from favorites"
         >
@@ -645,7 +645,7 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
             <button
               type="button"
               onClick={clearClassScope}
-              className="inline-flex items-center gap-1 h-8 px-2 rounded-md border border-gold/40 bg-gold/10 text-gold text-[11px] font-bold uppercase tracking-widest hover:bg-blood/10 hover:border-blood/40 hover:text-blood transition-colors"
+              className="inline-flex items-center gap-1 h-8 px-2 rounded-md border border-gold/45 bg-gold/15 text-gold text-[11px] font-bold uppercase tracking-widest hover:bg-blood/10 hover:border-blood/40 hover:text-blood transition-colors"
               title={`Scoped to ${classScopeIdentifier} class features. Click to clear.`}
             >
               Class: {classScopeIdentifier}
@@ -654,7 +654,7 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
           ) : null}
           {userProfile?.role === 'admin' ? (
             <Link to="/compendium/feats/manage">
-              <Button type="button" variant="outline" size="sm" className="h-8 border-gold/20 text-gold hover:bg-gold/5">
+              <Button type="button" variant="outline" size="sm" className="h-8 border-gold/25 text-gold hover:bg-gold/5">
                 Feat Manager
               </Button>
             </Link>

@@ -616,7 +616,7 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
             <>
               {selectedGroup ? (
                 <Link to={editGroupHref(selectedGroup.id)}>
-                  <Button size="sm" variant="outline" className="h-8 gap-2 border-gold/30 text-gold hover:bg-gold/10">
+                  <Button size="sm" variant="outline" className="h-8 gap-2 border-gold/35 text-gold hover:bg-gold/15">
                     <Edit className="w-4 h-4" /> Edit Group
                   </Button>
                 </Link>
@@ -625,7 +625,7 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
                   size="sm"
                   variant="outline"
                   disabled
-                  className="h-8 gap-2 border-gold/20 text-ink/30 cursor-not-allowed"
+                  className="h-8 gap-2 border-gold/25 text-ink/35 cursor-not-allowed"
                   title="Select a group to edit"
                 >
                   <Edit className="w-4 h-4" /> Edit Group
@@ -647,13 +647,13 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
         {/* Pane 1 — Groups */}
         <Card
           className={cn(
-            'border-gold/10 bg-card/50 overflow-hidden flex-col lg:flex-none lg:basis-1/4 lg:min-w-0',
+            'border-gold/15 bg-card/50 overflow-hidden flex-col lg:flex-none lg:basis-1/4 lg:min-w-0',
             narrowView === 'groups' ? 'flex flex-1' : 'hidden lg:flex',
           )}
           style={{ height: `${paneHeight}px` }}
         >
-          <div className="border-b border-gold/10 bg-background/35 px-3 py-2 shrink-0">
-            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-gold/70">
+          <div className="border-b border-gold/15 bg-background/35 px-3 py-2 shrink-0">
+            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-gold/75">
               Groups · {filteredGroups.length}{filteredGroups.length !== displayGroups.length ? ` / ${displayGroups.length}` : ''}
             </span>
           </div>
@@ -663,7 +663,7 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
             ) : filteredGroups.length === 0 ? (
               focusModeEnabled && focusMode === 'drafts' ? (
                 <div className="px-4 py-12 text-center text-ink/55 text-sm space-y-1.5">
-                  <p className="font-semibold text-ink/70">Nothing in this block yet</p>
+                  <p className="font-semibold text-ink/75">Nothing in this block yet</p>
                   <p className="text-xs text-ink/45 italic leading-relaxed">
                     Use <span className="text-gold not-italic font-semibold">New Group</span> to start one, or
                     switch to <span className="text-gold not-italic font-semibold">Full Catalog</span> to edit an
@@ -671,7 +671,7 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
                   </p>
                 </div>
               ) : (
-                <div className="px-4 py-12 text-center text-ink/40 italic text-sm">No groups found.</div>
+                <div className="px-4 py-12 text-center text-ink/45 italic text-sm">No groups found.</div>
               )
             ) : (
               <div className="divide-y divide-gold/5">
@@ -684,7 +684,7 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
                       onClick={() => handleSelectGroup(group.id)}
                       className={cn(
                         'w-full text-left px-3 py-2.5 transition-colors flex items-center justify-between gap-2 group',
-                        selected ? 'bg-gold/10' : 'hover:bg-gold/5',
+                        selected ? 'bg-gold/15' : 'hover:bg-gold/5',
                       )}
                     >
                       <span className="min-w-0">
@@ -695,14 +695,14 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
                           {group.name || 'Unnamed Group'}
                         </span>
                         {group.__draft && (
-                          <span className="inline-block mt-0.5 text-[8px] font-bold uppercase tracking-widest text-gold/80 bg-gold/10 border border-gold/30 px-1 py-0.5 rounded">
+                          <span className="inline-block mt-0.5 text-[8px] font-bold uppercase tracking-widest text-gold/85 bg-gold/15 border border-gold/35 px-1 py-0.5 rounded">
                             in this block
                           </span>
                         )}
                       </span>
                       <ChevronRight className={cn(
                         'w-4 h-4 shrink-0 transition-colors',
-                        selected ? 'text-gold' : 'text-gold/20 group-hover:text-gold/50',
+                        selected ? 'text-gold' : 'text-gold/25 group-hover:text-gold/55',
                       )} />
                     </button>
                   );
@@ -715,7 +715,7 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
         {/* Pane 2 — Options in the selected group */}
         <Card
           className={cn(
-            'border-gold/10 bg-card/50 overflow-hidden flex-col lg:flex-none lg:basis-1/4 lg:min-w-0',
+            'border-gold/15 bg-card/50 overflow-hidden flex-col lg:flex-none lg:basis-1/4 lg:min-w-0',
             narrowView === 'options' ? 'flex flex-1' : 'hidden lg:flex',
           )}
           style={{ height: `${paneHeight}px` }}
@@ -728,25 +728,25 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
             </Button>
           </div>
           {selectedGroup && (
-            <div className="border-b border-gold/10 bg-background/35 px-3 py-2 shrink-0">
-              <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-gold/70 truncate block">
+            <div className="border-b border-gold/15 bg-background/35 px-3 py-2 shrink-0">
+              <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-gold/75 truncate block">
                 Options · {filteredItems.length}{filteredItems.length !== items.length ? ` / ${items.length}` : ''}
               </span>
             </div>
           )}
           <CardContent className="p-0 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
             {!selectedGroup ? (
-              <div className="px-4 py-12 text-center text-ink/40 italic text-sm">
+              <div className="px-4 py-12 text-center text-ink/45 italic text-sm">
                 Select a group to see its options.
               </div>
             ) : itemsLoading ? (
               <div className="px-4 py-12 text-center text-ink/45 text-sm">Loading…</div>
             ) : items.length === 0 ? (
-              <div className="px-4 py-12 text-center text-ink/40 italic text-sm">
+              <div className="px-4 py-12 text-center text-ink/45 italic text-sm">
                 No options in this group yet.
               </div>
             ) : filteredItems.length === 0 ? (
-              <div className="px-4 py-12 text-center text-ink/40 italic text-sm">
+              <div className="px-4 py-12 text-center text-ink/45 italic text-sm">
                 No options match the filter.
               </div>
             ) : (
@@ -774,7 +774,7 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
                       onClick={() => handleSelectItem(item.id)}
                       className={cn(
                         'w-full text-left px-3 py-2 transition-colors flex items-center gap-2.5',
-                        selected ? 'bg-gold/10' : 'hover:bg-gold/5',
+                        selected ? 'bg-gold/15' : 'hover:bg-gold/5',
                       )}
                     >
                       <OptionIcon icon={icon} selected={selected} />
@@ -802,7 +802,7 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
         {/* Pane 3 — Detail */}
         <Card
           className={cn(
-            'border-gold/10 bg-card/50 overflow-hidden flex-col flex-1 lg:flex lg:basis-1/2 lg:min-w-0',
+            'border-gold/15 bg-card/50 overflow-hidden flex-col flex-1 lg:flex lg:basis-1/2 lg:min-w-0',
             narrowView === 'detail' ? 'flex' : 'hidden lg:flex',
           )}
           style={{ height: `${paneHeight}px` }}
@@ -937,7 +937,7 @@ function OptionIcon({ icon, selected }: { icon: string | null; selected: boolean
     <span
       className={cn(
         'w-7 h-7 rounded shrink-0 border flex items-center justify-center',
-        selected ? 'border-gold/30 bg-gold/5' : 'border-gold/10 bg-background/40',
+        selected ? 'border-gold/35 bg-gold/5' : 'border-gold/15 bg-background/40',
       )}
       aria-hidden
     >
@@ -980,8 +980,8 @@ function OptionDetail({
     return (
       <div className="h-full flex items-center justify-center px-6 py-12 text-center">
         <div className="space-y-2 max-w-xs">
-          <Layers className="w-7 h-7 text-gold/20 mx-auto" />
-          <p className="text-sm text-ink/50 font-serif italic">
+          <Layers className="w-7 h-7 text-gold/25 mx-auto" />
+          <p className="text-sm text-ink/55 font-serif italic">
             Select a group, then an option to view its details.
           </p>
         </div>
@@ -1000,18 +1000,18 @@ function OptionDetail({
           </h2>
         </div>
         {groupSourceName && (
-          <Badge variant="outline" className="border-gold/30 text-gold/80">
+          <Badge variant="outline" className="border-gold/35 text-gold/85">
             <BookOpen className="w-3 h-3 mr-1" /> {groupSourceName}
           </Badge>
         )}
         {group.description ? (
-          <div className="prose prose-sm max-w-none text-ink/80">
+          <div className="prose prose-sm max-w-none text-ink/85">
             <BBCodeRenderer content={group.description} />
           </div>
         ) : (
-          <p className="text-ink/40 italic">No description provided.</p>
+          <p className="text-ink/45 italic">No description provided.</p>
         )}
-        <p className="text-xs text-ink/40 italic pt-2 border-t border-gold/10">
+        <p className="text-xs text-ink/45 italic pt-2 border-t border-gold/15">
           Select an option from the middle pane to view its full details.
         </p>
       </div>
@@ -1033,12 +1033,12 @@ function OptionDetail({
           <img
             src={icon}
             alt=""
-            className="w-12 h-12 rounded-lg object-cover border border-gold/20 shrink-0 mt-0.5"
+            className="w-12 h-12 rounded-lg object-cover border border-gold/25 shrink-0 mt-0.5"
             referrerPolicy="no-referrer"
           />
         )}
         <div className="min-w-0">
-          <p className="text-[10px] uppercase tracking-[0.2em] text-gold/60 mb-1">{group.name}</p>
+          <p className="text-[10px] uppercase tracking-[0.2em] text-gold/65 mb-1">{group.name}</p>
           <h2 className="text-2xl font-serif font-bold text-ink">
             {item.name || 'Unnamed option'}
           </h2>
@@ -1047,29 +1047,29 @@ function OptionDetail({
 
       <div className="flex flex-wrap items-center gap-2">
         {level !== null && level !== undefined && (
-          <Badge variant="outline" className="text-[10px] border-gold/30 text-gold/80">
+          <Badge variant="outline" className="text-[10px] border-gold/35 text-gold/85">
             {isTotalLevel ? `Character Lv ${level}` : `Class Lv ${level}`}
           </Badge>
         )}
         {usesMax !== null && usesMax !== '' && (
-          <Badge variant="outline" className="text-[10px] border-ink/20 text-ink/60">
+          <Badge variant="outline" className="text-[10px] border-ink/25 text-ink/65">
             {String(usesMax)} use{String(usesMax) === '1' ? '' : 's'}{usesRecovery ? ` / ${usesRecovery}` : ''}
           </Badge>
         )}
       </div>
 
       {reqText && (
-        <p className="text-[11px] text-ink/50 italic border-l-2 border-gold/20 pl-3">
+        <p className="text-[11px] text-ink/55 italic border-l-2 border-gold/25 pl-3">
           Requires: {reqText}
         </p>
       )}
 
       {item.description ? (
-        <div className="prose prose-sm max-w-none text-ink/80">
+        <div className="prose prose-sm max-w-none text-ink/85">
           <BBCodeRenderer content={item.description} />
         </div>
       ) : (
-        <p className="text-ink/40 italic text-sm">No description.</p>
+        <p className="text-ink/45 italic text-sm">No description.</p>
       )}
     </div>
   );

@@ -62,7 +62,7 @@ export default function FeatureModalHero({
   onTabChange,
 }: FeatureModalHeroProps) {
   return (
-    <div className="p-6 pb-0 shrink-0 border-b border-gold/10">
+    <div className="p-6 pb-0 shrink-0 border-b border-gold/15">
       <div className="flex gap-6 items-start">
         <div className="w-32 h-32 shrink-0">
           <ImageUpload
@@ -78,7 +78,7 @@ export default function FeatureModalHero({
           <input
             value={name}
             onChange={e => onNameChange(e.target.value)}
-            className="w-full h-16 font-serif text-4xl tracking-tight text-center bg-transparent border border-transparent hover:border-gold/20 focus:border-gold/50 focus:bg-background/50 rounded outline-none text-gold transition-colors"
+            className="w-full h-16 font-serif text-4xl tracking-tight text-center bg-transparent border border-transparent hover:border-gold/25 focus:border-gold/55 focus:bg-background/50 rounded outline-none text-gold transition-colors"
             placeholder={namePlaceholder}
             required={required}
             autoFocus={autoFocusName}
@@ -88,7 +88,7 @@ export default function FeatureModalHero({
       </div>
 
       <div className="flex mt-6 relative pb-4">
-        <div className="absolute left-[50%] ml-[-12px] bottom-[-16px] w-6 h-6 bg-card flex items-center justify-center text-gold/40 text-sm rounded-full z-10 border border-gold/10">
+        <div className="absolute left-[50%] ml-[-12px] bottom-[-16px] w-6 h-6 bg-card flex items-center justify-center text-gold/45 text-sm rounded-full z-10 border border-gold/15">
           <Zap className="w-3 h-3" />
         </div>
         <Tabs value={activeTab} onValueChange={onTabChange} className="w-full bg-transparent border-none">
@@ -97,7 +97,7 @@ export default function FeatureModalHero({
               <TabsTrigger
                 key={tab}
                 value={tab}
-                className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-gold data-[state=active]:border-b-2 data-[state=active]:border-gold rounded-none h-10 px-0 label-text transition-all opacity-60 data-[state=active]:opacity-100 flex-1 hover:text-gold/80"
+                className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-gold data-[state=active]:border-b-2 data-[state=active]:border-gold rounded-none h-10 px-0 label-text transition-all opacity-60 data-[state=active]:opacity-100 flex-1 hover:text-gold/85"
               >
                 {tab}
               </TabsTrigger>

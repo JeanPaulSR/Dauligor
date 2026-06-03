@@ -126,11 +126,11 @@ export default function Wiki({ userProfile }: { userProfile: any }) {
   const renderArticleCard = (page: any) => (
     <Card 
       key={page.id} 
-      className="lore-card group flex flex-col border-gold/10 hover:border-gold/40 transition-all cursor-pointer overflow-hidden bg-card/40 backdrop-blur-sm"
+      className="lore-card group flex flex-col border-gold/15 hover:border-gold/45 transition-all cursor-pointer overflow-hidden bg-card/40 backdrop-blur-sm"
       onClick={() => navigate(`/wiki/article/${page.id}`)}
     >
       {page.imageUrl && (
-        <div className="h-32 overflow-hidden border-b border-gold/10">
+        <div className="h-32 overflow-hidden border-b border-gold/15">
           <img 
             src={page.imageUrl} 
             alt={page.title} 
@@ -142,7 +142,7 @@ export default function Wiki({ userProfile }: { userProfile: any }) {
       <CardHeader className="p-5 pb-2">
         <div className="flex justify-between items-start">
           <div className="flex items-center gap-2">
-            <Badge variant="outline" className="label-text bg-gold/5 border-gold/20">
+            <Badge variant="outline" className="label-text bg-gold/5 border-gold/25">
               {page.category}
             </Badge>
             {page.status === 'draft' && (
@@ -168,14 +168,14 @@ export default function Wiki({ userProfile }: { userProfile: any }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="p-5 pt-0 flex-grow">
-        <p className="description-text line-clamp-2 text-xs text-ink/60 mb-4">
+        <p className="description-text line-clamp-2 text-xs text-ink/65 mb-4">
           {page.excerpt || (page.content?.substring(0, 100) + '...')}
         </p>
         <div className="flex flex-wrap gap-1 mt-auto">
           {page.tags?.slice(0, 3).map((tag: string) => (
-            <span key={tag} className="text-[9px] bg-ink/5 px-2 py-0.5 rounded text-ink/40 border border-ink/5">#{tag}</span>
+            <span key={tag} className="text-[9px] bg-ink/5 px-2 py-0.5 rounded text-ink/45 border border-ink/5">#{tag}</span>
           ))}
-          {page.tags?.length > 3 && <span className="text-[9px] text-ink/30">+{page.tags.length - 3}</span>}
+          {page.tags?.length > 3 && <span className="text-[9px] text-ink/35">+{page.tags.length - 3}</span>}
         </div>
       </CardContent>
     </Card>
@@ -195,11 +195,11 @@ export default function Wiki({ userProfile }: { userProfile: any }) {
                   onClick={() => handleTabChange(cat.id)}
                   className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-all ${
                     activeTab === cat.id 
-                    ? 'bg-gold/10 text-gold font-bold shadow-sm' 
-                    : 'text-ink/60 hover:bg-gold/5 hover:text-ink'
+                    ? 'bg-gold/15 text-gold font-bold shadow-sm' 
+                    : 'text-ink/65 hover:bg-gold/5 hover:text-ink'
                   }`}
                 >
-                  <cat.icon className={`w-4 h-4 ${activeTab === cat.id ? 'text-gold' : 'text-ink/30'}`} />
+                  <cat.icon className={`w-4 h-4 ${activeTab === cat.id ? 'text-gold' : 'text-ink/35'}`} />
                   {cat.label}
                   <span className="ml-auto text-[10px] opacity-40">
                     {pages.filter(p => (cat.id === 'all' || p.category === cat.id) && (p.status === 'published' || isStaff)).length}
@@ -211,9 +211,9 @@ export default function Wiki({ userProfile }: { userProfile: any }) {
         </div>
 
         {isStaff && (
-          <div className="pt-6 border-t border-gold/10">
+          <div className="pt-6 border-t border-gold/15">
             <Link to="/wiki/new" className="block">
-              <Button className="w-full btn-gold-solid gap-2 shadow-lg shadow-gold/20">
+              <Button className="w-full btn-gold-solid gap-2 shadow-lg shadow-gold/25">
                 <Plus className="w-4 h-4" /> New Entry
               </Button>
             </Link>
@@ -231,11 +231,11 @@ export default function Wiki({ userProfile }: { userProfile: any }) {
           </div>
           
           <div className="flex items-center gap-4 w-full md:w-auto">
-            <div className="flex bg-card/50 border border-gold/10 rounded-md p-1">
+            <div className="flex bg-card/50 border border-gold/15 rounded-md p-1">
               <Button 
                 variant="ghost" 
                 size="sm" 
-                className={`px-3 py-1 h-8 ${viewMode === 'grid' ? 'bg-gold/10 text-gold' : 'text-ink/40 hover:text-ink'}`}
+                className={`px-3 py-1 h-8 ${viewMode === 'grid' ? 'bg-gold/15 text-gold' : 'text-ink/45 hover:text-ink'}`}
                 onClick={() => setViewMode('grid')}
               >
                 <LayoutGrid className="w-4 h-4" />
@@ -243,7 +243,7 @@ export default function Wiki({ userProfile }: { userProfile: any }) {
               <Button 
                 variant="ghost" 
                 size="sm" 
-                className={`px-3 py-1 h-8 ${viewMode === 'list' ? 'bg-gold/10 text-gold' : 'text-ink/40 hover:text-ink'}`}
+                className={`px-3 py-1 h-8 ${viewMode === 'list' ? 'bg-gold/15 text-gold' : 'text-ink/45 hover:text-ink'}`}
                 onClick={() => setViewMode('list')}
               >
                 <List className="w-4 h-4" />
@@ -269,7 +269,7 @@ export default function Wiki({ userProfile }: { userProfile: any }) {
                   if (categoryPages.length === 0) return null;
                   return (
                     <div key={category.id} className="space-y-4">
-                      <div className="flex items-center gap-3 border-b border-gold/20 pb-2">
+                      <div className="flex items-center gap-3 border-b border-gold/25 pb-2">
                         <category.icon className="w-6 h-6 text-gold" />
                         <h2 className="h3-title">{category.label}</h2>
                       </div>
@@ -287,16 +287,16 @@ export default function Wiki({ userProfile }: { userProfile: any }) {
             )}
             
             {filteredPages.length === 0 && (
-              <div className="text-center py-32 bg-gold/5 rounded-2xl border border-dashed border-gold/20">
-                <BookOpen className="w-16 h-16 text-gold/10 mx-auto mb-4" />
-                <h3 className="h3-title text-ink/40">These categories are empty</h3>
+              <div className="text-center py-32 bg-gold/5 rounded-2xl border border-dashed border-gold/25">
+                <BookOpen className="w-16 h-16 text-gold/15 mx-auto mb-4" />
+                <h3 className="h3-title text-ink/45">These categories are empty</h3>
                 <p className="muted-text mt-1">Try a different search or category.</p>
               </div>
             )}
           </>
         ) : (
           /* List / Tree View */
-          <div className="bg-card/40 border border-gold/10 rounded-lg p-6">
+          <div className="bg-card/40 border border-gold/15 rounded-lg p-6">
             {categories.filter(c => activeTab === 'all' || c.id === activeTab).map(category => {
               if (category.id === 'all') return null;
               
@@ -313,7 +313,7 @@ export default function Wiki({ userProfile }: { userProfile: any }) {
 
               return (
                 <div key={category.id} className="mb-8 last:mb-0">
-                  <div className="flex items-center gap-2 mb-4 pb-2 border-b border-gold/10">
+                  <div className="flex items-center gap-2 mb-4 pb-2 border-b border-gold/15">
                     <category.icon className="w-5 h-5 text-gold" />
                     <h2 className="h3-title">{category.label}</h2>
                   </div>
@@ -365,14 +365,14 @@ export default function Wiki({ userProfile }: { userProfile: any }) {
                             <div className="flex items-center gap-2 py-1.5 hover:bg-gold/5 rounded px-2 group">
                               <div style={{ width: `${depth * 20}px` }} />
                               {hasChildren ? (
-                                <button onClick={toggleParent} className="p-0.5 hover:bg-gold/10 rounded text-ink/40 hover:text-gold">
+                                <button onClick={toggleParent} className="p-0.5 hover:bg-gold/15 rounded text-ink/45 hover:text-gold">
                                   {isParentExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                                 </button>
                               ) : (
                                 <div className="w-4" />
                               )}
-                              <FileText className="w-3.5 h-3.5 text-gold/60" />
-                              <Link to={`/wiki/article/${page.id}`} className="text-sm font-medium text-ink/80 hover:text-gold transition-colors flex-grow">
+                              <FileText className="w-3.5 h-3.5 text-gold/65" />
+                              <Link to={`/wiki/article/${page.id}`} className="text-sm font-medium text-ink/85 hover:text-gold transition-colors flex-grow">
                                 {page.title}
                               </Link>
                               {page.status === 'draft' && (
@@ -406,12 +406,12 @@ export default function Wiki({ userProfile }: { userProfile: any }) {
                         <div key={folderName} className="flex flex-col">
                           <button 
                             onClick={toggleFolder}
-                            className="flex items-center gap-2 py-2 text-sm font-bold text-ink/70 hover:text-gold transition-colors text-left"
+                            className="flex items-center gap-2 py-2 text-sm font-bold text-ink/75 hover:text-gold transition-colors text-left"
                           >
                             {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                            <Folder className="w-4 h-4 text-gold/80" />
+                            <Folder className="w-4 h-4 text-gold/85" />
                             {folderName}
-                            <span className="text-xs font-normal text-ink/40 ml-2">({folderPages.length})</span>
+                            <span className="text-xs font-normal text-ink/45 ml-2">({folderPages.length})</span>
                           </button>
                           
                           {isExpanded && (
@@ -427,7 +427,7 @@ export default function Wiki({ userProfile }: { userProfile: any }) {
               );
             })}
             {filteredPages.length === 0 && (
-              <div className="py-20 text-center text-ink/40 font-serif italic">
+              <div className="py-20 text-center text-ink/45 font-serif italic">
                 No articles found matching your criteria.
               </div>
             )}

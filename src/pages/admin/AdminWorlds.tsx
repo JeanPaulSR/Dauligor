@@ -213,7 +213,7 @@ export default function AdminWorlds({ userProfile }: { userProfile: any }) {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div className="space-y-2">
           <h1 className="text-4xl font-serif font-bold text-ink tracking-tight uppercase">Worlds</h1>
-          <p className="text-ink/60 font-serif italic">
+          <p className="text-ink/65 font-serif italic">
             Top-level scope for compendium content. The default (<strong>Dauligor</strong>)
             world holds every shared, global entity; additional worlds will host
             user-owned content as scope-aware roles roll out.
@@ -249,7 +249,7 @@ export default function AdminWorlds({ userProfile }: { userProfile: any }) {
         </CardHeader>
         <CardContent>
           {worlds.length === 0 ? (
-            <p className="text-ink/60 italic py-8 text-center">
+            <p className="text-ink/65 italic py-8 text-center">
               {loading ? 'Loading…' : 'No worlds yet.'}
             </p>
           ) : (
@@ -275,12 +275,12 @@ export default function AdminWorlds({ userProfile }: { userProfile: any }) {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="font-mono text-xs text-ink/70">{world.slug}</TableCell>
-                    <TableCell className="text-xs text-ink/60">
+                    <TableCell className="font-mono text-xs text-ink/75">{world.slug}</TableCell>
+                    <TableCell className="text-xs text-ink/65">
                       {world.owner_user_id || <span className="italic">—</span>}
                     </TableCell>
-                    <TableCell className="text-xs text-ink/60">{world.sort_order ?? 0}</TableCell>
-                    <TableCell className="text-xs text-ink/60 max-w-md truncate">
+                    <TableCell className="text-xs text-ink/65">{world.sort_order ?? 0}</TableCell>
+                    <TableCell className="text-xs text-ink/65 max-w-md truncate">
                       {world.description || <span className="italic">No description</span>}
                     </TableCell>
                     <TableCell className="text-right">
@@ -348,12 +348,12 @@ function WorldForm({
           placeholder="auto-derived from name if blank"
           className="font-mono"
         />
-        <p className="text-xs text-ink/50">
+        <p className="text-xs text-ink/55">
           Lowercase letters, numbers, and dashes. Used in URLs once worlds scope public content.
         </p>
       </div>
       <div className="space-y-1">
-        <label className="text-sm font-medium">Owner user ID <span className="text-ink/40">(optional)</span></label>
+        <label className="text-sm font-medium">Owner user ID <span className="text-ink/45">(optional)</span></label>
         <Input
           value={draft.owner_user_id}
           onChange={(e) => setDraft({ ...draft, owner_user_id: e.target.value })}
@@ -370,7 +370,7 @@ function WorldForm({
         />
       </div>
       <div className="space-y-1">
-        <label className="text-sm font-medium">Description <span className="text-ink/40">(optional)</span></label>
+        <label className="text-sm font-medium">Description <span className="text-ink/45">(optional)</span></label>
         <Textarea
           value={draft.description}
           onChange={(e) => setDraft({ ...draft, description: e.target.value })}

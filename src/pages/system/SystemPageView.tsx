@@ -47,11 +47,11 @@ export default function SystemPageView() {
   return (
     <div className="max-w-5xl mx-auto px-4 py-10">
       {loading ? (
-        <div className="text-ink/40 italic">Loading…</div>
+        <div className="text-ink/45 italic">Loading…</div>
       ) : !detail ? (
         <div className="text-center py-20">
-          <h1 className="h2-title text-ink/60">System page not found</h1>
-          <p className="text-ink/40 mt-2">
+          <h1 className="h2-title text-ink/65">System page not found</h1>
+          <p className="text-ink/45 mt-2">
             No system page with identifier “{identifier}”.
           </p>
           <Link to="/" className="text-gold hover:underline mt-4 inline-block">

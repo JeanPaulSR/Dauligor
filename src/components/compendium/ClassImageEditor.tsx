@@ -146,8 +146,8 @@ function ContextPanel({
       {/* header */}
       <div className="flex items-start justify-between gap-2">
         <div>
-          <span className="label-text text-gold/80 uppercase block">{label}</span>
-          <span className="label-text text-ink/40">{subtitle}</span>
+          <span className="label-text text-gold/85 uppercase block">{label}</span>
+          <span className="label-text text-ink/45">{subtitle}</span>
         </div>
         {canOverride && (
           <div className="flex items-center gap-1.5 shrink-0">
@@ -155,7 +155,7 @@ function ContextPanel({
               <button
                 type="button"
                 onClick={() => { onOverrideChange!(''); setShowUpload(false); }}
-                className="label-text text-ink/40 hover:text-blood flex items-center gap-1"
+                className="label-text text-ink/45 hover:text-blood flex items-center gap-1"
               >
                 <X className="w-2.5 h-2.5" /> Reset
               </button>
@@ -176,7 +176,7 @@ function ContextPanel({
       <div
         ref={containerRef}
         className={cn(
-          'relative overflow-hidden rounded-lg select-none border border-gold/10',
+          'relative overflow-hidden rounded-lg select-none border border-gold/15',
           image ? 'cursor-grab active:cursor-grabbing' : '',
           aspectClass
         )}
@@ -206,7 +206,7 @@ function ContextPanel({
           </>
         ) : (
           <div className="absolute inset-0 bg-ink/5 flex items-center justify-center">
-            <ImageIcon className="w-8 h-8 text-gold/10" />
+            <ImageIcon className="w-8 h-8 text-gold/15" />
           </div>
         )}
       </div>
@@ -214,11 +214,11 @@ function ContextPanel({
       {/* zoom controls */}
       {image && (
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 bg-background/50 rounded-md border border-gold/10 px-1 py-0.5">
+          <div className="flex items-center gap-1 bg-background/50 rounded-md border border-gold/15 px-1 py-0.5">
             <Button type="button" size="sm" variant="ghost" className="h-6 w-6 p-0 btn-gold" onClick={() => step(-0.1)}>
               <ZoomOut className="w-3 h-3" />
             </Button>
-            <span className="label-text text-ink/40 w-8 text-center text-[10px]">
+            <span className="label-text text-ink/45 w-8 text-center text-[10px]">
               {Math.round(validDisplay.scale * 100)}%
             </span>
             <Button type="button" size="sm" variant="ghost" className="h-6 w-6 p-0 btn-gold" onClick={() => step(0.1)}>
@@ -230,7 +230,7 @@ function ContextPanel({
 
       {/* inline override upload */}
       {canOverride && showUpload && (
-        <div className="border border-gold/10 rounded-md p-3 bg-card/30">
+        <div className="border border-gold/15 rounded-md p-3 bg-card/30">
           <ImageUpload
             currentImageUrl={overrideImageUrl}
             storagePath={storagePath!}
@@ -309,8 +309,8 @@ export function ClassImageEditor({
 
   return (
     <div className={cn('space-y-2', className)}>
-      <p className="label-text text-ink/40">
-        Drag to pan · Scroll or use ± to zoom · <span className="text-gold/60">Camera icon</span> overrides the image for that view
+      <p className="label-text text-ink/45">
+        Drag to pan · Scroll or use ± to zoom · <span className="text-gold/65">Camera icon</span> overrides the image for that view
       </p>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
 
@@ -381,21 +381,21 @@ export function ClassImageEditor({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
         <div>
           {imageUrl && (
-            <Button type="button" size="sm" variant="ghost" className="w-full h-8 text-xs border border-gold/10 text-gold/60 hover:text-gold hover:border-gold/30" onClick={() => setModalImageUrl(imageUrl)}>
+            <Button type="button" size="sm" variant="ghost" className="w-full h-8 text-xs border border-gold/15 text-gold/65 hover:text-gold hover:border-gold/35" onClick={() => setModalImageUrl(imageUrl)}>
               <Info className="w-3 h-3 mr-1.5" /> Edit Metadata
             </Button>
           )}
         </div>
         <div>
           {cardImg && (
-            <Button type="button" size="sm" variant="ghost" className="w-full h-8 text-xs border border-gold/10 text-gold/60 hover:text-gold hover:border-gold/30" onClick={() => setModalImageUrl(cardImg)}>
+            <Button type="button" size="sm" variant="ghost" className="w-full h-8 text-xs border border-gold/15 text-gold/65 hover:text-gold hover:border-gold/35" onClick={() => setModalImageUrl(cardImg)}>
               <Info className="w-3 h-3 mr-1.5" /> Edit Metadata
             </Button>
           )}
         </div>
         <div>
           {prevImg && (
-            <Button type="button" size="sm" variant="ghost" className="w-full h-8 text-xs border border-gold/10 text-gold/60 hover:text-gold hover:border-gold/30" onClick={() => setModalImageUrl(prevImg)}>
+            <Button type="button" size="sm" variant="ghost" className="w-full h-8 text-xs border border-gold/15 text-gold/65 hover:text-gold hover:border-gold/35" onClick={() => setModalImageUrl(prevImg)}>
               <Info className="w-3 h-3 mr-1.5" /> Edit Metadata
             </Button>
           )}

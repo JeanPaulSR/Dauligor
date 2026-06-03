@@ -1204,30 +1204,30 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
 
             <div className="grid gap-3 grid-cols-2 md:grid-cols-3">
               <ReviewFieldHighlight columnKey="name" className="space-y-0.5">
-                <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Name</Label>
+                <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/45">Name</Label>
                 <Input
                   value={formData.name}
                   onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                  className="h-8 bg-background/50 border-gold/10 focus:border-gold text-sm"
+                  className="h-8 bg-background/50 border-gold/15 focus:border-gold text-sm"
                   placeholder="e.g. Fireball"
                   required
                 />
               </ReviewFieldHighlight>
               <ReviewFieldHighlight columnKey="identifier" className="space-y-0.5">
-                <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Identifier</Label>
+                <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/45">Identifier</Label>
                 <Input
                   value={formData.identifier}
                   onChange={e => setFormData(prev => ({ ...prev, identifier: e.target.value }))}
-                  className="h-8 bg-background/50 border-gold/10 focus:border-gold font-mono text-sm"
+                  className="h-8 bg-background/50 border-gold/15 focus:border-gold font-mono text-sm"
                   placeholder={slugify(formData.name || 'spell')}
                 />
               </ReviewFieldHighlight>
               <ReviewFieldHighlight columnKey="source_id" className="space-y-0.5">
-                <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Source</Label>
+                <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/45">Source</Label>
                 <select
                   value={formData.sourceId}
                   onChange={e => setFormData(prev => ({ ...prev, sourceId: e.target.value }))}
-                  className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                  className="w-full h-8 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm"
                 >
                   <option value="">Select a source</option>
                   {sources.map(source => (
@@ -1236,22 +1236,22 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
                 </select>
               </ReviewFieldHighlight>
               <ReviewFieldHighlight columnKey="level" className="space-y-0.5">
-                <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Level</Label>
+                <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/45">Level</Label>
                 <Input
                   type="number"
                   min={0}
                   max={9}
                   value={formData.level ?? 0}
                   onChange={e => setFormData(prev => ({ ...prev, level: parseInt(e.target.value || '0', 10) || 0 }))}
-                  className="h-8 bg-background/50 border-gold/10 focus:border-gold text-sm"
+                  className="h-8 bg-background/50 border-gold/15 focus:border-gold text-sm"
                 />
               </ReviewFieldHighlight>
               <ReviewFieldHighlight columnKey="school" className="space-y-0.5">
-                <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">School</Label>
+                <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/45">School</Label>
                 <select
                   value={formData.school || 'evo'}
                   onChange={e => setFormData(prev => ({ ...prev, school: e.target.value }))}
-                  className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                  className="w-full h-8 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm"
                 >
                   {SPELL_SCHOOLS.map(([value, label]) => (
                     <option key={value} value={value}>{label}</option>
@@ -1259,11 +1259,11 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
                 </select>
               </ReviewFieldHighlight>
               <ReviewFieldHighlight columnKey="preparation_mode" className="space-y-0.5">
-                <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Prep Mode</Label>
+                <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/45">Prep Mode</Label>
                 <select
                   value={formData.preparationMode || 'spell'}
                   onChange={e => setFormData(prev => ({ ...prev, preparationMode: e.target.value }))}
-                  className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                  className="w-full h-8 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm"
                 >
                   {PREPARATION_MODES.map(([value, label]) => (
                     <option key={value} value={value}>{label}</option>
@@ -1293,28 +1293,28 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
       render: () => (
         <Tabs defaultValue="casting" className="space-y-4">
           <TabsList variant="line" className="gap-2 bg-transparent p-0">
-            <TabsTrigger value="casting" className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">
+            <TabsTrigger value="casting" className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/45 data-active:bg-gold/15 data-active:text-gold">
               Casting
             </TabsTrigger>
-            <TabsTrigger value="targeting" className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">
+            <TabsTrigger value="targeting" className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/45 data-active:bg-gold/15 data-active:text-gold">
               Targeting
             </TabsTrigger>
-            <TabsTrigger value="uses" className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">
-              Uses {formData.uses.recovery.length > 0 && <span className="ml-1 text-gold/70">({formData.uses.recovery.length})</span>}
+            <TabsTrigger value="uses" className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/45 data-active:bg-gold/15 data-active:text-gold">
+              Uses {formData.uses.recovery.length > 0 && <span className="ml-1 text-gold/75">({formData.uses.recovery.length})</span>}
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="casting" className="mt-0 space-y-4">
-            <div className="space-y-4 border border-gold/10 rounded-md p-4 bg-background/20">
+            <div className="space-y-4 border border-gold/15 rounded-md p-4 bg-background/20">
               <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Casting Time</h3>
               <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                 <div className="space-y-2">
-                  <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Activation</Label>
+                  <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/65">Activation</Label>
                   <div className="grid grid-cols-[1fr_80px] gap-2">
                     <select
                       value={formData.activation.type || 'action'}
                       onChange={e => setFormData(prev => ({ ...prev, activation: { ...prev.activation, type: e.target.value } }))}
-                      className="h-9 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                      className="h-9 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm"
                     >
                       {ACTIVATION_TYPES.map(([value, label]) => (
                         <option key={value} value={value}>{label}</option>
@@ -1325,30 +1325,30 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
                       min={0}
                       value={String(formData.activation.value ?? '')}
                       onChange={e => setFormData(prev => ({ ...prev, activation: { ...prev.activation, value: e.target.value === '' ? '' : Number(e.target.value) } }))}
-                      className="h-9 bg-background/50 border-gold/10 focus:border-gold"
+                      className="h-9 bg-background/50 border-gold/15 focus:border-gold"
                     />
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Reaction Trigger</Label>
+                  <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/65">Reaction Trigger</Label>
                   <Input
                     value={formData.activation.condition || ''}
                     onChange={e => setFormData(prev => ({ ...prev, activation: { ...prev.activation, condition: e.target.value } }))}
                     placeholder="e.g. when you take damage (optional)"
-                    className="h-9 bg-background/50 border-gold/10 focus:border-gold text-xs"
+                    className="h-9 bg-background/50 border-gold/15 focus:border-gold text-xs"
                   />
                 </div>
               </div>
               <div className="grid md:grid-cols-2 gap-3">
-                <label className="flex items-center justify-between gap-3 border border-gold/10 rounded-md p-3">
-                  <span className="text-xs font-bold uppercase tracking-widest text-ink/60">Ritual</span>
+                <label className="flex items-center justify-between gap-3 border border-gold/15 rounded-md p-3">
+                  <span className="text-xs font-bold uppercase tracking-widest text-ink/65">Ritual</span>
                   <Checkbox
                     checked={!!formData.ritual}
                     onCheckedChange={checked => setFormData(prev => ({ ...prev, ritual: !!checked }))}
                   />
                 </label>
-                <label className="flex items-center justify-between gap-3 border border-gold/10 rounded-md p-3">
-                  <span className="text-xs font-bold uppercase tracking-widest text-ink/60">Concentration</span>
+                <label className="flex items-center justify-between gap-3 border border-gold/15 rounded-md p-3">
+                  <span className="text-xs font-bold uppercase tracking-widest text-ink/65">Concentration</span>
                   <Checkbox
                     checked={!!formData.concentration}
                     onCheckedChange={checked => setFormData(prev => ({ ...prev, concentration: !!checked }))}
@@ -1357,11 +1357,11 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
               </div>
             </div>
 
-            <div className="space-y-3 border border-gold/10 rounded-md p-4 bg-background/20">
+            <div className="space-y-3 border border-gold/15 rounded-md p-4 bg-background/20">
               <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Components</h3>
               <div className="grid md:grid-cols-3 gap-3">
-                <label className="flex items-center justify-between gap-3 border border-gold/10 rounded-md p-3">
-                  <span className="text-xs uppercase text-ink/60 font-bold">Verbal</span>
+                <label className="flex items-center justify-between gap-3 border border-gold/15 rounded-md p-3">
+                  <span className="text-xs uppercase text-ink/65 font-bold">Verbal</span>
                   <Checkbox
                     checked={!!formData.components?.vocal}
                     onCheckedChange={checked => setFormData(prev => ({
@@ -1370,8 +1370,8 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
                     }))}
                   />
                 </label>
-                <label className="flex items-center justify-between gap-3 border border-gold/10 rounded-md p-3">
-                  <span className="text-xs uppercase text-ink/60 font-bold">Somatic</span>
+                <label className="flex items-center justify-between gap-3 border border-gold/15 rounded-md p-3">
+                  <span className="text-xs uppercase text-ink/65 font-bold">Somatic</span>
                   <Checkbox
                     checked={!!formData.components?.somatic}
                     onCheckedChange={checked => setFormData(prev => ({
@@ -1380,8 +1380,8 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
                     }))}
                   />
                 </label>
-                <label className="flex items-center justify-between gap-3 border border-gold/10 rounded-md p-3">
-                  <span className="text-xs uppercase text-ink/60 font-bold">Material</span>
+                <label className="flex items-center justify-between gap-3 border border-gold/15 rounded-md p-3">
+                  <span className="text-xs uppercase text-ink/65 font-bold">Material</span>
                   <Checkbox
                     checked={!!formData.components?.material}
                     onCheckedChange={checked => setFormData(prev => ({
@@ -1393,31 +1393,31 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
               </div>
               <div className="grid md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)] gap-3">
                 <div className="space-y-1">
-                  <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Material Text</Label>
+                  <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/65">Material Text</Label>
                   <Input
                     value={formData.components?.materialText || ''}
                     onChange={e => setFormData(prev => ({
                       ...prev,
                       components: mergeSpellComponents(prev.components, { materialText: e.target.value })
                     }))}
-                    className="bg-background/50 border-gold/10 focus:border-gold"
+                    className="bg-background/50 border-gold/15 focus:border-gold"
                     placeholder="a tiny ball of bat guano and sulfur"
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Cost</Label>
+                  <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/65">Cost</Label>
                   <Input
                     value={formData.components?.cost || ''}
                     onChange={e => setFormData(prev => ({
                       ...prev,
                       components: mergeSpellComponents(prev.components, { cost: e.target.value })
                     }))}
-                    className="bg-background/50 border-gold/10 focus:border-gold text-xs"
+                    className="bg-background/50 border-gold/15 focus:border-gold text-xs"
                     placeholder="100 gp"
                   />
                 </div>
-                <label className="flex items-center justify-between gap-3 border border-gold/10 rounded-md p-3 self-end">
-                  <span className="text-[10px] uppercase text-ink/60 font-bold tracking-widest">Consumed</span>
+                <label className="flex items-center justify-between gap-3 border border-gold/15 rounded-md p-3 self-end">
+                  <span className="text-[10px] uppercase text-ink/65 font-bold tracking-widest">Consumed</span>
                   <Checkbox
                     checked={!!formData.components?.consumed}
                     onCheckedChange={checked => setFormData(prev => ({
@@ -1427,23 +1427,23 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
                   />
                 </label>
               </div>
-              <p className="text-[10px] text-ink/40">
+              <p className="text-[10px] text-ink/45">
                 Spell metadata stays lightweight here. Runtime behavior lives in Activities.
               </p>
             </div>
           </TabsContent>
 
           <TabsContent value="targeting" className="mt-0 space-y-4">
-            <div className="space-y-4 border border-gold/10 rounded-md p-4 bg-background/20">
+            <div className="space-y-4 border border-gold/15 rounded-md p-4 bg-background/20">
               <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Range &amp; Duration</h3>
               <div className="grid gap-4 lg:grid-cols-2">
                 <div className="space-y-2">
-                  <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Range</Label>
+                  <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/65">Range</Label>
                   <div className="grid grid-cols-[1fr_70px_70px] gap-2">
                     <select
                       value={formData.range.units || 'self'}
                       onChange={e => setFormData(prev => ({ ...prev, range: { ...prev.range, units: e.target.value } }))}
-                      className="h-9 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                      className="h-9 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm"
                     >
                       {RANGE_UNITS.map(([value, label]) => (
                         <option key={value} value={value}>{label}</option>
@@ -1456,7 +1456,7 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
                       onChange={e => setFormData(prev => ({ ...prev, range: { ...prev.range, value: e.target.value === '' ? '' : Number(e.target.value) } }))}
                       disabled={formData.range.units === 'self' || formData.range.units === 'touch'}
                       placeholder="Value"
-                      className="h-9 bg-background/50 border-gold/10 focus:border-gold disabled:opacity-50 text-xs"
+                      className="h-9 bg-background/50 border-gold/15 focus:border-gold disabled:opacity-50 text-xs"
                     />
                     <Input
                       type="number"
@@ -1465,27 +1465,27 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
                       onChange={e => setFormData(prev => ({ ...prev, range: { ...prev.range, long: e.target.value === '' ? '' : Number(e.target.value) } }))}
                       disabled={formData.range.units === 'self' || formData.range.units === 'touch'}
                       placeholder="Long"
-                      className="h-9 bg-background/50 border-gold/10 focus:border-gold disabled:opacity-50 text-xs"
+                      className="h-9 bg-background/50 border-gold/15 focus:border-gold disabled:opacity-50 text-xs"
                     />
                   </div>
                   <Input
                     value={formData.range.special || ''}
                     onChange={e => setFormData(prev => ({ ...prev, range: { ...prev.range, special: e.target.value } }))}
                     placeholder='e.g. "Sight" (optional)'
-                    className="h-9 bg-background/50 border-gold/10 focus:border-gold text-xs"
+                    className="h-9 bg-background/50 border-gold/15 focus:border-gold text-xs"
                   />
-                  <p className="text-[10px] text-ink/40">
+                  <p className="text-[10px] text-ink/45">
                     Long range is only meaningful for ranged-attack spells (Firebolt, Eldritch Blast); most spells leave it blank.
                   </p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Duration</Label>
+                  <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/65">Duration</Label>
                   <div className="grid grid-cols-[1fr_80px] gap-2">
                     <select
                       value={formData.duration.units || 'inst'}
                       onChange={e => setFormData(prev => ({ ...prev, duration: { ...prev.duration, units: e.target.value } }))}
-                      className="h-9 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                      className="h-9 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm"
                     >
                       {DURATION_UNITS.map(([value, label]) => (
                         <option key={value} value={value}>{label}</option>
@@ -1497,23 +1497,23 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
                       value={String(formData.duration.value ?? '')}
                       onChange={e => setFormData(prev => ({ ...prev, duration: { ...prev.duration, value: e.target.value === '' ? '' : Number(e.target.value) } }))}
                       disabled={formData.duration.units === 'inst' || formData.duration.units === 'perm' || formData.duration.units === 'spec'}
-                      className="h-9 bg-background/50 border-gold/10 focus:border-gold disabled:opacity-50"
+                      className="h-9 bg-background/50 border-gold/15 focus:border-gold disabled:opacity-50"
                     />
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="space-y-4 border border-gold/10 rounded-md p-4 bg-background/20">
+            <div className="space-y-4 border border-gold/15 rounded-md p-4 bg-background/20">
               <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Target</h3>
               <div className="grid gap-4 lg:grid-cols-2">
                 <div className="space-y-2">
-                  <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Area Template</Label>
+                  <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/65">Area Template</Label>
                   <div className="grid grid-cols-[1fr_70px] gap-2">
                     <select
                       value={formData.target.template.type || ''}
                       onChange={e => setFormData(prev => ({ ...prev, target: { ...prev.target, template: { ...prev.target.template, type: e.target.value } } }))}
-                      className="h-9 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                      className="h-9 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm"
                     >
                       <option value="">None</option>
                       <option value="cone">Cone</option>
@@ -1528,7 +1528,7 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
                     <select
                       value={formData.target.template.units || 'ft'}
                       onChange={e => setFormData(prev => ({ ...prev, target: { ...prev.target, template: { ...prev.target.template, units: e.target.value } } }))}
-                      className="h-9 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs"
+                      className="h-9 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-xs"
                       disabled={!formData.target.template.type}
                     >
                       <option value="ft">ft</option>
@@ -1543,32 +1543,32 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
                       onChange={e => setFormData(prev => ({ ...prev, target: { ...prev.target, template: { ...prev.target.template, size: e.target.value } } }))}
                       placeholder="Size"
                       disabled={!formData.target.template.type}
-                      className="h-9 bg-background/50 border-gold/10 focus:border-gold disabled:opacity-50 text-xs"
+                      className="h-9 bg-background/50 border-gold/15 focus:border-gold disabled:opacity-50 text-xs"
                     />
                     <Input
                       value={String(formData.target.template.width ?? '')}
                       onChange={e => setFormData(prev => ({ ...prev, target: { ...prev.target, template: { ...prev.target.template, width: e.target.value } } }))}
                       placeholder="Width"
                       disabled={!['line', 'wall'].includes(formData.target.template.type)}
-                      className="h-9 bg-background/50 border-gold/10 focus:border-gold disabled:opacity-50 text-xs"
+                      className="h-9 bg-background/50 border-gold/15 focus:border-gold disabled:opacity-50 text-xs"
                     />
                     <Input
                       value={String(formData.target.template.height ?? '')}
                       onChange={e => setFormData(prev => ({ ...prev, target: { ...prev.target, template: { ...prev.target.template, height: e.target.value } } }))}
                       placeholder="Height"
                       disabled={!['cylinder', 'wall'].includes(formData.target.template.type)}
-                      className="h-9 bg-background/50 border-gold/10 focus:border-gold disabled:opacity-50 text-xs"
+                      className="h-9 bg-background/50 border-gold/15 focus:border-gold disabled:opacity-50 text-xs"
                     />
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Affects</Label>
+                  <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/65">Affects</Label>
                   <div className="grid grid-cols-[1fr_70px] gap-2">
                     <select
                       value={formData.target.affects.type || ''}
                       onChange={e => setFormData(prev => ({ ...prev, target: { ...prev.target, affects: { ...prev.target.affects, type: e.target.value } } }))}
-                      className="h-9 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                      className="h-9 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm"
                     >
                       <option value="">None</option>
                       <option value="self">Self</option>
@@ -1583,11 +1583,11 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
                       onChange={e => setFormData(prev => ({ ...prev, target: { ...prev.target, affects: { ...prev.target.affects, count: e.target.value } } }))}
                       placeholder="Count"
                       disabled={!formData.target.affects.type || formData.target.affects.type === 'self'}
-                      className="h-9 bg-background/50 border-gold/10 focus:border-gold disabled:opacity-50 text-xs"
+                      className="h-9 bg-background/50 border-gold/15 focus:border-gold disabled:opacity-50 text-xs"
                     />
                   </div>
-                  <label className="flex items-center justify-between gap-3 border border-gold/10 rounded-md p-2.5">
-                    <span className="text-[10px] uppercase text-ink/60 font-bold tracking-widest">Caster chooses</span>
+                  <label className="flex items-center justify-between gap-3 border border-gold/15 rounded-md p-2.5">
+                    <span className="text-[10px] uppercase text-ink/65 font-bold tracking-widest">Caster chooses</span>
                     <Checkbox
                       checked={!!formData.target.affects.choice}
                       onCheckedChange={checked => setFormData(prev => ({ ...prev, target: { ...prev.target, affects: { ...prev.target.affects, choice: !!checked } } }))}
@@ -1597,42 +1597,42 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
                     value={formData.target.affects.special || ''}
                     onChange={e => setFormData(prev => ({ ...prev, target: { ...prev.target, affects: { ...prev.target.affects, special: e.target.value } } }))}
                     placeholder='Special override (e.g. "any number")'
-                    className="h-9 bg-background/50 border-gold/10 focus:border-gold text-xs"
+                    className="h-9 bg-background/50 border-gold/15 focus:border-gold text-xs"
                   />
                 </div>
               </div>
-              <p className="text-[10px] text-ink/40">
+              <p className="text-[10px] text-ink/45">
                 Touch / self spells can leave both blank. AoE spells use Template; single-target spells use Affects.
               </p>
             </div>
           </TabsContent>
 
           <TabsContent value="uses" className="mt-0 space-y-4">
-            <div className="space-y-4 border border-gold/10 rounded-md p-4 bg-background/20">
+            <div className="space-y-4 border border-gold/15 rounded-md p-4 bg-background/20">
               <div className="flex items-baseline justify-between">
                 <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Limited Uses</h3>
-                <span className="text-[10px] text-ink/40">Optional — leave blank for unlimited.</span>
+                <span className="text-[10px] text-ink/45">Optional — leave blank for unlimited.</span>
               </div>
               <div className="space-y-1">
-                <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Max (formula or number)</Label>
+                <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/65">Max (formula or number)</Label>
                 <Input
                   value={formData.uses.max || ''}
                   onChange={e => setFormData(prev => ({ ...prev, uses: { ...prev.uses, max: e.target.value } }))}
                   placeholder="e.g. @prof or 3"
-                  className="bg-background/50 border-gold/10 focus:border-gold text-xs font-mono"
+                  className="bg-background/50 border-gold/15 focus:border-gold text-xs font-mono"
                 />
               </div>
 
-              <div className="space-y-2 border-t border-gold/8 pt-3">
+              <div className="space-y-2 border-t border-gold/5 pt-3">
                 <div className="flex items-baseline justify-between">
-                  <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Recovery Rules</Label>
-                  <span className="text-[10px] text-ink/40">Lands at <code className="font-mono">system.uses.recovery[]</code></span>
+                  <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/65">Recovery Rules</Label>
+                  <span className="text-[10px] text-ink/45">Lands at <code className="font-mono">system.uses.recovery[]</code></span>
                 </div>
                 <div className="space-y-2">
                   {formData.uses.recovery.map((entry, idx) => (
                     <div
                       key={idx}
-                      className="flex gap-2 items-center p-2.5 bg-gold/3 border border-gold/8 rounded"
+                      className="flex gap-2 items-center p-2.5 bg-gold/5 border border-gold/5 rounded"
                     >
                       <SingleSelectSearch
                         value={entry.period || ''}
@@ -1663,7 +1663,7 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
                           next[idx] = { ...entry, formula: e.target.value };
                           setFormData((prev) => ({ ...prev, uses: { ...prev.uses, recovery: next } }));
                         }}
-                        className="h-7 text-[10px] font-mono bg-background/40 border-gold/10 flex-1"
+                        className="h-7 text-[10px] font-mono bg-background/40 border-gold/15 flex-1"
                         placeholder="1d4 or @prof"
                       />
                       <button
@@ -1682,7 +1682,7 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
                     </div>
                   ))}
                   {formData.uses.recovery.length === 0 && (
-                    <p className="text-center py-3 text-ink/30 italic text-[10px]">No recovery rules.</p>
+                    <p className="text-center py-3 text-ink/35 italic text-[10px]">No recovery rules.</p>
                   )}
                   <button
                     type="button"
@@ -1695,13 +1695,13 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
                         },
                       }))
                     }
-                    className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[10px] uppercase tracking-widest font-black text-gold/50 hover:text-gold border border-dashed border-gold/15 hover:border-gold/30 rounded transition-colors"
+                    className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[10px] uppercase tracking-widest font-black text-gold/55 hover:text-gold border border-dashed border-gold/15 hover:border-gold/35 rounded transition-colors"
                   >
                     <Plus className="w-3 h-3" /> Add Recovery Rule
                   </button>
                 </div>
               </div>
-              <p className="text-[10px] text-ink/40">
+              <p className="text-[10px] text-ink/45">
                 Period + Type drive Foundry's automatic recovery on rest. Formula optional — populate it for "recover 1d4 charges" patterns.
               </p>
             </div>
@@ -1713,7 +1713,7 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
       key: 'activities',
       label: 'Activities',
       render: () => (
-        <div className="border-t border-gold/10 pt-4">
+        <div className="border-t border-gold/15 pt-4">
           <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold mb-2">Activities</h3>
           <ActivityEditor
             activities={formData.activities}
@@ -1728,7 +1728,7 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
       key: 'effects',
       label: 'Effects',
       render: () => (
-        <div className="border-t border-gold/10 pt-4">
+        <div className="border-t border-gold/15 pt-4">
           <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold mb-2">Active Effects</h3>
           <ActiveEffectEditor
             effects={formData.effects}
@@ -1746,7 +1746,7 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
       label: (
         <>
           Tags {formData.tags.length > 0 && (
-            <span className="ml-1 text-gold/70">({formData.tags.length})</span>
+            <span className="ml-1 text-gold/75">({formData.tags.length})</span>
           )}
         </>
       ),
@@ -1766,7 +1766,7 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
       label: (
         <>
           Prereqs {formData.requiredTags.length > 0 && (
-            <span className="ml-1 text-gold/70">({formData.requiredTags.length})</span>
+            <span className="ml-1 text-gold/75">({formData.requiredTags.length})</span>
           )}
         </>
       ),
@@ -1780,15 +1780,15 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
             hint="A character must have all selected tags on their effective tag set to use this spell."
             emptyHint="No tags loaded yet."
           />
-          <div className="space-y-1 border border-gold/10 rounded-md p-3 bg-background/20">
-            <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Prerequisite Notes</Label>
+          <div className="space-y-1 border border-gold/15 rounded-md p-3 bg-background/20">
+            <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/65">Prerequisite Notes</Label>
             <Input
               value={formData.prerequisiteText}
               onChange={e => setFormData(prev => ({ ...prev, prerequisiteText: e.target.value }))}
               placeholder='e.g. "Must have cast Detect Magic in the past hour"'
-              className="bg-background/50 border-gold/10 focus:border-gold text-xs"
+              className="bg-background/50 border-gold/15 focus:border-gold text-xs"
             />
-            <p className="text-[10px] text-ink/40">
+            <p className="text-[10px] text-ink/45">
               Free-text fallback for prereqs that can't be expressed as a tag check. Displayed on the spell card; not machine-checked.
             </p>
           </div>
@@ -1805,7 +1805,7 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
             canEdit={isAdmin}
           />
         ) : (
-          <div className="text-xs text-ink/40 italic">
+          <div className="text-xs text-ink/45 italic">
             Save this spell first — rule membership wires up
             to the spell's persisted id.
           </div>
@@ -1835,7 +1835,7 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
             "truncate font-serif text-sm",
             drafted ? 'text-archive-blue font-semibold' : 'text-ink',
           )}>
-            {entry.name || <em className="text-ink/40">Untitled</em>}
+            {entry.name || <em className="text-ink/45">Untitled</em>}
           </span>
         );
       },
@@ -1863,7 +1863,7 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
         const srcAbbrev = String(sourceAbbrevById[entry.sourceId] || entry.sourceId || '—');
         return (
           <>
-            <span className="text-[10px] font-bold text-gold/80 text-center truncate">
+            <span className="text-[10px] font-bold text-gold/85 text-center truncate">
               {srcAbbrev}
             </span>
             {!entry.__pendingDelete && (
@@ -1907,8 +1907,8 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
   const listEmptyContent = useMemo(() => {
     if (focusModeEnabled && focusMode === 'drafts') {
       return (
-        <div className="px-6 py-12 text-center text-ink/60 max-w-sm mx-auto space-y-2">
-          <p className="font-bold text-ink/80">No spells in this block yet.</p>
+        <div className="px-6 py-12 text-center text-ink/65 max-w-sm mx-auto space-y-2">
+          <p className="font-bold text-ink/85">No spells in this block yet.</p>
           <p className="text-xs leading-relaxed text-ink/55">
             Click <span className="font-bold text-gold">New Spell</span> above to
             author one from scratch.
@@ -1950,7 +1950,7 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
         size="sm"
         onClick={handleBackfillDescriptions}
         disabled={backfilling || purging}
-        className="h-8 border-gold/30 text-gold/80 hover:bg-gold/5 hover:text-gold text-xs uppercase tracking-widest"
+        className="h-8 border-gold/35 text-gold/85 hover:bg-gold/5 hover:text-gold text-xs uppercase tracking-widest"
         title="Regenerate every spell's BBCode description from its preserved Foundry HTML payload."
       >
         <Wand2 className="w-3.5 h-3.5 mr-1.5" />
@@ -2074,10 +2074,10 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
           ) : (
             <div className="h-full flex items-center justify-center px-6 py-12 text-center">
               <div className="space-y-2 max-w-xs">
-                <p className="text-sm text-ink/60 font-serif italic">
+                <p className="text-sm text-ink/65 font-serif italic">
                   Preview pane
                 </p>
-                <p className="text-[11px] text-ink/40 leading-relaxed">
+                <p className="text-[11px] text-ink/45 leading-relaxed">
                   Select a spell from the list to preview it as it
                   appears in the public compendium. Pending edits
                   don't reflect until you save.

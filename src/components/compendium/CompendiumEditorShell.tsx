@@ -371,7 +371,7 @@ export function CompendiumEditorShell<TRow>(props: CompendiumEditorShellProps<TR
   const topToolbar = (
     <div
       className={cn(
-        'shrink-0 flex items-center gap-2 bg-card p-2 rounded-lg border border-gold/10 shadow-sm flex-wrap lg:flex',
+        'shrink-0 flex items-center gap-2 bg-card p-2 rounded-lg border border-gold/15 shadow-sm flex-wrap lg:flex',
         hideToolbarsBelowLg ? 'hidden lg:flex' : 'flex',
       )}
     >
@@ -388,7 +388,7 @@ export function CompendiumEditorShell<TRow>(props: CompendiumEditorShellProps<TR
             <TabsTrigger
               key={mode.key}
               value={mode.key}
-              className="h-8 rounded-md border border-gold/15 bg-background/30 px-3 py-1 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold"
+              className="h-8 rounded-md border border-gold/15 bg-background/30 px-3 py-1 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/45 data-active:bg-gold/15 data-active:text-gold"
             >
               {mode.label}
             </TabsTrigger>
@@ -430,7 +430,7 @@ export function CompendiumEditorShell<TRow>(props: CompendiumEditorShellProps<TR
               variant="outline"
               size="sm"
               onClick={handleNew}
-              className="h-8 gap-2 border-gold/20 text-gold hover:bg-gold/5"
+              className="h-8 gap-2 border-gold/25 text-gold hover:bg-gold/5"
             >
               <Plus className="w-3 h-3" /> New {entityName.singular}
             </Button>
@@ -444,9 +444,9 @@ export function CompendiumEditorShell<TRow>(props: CompendiumEditorShellProps<TR
   // List column header strip — driven by `listColumns`.
   const gridTemplate = listColumns.map((c) => c.width).join(' ');
   const listHeader = (
-    <div className="border-b border-gold/10 bg-background/35 px-3 py-2.5 shrink-0">
+    <div className="border-b border-gold/15 bg-background/35 px-3 py-2.5 shrink-0">
       <div
-        className="grid gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-gold/70 items-center"
+        className="grid gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-gold/75 items-center"
         style={{ gridTemplateColumns: gridTemplate }}
       >
         {listColumns.map((col) => {
@@ -477,7 +477,7 @@ export function CompendiumEditorShell<TRow>(props: CompendiumEditorShellProps<TR
   const listCard = (
     <Card
       className={cn(
-        'border-gold/10 bg-card/50 overflow-hidden flex-col lg:flex lg:flex-none lg:w-[280px]',
+        'border-gold/15 bg-card/50 overflow-hidden flex-col lg:flex lg:flex-none lg:w-[280px]',
         listView === 'list' ? 'flex flex-1' : 'hidden lg:flex',
       )}
       style={{ height: `${paneHeight}px`, width: `${LIST_COL_WIDTH_PX}px` }}
@@ -511,7 +511,7 @@ export function CompendiumEditorShell<TRow>(props: CompendiumEditorShellProps<TR
                   }}
                   className={cn(
                     'group relative grid w-full gap-2 items-center px-3 text-left transition-colors border-b border-gold/5 cursor-pointer focus:outline-none focus:bg-gold/5',
-                    selected ? 'bg-gold/10' : 'hover:bg-gold/5',
+                    selected ? 'bg-gold/15' : 'hover:bg-gold/5',
                   )}
                   style={{
                     gridTemplateColumns: gridTemplate,
@@ -535,7 +535,7 @@ export function CompendiumEditorShell<TRow>(props: CompendiumEditorShellProps<TR
     <Button
       type="button"
       size="sm"
-      className="gap-1.5 bg-gold text-white h-8 text-xs"
+      className="gap-1.5 bg-gold text-[var(--primary-foreground)] h-8 text-xs"
       onClick={onUnlockBase}
     >
       <Pencil className="h-3.5 w-3.5" />
@@ -559,7 +559,7 @@ export function CompendiumEditorShell<TRow>(props: CompendiumEditorShellProps<TR
         type="button"
         variant="outline"
         size="sm"
-        className="gap-1.5 border-gold/20 bg-background/40 text-ink hover:bg-gold/5 h-8 text-xs"
+        className="gap-1.5 border-gold/25 bg-background/40 text-ink hover:bg-gold/5 h-8 text-xs"
         onClick={onReset}
       >
         <Edit3 className="h-3.5 w-3.5" />
@@ -580,8 +580,8 @@ export function CompendiumEditorShell<TRow>(props: CompendiumEditorShellProps<TR
 
   // Default readonly banner used when consumer doesn't pass one.
   const defaultReadonlyBanner = (
-    <div className="flex items-start gap-2 rounded-md border border-gold/30 bg-gold/5 px-3 py-2">
-      <Lock className="h-4 w-4 text-gold/70 mt-0.5 flex-shrink-0" />
+    <div className="flex items-start gap-2 rounded-md border border-gold/35 bg-gold/5 px-3 py-2">
+      <Lock className="h-4 w-4 text-gold/75 mt-0.5 flex-shrink-0" />
       <p className="text-xs text-ink/75 leading-relaxed">
         <span className="font-semibold">
           Base {entityName.singular.toLowerCase()} — viewing only.
@@ -599,7 +599,7 @@ export function CompendiumEditorShell<TRow>(props: CompendiumEditorShellProps<TR
   const editorCard = (
     <Card
       className={cn(
-        'border-gold/20 bg-card/50 overflow-hidden flex-col lg:flex lg:flex-1',
+        'border-gold/25 bg-card/50 overflow-hidden flex-col lg:flex lg:flex-1',
         listView === 'editor' ? 'flex flex-1' : 'hidden lg:flex',
       )}
       style={{ height: `${paneHeight}px` }}
@@ -634,7 +634,7 @@ export function CompendiumEditorShell<TRow>(props: CompendiumEditorShellProps<TR
           >
             {/* Editor card header — banners stack, then identity row,
                 then super-tab strip. */}
-            <div className="border-b border-gold/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.02),transparent)] px-4 py-2 space-y-1.5">
+            <div className="border-b border-gold/15 bg-[linear-gradient(180deg,rgba(255,255,255,0.02),transparent)] px-4 py-2 space-y-1.5">
               {cascadeBanner}
               {isReadOnly ? (readonlyBanner ?? defaultReadonlyBanner) : null}
 
@@ -645,14 +645,14 @@ export function CompendiumEditorShell<TRow>(props: CompendiumEditorShellProps<TR
                   </h3>
                   {identitySourceAbbrev ? (
                     <span
-                      className="rounded border border-gold/20 bg-gold/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-gold whitespace-nowrap"
+                      className="rounded border border-gold/25 bg-gold/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-gold whitespace-nowrap"
                       title={identitySourceFullName || identitySourceAbbrev}
                     >
                       {identitySourceAbbrev}
                     </span>
                   ) : null}
                   {identitySubtitle ? (
-                    <span className="font-serif italic text-ink/60 text-xs whitespace-nowrap">
+                    <span className="font-serif italic text-ink/65 text-xs whitespace-nowrap">
                       {identitySubtitle}
                     </span>
                   ) : null}
@@ -663,17 +663,17 @@ export function CompendiumEditorShell<TRow>(props: CompendiumEditorShellProps<TR
               <TabsList variant="line" className="gap-1 bg-transparent p-0">
                 <TabsTrigger
                   value="editor"
-                  className="rounded-md border border-gold/15 bg-background/30 px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold"
+                  className="rounded-md border border-gold/15 bg-background/30 px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-ink/65 data-active:border-gold/45 data-active:bg-gold/15 data-active:text-gold"
                 >
                   Editor
                 </TabsTrigger>
                 <TabsTrigger
                   value="tags"
-                  className="rounded-md border border-gold/15 bg-background/30 px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold"
+                  className="rounded-md border border-gold/15 bg-background/30 px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-ink/65 data-active:border-gold/45 data-active:bg-gold/15 data-active:text-gold"
                 >
                   Tags
                   {typeof tagsSuperTabCount === 'number' && tagsSuperTabCount > 0 && (
-                    <span className="ml-1 text-gold/70">({tagsSuperTabCount})</span>
+                    <span className="ml-1 text-gold/75">({tagsSuperTabCount})</span>
                   )}
                 </TabsTrigger>
               </TabsList>
@@ -690,13 +690,13 @@ export function CompendiumEditorShell<TRow>(props: CompendiumEditorShellProps<TR
                 onValueChange={setEditorSubTab}
                 className="flex-1 min-h-0 flex flex-col"
               >
-                <div className="border-b border-gold/10 bg-background/35 px-4 py-1.5 shrink-0">
+                <div className="border-b border-gold/15 bg-background/35 px-4 py-1.5 shrink-0">
                   <TabsList variant="line" className="gap-2 bg-transparent p-0">
                     {editorSubTabs.map((t) => (
                       <TabsTrigger
                         key={t.key}
                         value={t.key}
-                        className="rounded-md border border-gold/15 bg-background/30 px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold"
+                        className="rounded-md border border-gold/15 bg-background/30 px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-ink/65 data-active:border-gold/45 data-active:bg-gold/15 data-active:text-gold"
                       >
                         {t.label}
                       </TabsTrigger>
@@ -742,13 +742,13 @@ export function CompendiumEditorShell<TRow>(props: CompendiumEditorShellProps<TR
                 onValueChange={setTagsSubTab}
                 className="flex-1 min-h-0 flex flex-col"
               >
-                <div className="border-b border-gold/10 bg-background/35 px-4 py-1.5 shrink-0">
+                <div className="border-b border-gold/15 bg-background/35 px-4 py-1.5 shrink-0">
                   <TabsList variant="line" className="gap-2 bg-transparent p-0">
                     {tagsSubTabs.map((t) => (
                       <TabsTrigger
                         key={t.key}
                         value={t.key}
-                        className="rounded-md border border-gold/15 bg-background/30 px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold"
+                        className="rounded-md border border-gold/15 bg-background/30 px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-ink/65 data-active:border-gold/45 data-active:bg-gold/15 data-active:text-gold"
                       >
                         {t.label}
                       </TabsTrigger>
@@ -781,7 +781,7 @@ export function CompendiumEditorShell<TRow>(props: CompendiumEditorShellProps<TR
   // Preview card — right column, xl+ only.
   const previewCard = (
     <Card
-      className="border-gold/10 bg-card/50 overflow-hidden hidden xl:flex xl:flex-col xl:flex-none"
+      className="border-gold/15 bg-card/50 overflow-hidden hidden xl:flex xl:flex-col xl:flex-none"
       style={{ height: `${paneHeight}px`, width: `${PREVIEW_COL_WIDTH_PX}px` }}
     >
       <CardContent className="p-0 h-full overflow-y-auto custom-scrollbar">

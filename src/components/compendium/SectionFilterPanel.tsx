@@ -379,7 +379,7 @@ function FilterSectionRow({
   const hasAltLabel = axis.values.some(v => !!v.labelAlt);
 
   return (
-    <div className="rounded border border-gold/10 bg-background/20 p-1.5">
+    <div className="rounded border border-gold/15 bg-background/20 p-1.5">
       {/* Header — two grid columns. Title flows in the 1fr left
           column (wraps on narrow widths without dragging the
           controls with it). Controls anchor to the top-right via
@@ -392,11 +392,11 @@ function FilterSectionRow({
               axes and tag groups share `text-xs` so the wall
               reads as a single rhythm of consistent section
               dividers rather than a two-tier hierarchy. */}
-          <span className="text-xs uppercase tracking-[0.22em] text-ink/60 font-bold">
+          <span className="text-xs uppercase tracking-[0.22em] text-ink/65 font-bold">
             {axis.name}
           </span>
           {axisActive > 0 && (
-            <span className="text-[9px] text-gold/70 font-bold">· {axisActive} active</span>
+            <span className="text-[9px] text-gold/75 font-bold">· {axisActive} active</span>
           )}
         </div>
         {/* Per-axis controls — only the ones the caller wired show
@@ -630,7 +630,7 @@ function PillBody({
         }}
         className={cn(
           'inline-flex items-center gap-0.5 rounded border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-colors select-none',
-          !state && 'border-gold/15 bg-card text-ink/55 hover:border-gold/40 hover:text-ink/90',
+          !state && 'border-gold/15 bg-card text-ink/55 hover:border-gold/45 hover:text-ink/95',
           state === 1 && 'border-sky-500/50 bg-sky-500/15 text-sky-300',
           state === 2 && 'border-blood/50 bg-blood/15 text-blood line-through',
         )}
@@ -669,8 +669,8 @@ function PillBody({
                   className={cn(
                     'inline-flex items-center justify-center h-[22px] w-[20px] rounded border transition-colors',
                     expanded
-                      ? 'border-gold/50 bg-gold/15 text-gold'
-                      : 'border-gold/20 bg-card/60 text-ink/55 hover:border-gold/40 hover:text-gold',
+                      ? 'border-gold/55 bg-gold/15 text-gold'
+                      : 'border-gold/25 bg-card/60 text-ink/55 hover:border-gold/45 hover:text-gold',
                   )}
                   title={
                     expanded
@@ -711,7 +711,7 @@ function PillBody({
           <div className="ml-3 pl-3 border-l border-gold/15 grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1">
             {rows.map(({ root, pills }) => (
               <React.Fragment key={`drawer-${root.value}`}>
-                <span className="text-[10px] uppercase tracking-widest text-ink/40 pt-1">{root.label}:</span>
+                <span className="text-[10px] uppercase tracking-widest text-ink/45 pt-1">{root.label}:</span>
                 <div className="flex flex-wrap gap-1">{pills}</div>
               </React.Fragment>
             ))}
@@ -784,8 +784,8 @@ function AxisControlButton({
         'inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-[9px] uppercase tracking-widest font-bold transition-colors',
         // Rest + hover styles, picked by color mode.
         (!color || color === 'neutral' || color === 'include-hover' || color === 'exclude-hover') &&
-          'border-gold/25 bg-card/60 text-ink/70',
-        (!color || color === 'neutral') && 'hover:bg-gold/15 hover:border-gold/50 hover:text-gold',
+          'border-gold/25 bg-card/60 text-ink/75',
+        (!color || color === 'neutral') && 'hover:bg-gold/15 hover:border-gold/55 hover:text-gold',
         color === 'include-hover' && 'hover:bg-sky-500/15 hover:border-sky-500/50 hover:text-sky-300',
         color === 'exclude-hover' && 'hover:bg-blood/15 hover:border-blood/50 hover:text-blood',
         color === 'include' && 'border-sky-500/50 bg-sky-500/15 text-sky-300 hover:bg-sky-500/25 hover:border-sky-500/70',
@@ -1029,9 +1029,9 @@ export function SectionFilterPanel(props: SectionFilterPanelProps) {
     >
       {/* Standalone header — skipped when embedded. */}
       {!embedded && (
-        <div className="px-3 py-2 border-b border-gold/10 bg-gold/[0.03] flex items-center gap-2 flex-wrap">
+        <div className="px-3 py-2 border-b border-gold/15 bg-gold/[0.03] flex items-center gap-2 flex-wrap">
           {leadingActions}
-          <Filter className="w-3.5 h-3.5 text-gold/80 shrink-0" />
+          <Filter className="w-3.5 h-3.5 text-gold/85 shrink-0" />
           <SearchInput
             value={search}
             onChange={setSearch}
@@ -1043,7 +1043,7 @@ export function SectionFilterPanel(props: SectionFilterPanelProps) {
             <button
               type="button"
               onClick={resetAll}
-              className="inline-flex items-center gap-1 text-[10px] uppercase tracking-widest text-ink/55 hover:text-blood px-2 py-1 rounded border border-gold/10 hover:border-blood/40 transition-colors"
+              className="inline-flex items-center gap-1 text-[10px] uppercase tracking-widest text-ink/55 hover:text-blood px-2 py-1 rounded border border-gold/15 hover:border-blood/40 transition-colors"
               title={`Clear ${activeFilterCount} active filter${activeFilterCount === 1 ? '' : 's'}`}
             >
               <RotateCcw className="w-3 h-3" />

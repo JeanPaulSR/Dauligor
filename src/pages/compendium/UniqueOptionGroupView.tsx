@@ -169,13 +169,13 @@ export default function UniqueOptionGroupView({ userProfile }: { userProfile: an
 
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto py-20 text-center text-ink/50 italic">Loading…</div>
+      <div className="max-w-4xl mx-auto py-20 text-center text-ink/55 italic">Loading…</div>
     );
   }
   if (error || !group) {
     return (
       <div className="max-w-4xl mx-auto py-20 text-center space-y-4">
-        <p className="text-ink/60 italic">{error || 'Not found.'}</p>
+        <p className="text-ink/65 italic">{error || 'Not found.'}</p>
         <Button variant="outline" onClick={() => navigate('/compendium/unique-options')}>
           <ChevronLeft className="w-4 h-4 mr-2" /> Back to Modular Options
         </Button>
@@ -188,7 +188,7 @@ export default function UniqueOptionGroupView({ userProfile }: { userProfile: an
       <div className="flex items-center justify-between gap-4">
         <Link
           to="/compendium/unique-options"
-          className="inline-flex items-center text-xs text-ink/60 hover:text-gold transition-colors uppercase tracking-widest"
+          className="inline-flex items-center text-xs text-ink/65 hover:text-gold transition-colors uppercase tracking-widest"
         >
           <ChevronLeft className="w-4 h-4 mr-1" /> All Modular Options
         </Link>
@@ -212,26 +212,26 @@ export default function UniqueOptionGroupView({ userProfile }: { userProfile: an
 
       <div className="flex flex-wrap items-center gap-2">
         {sourceName && (
-          <Badge variant="outline" className="border-gold/30 text-gold/80">
+          <Badge variant="outline" className="border-gold/35 text-gold/85">
             <BookOpen className="w-3 h-3 mr-1" /> {sourceName}
           </Badge>
         )}
         {groupClasses.map((c) => (
-          <Badge key={c.id} variant="outline" className="border-ink/20 text-ink/60">
+          <Badge key={c.id} variant="outline" className="border-ink/25 text-ink/65">
             {c.name}
           </Badge>
         ))}
         {groupClassIds.length === 0 && (
-          <span className="text-[10px] text-ink/40 italic">No classes assigned</span>
+          <span className="text-[10px] text-ink/45 italic">No classes assigned</span>
         )}
       </div>
 
       {group.description ? (
-        <div className="prose prose-sm max-w-none text-ink/80">
+        <div className="prose prose-sm max-w-none text-ink/85">
           <BBCodeRenderer content={group.description} />
         </div>
       ) : (
-        <p className="text-ink/40 italic">No description provided.</p>
+        <p className="text-ink/45 italic">No description provided.</p>
       )}
 
       <div className="section-header">
@@ -241,8 +241,8 @@ export default function UniqueOptionGroupView({ userProfile }: { userProfile: an
       </div>
 
       {items.length === 0 ? (
-        <Card className="border-dashed border-gold/20">
-          <CardContent className="py-12 text-center text-ink/40 italic">
+        <Card className="border-dashed border-gold/25">
+          <CardContent className="py-12 text-center text-ink/45 italic">
             No options have been added to this group yet.
           </CardContent>
         </Card>
@@ -283,34 +283,34 @@ function ItemCard({
   const usesRecovery = item.usesRecovery ?? null;
 
   return (
-    <Card className="border-gold/10">
+    <Card className="border-gold/15">
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-3 flex-wrap">
           <span>{item.name || 'Unnamed option'}</span>
           {level !== null && level !== undefined && (
-            <Badge variant="outline" className="text-[9px] border-gold/30 text-gold/80">
+            <Badge variant="outline" className="text-[9px] border-gold/35 text-gold/85">
               {isTotalLevel ? `Character Lv ${level}` : `Class Lv ${level}`}
             </Badge>
           )}
           {usesMax !== null && usesMax !== '' && (
-            <Badge variant="outline" className="text-[9px] border-ink/20 text-ink/60">
+            <Badge variant="outline" className="text-[9px] border-ink/25 text-ink/65">
               {String(usesMax)} use{String(usesMax) === '1' ? '' : 's'}{usesRecovery ? ` / ${usesRecovery}` : ''}
             </Badge>
           )}
         </CardTitle>
         {reqText && (
-          <p className="text-[11px] text-ink/50 italic mt-1">
+          <p className="text-[11px] text-ink/55 italic mt-1">
             Requires: {reqText}
           </p>
         )}
       </CardHeader>
       <CardContent>
         {item.description ? (
-          <div className="prose prose-sm max-w-none text-ink/80">
+          <div className="prose prose-sm max-w-none text-ink/85">
             <BBCodeRenderer content={item.description} />
           </div>
         ) : (
-          <p className="text-ink/40 italic text-sm">No description.</p>
+          <p className="text-ink/45 italic text-sm">No description.</p>
         )}
       </CardContent>
     </Card>

@@ -239,38 +239,38 @@ export default function ScalingMatrixEditor({
         </Button>
       </div>
 
-      <div className="p-4 border border-gold/20 bg-card/50 space-y-6">
+      <div className="p-4 border border-gold/25 bg-card/50 space-y-6">
         <div className="space-y-1">
-          <label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Column Name</label>
+          <label className="text-[10px] font-bold uppercase tracking-widest text-ink/45">Column Name</label>
           <Input
             value={name}
             onChange={e => setName(e.target.value)}
             placeholder="e.g. Invocations Known, Sorcery Points"
-            className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold"
+            className="h-8 text-sm bg-background/50 border-gold/15 focus:border-gold"
             required
           />
-          <p className="text-[9px] text-ink/30 italic">This name will appear as the header in the class table.</p>
+          <p className="text-[9px] text-ink/35 italic">This name will appear as the header in the class table.</p>
         </div>
 
         <div className="grid sm:grid-cols-2 gap-4">
           <div className="space-y-1">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Identifier</label>
+            <label className="text-[10px] font-bold uppercase tracking-widest text-ink/45">Identifier</label>
             <Input
               value={identifier}
               onChange={(e) => { setIdentifier(slugify(e.target.value)); setIdentifierTouched(true); }}
               placeholder={slugify(name) || 'auto-derived from name'}
-              className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold font-mono"
+              className="h-8 text-sm bg-background/50 border-gold/15 focus:border-gold font-mono"
             />
-            <p className="text-[9px] text-ink/30 italic">
+            <p className="text-[9px] text-ink/35 italic">
               Stable slug used in formula references (<code>@scale.&lt;class&gt;.{identifier || slugify(name) || '<id>'}</code>).
               Auto-derived from name until you edit it.
             </p>
           </div>
 
           <div className="space-y-1">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Type</label>
+            <label className="text-[10px] font-bold uppercase tracking-widest text-ink/45">Type</label>
             <Select value={type} onValueChange={(v) => setType(v as ScaleType)}>
-              <SelectTrigger className="h-8 text-sm bg-background/50 border-gold/10">
+              <SelectTrigger className="h-8 text-sm bg-background/50 border-gold/15">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -279,7 +279,7 @@ export default function ScalingMatrixEditor({
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-[9px] text-ink/30 italic">
+            <p className="text-[9px] text-ink/35 italic">
               {SCALE_TYPES.find((t) => t.value === type)?.hint}
             </p>
           </div>
@@ -287,9 +287,9 @@ export default function ScalingMatrixEditor({
 
         {type === 'distance' && (
           <div className="space-y-1 max-w-xs">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Distance Units</label>
+            <label className="text-[10px] font-bold uppercase tracking-widest text-ink/45">Distance Units</label>
             <Select value={distanceUnits} onValueChange={setDistanceUnits}>
-              <SelectTrigger className="h-8 text-sm bg-background/50 border-gold/10">
+              <SelectTrigger className="h-8 text-sm bg-background/50 border-gold/15">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -303,17 +303,17 @@ export default function ScalingMatrixEditor({
 
         <div className="space-y-4">
           <div className="section-header">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Level Progression</label>
-            <span className="text-[9px] text-ink/30 italic uppercase">Values persist until the next defined level</span>
+            <label className="text-[10px] font-bold uppercase tracking-widest text-ink/45">Level Progression</label>
+            <span className="text-[9px] text-ink/35 italic uppercase">Values persist until the next defined level</span>
           </div>
 
           <div className="space-y-2">
             {Array.from({ length: 20 }, (_, i) => i + 1).map(level => {
               const placeholder = getPlaceholder(level);
               return (
-                <div key={level} className="flex items-center gap-4 p-2 border border-gold/5 bg-gold/5 rounded group hover:bg-gold/10 transition-colors">
+                <div key={level} className="flex items-center gap-4 p-2 border border-gold/5 bg-gold/5 rounded group hover:bg-gold/15 transition-colors">
                   <div className="w-12 flex items-center gap-2">
-                    <span className="text-[10px] font-bold text-gold/40">LVL {level}</span>
+                    <span className="text-[10px] font-bold text-gold/45">LVL {level}</span>
                     {values[level.toString()] && (
                       <div className="w-1.5 h-1.5 rounded-full bg-gold shadow-[0_0_8px_rgba(212,175,55,0.5)]" />
                     )}
@@ -322,10 +322,10 @@ export default function ScalingMatrixEditor({
                     value={values[level.toString()] || ''}
                     onChange={e => updateValue(level, e.target.value)}
                     placeholder={placeholder}
-                    className={`flex-1 h-8 text-sm font-mono transition-all border-none shadow-none focus:ring-1 focus:ring-gold/30 ${
+                    className={`flex-1 h-8 text-sm font-mono transition-all border-none shadow-none focus:ring-1 focus:ring-gold/35 ${
                       values[level.toString()]
-                      ? 'bg-gold/10 text-gold font-bold'
-                      : 'bg-transparent text-ink/20'
+                      ? 'bg-gold/15 text-gold font-bold'
+                      : 'bg-transparent text-ink/25'
                     }`}
                   />
                 </div>

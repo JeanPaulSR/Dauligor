@@ -140,7 +140,7 @@ export function FilterBar({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row gap-4 items-center bg-card p-2 rounded-lg border border-gold/10 shadow-sm">
+      <div className="flex flex-col sm:flex-row gap-4 items-center bg-card p-2 rounded-lg border border-gold/15 shadow-sm">
         {leadingActions && (
           <div className="flex items-center gap-2 shrink-0">
             {leadingActions}
@@ -157,7 +157,7 @@ export function FilterBar({
             variant={isFilterOpen ? "default" : "outline"}
             size="sm"
             onClick={() => setIsFilterOpen(true)}
-            className={`h-8 gap-2 w-full sm:w-auto ${isFilterOpen ? 'bg-gold text-white' : 'border-gold/20 text-gold hover:bg-gold/10'}`}
+            className={`h-8 gap-2 w-full sm:w-auto ${isFilterOpen ? 'bg-gold text-[var(--primary-foreground)]' : 'border-gold/25 text-gold hover:bg-gold/15'}`}
           >
             <Filter className="w-3 h-3" /> Filters
             {activeFilterCount > 0 && (
@@ -189,10 +189,10 @@ export function FilterBar({
               disabled={!canReset}
               onClick={() => { resetFilters(); setSearch(''); }}
               className={cn(
-                'h-8 gap-2 w-full sm:w-auto border-gold/20',
+                'h-8 gap-2 w-full sm:w-auto border-gold/25',
                 canReset
-                  ? 'text-ink/70 hover:bg-blood/5 hover:text-blood hover:border-blood/30'
-                  : 'text-ink/30 cursor-not-allowed',
+                  ? 'text-ink/75 hover:bg-blood/5 hover:text-blood hover:border-blood/30'
+                  : 'text-ink/35 cursor-not-allowed',
               )}
               title={canReset ? 'Clear search and all filters' : 'Nothing to reset'}
             >
@@ -218,16 +218,16 @@ export function FilterBar({
         // bottom margins on any viewport size.
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4 sm:px-6 md:px-10">
           <div
-            className="absolute inset-0 bg-ink/40 backdrop-blur-sm animate-in fade-in duration-200"
+            className="absolute inset-0 bg-ink/45 backdrop-blur-sm animate-in fade-in duration-200"
             onClick={() => setIsFilterOpen(false)}
           />
           {/* `py-0 gap-0` overrides the Card primitive's default
               vertical padding + child gap so the modal body sits
               flush with the header (no dead-space band above
               "SOURCES" or below the last axis). */}
-          <Card className="relative w-full max-w-4xl h-[90vh] overflow-hidden flex flex-col py-0 gap-0 border-gold/20 bg-card shadow-2xl animate-in zoom-in-95 duration-200 pointer-events-auto">
+          <Card className="relative w-full max-w-4xl h-[90vh] overflow-hidden flex flex-col py-0 gap-0 border-gold/25 bg-card shadow-2xl animate-in zoom-in-95 duration-200 pointer-events-auto">
             <FilterBarContext.Provider value={ctxValue}>
-              <div className="flex flex-col gap-3 p-5 border-b border-gold/10 bg-gold/5">
+              <div className="flex flex-col gap-3 p-5 border-b border-gold/15 bg-gold/5">
                 <div className="flex items-center justify-between gap-4">
                   <div className="space-y-1">
                     <h2 className="h2-title uppercase text-ink">{filterTitle}</h2>
@@ -235,7 +235,7 @@ export function FilterBar({
                       <p className="text-sm text-ink/55">{filterSubtitle}</p>
                     ) : null}
                   </div>
-                  <Button variant="ghost" size="sm" onClick={() => setIsFilterOpen(false)} className="text-ink/40 hover:text-gold transition-colors">
+                  <Button variant="ghost" size="sm" onClick={() => setIsFilterOpen(false)} className="text-ink/45 hover:text-gold transition-colors">
                     <X className="w-5 h-5" />
                   </Button>
                 </div>
@@ -259,7 +259,7 @@ export function FilterBar({
                       <button
                         type="button"
                         onClick={() => setChipSearch('')}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-ink/40 hover:text-ink"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-ink/45 hover:text-ink"
                         title="Clear chip search"
                       >
                         <X className="w-3 h-3" />
@@ -270,7 +270,7 @@ export function FilterBar({
                     size="sm"
                     variant="outline"
                     onClick={() => setShowAllVersion((v) => v + 1)}
-                    className="h-7 px-3 text-[10px] uppercase tracking-widest border-gold/20 text-ink/70 hover:bg-gold/5"
+                    className="h-7 px-3 text-[10px] uppercase tracking-widest border-gold/25 text-ink/75 hover:bg-gold/5"
                     title="Expand every section"
                   >
                     Show All
@@ -279,7 +279,7 @@ export function FilterBar({
                     size="sm"
                     variant="outline"
                     onClick={() => setHideAllVersion((v) => v + 1)}
-                    className="h-7 px-3 text-[10px] uppercase tracking-widest border-gold/20 text-ink/70 hover:bg-gold/5"
+                    className="h-7 px-3 text-[10px] uppercase tracking-widest border-gold/25 text-ink/75 hover:bg-gold/5"
                     title="Collapse every section to its header"
                   >
                     Hide All
@@ -288,7 +288,7 @@ export function FilterBar({
                     size="sm"
                     variant="outline"
                     onClick={resetFilters}
-                    className="h-7 px-3 text-[10px] uppercase tracking-widest border-gold/20 text-ink/70 hover:bg-gold/5"
+                    className="h-7 px-3 text-[10px] uppercase tracking-widest border-gold/25 text-ink/75 hover:bg-gold/5"
                     title="Clear every filter"
                   >
                     {resetLabel}

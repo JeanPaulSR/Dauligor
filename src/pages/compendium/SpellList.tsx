@@ -629,7 +629,7 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
           <div className="min-w-0 flex items-center gap-1.5">
             <span className="truncate font-serif text-sm text-ink">{spell.name}</span>
             {isFavorite(spell.id) && (
-              <Star className="w-3 h-3 text-gold/70 fill-gold/40 shrink-0" aria-label="Favorite" />
+              <Star className="w-3 h-3 text-gold/75 fill-gold/45 shrink-0" aria-label="Favorite" />
             )}
           </div>
         );
@@ -711,7 +711,7 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
       // for the name column when the list pane narrows.
       hideBelow: 'xl',
       render: (spell) => (
-        <div className="text-xs font-bold text-gold/80 text-center truncate">
+        <div className="text-xs font-bold text-gold/85 text-center truncate">
           {renderSourceAbbreviation(spell)}
         </div>
       ),
@@ -727,7 +727,7 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
         onClick={onSelect}
         className={cn(
           'flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition-colors',
-          selected ? 'bg-gold/10' : 'hover:bg-gold/5',
+          selected ? 'bg-gold/15' : 'hover:bg-gold/5',
         )}
       >
         <div className="min-w-0">
@@ -739,7 +739,7 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
           </div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          <span className="text-[10px] font-bold text-gold/70">{sourceLabel}</span>
+          <span className="text-[10px] font-bold text-gold/75">{sourceLabel}</span>
           <span
             role="button"
             tabIndex={0}
@@ -751,7 +751,7 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
                 toggleStar();
               }
             }}
-            className="text-gold/70 hover:text-blood transition-colors cursor-pointer"
+            className="text-gold/75 hover:text-blood transition-colors cursor-pointer"
             title="Remove from favorites"
             aria-label="Remove from favorites"
           >
@@ -767,11 +767,11 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
   // Lets the user pick Universal vs per-character scope; the
   // useSpellFavorites hook re-reads whenever the scope changes.
   const favoritesScopePicker = (
-    <div className="flex flex-col gap-2 border-b border-gold/10 bg-background/35 px-3 py-2.5 shrink-0">
+    <div className="flex flex-col gap-2 border-b border-gold/15 bg-background/35 px-3 py-2.5 shrink-0">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Star className="w-3.5 h-3.5 text-gold/80 fill-gold/40" />
-          <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold/70">Favorites</span>
+          <Star className="w-3.5 h-3.5 text-gold/85 fill-gold/45" />
+          <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold/75">Favorites</span>
         </div>
         <span className="text-[10px] text-ink/45">{favorites.size}</span>
       </div>
@@ -779,7 +779,7 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="w-full flex items-center justify-between gap-2 px-2 py-1 rounded border border-gold/15 bg-card/60 hover:border-gold/30 hover:bg-gold/[0.06] transition-colors text-[11px] text-ink/85"
+            className="w-full flex items-center justify-between gap-2 px-2 py-1 rounded border border-gold/15 bg-card/60 hover:border-gold/35 hover:bg-gold/[0.06] transition-colors text-[11px] text-ink/85"
             aria-label="Select favorites scope"
           >
             <span className="truncate">
@@ -794,18 +794,18 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
             onClick={() => { setFavoriteScope(null); setScopeOpen(false); }}
             className={cn(
               'w-full text-left px-2 py-1.5 rounded text-xs hover:bg-gold/5 transition-colors',
-              !favoriteScope ? 'bg-gold/10 text-gold font-bold' : 'text-ink/85',
+              !favoriteScope ? 'bg-gold/15 text-gold font-bold' : 'text-ink/85',
             )}
           >
             Universal Favorite
           </button>
           {myCharacters.length === 0 ? (
-            <div className="px-2 py-1.5 text-[11px] text-ink/45 italic border-t border-gold/10 mt-1">
+            <div className="px-2 py-1.5 text-[11px] text-ink/45 italic border-t border-gold/15 mt-1">
               You have no saved characters.
             </div>
           ) : (
             <>
-              <div className="text-[9px] font-bold uppercase tracking-widest text-ink/45 px-2 pt-2 pb-1 border-t border-gold/10 mt-1">
+              <div className="text-[9px] font-bold uppercase tracking-widest text-ink/45 px-2 pt-2 pb-1 border-t border-gold/15 mt-1">
                 Characters
               </div>
               {myCharacters.map((c) => {
@@ -817,7 +817,7 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
                     onClick={() => { setFavoriteScope({ characterId: c.id, characterName: c.name }); setScopeOpen(false); }}
                     className={cn(
                       'w-full text-left px-2 py-1.5 rounded text-xs hover:bg-gold/5 transition-colors truncate',
-                      active ? 'bg-gold/10 text-gold font-bold' : 'text-ink/85',
+                      active ? 'bg-gold/15 text-gold font-bold' : 'text-ink/85',
                     )}
                     title={c.name}
                   >
@@ -925,7 +925,7 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
             <button
               type="button"
               onClick={clearClassFilter}
-              className="inline-flex items-center gap-1 h-8 px-2 rounded-md border border-gold/40 bg-gold/10 text-gold text-[11px] font-bold uppercase tracking-widest hover:bg-blood/10 hover:border-blood/40 hover:text-blood transition-colors"
+              className="inline-flex items-center gap-1 h-8 px-2 rounded-md border border-gold/45 bg-gold/15 text-gold text-[11px] font-bold uppercase tracking-widest hover:bg-blood/10 hover:border-blood/40 hover:text-blood transition-colors"
               title={`Scoped to ${classFilter.className}'s spell list (${classFilter.spellIds.size} spells). Click to clear.`}
             >
               Class: {classFilter.className}
@@ -934,7 +934,7 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
           ) : null}
           {userProfile?.role === 'admin' ? (
             <Link to="/compendium/spells/manage">
-              <Button type="button" variant="outline" size="sm" className="h-8 border-gold/20 text-gold hover:bg-gold/5">
+              <Button type="button" variant="outline" size="sm" className="h-8 border-gold/25 text-gold hover:bg-gold/5">
                 Spell Manager
               </Button>
             </Link>

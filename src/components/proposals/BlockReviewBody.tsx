@@ -119,7 +119,7 @@ export function BlockReviewBody({
                 setArmedRemoveId(null);
                 onContinueEditing(draft);
               }}
-              className="gap-1.5 border-gold/30 text-gold hover:bg-gold/10"
+              className="gap-1.5 border-gold/35 text-gold hover:bg-gold/15"
             >
               Open in editor <ArrowRight className="w-3.5 h-3.5" />
             </Button>
@@ -128,7 +128,7 @@ export function BlockReviewBody({
                 <Button
                   variant="outline"
                   onClick={() => setArmedRemoveId(null)}
-                  className="border-ink/20 text-ink/60 hover:bg-ink/5"
+                  className="border-ink/25 text-ink/65 hover:bg-ink/5"
                 >
                   Cancel
                 </Button>

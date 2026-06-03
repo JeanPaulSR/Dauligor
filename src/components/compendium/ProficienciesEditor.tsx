@@ -92,7 +92,7 @@ export default function ProficienciesEditor({
       <div className="space-y-4">
         <div className="section-header">
           <h3 className="field-label flex items-center gap-2">
-            <Shield className="w-3.5 h-3.5 text-gold/40" /> Saving Throws
+            <Shield className="w-3.5 h-3.5 text-gold/45" /> Saving Throws
           </h3>
           <div className="flex items-center gap-2">
             <label className="field-label opacity-70">Choices:</label>
@@ -103,14 +103,14 @@ export default function ProficienciesEditor({
                 ...proficiencies,
                 savingThrows: { ...proficiencies.savingThrows, choiceCount: parseInt(e.target.value) || 0 }
               })}
-              className="w-12 h-6 text-center text-xs bg-background/50 border-gold/10"
+              className="w-12 h-6 text-center text-xs bg-background/50 border-gold/15"
             />
           </div>
         </div>
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <label className="section-label text-gold/60">Choice Options</label>
+            <label className="section-label text-gold/65">Choice Options</label>
             <div className="flex flex-wrap gap-2">
               {allAttributes.map(attr => {
                 const iden = (attr.identifier || attr.id).toUpperCase();
@@ -133,8 +133,8 @@ export default function ProficienciesEditor({
                     }}
                     className={`px-4 py-1.5 rounded text-xs font-bold transition-all border ${
                       isSelected
-                      ? 'bg-gold text-white border-gold'
-                      : 'bg-card text-gold/60 border-gold/10 hover:border-gold/20'
+                      ? 'bg-gold text-[var(--primary-foreground)] border-gold'
+                      : 'bg-card text-gold/65 border-gold/15 hover:border-gold/25'
                     }`}
                   >
                     {attr.name}
@@ -145,7 +145,7 @@ export default function ProficienciesEditor({
           </div>
 
           <div className="space-y-2">
-            <label className="section-label text-gold/60">Given (Fixed)</label>
+            <label className="section-label text-gold/65">Given (Fixed)</label>
             <div className="flex flex-wrap gap-2">
               {allAttributes.map(attr => {
                 const iden = (attr.identifier || attr.id).toUpperCase();
@@ -170,15 +170,15 @@ export default function ProficienciesEditor({
                     }}
                     className={`px-4 py-1.5 rounded text-xs font-bold transition-all border ${
                       isFixed
-                      ? 'bg-gold text-white border-gold'
-                      : 'bg-card text-gold/60 border-gold/10 hover:border-gold/20'
+                      ? 'bg-gold text-[var(--primary-foreground)] border-gold'
+                      : 'bg-card text-gold/65 border-gold/15 hover:border-gold/25'
                     }`}
                   >
                     {attr.name}
                   </button>
                 );
               })}
-              {allAttributes.length === 0 && <p className="text-[10px] text-ink/30 italic col-span-2">No attributes defined. <Link to="/admin/proficiencies" className="text-gold underline">Manage Attributes</Link></p>}
+              {allAttributes.length === 0 && <p className="text-[10px] text-ink/35 italic col-span-2">No attributes defined. <Link to="/admin/proficiencies" className="text-gold underline">Manage Attributes</Link></p>}
             </div>
           </div>
         </div>

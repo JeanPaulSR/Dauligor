@@ -173,9 +173,41 @@ async function attachPermissions(row: any): Promise<any> {
   return { ...row, permissions };
 }
 
+/**
+ * Folds the user's active custom theme (if any) into the profile as
+ * `active_theme = { id, name, base_preset, tokens }` so the client can apply it
+ * in one request. `active_theme_id IS NULL` (or a dangling reference) yields
+ * `active_theme: null` — the client then uses the built-in preset. The lookup
+ * is scoped by `user_id` so a stale/foreign id can never surface another user's
+ * theme.
+ */
+async function attachActiveTheme(row: any): Promise<any> {
+  if (!row) return row;
+  if (!row.active_theme_id) return { ...row, active_theme: null };
+  const result = await executeD1QueryInternal({
+    sql: "SELECT id, name, base_preset, tokens FROM user_themes WHERE id = ? AND user_id = ? LIMIT 1",
+    params: [row.active_theme_id, row.id],
+  });
+  const rows = Array.isArray(result?.results) ? result.results : [];
+  const t = rows[0] as any;
+  if (!t) return { ...row, active_theme: null };
+  let tokens: Record<string, unknown> = {};
+  try {
+    tokens = typeof t.tokens === "string" ? JSON.parse(t.tokens) : (t.tokens || {});
+  } catch {
+    tokens = {};
+  }
+  return { ...row, active_theme: { id: t.id, name: t.name, base_preset: t.base_preset, tokens } };
+}
+
+/** The canonical client profile shape: row + permissions + active theme. */
+async function enrichProfile(row: any): Promise<any> {
+  return attachActiveTheme(await attachPermissions(row));
+}
+
 async function handleGetMe(decoded: any): Promise<Response> {
   const profile = await getOwnProfile(decoded);
-  return Response.json({ profile: await attachPermissions(profile) });
+  return Response.json({ profile: await enrichProfile(profile) });
 }
 
 async function handlePatchMe(request: Request, decoded: any): Promise<Response> {
@@ -199,7 +231,7 @@ async function handlePatchMe(request: Request, decoded: any): Promise<Response> 
 
   if (Object.keys(updates).length === 0) {
     const profile = await getOwnProfile(decoded);
-    return Response.json({ profile: await attachPermissions(profile), noop: true });
+    return Response.json({ profile: await enrichProfile(profile), noop: true });
   }
 
   if (typeof updates.username === "string" && updates.username) {
@@ -235,7 +267,7 @@ async function handlePatchMe(request: Request, decoded: any): Promise<Response> 
   });
 
   const profile = await getOwnProfile(decoded);
-  return Response.json({ profile: await attachPermissions(profile) });
+  return Response.json({ profile: await enrichProfile(profile) });
 }
 
 /* -------------------------------------------------------------------------- */

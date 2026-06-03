@@ -553,7 +553,7 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div className="space-y-2">
           <h1 className="text-4xl font-serif font-bold text-ink tracking-tight uppercase">Content Proposals</h1>
-          <p className="text-ink/60 font-serif italic">
+          <p className="text-ink/65 font-serif italic">
             Review pending revisions submitted by content creators. Approve to write
             through to the live tables; reject (optionally with a reason) to send
             feedback. Children of a rejected bundle row are cascaded automatically.
@@ -579,28 +579,28 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
               variant="ghost"
               size="sm"
               onClick={() => setSelectedBundleId(null)}
-              className="gap-2 text-gold hover:bg-gold/10"
+              className="gap-2 text-gold hover:bg-gold/15"
             >
               <ChevronLeft className="w-4 h-4" />
               Back to blocks
             </Button>
           </div>
           {selectedBundleId === ORPHANS_PSEUDO_BUNDLE_ID ? (
-            <Card className="border-gold/10">
+            <Card className="border-gold/15">
               <CardHeader>
                 <CardTitle className="text-base">
                   Standalone proposals — {detailProposals.length}
                 </CardTitle>
-                <p className="text-xs text-ink/60 italic">
+                <p className="text-xs text-ink/65 italic">
                   Revisions with no block (legacy single-revision submits, or
                   bundles that lost their metadata row).
                 </p>
               </CardHeader>
               <CardContent>
                 {loading ? (
-                  <p className="text-ink/50 italic text-center py-12">Loading…</p>
+                  <p className="text-ink/55 italic text-center py-12">Loading…</p>
                 ) : detailProposals.length === 0 ? (
-                  <p className="text-ink/50 italic text-center py-12">
+                  <p className="text-ink/55 italic text-center py-12">
                     No standalone proposals.
                   </p>
                 ) : (
@@ -634,7 +634,7 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
               onRejectRevision={(p) => setRejectDialog({ proposal: p, reason: '' })}
             />
           ) : (
-            <p className="text-ink/50 italic text-center py-12">
+            <p className="text-ink/55 italic text-center py-12">
               Block not found.
             </p>
           )}
@@ -645,7 +645,7 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
          * surface. Each row summarises a block: name + description +
          * proposer + counts + entity-type chips.
          * =========================================================== */
-        <Card className="border-gold/10">
+        <Card className="border-gold/15">
           <CardHeader>
             <CardTitle className="text-base">
               {showResolved
@@ -658,9 +658,9 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
           </CardHeader>
           <CardContent>
             {loading && bundles.length === 0 && orphans.length === 0 ? (
-              <p className="text-ink/50 italic text-center py-12">Loading…</p>
+              <p className="text-ink/55 italic text-center py-12">Loading…</p>
             ) : bundles.length === 0 && orphans.length === 0 ? (
-              <p className="text-ink/50 italic text-center py-12">
+              <p className="text-ink/55 italic text-center py-12">
                 {showResolved ? 'Nothing to show.' : 'No pending proposals.'}
               </p>
             ) : (
@@ -692,7 +692,7 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
                           Pre-block-system submits and bundle metadata gaps
                         </span>
                       </div>
-                      <ChevronRight className="w-4 h-4 text-ink/40 flex-shrink-0" />
+                      <ChevronRight className="w-4 h-4 text-ink/45 flex-shrink-0" />
                     </button>
                   </li>
                 )}
@@ -821,7 +821,7 @@ function BundleRowDisplay({
               {bundle.name}
             </span>
             {bundle.pending_count > 0 && (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-gold/60 text-gold">
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-gold/65 text-gold">
                 {bundle.pending_count} pending
               </Badge>
             )}
@@ -842,7 +842,7 @@ function BundleRowDisplay({
             </span>
           )}
           <div className="flex items-center gap-2 flex-wrap text-[11px] text-ink/55">
-            <span className="font-medium text-ink/70">
+            <span className="font-medium text-ink/75">
               {bundle.proposer_display_name ||
                 bundle.proposer_username ||
                 bundle.created_by_user_id ||
@@ -863,7 +863,7 @@ function BundleRowDisplay({
                     return (
                       <span
                         key={et}
-                        className="inline-flex items-center gap-0.5 text-ink/50"
+                        className="inline-flex items-center gap-0.5 text-ink/55"
                         title={ENTITY_LABEL[et]}
                       >
                         {Icon && <Icon className="w-3 h-3" />}
@@ -875,7 +875,7 @@ function BundleRowDisplay({
             )}
           </div>
         </div>
-        <ChevronRight className="w-4 h-4 text-ink/40 flex-shrink-0" />
+        <ChevronRight className="w-4 h-4 text-ink/45 flex-shrink-0" />
       </button>
     </li>
   );
@@ -901,19 +901,19 @@ function BlockReview({
   onRejectRevision: (p: Proposal) => void;
 }) {
   return (
-    <Card className="border-gold/10 overflow-hidden">
+    <Card className="border-gold/15 overflow-hidden">
       <CardHeader>
         <div className="space-y-2">
           <CardTitle className="text-base flex items-center gap-2">{bundle.name}</CardTitle>
           {bundle.description && (
-            <p className="text-sm text-ink/70 leading-relaxed">{bundle.description}</p>
+            <p className="text-sm text-ink/75 leading-relaxed">{bundle.description}</p>
           )}
           <p className="text-xs text-ink/55">
             <span className="font-medium text-ink/75">
               {bundle.proposer_display_name || bundle.proposer_username || bundle.created_by_user_id || 'unknown'}
             </span>
             {bundle.first_proposed_at && <>{' · submitted '}{formatSqliteLocal(bundle.first_proposed_at)}</>}
-            {' · '}<span className="text-gold/80 font-semibold">{bundle.pending_count} pending</span>
+            {' · '}<span className="text-gold/85 font-semibold">{bundle.pending_count} pending</span>
             {bundle.approved_count > 0 && <> · {bundle.approved_count} approved</>}
             {bundle.rejected_count > 0 && <> · {bundle.rejected_count} rejected</>}
             {bundle.withdrawn_count > 0 && <> · {bundle.withdrawn_count} withdrawn</>}
@@ -998,7 +998,7 @@ function ProposalRow({
           <p className="font-medium text-sm truncate flex items-center gap-2">
             {describePayloadSummary(proposal)}
             {isPinned && (
-              <Badge variant="outline" className="text-[9px] border-gold/40 text-gold">
+              <Badge variant="outline" className="text-[9px] border-gold/45 text-gold">
                 Pinned
               </Badge>
             )}
@@ -1018,11 +1018,11 @@ function ProposalRow({
               </Badge>
             )}
           </p>
-          <p className="text-[11px] text-ink/50">
+          <p className="text-[11px] text-ink/55">
             by {proposal.proposer_display_name || proposal.proposer_username || proposal.proposed_by_user_id} ·{' '}
             {formatSqliteLocal(proposal.proposed_at)}
             {proposal.bundle_id && (
-              <> · <span className="font-mono text-ink/40">{proposal.bundle_id.slice(0, 12)}</span></>
+              <> · <span className="font-mono text-ink/45">{proposal.bundle_id.slice(0, 12)}</span></>
             )}
           </p>
         </div>
@@ -1034,7 +1034,7 @@ function ProposalRow({
             size="xs"
             variant="outline"
             onClick={(e) => { e.stopPropagation(); onTogglePin(); }}
-            className={`gap-1.5 ${isPinned ? 'border-gold/60 text-gold bg-gold/10' : 'border-ink/20 text-ink/60 hover:bg-gold/5'}`}
+            className={`gap-1.5 ${isPinned ? 'border-gold/65 text-gold bg-gold/15' : 'border-ink/25 text-ink/65 hover:bg-gold/5'}`}
             title={isPinned
               ? 'Unpin — this proposal will follow the standard 30-day retention.'
               : 'Pin — exempt this proposal from the 30-day retention sweep.'}
@@ -1095,7 +1095,7 @@ function ProposalDetailDialog({
           </DialogTitle>
           <DialogDescription className="text-xs">
             Proposed by{' '}
-            <span className="font-medium text-ink/70">
+            <span className="font-medium text-ink/75">
               {proposal.proposer_display_name || proposal.proposer_username || proposal.proposed_by_user_id}
             </span>
             {' '}on {formatSqliteLocal(proposal.proposed_at)}.
@@ -1106,8 +1106,8 @@ function ProposalDetailDialog({
         </DialogHeader>
 
         {proposal.notes_from_proposer && (
-          <div className="p-3 rounded bg-gold/5 border border-gold/10 text-sm">
-            <p className="text-[10px] uppercase tracking-widest text-gold/70 mb-1">Notes from proposer</p>
+          <div className="p-3 rounded bg-gold/5 border border-gold/15 text-sm">
+            <p className="text-[10px] uppercase tracking-widest text-gold/75 mb-1">Notes from proposer</p>
             <p className="whitespace-pre-wrap">{proposal.notes_from_proposer}</p>
           </div>
         )}
@@ -1155,8 +1155,8 @@ function ProposalDetailDialog({
 
 function DiffPane({ title, data }: { title: string; data: any }) {
   return (
-    <div className="rounded border border-gold/10 p-3 bg-background/50">
-      <p className="text-[10px] uppercase tracking-widest text-ink/40 mb-2">{title}</p>
+    <div className="rounded border border-gold/15 p-3 bg-background/50">
+      <p className="text-[10px] uppercase tracking-widest text-ink/45 mb-2">{title}</p>
       <pre className="text-[11px] leading-snug whitespace-pre-wrap break-words font-mono max-h-64 overflow-y-auto">
         {data === null || data === undefined ? '—' : JSON.stringify(data, null, 2)}
       </pre>

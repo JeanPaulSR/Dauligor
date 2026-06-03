@@ -631,7 +631,7 @@ export default function ClassPreviewPane({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-[95vw] md:max-w-4xl max-h-[90vh] bg-card border-gold p-0 flex flex-col shadow-2xl shadow-gold/20 overflow-hidden">
+      <DialogContent className="max-w-[95vw] md:max-w-4xl max-h-[90vh] bg-card border-gold p-0 flex flex-col shadow-2xl shadow-gold/25 overflow-hidden">
         {selectedClass && (
           <>
             {/* Background image — fills top half of the dialog, mask-fades to transparent */}
@@ -658,19 +658,19 @@ export default function ClassPreviewPane({
               <div className="relative p-6 px-8 flex items-center justify-between z-10">
                 <div>
                   <h2 className="h1-title text-gold drop-shadow-md text-4xl">{selectedClass.name}</h2>
-                  <p className="label-text text-gold/60 mt-1">{sources[selectedClass.source_id || selectedClass.sourceId]?.name || 'Unknown Source'}</p>
+                  <p className="label-text text-gold/65 mt-1">{sources[selectedClass.source_id || selectedClass.sourceId]?.name || 'Unknown Source'}</p>
                 </div>
                 <div className="flex flex-col items-end gap-2">
                   <div className="flex items-center gap-3">
-                    <div className="bg-gold/10 border border-gold/20 px-3 py-1.5 rounded text-gold label-text">
+                    <div className="bg-gold/15 border border-gold/25 px-3 py-1.5 rounded text-gold label-text">
                       Hit Die: d{selectedClass.hitDie || 8}
                     </div>
                     {selectionMode ? (
                       <div className="flex gap-2">
-                        <Button size="sm" variant="outline" className="border-gold/20 text-gold uppercase tracking-widest text-[10px] h-8" onClick={() => (onCancel ? onCancel() : onClose())}>
+                        <Button size="sm" variant="outline" className="border-gold/25 text-gold uppercase tracking-widest text-[10px] h-8" onClick={() => (onCancel ? onCancel() : onClose())}>
                           Cancel
                         </Button>
-                        <Button size="sm" onClick={() => onSelect && onSelect(selectedClass)} className="btn-gold-solid shadow-lg shadow-gold/20 uppercase tracking-widest text-[10px] h-8">
+                        <Button size="sm" onClick={() => onSelect && onSelect(selectedClass)} className="btn-gold-solid shadow-lg shadow-gold/25 uppercase tracking-widest text-[10px] h-8">
                           Select Class
                         </Button>
                       </div>
@@ -682,12 +682,12 @@ export default function ClassPreviewPane({
                             stays inside /proposals/edit/* end-to-end. Rendered only
                             when the host supplies an onViewPage handler. */}
                         {onViewPage && (
-                          <Button size="sm" onClick={() => onViewPage(selectedClass)} className="btn-gold-solid shadow-lg shadow-gold/20 uppercase tracking-widest text-[10px] h-8">
+                          <Button size="sm" onClick={() => onViewPage(selectedClass)} className="btn-gold-solid shadow-lg shadow-gold/25 uppercase tracking-widest text-[10px] h-8">
                             View Page
                           </Button>
                         )}
                         {onEdit && (
-                          <Button size="sm" variant={editAsPrimary ? undefined : "outline"} onClick={() => onEdit(selectedClass)} className={editAsPrimary ? "btn-gold-solid shadow-lg shadow-gold/20 uppercase tracking-widest text-[10px] h-8" : "border-gold/20 text-gold uppercase tracking-widest text-[10px] h-8"}>
+                          <Button size="sm" variant={editAsPrimary ? undefined : "outline"} onClick={() => onEdit(selectedClass)} className={editAsPrimary ? "btn-gold-solid shadow-lg shadow-gold/25 uppercase tracking-widest text-[10px] h-8" : "border-gold/25 text-gold uppercase tracking-widest text-[10px] h-8"}>
                             <Edit className="w-3.5 h-3.5 mr-1" /> Edit
                           </Button>
                         )}
@@ -699,40 +699,40 @@ export default function ClassPreviewPane({
             </div>
 
             {/* Scrollable Content */}
-            <div className="flex-1 overflow-y-auto min-h-0 p-6 px-8 border-t border-gold/10 relative z-10 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto min-h-0 p-6 px-8 border-t border-gold/15 relative z-10 custom-scrollbar">
               <div className="space-y-10">
                 {/* Class Table */}
                 {previewLoading ? (
-                  <div className="h-64 flex flex-col items-center justify-center border border-gold/20 bg-card/50 backdrop-blur-sm rounded-lg space-y-4">
+                  <div className="h-64 flex flex-col items-center justify-center border border-gold/25 bg-card/50 backdrop-blur-sm rounded-lg space-y-4">
                     <div className="w-8 h-8 border-2 border-gold border-t-transparent rounded-full animate-spin" />
-                    <span className="text-[10px] uppercase font-bold tracking-widest text-gold/60">Loading class table...</span>
+                    <span className="text-[10px] uppercase font-bold tracking-widest text-gold/65">Loading class table...</span>
                   </div>
                 ) : (
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3 }}
-                    className="border border-gold/20 bg-card/50 backdrop-blur-sm rounded-lg overflow-x-auto custom-scrollbar"
+                    className="border border-gold/25 bg-card/50 backdrop-blur-sm rounded-lg overflow-x-auto custom-scrollbar"
                   >
                     <table className="w-full text-left border-collapse">
                     <thead className="sticky top-0 bg-card z-10 shadow-md">
-                      <tr className="border-b border-gold/20 bg-gold/5">
-                        <th className="p-1 px-2 label-text italic text-gold text-center w-8 border-r border-gold/10 text-[10px]">Level</th>
-                        <th className="p-1 px-2 label-text italic text-gold text-center w-10 border-r border-gold/10 text-[10px]">PB</th>
-                        <th className="p-1 px-2 label-text italic text-gold border-r border-gold/10 text-[10px]">Features</th>
+                      <tr className="border-b border-gold/25 bg-gold/5">
+                        <th className="p-1 px-2 label-text italic text-gold text-center w-8 border-r border-gold/15 text-[10px]">Level</th>
+                        <th className="p-1 px-2 label-text italic text-gold text-center w-10 border-r border-gold/15 text-[10px]">PB</th>
+                        <th className="p-1 px-2 label-text italic text-gold border-r border-gold/15 text-[10px]">Features</th>
                         {previewScalings.map(col => (
-                          <th key={col.id} className="p-1 px-2 label-text italic text-gold text-center border-r border-gold/10 text-[10px]">{col.name}</th>
+                          <th key={col.id} className="p-1 px-2 label-text italic text-gold text-center border-r border-gold/15 text-[10px]">{col.name}</th>
                         ))}
                         {hasAnySpellsKnown && (
                           <>
-                            <th className="p-1 px-2 label-text italic text-gold text-center border-r border-gold/10 text-[10px]">Cantrips</th>
-                            <th className="p-1 px-2 label-text italic text-gold text-center border-r border-gold/10 text-[10px]">Spells Known</th>
+                            <th className="p-1 px-2 label-text italic text-gold text-center border-r border-gold/15 text-[10px]">Cantrips</th>
+                            <th className="p-1 px-2 label-text italic text-gold text-center border-r border-gold/15 text-[10px]">Spells Known</th>
                           </>
                         )}
                         {hasAnyAltSpellcasting && (
                           <>
-                            <th className="p-1 px-2 label-text italic text-gold text-center border-r border-gold/10 text-[10px]">Slot Count</th>
-                            <th className="p-1 px-2 label-text italic text-gold text-center border-r border-gold/10 text-[10px]">Slot Level</th>
+                            <th className="p-1 px-2 label-text italic text-gold text-center border-r border-gold/15 text-[10px]">Slot Count</th>
+                            <th className="p-1 px-2 label-text italic text-gold text-center border-r border-gold/15 text-[10px]">Slot Level</th>
                           </>
                         )}
                         {hasAnySpellcasting && (
@@ -740,8 +740,8 @@ export default function ClassPreviewPane({
                         )}
                       </tr>
                       {hasAnySpellcasting && (
-                        <tr className="border-b border-gold/10 bg-gold/5">
-                          <th colSpan={3 + previewScalings.length + (hasAnySpellsKnown ? 2 : 0) + (hasAnyAltSpellcasting ? 2 : 0)} className="border-r border-gold/10"></th>
+                        <tr className="border-b border-gold/15 bg-gold/5">
+                          <th colSpan={3 + previewScalings.length + (hasAnySpellsKnown ? 2 : 0) + (hasAnyAltSpellcasting ? 2 : 0)} className="border-r border-gold/15"></th>
                           {Array.from({ length: maxSpellLevel }, (_, i) => i + 1).map(lvl => (
                             <th key={lvl} className="p-0.5 label-text italic text-gold text-center w-5 border-r border-gold/5 last:border-r-0 text-[10px]">
                               {lvl}{lvl === 1 ? 'st' : lvl === 2 ? 'nd' : lvl === 3 ? 'rd' : 'th'}
@@ -760,8 +760,8 @@ export default function ClassPreviewPane({
 
                         return (
                           <tr key={level} className="border-b border-gold/5 hover:bg-gold/5 transition-colors group">
-                            <td className="p-1 px-2 text-center text-[10px] font-mono text-ink/40 border-r border-gold/5">{level}</td>
-                            <td className="p-1 px-2 text-center text-[10px] font-mono text-ink/60 border-r border-gold/5">+{pb}</td>
+                            <td className="p-1 px-2 text-center text-[10px] font-mono text-ink/45 border-r border-gold/5">{level}</td>
+                            <td className="p-1 px-2 text-center text-[10px] font-mono text-ink/65 border-r border-gold/5">+{pb}</td>
                             <td className="p-1 px-2 border-r border-gold/5">
                               <div className="flex flex-wrap gap-1">
                                 {levelFeatures.map((f, idx) => (
@@ -769,13 +769,13 @@ export default function ClassPreviewPane({
                                     key={idx}
                                     className={cn(
                                       "text-[10px]",
-                                      f.isAdvancement ? "text-gold/60 italic font-medium" : "font-bold text-gold/80"
+                                      f.isAdvancement ? "text-gold/65 italic font-medium" : "font-bold text-gold/85"
                                     )}
                                   >
                                     {f.name.split(' (')[0]}{idx < levelFeatures.length - 1 ? ',' : ''}
                                   </span>
                                 ))}
-                                {levelFeatures.length === 0 && <span className="text-ink/20 text-[10px]">—</span>}
+                                {levelFeatures.length === 0 && <span className="text-ink/25 text-[10px]">—</span>}
                               </div>
                             </td>
                             {previewScalings.map(col => {
@@ -787,27 +787,27 @@ export default function ClassPreviewPane({
                                 }
                               }
                               return (
-                                <td key={col.id} className="p-1 px-2 text-center text-[10px] font-mono text-ink/60 border-r border-gold/5">
+                                <td key={col.id} className="p-1 px-2 text-center text-[10px] font-mono text-ink/65 border-r border-gold/5">
                                   {displayValue}
                                 </td>
                               );
                             })}
                             {hasAnySpellsKnown && (
                               <>
-                                <td className="p-1 px-2 text-center text-[10px] font-mono text-ink/60 border-r border-gold/5">{levelKnown?.cantrips ?? levelKnown?.cantripsKnown ?? '—'}</td>
-                                <td className="p-1 px-2 text-center text-[10px] font-mono text-ink/60 border-r border-gold/5">{levelKnown?.spellsKnown ?? levelKnown?.spells ?? '—'}</td>
+                                <td className="p-1 px-2 text-center text-[10px] font-mono text-ink/65 border-r border-gold/5">{levelKnown?.cantrips ?? levelKnown?.cantripsKnown ?? '—'}</td>
+                                <td className="p-1 px-2 text-center text-[10px] font-mono text-ink/65 border-r border-gold/5">{levelKnown?.spellsKnown ?? levelKnown?.spells ?? '—'}</td>
                               </>
                             )}
                             {hasAnyAltSpellcasting && (
                               <>
-                                <td className="p-1 px-2 text-center text-[10px] font-mono text-ink/60 border-r border-gold/5">{levelAlt?.slotCount ?? '—'}</td>
-                                <td className="p-1 px-2 text-center text-[10px] font-mono text-ink/60 border-r border-gold/5">
+                                <td className="p-1 px-2 text-center text-[10px] font-mono text-ink/65 border-r border-gold/5">{levelAlt?.slotCount ?? '—'}</td>
+                                <td className="p-1 px-2 text-center text-[10px] font-mono text-ink/65 border-r border-gold/5">
                                   {levelAlt?.slotLevel ? `${levelAlt.slotLevel}${levelAlt.slotLevel === 1 ? 'st' : levelAlt.slotLevel === 2 ? 'nd' : levelAlt.slotLevel === 3 ? 'rd' : 'th'}` : '—'}
                                 </td>
                               </>
                             )}
                             {hasAnySpellcasting && (levelScaling?.slots || Array(maxSpellLevel).fill(0)).slice(0, maxSpellLevel).map((slots: number, idx: number) => (
-                              <td key={idx} className={`p-1 text-center font-mono text-[10px] border-r border-gold/5 last:border-r-0 ${slots > 0 ? 'text-ink font-bold' : 'text-ink/20'}`}>
+                              <td key={idx} className={`p-1 text-center font-mono text-[10px] border-r border-gold/5 last:border-r-0 ${slots > 0 ? 'text-ink font-bold' : 'text-ink/25'}`}>
                                 {slots > 0 ? slots : '—'}
                               </td>
                             ))}
@@ -825,16 +825,16 @@ export default function ClassPreviewPane({
                     {/* Description Preview */}
                     {selectedClass.description && (
                       <div className="space-y-2">
-                        <h3 className="h3-title text-gold border-b border-gold/10 pb-1 w-full">Class Description</h3>
+                        <h3 className="h3-title text-gold border-b border-gold/15 pb-1 w-full">Class Description</h3>
                         <BBCodeRenderer content={selectedClass.description} className="body-text" />
                       </div>
                     )}
 
                     {/* Core Features Preview */}
                     <div className="space-y-4">
-                      <h3 className="h3-title text-gold border-b border-gold/10 pb-1 w-full">Core Features</h3>
+                      <h3 className="h3-title text-gold border-b border-gold/15 pb-1 w-full">Core Features</h3>
                       {previewLoading ? (
-                        <div className="animate-pulse h-10 bg-gold/5 border border-gold/10 rounded" />
+                        <div className="animate-pulse h-10 bg-gold/5 border border-gold/15 rounded" />
                       ) : previewFeatures.length > 0 ? (
                         <div>
                           <FeaturesView
@@ -854,7 +854,7 @@ export default function ClassPreviewPane({
                           />
                         </div>
                       ) : (
-                        <p className="text-sm text-ink/40 italic">No features defined yet.</p>
+                        <p className="text-sm text-ink/45 italic">No features defined yet.</p>
                       )}
                     </div>
 
@@ -863,7 +863,7 @@ export default function ClassPreviewPane({
                       <div className="space-y-4">
                         <div className="flex items-center gap-4">
                           <h2 className="label-text text-gold shrink-0 uppercase tracking-widest font-bold">Class Lore within Setting</h2>
-                          <div className="h-px bg-gold/10 w-full" />
+                          <div className="h-px bg-gold/15 w-full" />
                         </div>
                         <BBCodeRenderer content={selectedClass.lore} className="body-text" />
                       </div>
@@ -872,8 +872,8 @@ export default function ClassPreviewPane({
 
                 {/* Right Column: Proficiencies & Actions */}
                 <div className="space-y-6">
-                  <div className="bg-background/50 border border-gold/10 rounded-md p-4 space-y-4">
-                    <h4 className="label-text text-gold border-b border-gold/10 pb-1">Proficiencies</h4>
+                  <div className="bg-background/50 border border-gold/15 rounded-md p-4 space-y-4">
+                    <h4 className="label-text text-gold border-b border-gold/15 pb-1">Proficiencies</h4>
                     <div className="space-y-3">
                       {['armor', 'weapons'].map(key => {
                         const prof = selectedClass.proficiencies?.[key];
@@ -899,14 +899,14 @@ export default function ClassPreviewPane({
 
                         return (
                           <div key={key}>
-                            <span className="block text-[10px] uppercase font-bold text-ink/40 mb-1">{key}</span>
-                            <span className="text-xs text-ink/80">{displayVal}</span>
+                            <span className="block text-[10px] uppercase font-bold text-ink/45 mb-1">{key}</span>
+                            <span className="text-xs text-ink/85">{displayVal}</span>
                           </div>
                         );
                       })}
                       <div className="space-y-1">
-                        <span className="block text-[10px] uppercase font-bold text-ink/40 mb-1">Tools</span>
-                        <span className="text-xs text-ink/80">
+                        <span className="block text-[10px] uppercase font-bold text-ink/45 mb-1">Tools</span>
+                        <span className="text-xs text-ink/85">
                           {(() => {
                             const tools = selectedClass.proficiencies?.tools;
                             const displayName = String(selectedClass.proficiencies?.toolsDisplayName || '').trim();
@@ -935,8 +935,8 @@ export default function ClassPreviewPane({
                         </span>
                       </div>
                       <div className="space-y-1">
-                        <span className="block text-[10px] uppercase font-bold text-ink/40 mb-1">Skills</span>
-                        <span className="text-xs text-ink/80">
+                        <span className="block text-[10px] uppercase font-bold text-ink/45 mb-1">Skills</span>
+                        <span className="text-xs text-ink/85">
                           {(() => {
                             const skills = selectedClass.proficiencies?.skills;
                             if (!skills || typeof skills === 'string') return skills || 'None';
@@ -950,8 +950,8 @@ export default function ClassPreviewPane({
                         </span>
                       </div>
                       <div>
-                        <span className="block text-[10px] uppercase font-bold text-ink/40 mb-1">Saving Throws</span>
-                        <span className="text-xs text-ink/80">
+                        <span className="block text-[10px] uppercase font-bold text-ink/45 mb-1">Saving Throws</span>
+                        <span className="text-xs text-ink/85">
                           {(() => {
                             const st = selectedClass.proficiencies?.savingThrows;
                             let fixedIds = (st?.fixedIds || []);
@@ -1004,8 +1004,8 @@ export default function ClassPreviewPane({
                     </div>
                   </div>
                   {/* Multiclassing Requirements */}
-                  <div className="bg-background/50 border border-gold/10 rounded-md p-4 space-y-4">
-                    <h4 className="label-text text-gold border-b border-gold/10 pb-1">Multiclassing Requirements</h4>
+                  <div className="bg-background/50 border border-gold/15 rounded-md p-4 space-y-4">
+                    <h4 className="label-text text-gold border-b border-gold/15 pb-1">Multiclassing Requirements</h4>
                     {(() => {
                       const fixedNames = (selectedClass.primaryAbility || []).map((id: string) => {
                         const attr = allAttributes.find(a => (a.identifier || a.id).toUpperCase() === id.toUpperCase());
@@ -1045,17 +1045,17 @@ export default function ClassPreviewPane({
                   </div>
 
                   {/* Tags */}
-                  <div className="bg-background/50 border border-gold/10 rounded-md p-4 space-y-4">
-                    <h4 className="label-text text-gold border-b border-gold/10 pb-1">Tags</h4>
+                  <div className="bg-background/50 border border-gold/15 rounded-md p-4 space-y-4">
+                    <h4 className="label-text text-gold border-b border-gold/15 pb-1">Tags</h4>
                     <div className="flex flex-wrap gap-2">
                       {selectedClass.tagIds?.length > 0 ? selectedClass.tagIds.map((tagId: string) => {
                         const tagDef = allTags.find(t => t.id === tagId);
                         return tagDef ? (
-                          <Badge key={tagId} variant="outline" className="text-[10px] px-2 py-0 h-5 border-gold/20 text-ink/60">
+                          <Badge key={tagId} variant="outline" className="text-[10px] px-2 py-0 h-5 border-gold/25 text-ink/65">
                             {tagDef.name}
                           </Badge>
                         ) : null;
-                      }) : <span className="text-xs text-ink/80">None</span>}
+                      }) : <span className="text-xs text-ink/85">None</span>}
                     </div>
                   </div>
                 </div>

@@ -234,10 +234,10 @@ function PreviewPanel({
       <button
         type="button"
         onClick={() => setIsOpen(true)}
-        className="w-full flex items-center justify-between bg-background/20 border border-gold/10 hover:bg-gold/5 h-auto py-3 px-4 rounded-md transition-colors text-left focus:outline-none focus:ring-2 focus:ring-gold/50 cursor-pointer"
+        className="w-full flex items-center justify-between bg-background/20 border border-gold/15 hover:bg-gold/5 h-auto py-3 px-4 rounded-md transition-colors text-left focus:outline-none focus:ring-2 focus:ring-gold/55 cursor-pointer"
       >
-        <span className="text-[10px] uppercase font-black tracking-widest text-gold/60">{title}</span>
-        <Eye className="w-3.5 h-3.5 text-gold/60 shrink-0" />
+        <span className="text-[10px] uppercase font-black tracking-widest text-gold/65">{title}</span>
+        <Eye className="w-3.5 h-3.5 text-gold/65 shrink-0" />
       </button>
 
       {isOpen && createPortal(
@@ -247,15 +247,15 @@ function PreviewPanel({
             onClick={() => setIsOpen(false)} 
             aria-hidden="true"
           />
-          <div className="relative w-full max-w-2xl max-h-[85vh] flex flex-col gap-0 rounded-xl bg-card p-4 text-ink shadow-2xl ring-1 ring-gold/20 outline-none animate-in fade-in-0 zoom-in-95 duration-100">
+          <div className="relative w-full max-w-2xl max-h-[85vh] flex flex-col gap-0 rounded-xl bg-card p-4 text-ink shadow-2xl ring-1 ring-gold/25 outline-none animate-in fade-in-0 zoom-in-95 duration-100">
             <div className="flex justify-between items-start mb-4 gap-4">
               <div className="shrink-0">
-                <h4 className="text-sm uppercase font-black tracking-widest text-gold/80">{title}</h4>
-                {subtitle && <p className="text-[10px] text-ink/60 mt-1">{subtitle}</p>}
+                <h4 className="text-sm uppercase font-black tracking-widest text-gold/85">{title}</h4>
+                {subtitle && <p className="text-[10px] text-ink/65 mt-1">{subtitle}</p>}
               </div>
               <button 
                 onClick={() => setIsOpen(false)}
-                className="rounded-sm opacity-70 hover:opacity-100 transition-opacity p-1 bg-background/50 hover:bg-background border border-gold/10 shrink-0 cursor-pointer text-gold"
+                className="rounded-sm opacity-70 hover:opacity-100 transition-opacity p-1 bg-background/50 hover:bg-background border border-gold/15 shrink-0 cursor-pointer text-gold"
               >
                  <X className="w-4 h-4" />
               </button>
@@ -688,12 +688,12 @@ function AdvancementManager({
     // Replacements. Identical to the chevrons on the per-item rows.
     const pillBase = 'px-1.5 py-0.5 rounded text-[8px] uppercase tracking-widest font-black transition-all border leading-none';
     const pillOn = target === 'fixed'
-      ? 'bg-gold/80 border-gold/80 text-white'
+      ? 'bg-gold/85 border-gold/85 text-[var(--primary-foreground)]'
       : target === 'options'
         ? 'bg-sky-500/80 border-sky-500/80 text-white'
         : 'bg-purple-500/80 border-purple-500/80 text-white';
     const pillOff = target === 'fixed'
-      ? 'bg-card/40 text-gold/40 border-gold/15 hover:border-gold/40'
+      ? 'bg-card/40 text-gold/45 border-gold/15 hover:border-gold/45'
       : target === 'options'
         ? 'bg-card/40 text-sky-400/40 border-sky-500/15 hover:border-sky-400/50'
         : 'bg-card/40 text-purple-400/40 border-purple-500/15 hover:border-purple-400/50';
@@ -902,8 +902,8 @@ function AdvancementManager({
   if (isInsideFeature) {
     return (
       <div className="space-y-4">
-        <div className="p-4 bg-gold/5 border border-gold/10 rounded-md">
-          <p className="text-[10px] text-ink/60 mb-4 italic">
+        <div className="p-4 bg-gold/5 border border-gold/15 rounded-md">
+          <p className="text-[10px] text-ink/65 mb-4 italic">
             Select which class-level advancements are linked to this feature.
             Progression logic should be managed on the main Class page.
           </p>
@@ -911,16 +911,16 @@ function AdvancementManager({
             {rootAdvancements.map((adv) => {
               const isLinked = adv.featureId === featureId;
               return (
-                <div key={adv._id} className={`flex items-center gap-3 p-2 rounded border transition-all ${isLinked ? 'bg-gold/10 border-gold/30' : 'bg-background/40 border-gold/5 opacity-60'}`}>
+                <div key={adv._id} className={`flex items-center gap-3 p-2 rounded border transition-all ${isLinked ? 'bg-gold/15 border-gold/35' : 'bg-background/40 border-gold/5 opacity-60'}`}>
                   <input
                     type="checkbox"
-                    className="w-3.5 h-3.5 rounded border-gold/20 text-gold focus:ring-gold"
+                    className="w-3.5 h-3.5 rounded border-gold/25 text-gold focus:ring-gold"
                     checked={isLinked}
                     onChange={(e) => onLinkAdvancement?.(adv._id, e.target.checked ? featureId : undefined)}
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-mono text-gold/60">L{adv.level}</span>
+                      <span className="text-[10px] font-mono text-gold/65">L{adv.level}</span>
                       <span className={`text-[10px] uppercase font-black tracking-tight ${ADVANCEMENT_INFO[adv.type]?.color}`}>
                         {ADVANCEMENT_INFO[adv.type]?.label || adv.type}
                       </span>
@@ -933,8 +933,8 @@ function AdvancementManager({
               );
             })}
             {rootAdvancements.length === 0 && (
-              <div className="text-center py-4 bg-background/20 border border-dashed border-gold/10 rounded">
-                <p className="text-[10px] text-ink/40 uppercase tracking-widest font-black">No Class Advancements Found</p>
+              <div className="text-center py-4 bg-background/20 border border-dashed border-gold/15 rounded">
+                <p className="text-[10px] text-ink/45 uppercase tracking-widest font-black">No Class Advancements Found</p>
               </div>
             )}
           </div>
@@ -955,28 +955,28 @@ function AdvancementManager({
       <div className="grid gap-2">
         {advancements.map((adv, idx) => (
           <div key={adv._id} className={cn(
-            "flex items-center gap-3 p-3 bg-card/40 border border-gold/10 rounded-lg group hover:border-gold/30 hover:bg-card/60 transition-all",
+            "flex items-center gap-3 p-3 bg-card/40 border border-gold/15 rounded-lg group hover:border-gold/35 hover:bg-card/60 transition-all",
             adv.isBase && "opacity-60 saturate-50 bg-gold/[0.02]"
           )}>
-            <div className="w-10 h-10 bg-background rounded border border-gold/10 flex flex-col items-center justify-center shrink-0">
-              <span className="text-[10px] font-mono text-gold/60 leading-none">L{adv.level}</span>
+            <div className="w-10 h-10 bg-background rounded border border-gold/15 flex flex-col items-center justify-center shrink-0">
+              <span className="text-[10px] font-mono text-gold/65 leading-none">L{adv.level}</span>
               <div className={ADVANCEMENT_INFO[adv.type]?.color || 'text-gold'}>
                 {ADVANCEMENT_INFO[adv.type]?.icon || <Zap className="w-4 h-4" />}
               </div>
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-black uppercase text-ink/80 tracking-wider truncate">
+                <span className="text-xs font-black uppercase text-ink/85 tracking-wider truncate">
                   {adv.title || ADVANCEMENT_INFO[adv.type]?.label || adv.type}
                 </span>
                 {adv.isBase && (
-                  <span className="text-[8px] bg-gold/10 text-gold px-1.5 py-0.5 rounded font-black tracking-widest uppercase">Base</span>
+                  <span className="text-[8px] bg-gold/15 text-gold px-1.5 py-0.5 rounded font-black tracking-widest uppercase">Base</span>
                 )}
-                <span className="text-[8px] font-bold text-ink/20 uppercase tracking-widest shrink-0">
+                <span className="text-[8px] font-bold text-ink/25 uppercase tracking-widest shrink-0">
                   {adv.type}
                 </span>
               </div>
-              <div className="text-[10px] text-ink/40 font-serif italic flex items-center gap-2">
+              <div className="text-[10px] text-ink/45 font-serif italic flex items-center gap-2">
                 <span className="truncate">
                   {adv.type === 'ItemGrant' && (adv.configuration?.choiceType === 'option-group'
                     ? `Grants items from Option Group`
@@ -1007,14 +1007,14 @@ function AdvancementManager({
                   })()}
                 </span>
                 {adv.isBase && (
-                  <span className="text-gold/40 not-italic font-sans font-bold uppercase tracking-tighter text-[9px]">
+                  <span className="text-gold/45 not-italic font-sans font-bold uppercase tracking-tighter text-[9px]">
                     — Starting Core Advancement
                   </span>
                 )}
               </div>
             </div>
             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              <Button variant="ghost" size="sm" onClick={() => handleEdit(idx)} className="h-7 w-7 p-0 text-gold hover:bg-gold/10"><Edit2 className="w-3.5 h-3.5" /></Button>
+              <Button variant="ghost" size="sm" onClick={() => handleEdit(idx)} className="h-7 w-7 p-0 text-gold hover:bg-gold/15"><Edit2 className="w-3.5 h-3.5" /></Button>
               {!adv.isBase && (
                 <Button variant="ghost" size="sm" onClick={() => handleDelete(idx)} className="h-7 w-7 p-0 btn-danger"><Trash2 className="w-3.5 h-3.5" /></Button>
               )}
@@ -1024,9 +1024,9 @@ function AdvancementManager({
 
         {advancements.length === 0 && (
           <div className="empty-state">
-            <Zap className="w-8 h-8 text-gold/20 mb-3" />
-            <p className="text-ink/40 font-serif italic text-sm">No advancements defined yet.</p>
-            <p className="text-[9px] uppercase font-black text-gold/40 mt-1 tracking-widest">Own the progression path for this class</p>
+            <Zap className="w-8 h-8 text-gold/25 mb-3" />
+            <p className="text-ink/45 font-serif italic text-sm">No advancements defined yet.</p>
+            <p className="text-[9px] uppercase font-black text-gold/45 mt-1 tracking-widest">Own the progression path for this class</p>
           </div>
         )}
       </div>
@@ -1037,7 +1037,7 @@ function AdvancementManager({
             <div className="flex items-center justify-between gap-4">
               <DialogTitle className="dialog-title flex items-center gap-3">
                 {editingIndex !== null ? 'Configure Advancement' : 'New Advancement'}
-                {editingAdv.isBase && <span className="text-[10px] bg-gold/10 text-gold px-2 py-0.5 rounded border border-gold/20 tracking-widest">Base</span>}
+                {editingAdv.isBase && <span className="text-[10px] bg-gold/15 text-gold px-2 py-0.5 rounded border border-gold/25 tracking-widest">Base</span>}
               </DialogTitle>
               {referenceContext ? (
                 <ReferenceSheetDialog
@@ -1061,7 +1061,7 @@ function AdvancementManager({
                     value={editingAdv.title || ''}
                     onChange={e => setEditingAdv({...editingAdv, title: e.target.value})}
                     placeholder="Leave blank for default"
-                    className="h-9 bg-background/50 border-gold/10 placeholder:text-ink/20"
+                    className="h-9 bg-background/50 border-gold/15 placeholder:text-ink/25"
                   />
                 </div>
                 {!isInsideFeature && (
@@ -1082,7 +1082,7 @@ function AdvancementManager({
                         setEditingAdv({ ...editingAdv, level: next });
                       }}
                       disabled={!!(editingAdv.featureId && availableFeatures.find(f => f.id === editingAdv.featureId))}
-                      className="h-9 bg-background/50 border-gold/10 disabled:opacity-50"
+                      className="h-9 bg-background/50 border-gold/15 disabled:opacity-50"
                     />
                   </div>
                 )}
@@ -1103,7 +1103,7 @@ function AdvancementManager({
                       setEditingAdv(base);
                     }}
                   >
-                    <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                    <SelectTrigger className="w-full h-9 bg-background/50 border-gold/15">
                       <SelectValue>
                         {editingAdv.type ? (ADVANCEMENT_INFO[editingAdv.type]?.label || editingAdv.type) : 'Select type...'}
                       </SelectValue>
@@ -1137,7 +1137,7 @@ function AdvancementManager({
                         });
                       }}
                     >
-                      <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                      <SelectTrigger className="w-full h-9 bg-background/50 border-gold/15">
                         <SelectValue>
                           {editingAdv.featureId && editingAdv.featureId !== 'none'
                             ? (availableFeatures.find(f => f.id === editingAdv.featureId)?.name || 'Unknown Feature')
@@ -1165,11 +1165,11 @@ function AdvancementManager({
                   {/* Left Column: Settings & Preview */}
                   <div className="space-y-4">
                     <fieldset className="config-fieldset bg-background/20">
-                      <legend className="section-label text-gold/60 px-1">Grant Settings</legend>
+                      <legend className="section-label text-gold/65 px-1">Grant Settings</legend>
                       <div className="space-y-4">
                         <label className="flex items-center gap-2 cursor-pointer group w-fit">
-                          <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${editingAdv.configuration?.optional ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/60'}`}>
-                            {editingAdv.configuration?.optional && <Check className="w-2.5 h-2.5 text-white" />}
+                          <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${editingAdv.configuration?.optional ? 'bg-gold border-gold' : 'border-gold/35 group-hover:border-gold/65'}`}>
+                            {editingAdv.configuration?.optional && <Check className="w-2.5 h-2.5 text-[var(--primary-foreground)]" />}
                           </div>
                           <input
                             type="checkbox"
@@ -1177,7 +1177,7 @@ function AdvancementManager({
                             checked={editingAdv.configuration?.optional || false}
                             onChange={e => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, optional: e.target.checked }})}
                           />
-                          <span className="text-[10px] uppercase font-bold text-ink/60">Optional (players may opt out)</span>
+                          <span className="text-[10px] uppercase font-bold text-ink/65">Optional (players may opt out)</span>
                         </label>
 
                         <div className="grid sm:grid-cols-2 gap-4">
@@ -1197,7 +1197,7 @@ function AdvancementManager({
                                 }
                               })}
                             >
-                              <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                              <SelectTrigger className="w-full h-9 bg-background/50 border-gold/15">
                                 <SelectValue>
                                   {ITEM_TYPE_LABELS[editingAdv.configuration?.choiceType || 'feature'] || editingAdv.configuration?.choiceType}
                                 </SelectValue>
@@ -1234,7 +1234,7 @@ function AdvancementManager({
                                     value={editingAdv.configuration?.optionGroupId || ''}
                                     onValueChange={val => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, optionGroupId: val, excludedOptionIds: [] }})}
                                   >
-                                    <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                                    <SelectTrigger className="w-full h-9 bg-background/50 border-gold/15">
                                       <SelectValue>
                                         {editingAdv.configuration?.optionGroupId
                                           ? (availableOptionGroups.find(g => g.id === editingAdv.configuration.optionGroupId)?.name || editingAdv.configuration.optionGroupId)
@@ -1245,23 +1245,23 @@ function AdvancementManager({
                                       {classFiltered.map(g => (
                                         <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
                                       ))}
-                                      {classFiltered.length === 0 && <p className="px-2 py-2 text-[10px] italic text-ink/30">No groups assigned to this class.</p>}
+                                      {classFiltered.length === 0 && <p className="px-2 py-2 text-[10px] italic text-ink/35">No groups assigned to this class.</p>}
                                     </SelectContent>
                                   </Select>
                                   {/* Inline search-all panel */}
-                                  <div className="border border-gold/10 rounded-md overflow-hidden bg-background/20">
-                                    <div className="flex items-center gap-2 px-2 py-1.5 border-b border-gold/10">
-                                      <Search className="w-3 h-3 text-ink/40 shrink-0" />
+                                  <div className="border border-gold/15 rounded-md overflow-hidden bg-background/20">
+                                    <div className="flex items-center gap-2 px-2 py-1.5 border-b border-gold/15">
+                                      <Search className="w-3 h-3 text-ink/45 shrink-0" />
                                       <input
                                         type="text"
                                         placeholder="Search all option groups…"
                                         value={optionGroupSearch}
                                         onChange={e => { setOptionGroupSearch(e.target.value); setShowAllOptionGroups(true); }}
                                         onFocus={() => setShowAllOptionGroups(true)}
-                                        className="flex-1 bg-transparent text-xs outline-none placeholder:text-ink/40 text-ink"
+                                        className="flex-1 bg-transparent text-xs outline-none placeholder:text-ink/45 text-ink"
                                       />
                                       {optionGroupSearch && (
-                                        <button type="button" onClick={() => { setOptionGroupSearch(''); setShowAllOptionGroups(false); }} className="text-ink/30 hover:text-ink/60 text-sm leading-none">×</button>
+                                        <button type="button" onClick={() => { setOptionGroupSearch(''); setShowAllOptionGroups(false); }} className="text-ink/35 hover:text-ink/65 text-sm leading-none">×</button>
                                       )}
                                     </div>
                                     {showAllOptionGroups && (
@@ -1270,7 +1270,7 @@ function AdvancementManager({
                                           <button
                                             key={g.id}
                                             type="button"
-                                            className="w-full text-left px-3 py-2 text-xs hover:bg-gold/10 flex items-center justify-between gap-2"
+                                            className="w-full text-left px-3 py-2 text-xs hover:bg-gold/15 flex items-center justify-between gap-2"
                                             onClick={() => {
                                               setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, optionGroupId: g.id, excludedOptionIds: [] }});
                                               setShowAllOptionGroups(false);
@@ -1278,17 +1278,17 @@ function AdvancementManager({
                                             }}
                                           >
                                             <span className="font-bold text-ink">{g.name}</span>
-                                            {g.classIds?.length > 0 && <span className="text-[9px] text-gold/60 shrink-0">{g.classIds.length} class{g.classIds.length !== 1 ? 'es' : ''}</span>}
+                                            {g.classIds?.length > 0 && <span className="text-[9px] text-gold/65 shrink-0">{g.classIds.length} class{g.classIds.length !== 1 ? 'es' : ''}</span>}
                                           </button>
                                         ))}
-                                        {searchFiltered.length === 0 && <p className="px-3 py-3 text-[10px] italic text-ink/30">No groups match.</p>}
+                                        {searchFiltered.length === 0 && <p className="px-3 py-3 text-[10px] italic text-ink/35">No groups match.</p>}
                                       </div>
                                     )}
                                   </div>
                                 </div>
                               );
                             })() : (
-                              <div className="h-9 rounded-md border border-gold/10 bg-background/35 px-3 flex items-center text-[10px] text-ink/40">
+                              <div className="h-9 rounded-md border border-gold/15 bg-background/35 px-3 flex items-center text-[10px] text-ink/45">
                                 {editingAdv.configuration?.choiceType === 'feat' ? 'Specific Feats' : 'Specific Features'}
                               </div>
                             )}
@@ -1308,7 +1308,7 @@ function AdvancementManager({
                                 }
                               })}
                             >
-                              <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                              <SelectTrigger className="w-full h-9 bg-background/50 border-gold/15">
                                 <SelectValue>
                                   {editingAdv.configuration?.usesFeatureId
                                     ? (availableFeatures.find((f: any) => f.id === editingAdv.configuration.usesFeatureId)?.name || 'Linked feature')
@@ -1322,7 +1322,7 @@ function AdvancementManager({
                                 ))}
                               </SelectContent>
                             </Select>
-                            <p className="text-[9px] text-ink/40 italic">Granted options consume from this feature's uses pool and inherit its damage scaling — e.g. Battle Master maneuvers consume Superiority Dice. Leave <em>None</em> to let each option track its own uses.</p>
+                            <p className="text-[9px] text-ink/45 italic">Granted options consume from this feature's uses pool and inherit its damage scaling — e.g. Battle Master maneuvers consume Superiority Dice. Leave <em>None</em> to let each option track its own uses.</p>
                           </div>
                         )}
 
@@ -1339,7 +1339,7 @@ function AdvancementManager({
                                 }
                               })}
                             >
-                              <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                              <SelectTrigger className="w-full h-9 bg-background/50 border-gold/15">
                                 <SelectValue>
                                   {editingAdv.configuration?.optionScalingColumnId
                                     ? (availableScalingColumns.find((c: any) => c.id === editingAdv.configuration.optionScalingColumnId)?.name || 'Selected column')
@@ -1353,7 +1353,7 @@ function AdvancementManager({
                                 ))}
                               </SelectContent>
                             </Select>
-                            <p className="text-[9px] text-ink/40 italic">The scaling column the granted options' damage / dice formulas resolve to. Each granter can pick a different column even when the option group is shared — Reaver imports use Barbarian's Superiority Dice, Battle Master imports use Fighter's. Authors write <code className="text-gold/70">@scale.linked</code> in the linked feature's damage formula; the bridge substitutes per-grant. Leave <em>None</em> to fall back to the Uses Feature's scaling, then the linked feature's own scaling.</p>
+                            <p className="text-[9px] text-ink/45 italic">The scaling column the granted options' damage / dice formulas resolve to. Each granter can pick a different column even when the option group is shared — Reaver imports use Barbarian's Superiority Dice, Battle Master imports use Fighter's. Authors write <code className="text-gold/75">@scale.linked</code> in the linked feature's damage formula; the bridge substitutes per-grant. Leave <em>None</em> to fall back to the Uses Feature's scaling, then the linked feature's own scaling.</p>
                           </div>
                         )}
                       </div>
@@ -1369,10 +1369,10 @@ function AdvancementManager({
                     >
                       {editingAdv.configuration?.choiceType === 'feat' ? (
                         selectedPoolFeats.length > 0 ? (
-                          <div className="border border-gold/10 rounded-md overflow-hidden">
-                            <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] px-3 py-2 bg-background/60 border-b border-gold/10">
-                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Optional</span>
-                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Feat</span>
+                          <div className="border border-gold/15 rounded-md overflow-hidden">
+                            <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] px-3 py-2 bg-background/60 border-b border-gold/15">
+                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/65">Optional</span>
+                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/65">Feat</span>
                             </div>
                             <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto custom-scrollbar">
                               {selectedPoolFeats.map((feat: any) => (
@@ -1384,11 +1384,11 @@ function AdvancementManager({
                                     <div className="flex items-center justify-between gap-2">
                                       <span className="text-xs font-bold text-ink">{feat.name}</span>
                                       {feat.featSubtype && (
-                                        <span className="text-[9px] text-gold/60 uppercase tracking-widest">{feat.featSubtype}</span>
+                                        <span className="text-[9px] text-gold/65 uppercase tracking-widest">{feat.featSubtype}</span>
                                       )}
                                     </div>
                                     {feat.description && (
-                                      <p className="mt-1 text-[9px] text-ink/40 line-clamp-2">{feat.description}</p>
+                                      <p className="mt-1 text-[9px] text-ink/45 line-clamp-2">{feat.description}</p>
                                     )}
                                   </div>
                                 </div>
@@ -1408,15 +1408,15 @@ function AdvancementManager({
                                   <p className="mt-1 text-[10px] text-ink/45">{selectedOptionGroup.description}</p>
                                 )}
                               </div>
-                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">
+                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/65">
                                 {includedOptionItems.length}/{selectedOptionItems.length} included
                               </span>
                             </div>
-                            <div className="border border-gold/10 rounded-md overflow-hidden">
-                              <div className="grid grid-cols-[4.5rem_4.5rem_minmax(0,1fr)] px-3 py-2 bg-background/60 border-b border-gold/10">
-                                <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Optional</span>
-                                <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Level</span>
-                                <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Item</span>
+                            <div className="border border-gold/15 rounded-md overflow-hidden">
+                              <div className="grid grid-cols-[4.5rem_4.5rem_minmax(0,1fr)] px-3 py-2 bg-background/60 border-b border-gold/15">
+                                <span className="text-[9px] uppercase font-black tracking-widest text-gold/65">Optional</span>
+                                <span className="text-[9px] uppercase font-black tracking-widest text-gold/65">Level</span>
+                                <span className="text-[9px] uppercase font-black tracking-widest text-gold/65">Item</span>
                               </div>
                               <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto custom-scrollbar">
                                 {includedOptionItems.map((item: any) => (
@@ -1428,7 +1428,7 @@ function AdvancementManager({
                                     <div>
                                       <p className="text-xs font-bold text-ink">{item.name}</p>
                                       {(item.featureId || item.sourceId) && (
-                                        <p className="mt-1 text-[9px] text-ink/40">
+                                        <p className="mt-1 text-[9px] text-ink/45">
                                           {item.featureId ? `Linked feature: ${availableFeatures.find((feature: any) => feature.id === item.featureId)?.name || item.featureId}` : `Source: ${item.sourceId}`}
                                         </p>
                                       )}
@@ -1445,10 +1445,10 @@ function AdvancementManager({
                           <p className="text-[10px] italic text-ink/35">Choose a unique option group to preview what this advancement will grant.</p>
                         )
                       ) : selectedPoolFeatures.length > 0 ? (
-                        <div className="border border-gold/10 rounded-md overflow-hidden">
-                          <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] px-3 py-2 bg-background/60 border-b border-gold/10">
-                            <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Optional</span>
-                            <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Item</span>
+                        <div className="border border-gold/15 rounded-md overflow-hidden">
+                          <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] px-3 py-2 bg-background/60 border-b border-gold/15">
+                            <span className="text-[9px] uppercase font-black tracking-widest text-gold/65">Optional</span>
+                            <span className="text-[9px] uppercase font-black tracking-widest text-gold/65">Item</span>
                           </div>
                           <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto custom-scrollbar">
                             {selectedPoolFeatures.map((feature: any) => (
@@ -1459,10 +1459,10 @@ function AdvancementManager({
                                 <div>
                                   <div className="flex items-center justify-between gap-2">
                                     <span className="text-xs font-bold text-ink">{feature.name}</span>
-                                    <span className="text-[9px] text-gold/60 uppercase tracking-widest">Lvl {feature.level}</span>
+                                    <span className="text-[9px] text-gold/65 uppercase tracking-widest">Lvl {feature.level}</span>
                                   </div>
                                   {feature.description && (
-                                    <p className="mt-1 text-[9px] text-ink/40 line-clamp-2">{feature.description}</p>
+                                    <p className="mt-1 text-[9px] text-ink/45 line-clamp-2">{feature.description}</p>
                                   )}
                                 </div>
                               </div>
@@ -1478,14 +1478,14 @@ function AdvancementManager({
                   {/* Right Column: Pool selection */}
                   <div className="space-y-4">
                     <fieldset className="config-fieldset bg-background/20 h-full">
-                      <legend className="section-label text-gold/60 px-1">
+                      <legend className="section-label text-gold/65 px-1">
                         {editingAdv.configuration?.choiceType === 'option-group'
                           ? 'Included Group Items'
                           : editingAdv.configuration?.choiceType === 'feat'
                             ? 'Feats to Grant'
                             : 'Items to Grant'}
                       </legend>
-                      <div className="border border-gold/10 rounded-md overflow-hidden bg-background/20">
+                      <div className="border border-gold/15 rounded-md overflow-hidden bg-background/20">
                         {editingAdv.configuration?.choiceType === 'feat' ? (() => {
                           const fq = featSearch.trim().toLowerCase();
                           // Type-scope: default to `feat_type='feat'`
@@ -1504,31 +1504,31 @@ function AdvancementManager({
                             : typeFiltered;
                           return (
                             <>
-                              <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gold/10 bg-background/30">
-                                <Search className="w-3 h-3 text-ink/30 shrink-0" />
+                              <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gold/15 bg-background/30">
+                                <Search className="w-3 h-3 text-ink/35 shrink-0" />
                                 <input
                                   type="text"
                                   placeholder={fq ? `${displayedFeats.length} result${displayedFeats.length !== 1 ? 's' : ''}` : `${typeFiltered.length} feats — search…`}
                                   value={featSearch}
                                   onChange={e => setFeatSearch(e.target.value)}
-                                  className="flex-1 bg-transparent text-xs outline-none placeholder:text-ink/30 text-ink py-0.5"
+                                  className="flex-1 bg-transparent text-xs outline-none placeholder:text-ink/35 text-ink py-0.5"
                                 />
                                 {featSearch && (
-                                  <button type="button" onClick={() => setFeatSearch('')} className="text-ink/30 hover:text-ink/60 text-sm leading-none">×</button>
+                                  <button type="button" onClick={() => setFeatSearch('')} className="text-ink/35 hover:text-ink/65 text-sm leading-none">×</button>
                                 )}
-                                <label className="flex items-center gap-1.5 cursor-pointer text-[9px] uppercase font-bold tracking-widest text-ink/50 hover:text-ink/80 shrink-0">
+                                <label className="flex items-center gap-1.5 cursor-pointer text-[9px] uppercase font-bold tracking-widest text-ink/55 hover:text-ink/85 shrink-0">
                                   <input
                                     type="checkbox"
-                                    className="w-3 h-3 rounded border-gold/20 text-gold focus:ring-gold"
+                                    className="w-3 h-3 rounded border-gold/25 text-gold focus:ring-gold"
                                     checked={includeNonFeatTypes}
                                     onChange={(e) => setIncludeNonFeatTypes(e.target.checked)}
                                   />
                                   Include race/bg
                                 </label>
                               </div>
-                              <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] px-3 py-2 bg-gold/5 border-b border-gold/10">
-                                <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Feat</span>
-                                <span className="text-[9px] uppercase font-black tracking-widest text-gold/60 text-center">Optional</span>
+                              <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] px-3 py-2 bg-gold/5 border-b border-gold/15">
+                                <span className="text-[9px] uppercase font-black tracking-widest text-gold/65">Feat</span>
+                                <span className="text-[9px] uppercase font-black tracking-widest text-gold/65 text-center">Optional</span>
                               </div>
                               <div className="divide-y divide-gold/5 max-h-[14rem] overflow-y-auto custom-scrollbar">
                                 {displayedFeats.map((f: any) => {
@@ -1537,9 +1537,9 @@ function AdvancementManager({
                                     <div key={f.id} className="grid grid-cols-[minmax(0,1fr)_4.5rem] gap-3 px-3 py-2 items-center hover:bg-gold/5">
                                       <label className="flex items-center gap-2 cursor-pointer min-w-0">
                                         <div className={`w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center transition-all ${
-                                          isPicked ? 'bg-gold border-gold' : 'border-gold/30 hover:border-gold/60'
+                                          isPicked ? 'bg-gold border-gold' : 'border-gold/35 hover:border-gold/65'
                                         }`}>
-                                          {isPicked && <Check className="w-2.5 h-2.5 text-white" />}
+                                          {isPicked && <Check className="w-2.5 h-2.5 text-[var(--primary-foreground)]" />}
                                         </div>
                                         <input
                                           type="checkbox"
@@ -1560,13 +1560,13 @@ function AdvancementManager({
                                         />
                                         <span className="min-w-0 text-xs font-bold text-ink truncate">
                                           {f.name}
-                                          {f.featSubtype && <span className="text-ink/40 font-normal"> ({f.featSubtype})</span>}
+                                          {f.featSubtype && <span className="text-ink/45 font-normal"> ({f.featSubtype})</span>}
                                         </span>
                                       </label>
                                       <label className="flex justify-center cursor-pointer">
                                         <input
                                           type="checkbox"
-                                          className="w-3 h-3 rounded border-gold/20 text-gold focus:ring-gold"
+                                          className="w-3 h-3 rounded border-gold/25 text-gold focus:ring-gold"
                                           disabled={!isPicked || !editingAdv.configuration?.optional}
                                           checked={(editingAdv.configuration?.optionalPool || []).includes(f.id)}
                                           onChange={e => {
@@ -1584,7 +1584,7 @@ function AdvancementManager({
                                   );
                                 })}
                                 {displayedFeats.length === 0 && (
-                                  <p className="px-3 py-4 text-[10px] italic text-ink/30">
+                                  <p className="px-3 py-4 text-[10px] italic text-ink/35">
                                     {fq ? `No feats match "${featSearch}".` : 'No feats available — load the feats catalog at this scope.'}
                                   </p>
                                 )}
@@ -1594,18 +1594,18 @@ function AdvancementManager({
                         })() : editingAdv.configuration?.choiceType === 'option-group' ? (
                           <>
                             {selectedOptionGroup && selectedOptionItems.length > 0 && (
-                              <div className="flex flex-wrap gap-2 px-3 py-2 bg-gold/5 border-b border-gold/10">
-                                <Button type="button" variant="outline" size="sm" className="h-6 text-[10px] text-ink/60 border-gold/20 hover:bg-gold/10 hover:text-ink/80" onClick={() => {
+                              <div className="flex flex-wrap gap-2 px-3 py-2 bg-gold/5 border-b border-gold/15">
+                                <Button type="button" variant="outline" size="sm" className="h-6 text-[10px] text-ink/65 border-gold/25 hover:bg-gold/15 hover:text-ink/85" onClick={() => {
                                   let excluded = new Set(editingAdv.configuration?.excludedOptionIds || []);
                                   selectedOptionItems.forEach(item => excluded.delete(item.id));
                                   setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, excludedOptionIds: Array.from(excluded) }});
                                 }}>Select All</Button>
-                                <Button type="button" variant="outline" size="sm" className="h-6 text-[10px] text-ink/60 border-gold/20 hover:bg-gold/10 hover:text-ink/80" onClick={() => {
+                                <Button type="button" variant="outline" size="sm" className="h-6 text-[10px] text-ink/65 border-gold/25 hover:bg-gold/15 hover:text-ink/85" onClick={() => {
                                   let excluded = new Set(editingAdv.configuration?.excludedOptionIds || []);
                                   selectedOptionItems.forEach(item => excluded.add(item.id));
                                   setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, excludedOptionIds: Array.from(excluded) }});
                                 }}>Deselect All</Button>
-                                <Button type="button" variant="outline" size="sm" className="h-6 text-[10px] text-ink/60 border-gold/20 hover:bg-gold/10 hover:text-ink/80" onClick={() => {
+                                <Button type="button" variant="outline" size="sm" className="h-6 text-[10px] text-ink/65 border-gold/25 hover:bg-gold/15 hover:text-ink/85" onClick={() => {
                                   let excluded = new Set(editingAdv.configuration?.excludedOptionIds || []);
                                   selectedOptionItems.forEach(item => {
                                     if ((item.levelPrerequisite || 0) > 0) excluded.add(item.id);
@@ -1614,11 +1614,11 @@ function AdvancementManager({
                                 }}>Exclude Options with Level Prerequisites</Button>
                               </div>
                             )}
-                            <div className="grid grid-cols-[4.5rem_4.5rem_minmax(0,1fr)_4.5rem] px-3 py-2 bg-gold/5 border-b border-gold/10">
-                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Include</span>
-                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Level</span>
-                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Item</span>
-                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/60 text-center">Optional</span>
+                            <div className="grid grid-cols-[4.5rem_4.5rem_minmax(0,1fr)_4.5rem] px-3 py-2 bg-gold/5 border-b border-gold/15">
+                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/65">Include</span>
+                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/65">Level</span>
+                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/65">Item</span>
+                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/65 text-center">Optional</span>
                             </div>
                             <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto custom-scrollbar">
                               {selectedOptionGroup ? selectedOptionItems.map((item: any) => {
@@ -1626,8 +1626,8 @@ function AdvancementManager({
                                 return (
                                   <div key={item.id} className="grid grid-cols-[4.5rem_4.5rem_minmax(0,1fr)_4.5rem] gap-3 px-3 py-2 items-center hover:bg-gold/5">
                                     <label className="flex items-center gap-2 cursor-pointer">
-                                      <div className={`w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center transition-all ${isIncluded ? 'bg-gold border-gold' : 'border-gold/30 hover:border-gold/60'}`}>
-                                        {isIncluded && <Check className="w-2.5 h-2.5 text-white" />}
+                                      <div className={`w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center transition-all ${isIncluded ? 'bg-gold border-gold' : 'border-gold/35 hover:border-gold/65'}`}>
+                                        {isIncluded && <Check className="w-2.5 h-2.5 text-[var(--primary-foreground)]" />}
                                       </div>
                                       <input
                                         type="checkbox"
@@ -1651,7 +1651,7 @@ function AdvancementManager({
                                     <div>
                                       <p className="text-xs font-bold text-ink">{item.name}</p>
                                       {(item.featureId || item.sourceId) && (
-                                        <p className="mt-1 text-[9px] text-ink/40">
+                                        <p className="mt-1 text-[9px] text-ink/45">
                                           {item.featureId ? `Linked feature: ${availableFeatures.find((feature: any) => feature.id === item.featureId)?.name || item.featureId}` : `Source: ${item.sourceId}`}
                                         </p>
                                       )}
@@ -1659,7 +1659,7 @@ function AdvancementManager({
                                     <label className="flex justify-center cursor-pointer">
                                       <input
                                         type="checkbox"
-                                        className="w-3 h-3 rounded border-gold/20 text-gold focus:ring-gold"
+                                        className="w-3 h-3 rounded border-gold/25 text-gold focus:ring-gold"
                                         disabled={!isIncluded || !editingAdv.configuration?.optional}
                                         checked={(editingAdv.configuration?.optionalPool || []).includes(item.id)}
                                         onChange={e => {
@@ -1690,31 +1690,31 @@ function AdvancementManager({
                               : availableFeatures;
                             return (
                               <>
-                                <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gold/10 bg-background/30">
-                                  <Search className="w-3 h-3 text-ink/30 shrink-0" />
+                                <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gold/15 bg-background/30">
+                                  <Search className="w-3 h-3 text-ink/35 shrink-0" />
                                   <input
                                     type="text"
                                     placeholder={q ? `${displayed.length} result${displayed.length !== 1 ? 's' : ''}` : `${availableFeatures.length} local features — search all…`}
                                     value={featureSearch}
                                     onChange={e => setFeatureSearch(e.target.value)}
-                                    className="flex-1 bg-transparent text-xs outline-none placeholder:text-ink/30 text-ink py-0.5"
+                                    className="flex-1 bg-transparent text-xs outline-none placeholder:text-ink/35 text-ink py-0.5"
                                   />
                                   {featureSearch && (
-                                    <button type="button" onClick={() => setFeatureSearch('')} className="text-ink/30 hover:text-ink/60 text-sm leading-none">×</button>
+                                    <button type="button" onClick={() => setFeatureSearch('')} className="text-ink/35 hover:text-ink/65 text-sm leading-none">×</button>
                                   )}
                                 </div>
-                                <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] px-3 py-2 bg-gold/5 border-b border-gold/10">
-                                  <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Item</span>
-                                  <span className="text-[9px] uppercase font-black tracking-widest text-gold/60 text-center">Optional</span>
+                                <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] px-3 py-2 bg-gold/5 border-b border-gold/15">
+                                  <span className="text-[9px] uppercase font-black tracking-widest text-gold/65">Item</span>
+                                  <span className="text-[9px] uppercase font-black tracking-widest text-gold/65 text-center">Optional</span>
                                 </div>
                                 <div className="divide-y divide-gold/5 max-h-[14rem] overflow-y-auto custom-scrollbar">
                                   {displayed.map(f => (
                                     <div key={f.id} className="grid grid-cols-[minmax(0,1fr)_4.5rem] gap-3 px-3 py-2 items-center hover:bg-gold/5">
                                       <label className="flex items-center gap-2 cursor-pointer min-w-0">
                                         <div className={`w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center transition-all ${
-                                          (editingAdv.configuration?.pool || []).includes(f.id) ? 'bg-gold border-gold' : 'border-gold/30 hover:border-gold/60'
+                                          (editingAdv.configuration?.pool || []).includes(f.id) ? 'bg-gold border-gold' : 'border-gold/35 hover:border-gold/65'
                                         }`}>
-                                          {(editingAdv.configuration?.pool || []).includes(f.id) && <Check className="w-2.5 h-2.5 text-white" />}
+                                          {(editingAdv.configuration?.pool || []).includes(f.id) && <Check className="w-2.5 h-2.5 text-[var(--primary-foreground)]" />}
                                         </div>
                                         <input
                                           type="checkbox"
@@ -1733,12 +1733,12 @@ function AdvancementManager({
                                             setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, pool, optionalPool }});
                                           }}
                                         />
-                                        <span className="min-w-0 text-xs font-bold text-ink truncate">{f.name} <span className="text-ink/40 font-normal">(Lvl {f.level})</span></span>
+                                        <span className="min-w-0 text-xs font-bold text-ink truncate">{f.name} <span className="text-ink/45 font-normal">(Lvl {f.level})</span></span>
                                       </label>
                                       <label className="flex justify-center cursor-pointer">
                                         <input
                                           type="checkbox"
-                                          className="w-3 h-3 rounded border-gold/20 text-gold focus:ring-gold"
+                                          className="w-3 h-3 rounded border-gold/25 text-gold focus:ring-gold"
                                           disabled={!(editingAdv.configuration?.pool || []).includes(f.id) || !editingAdv.configuration?.optional}
                                           checked={(editingAdv.configuration?.optionalPool || []).includes(f.id)}
                                           onChange={e => {
@@ -1755,7 +1755,7 @@ function AdvancementManager({
                                     </div>
                                   ))}
                                   {displayed.length === 0 && (
-                                    <p className="px-3 py-4 text-[10px] italic text-ink/30">
+                                    <p className="px-3 py-4 text-[10px] italic text-ink/35">
                                       {q ? `No features match "${featureSearch}".` : 'No features created for this class yet.'}
                                     </p>
                                   )}
@@ -1777,7 +1777,7 @@ function AdvancementManager({
                   {/* Left Column: Choice Pool Settings + Selection Rule preview + Choice Preview */}
                   <div className="space-y-4">
                     <fieldset className="config-fieldset bg-background/20 h-full">
-                      <legend className="section-label text-gold/60 px-1">Choice Pool Settings</legend>
+                      <legend className="section-label text-gold/65 px-1">Choice Pool Settings</legend>
                       <div className="grid sm:grid-cols-2 gap-4 mb-3">
                         <div className="space-y-1.5">
                           <label className="field-label">Item Type</label>
@@ -1794,7 +1794,7 @@ function AdvancementManager({
                               }
                             })}
                           >
-                            <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                            <SelectTrigger className="w-full h-9 bg-background/50 border-gold/15">
                               <SelectValue>
                                 {ITEM_TYPE_LABELS[editingAdv.configuration?.choiceType || 'option-group'] || editingAdv.configuration?.choiceType}
                               </SelectValue>
@@ -1824,7 +1824,7 @@ function AdvancementManager({
                                 value={editingAdv.configuration?.optionGroupId || ''}
                                 onValueChange={val => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, optionGroupId: val, excludedOptionIds: [] }})}
                               >
-                                <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                                <SelectTrigger className="w-full h-9 bg-background/50 border-gold/15">
                                   <SelectValue>
                                     {editingAdv.configuration?.optionGroupId
                                       ? (availableOptionGroups.find(g => g.id === editingAdv.configuration.optionGroupId)?.name || editingAdv.configuration.optionGroupId)
@@ -1835,23 +1835,23 @@ function AdvancementManager({
                                   {classFiltered.map(g => (
                                     <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
                                   ))}
-                                  {classFiltered.length === 0 && <p className="px-2 py-2 text-[10px] italic text-ink/30">No groups assigned to this class.</p>}
+                                  {classFiltered.length === 0 && <p className="px-2 py-2 text-[10px] italic text-ink/35">No groups assigned to this class.</p>}
                                 </SelectContent>
                               </Select>
                               {/* Inline search-all panel */}
-                              <div className="border border-gold/10 rounded-md overflow-hidden bg-background/20">
-                                <div className="flex items-center gap-2 px-2 py-1.5 border-b border-gold/10">
-                                  <Search className="w-3 h-3 text-ink/40 shrink-0" />
+                              <div className="border border-gold/15 rounded-md overflow-hidden bg-background/20">
+                                <div className="flex items-center gap-2 px-2 py-1.5 border-b border-gold/15">
+                                  <Search className="w-3 h-3 text-ink/45 shrink-0" />
                                   <input
                                     type="text"
                                     placeholder="Search all option groups…"
                                     value={optionGroupSearch}
                                     onChange={e => { setOptionGroupSearch(e.target.value); setShowAllOptionGroups(true); }}
                                     onFocus={() => setShowAllOptionGroups(true)}
-                                    className="flex-1 bg-transparent text-xs outline-none placeholder:text-ink/40 text-ink"
+                                    className="flex-1 bg-transparent text-xs outline-none placeholder:text-ink/45 text-ink"
                                   />
                                   {optionGroupSearch && (
-                                    <button type="button" onClick={() => { setOptionGroupSearch(''); setShowAllOptionGroups(false); }} className="text-ink/30 hover:text-ink/60 text-sm leading-none">×</button>
+                                    <button type="button" onClick={() => { setOptionGroupSearch(''); setShowAllOptionGroups(false); }} className="text-ink/35 hover:text-ink/65 text-sm leading-none">×</button>
                                   )}
                                 </div>
                                 {showAllOptionGroups && (
@@ -1860,7 +1860,7 @@ function AdvancementManager({
                                       <button
                                         key={g.id}
                                         type="button"
-                                        className="w-full text-left px-3 py-2 text-xs hover:bg-gold/10 flex items-center justify-between gap-2"
+                                        className="w-full text-left px-3 py-2 text-xs hover:bg-gold/15 flex items-center justify-between gap-2"
                                         onClick={() => {
                                           setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, optionGroupId: g.id, excludedOptionIds: [] }});
                                           setShowAllOptionGroups(false);
@@ -1868,10 +1868,10 @@ function AdvancementManager({
                                         }}
                                       >
                                         <span className="font-bold text-ink">{g.name}</span>
-                                        {g.classIds?.length > 0 && <span className="text-[9px] text-gold/60 shrink-0">{g.classIds.length} class{g.classIds.length !== 1 ? 'es' : ''}</span>}
+                                        {g.classIds?.length > 0 && <span className="text-[9px] text-gold/65 shrink-0">{g.classIds.length} class{g.classIds.length !== 1 ? 'es' : ''}</span>}
                                       </button>
                                     ))}
-                                    {searchFiltered.length === 0 && <p className="px-3 py-3 text-[10px] italic text-ink/30">No groups match.</p>}
+                                    {searchFiltered.length === 0 && <p className="px-3 py-3 text-[10px] italic text-ink/35">No groups match.</p>}
                                   </div>
                                 )}
                               </div>
@@ -1893,7 +1893,7 @@ function AdvancementManager({
                               }
                             })}
                           >
-                            <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                            <SelectTrigger className="w-full h-9 bg-background/50 border-gold/15">
                               <SelectValue>
                                 {editingAdv.configuration?.usesFeatureId
                                   ? (availableFeatures.find((f: any) => f.id === editingAdv.configuration.usesFeatureId)?.name || 'Linked feature')
@@ -1907,7 +1907,7 @@ function AdvancementManager({
                               ))}
                             </SelectContent>
                           </Select>
-                          <p className="text-[9px] text-ink/40 italic">Granted options consume from this feature's uses pool and inherit its damage scaling — e.g. Battle Master maneuvers consume Superiority Dice. Leave <em>None</em> to let each option track its own uses.</p>
+                          <p className="text-[9px] text-ink/45 italic">Granted options consume from this feature's uses pool and inherit its damage scaling — e.g. Battle Master maneuvers consume Superiority Dice. Leave <em>None</em> to let each option track its own uses.</p>
                         </div>
                       )}
 
@@ -1924,7 +1924,7 @@ function AdvancementManager({
                               }
                             })}
                           >
-                            <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                            <SelectTrigger className="w-full h-9 bg-background/50 border-gold/15">
                               <SelectValue>
                                 {editingAdv.configuration?.optionScalingColumnId
                                   ? (availableScalingColumns.find((c: any) => c.id === editingAdv.configuration.optionScalingColumnId)?.name || 'Selected column')
@@ -1938,7 +1938,7 @@ function AdvancementManager({
                               ))}
                             </SelectContent>
                           </Select>
-                          <p className="text-[9px] text-ink/40 italic">The scaling column the granted options' damage / dice formulas resolve to. Each granter can pick a different column even when the option group is shared — Reaver imports use Barbarian's Superiority Dice, Battle Master imports use Fighter's. Authors write <code className="text-gold/70">@scale.linked</code> in the linked feature's damage formula; the bridge substitutes per-grant. Leave <em>None</em> to fall back to the Uses Feature's scaling, then the linked feature's own scaling.</p>
+                          <p className="text-[9px] text-ink/45 italic">The scaling column the granted options' damage / dice formulas resolve to. Each granter can pick a different column even when the option group is shared — Reaver imports use Barbarian's Superiority Dice, Battle Master imports use Fighter's. Authors write <code className="text-gold/75">@scale.linked</code> in the linked feature's damage formula; the bridge substitutes per-grant. Leave <em>None</em> to fall back to the Uses Feature's scaling, then the linked feature's own scaling.</p>
                         </div>
                       )}
 
@@ -1953,7 +1953,7 @@ function AdvancementManager({
                     >
                       {choiceCountMode === 'manual' ? (
                         <div className="space-y-2">
-                          <p className="text-[10px] uppercase font-black tracking-widest text-gold/60">Manual Count</p>
+                          <p className="text-[10px] uppercase font-black tracking-widest text-gold/65">Manual Count</p>
                           <p className="text-2xl font-serif font-black text-ink">{editingAdv.configuration?.count || 1}</p>
                         </div>
                       ) : selectedScalingColumn ? (
@@ -1967,9 +1967,9 @@ function AdvancementManager({
                           {scalingBreakpointRows.length > 0 ? (
                             <div className="flex flex-col gap-1.5 w-full">
                               {scalingBreakpointRows.map(([level, value]) => (
-                                <div key={level} className="flex items-center gap-3 rounded-md border border-gold/10 bg-background/55 px-3 py-1.5 w-full">
-                                  <span className="text-[10px] uppercase font-black tracking-widest text-gold/60 min-w-[2.5rem] whitespace-nowrap">Lvl {level}</span>
-                                  <div className="h-px bg-gold/10 flex-1" />
+                                <div key={level} className="flex items-center gap-3 rounded-md border border-gold/15 bg-background/55 px-3 py-1.5 w-full">
+                                  <span className="text-[10px] uppercase font-black tracking-widest text-gold/65 min-w-[2.5rem] whitespace-nowrap">Lvl {level}</span>
+                                  <div className="h-px bg-gold/15 flex-1" />
                                   <span className="text-sm font-black text-ink">{String(value)}</span>
                                 </div>
                               ))}
@@ -1994,10 +1994,10 @@ function AdvancementManager({
                       <div className="space-y-4">
                         {editingAdv.configuration?.choiceType === 'feat' ? (
                           selectedPoolFeats.length > 0 ? (
-                            <div className="border border-gold/10 rounded-md overflow-hidden">
-                              <div className="grid grid-cols-[minmax(0,1fr)_6rem] px-3 py-2 bg-background/60 border-b border-gold/10">
-                                <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Feat</span>
-                                <span className="text-[9px] uppercase font-black tracking-widest text-gold/60 text-right">Subtype</span>
+                            <div className="border border-gold/15 rounded-md overflow-hidden">
+                              <div className="grid grid-cols-[minmax(0,1fr)_6rem] px-3 py-2 bg-background/60 border-b border-gold/15">
+                                <span className="text-[9px] uppercase font-black tracking-widest text-gold/65">Feat</span>
+                                <span className="text-[9px] uppercase font-black tracking-widest text-gold/65 text-right">Subtype</span>
                               </div>
                               <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto custom-scrollbar">
                                 {selectedPoolFeats.map((feat: any) => (
@@ -2021,14 +2021,14 @@ function AdvancementManager({
                                     <p className="mt-1 text-[10px] text-ink/45">{selectedOptionGroup.description}</p>
                                   )}
                                 </div>
-                                <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">
+                                <span className="text-[9px] uppercase font-black tracking-widest text-gold/65">
                                   {includedOptionItems.length}/{selectedOptionItems.length} usable
                                 </span>
                               </div>
-                              <div className="border border-gold/10 rounded-md overflow-hidden">
-                                <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] px-3 py-2 bg-background/60 border-b border-gold/10">
-                                  <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Level</span>
-                                  <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Option</span>
+                              <div className="border border-gold/15 rounded-md overflow-hidden">
+                                <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] px-3 py-2 bg-background/60 border-b border-gold/15">
+                                  <span className="text-[9px] uppercase font-black tracking-widest text-gold/65">Level</span>
+                                  <span className="text-[9px] uppercase font-black tracking-widest text-gold/65">Option</span>
                                 </div>
                                 <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto custom-scrollbar">
                                   {includedOptionItems.map((item: any) => (
@@ -2037,7 +2037,7 @@ function AdvancementManager({
                                       <div>
                                         <p className="text-xs font-bold text-ink">{item.name}</p>
                                         {(item.featureId || item.sourceId) && (
-                                          <p className="mt-1 text-[9px] text-ink/40">
+                                          <p className="mt-1 text-[9px] text-ink/45">
                                             {item.featureId ? `Linked feature: ${availableFeatures.find((feature: any) => feature.id === item.featureId)?.name || item.featureId}` : `Source: ${item.sourceId}`}
                                           </p>
                                         )}
@@ -2054,10 +2054,10 @@ function AdvancementManager({
                             <p className="text-[10px] italic text-ink/35">Choose a unique option group to preview the usable options.</p>
                           )
                         ) : selectedPoolFeatures.length > 0 ? (
-                          <div className="border border-gold/10 rounded-md overflow-hidden">
-                            <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] px-3 py-2 bg-background/60 border-b border-gold/10">
-                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Feature</span>
-                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/60 text-right">Level</span>
+                          <div className="border border-gold/15 rounded-md overflow-hidden">
+                            <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] px-3 py-2 bg-background/60 border-b border-gold/15">
+                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/65">Feature</span>
+                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/65 text-right">Level</span>
                             </div>
                             <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto custom-scrollbar">
                               {selectedPoolFeatures.map((feature: any) => (
@@ -2078,7 +2078,7 @@ function AdvancementManager({
                   {/* Right Column: Number of Choices + Included Group Items */}
                   <div className="space-y-4">
                     <fieldset className="config-fieldset bg-background/20">
-                      <legend className="section-label text-gold/60 px-1">Number of Choices</legend>
+                      <legend className="section-label text-gold/65 px-1">Number of Choices</legend>
                       <div className="space-y-3">
                         <Select
                           value={choiceCountMode}
@@ -2107,7 +2107,7 @@ function AdvancementManager({
                             });
                           }}
                         >
-                          <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                          <SelectTrigger className="w-full h-9 bg-background/50 border-gold/15">
                             <SelectValue>
                               {choiceCountMode === 'manual'
                                 ? 'Manual'
@@ -2129,7 +2129,7 @@ function AdvancementManager({
                               min="1"
                               value={editingAdv.configuration?.count || 1}
                               onChange={e => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, count: parseInt(e.target.value) || 1 }})}
-                              className="w-full h-9 bg-background/50 border-gold/10"
+                              className="w-full h-9 bg-background/50 border-gold/15"
                             />
                           </div>
                         )}
@@ -2137,14 +2137,14 @@ function AdvancementManager({
                     </fieldset>
 
                     <fieldset className="config-fieldset bg-background/20 h-full">
-                      <legend className="section-label text-gold/60 px-1">
+                      <legend className="section-label text-gold/65 px-1">
                         {editingAdv.configuration?.choiceType === 'option-group'
                           ? 'Included Group Items'
                           : editingAdv.configuration?.choiceType === 'feat'
                             ? 'Choice Feats'
                             : 'Choice Features'}
                       </legend>
-                      <div className="border border-gold/10 rounded-md overflow-hidden bg-background/20">
+                      <div className="border border-gold/15 rounded-md overflow-hidden bg-background/20">
                         {editingAdv.configuration?.choiceType === 'feat' ? (() => {
                           const fq = featSearch.trim().toLowerCase();
                           // Type-scope: default to `feat_type='feat'`
@@ -2163,30 +2163,30 @@ function AdvancementManager({
                             : typeFiltered;
                           return (
                             <>
-                              <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gold/10 bg-background/30">
-                                <Search className="w-3 h-3 text-ink/30 shrink-0" />
+                              <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gold/15 bg-background/30">
+                                <Search className="w-3 h-3 text-ink/35 shrink-0" />
                                 <input
                                   type="text"
                                   placeholder={fq ? `${displayedFeats.length} result${displayedFeats.length !== 1 ? 's' : ''}` : `${typeFiltered.length} feats — search…`}
                                   value={featSearch}
                                   onChange={e => setFeatSearch(e.target.value)}
-                                  className="flex-1 bg-transparent text-xs outline-none placeholder:text-ink/30 text-ink py-0.5"
+                                  className="flex-1 bg-transparent text-xs outline-none placeholder:text-ink/35 text-ink py-0.5"
                                 />
                                 {featSearch && (
-                                  <button type="button" onClick={() => setFeatSearch('')} className="text-ink/30 hover:text-ink/60 text-sm leading-none">×</button>
+                                  <button type="button" onClick={() => setFeatSearch('')} className="text-ink/35 hover:text-ink/65 text-sm leading-none">×</button>
                                 )}
-                                <label className="flex items-center gap-1.5 cursor-pointer text-[9px] uppercase font-bold tracking-widest text-ink/50 hover:text-ink/80 shrink-0">
+                                <label className="flex items-center gap-1.5 cursor-pointer text-[9px] uppercase font-bold tracking-widest text-ink/55 hover:text-ink/85 shrink-0">
                                   <input
                                     type="checkbox"
-                                    className="w-3 h-3 rounded border-gold/20 text-gold focus:ring-gold"
+                                    className="w-3 h-3 rounded border-gold/25 text-gold focus:ring-gold"
                                     checked={includeNonFeatTypes}
                                     onChange={(e) => setIncludeNonFeatTypes(e.target.checked)}
                                   />
                                   Include race/bg
                                 </label>
                               </div>
-                              <div className="grid grid-cols-[minmax(0,1fr)] px-3 py-2 bg-gold/5 border-b border-gold/10">
-                                <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Feat</span>
+                              <div className="grid grid-cols-[minmax(0,1fr)] px-3 py-2 bg-gold/5 border-b border-gold/15">
+                                <span className="text-[9px] uppercase font-black tracking-widest text-gold/65">Feat</span>
                               </div>
                               <div className="divide-y divide-gold/5 max-h-[14rem] overflow-y-auto custom-scrollbar">
                                 {displayedFeats.map((f: any) => {
@@ -2194,9 +2194,9 @@ function AdvancementManager({
                                   return (
                                     <label key={f.id} className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-gold/5 group transition-colors">
                                       <div className={`w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center transition-all ${
-                                        isPicked ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/60'
+                                        isPicked ? 'bg-gold border-gold' : 'border-gold/35 group-hover:border-gold/65'
                                       }`}>
-                                        {isPicked && <Check className="w-2.5 h-2.5 text-white" />}
+                                        {isPicked && <Check className="w-2.5 h-2.5 text-[var(--primary-foreground)]" />}
                                       </div>
                                       <input
                                         type="checkbox"
@@ -2214,13 +2214,13 @@ function AdvancementManager({
                                       />
                                       <span className="min-w-0 text-xs font-bold text-ink truncate">
                                         {f.name}
-                                        {f.featSubtype && <span className="text-ink/40 font-normal"> ({f.featSubtype})</span>}
+                                        {f.featSubtype && <span className="text-ink/45 font-normal"> ({f.featSubtype})</span>}
                                       </span>
                                     </label>
                                   );
                                 })}
                                 {displayedFeats.length === 0 && (
-                                  <p className="px-3 py-4 text-[10px] italic text-ink/30">
+                                  <p className="px-3 py-4 text-[10px] italic text-ink/35">
                                     {fq ? `No feats match "${featSearch}".` : 'No feats available — load the feats catalog at this scope.'}
                                   </p>
                                 )}
@@ -2230,18 +2230,18 @@ function AdvancementManager({
                         })() : editingAdv.configuration?.choiceType === 'option-group' ? (
                           <>
                             {selectedOptionGroup && selectedOptionItems.length > 0 && (
-                              <div className="flex flex-wrap gap-2 px-3 py-2 bg-gold/5 border-b border-gold/10">
-                                <Button type="button" variant="outline" size="sm" className="h-6 text-[10px] text-ink/60 border-gold/20 hover:bg-gold/10 hover:text-ink/80" onClick={() => {
+                              <div className="flex flex-wrap gap-2 px-3 py-2 bg-gold/5 border-b border-gold/15">
+                                <Button type="button" variant="outline" size="sm" className="h-6 text-[10px] text-ink/65 border-gold/25 hover:bg-gold/15 hover:text-ink/85" onClick={() => {
                                   let excluded = new Set(editingAdv.configuration?.excludedOptionIds || []);
                                   selectedOptionItems.forEach(item => excluded.delete(item.id));
                                   setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, excludedOptionIds: Array.from(excluded) }});
                                 }}>Select All</Button>
-                                <Button type="button" variant="outline" size="sm" className="h-6 text-[10px] text-ink/60 border-gold/20 hover:bg-gold/10 hover:text-ink/80" onClick={() => {
+                                <Button type="button" variant="outline" size="sm" className="h-6 text-[10px] text-ink/65 border-gold/25 hover:bg-gold/15 hover:text-ink/85" onClick={() => {
                                   let excluded = new Set(editingAdv.configuration?.excludedOptionIds || []);
                                   selectedOptionItems.forEach(item => excluded.add(item.id));
                                   setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, excludedOptionIds: Array.from(excluded) }});
                                 }}>Deselect All</Button>
-                                <Button type="button" variant="outline" size="sm" className="h-6 text-[10px] text-ink/60 border-gold/20 hover:bg-gold/10 hover:text-ink/80" onClick={() => {
+                                <Button type="button" variant="outline" size="sm" className="h-6 text-[10px] text-ink/65 border-gold/25 hover:bg-gold/15 hover:text-ink/85" onClick={() => {
                                   let excluded = new Set(editingAdv.configuration?.excludedOptionIds || []);
                                   selectedOptionItems.forEach(item => {
                                     if ((item.levelPrerequisite || 0) > 0) excluded.add(item.id);
@@ -2250,10 +2250,10 @@ function AdvancementManager({
                                 }}>Exclude Options with Level Prerequisites</Button>
                               </div>
                             )}
-                            <div className="grid grid-cols-[4.5rem_4.5rem_minmax(0,1fr)] px-3 py-2 bg-gold/5 border-b border-gold/10">
-                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Use</span>
-                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Level</span>
-                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Option</span>
+                            <div className="grid grid-cols-[4.5rem_4.5rem_minmax(0,1fr)] px-3 py-2 bg-gold/5 border-b border-gold/15">
+                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/65">Use</span>
+                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/65">Level</span>
+                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/65">Option</span>
                             </div>
                             <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto custom-scrollbar">
                               {selectedOptionGroup ? selectedOptionItems.map((item: any) => {
@@ -2261,8 +2261,8 @@ function AdvancementManager({
                                 return (
                                   <div key={item.id} className="grid grid-cols-[4.5rem_4.5rem_minmax(0,1fr)] gap-3 px-3 py-2 items-start hover:bg-gold/5">
                                     <label className="flex items-center gap-2 cursor-pointer">
-                                      <div className={`w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center transition-all ${isIncluded ? 'bg-gold border-gold' : 'border-gold/30 hover:border-gold/60'}`}>
-                                        {isIncluded && <Check className="w-2.5 h-2.5 text-white" />}
+                                      <div className={`w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center transition-all ${isIncluded ? 'bg-gold border-gold' : 'border-gold/35 hover:border-gold/65'}`}>
+                                        {isIncluded && <Check className="w-2.5 h-2.5 text-[var(--primary-foreground)]" />}
                                       </div>
                                       <input
                                         type="checkbox"
@@ -2275,7 +2275,7 @@ function AdvancementManager({
                                     <div>
                                       <p className="text-xs font-bold text-ink">{item.name}</p>
                                       {(item.featureId || item.sourceId) && (
-                                        <p className="mt-1 text-[9px] text-ink/40">
+                                        <p className="mt-1 text-[9px] text-ink/45">
                                           {item.featureId ? `Linked feature: ${availableFeatures.find((feature: any) => feature.id === item.featureId)?.name || item.featureId}` : `Source: ${item.sourceId}`}
                                         </p>
                                       )}
@@ -2297,29 +2297,29 @@ function AdvancementManager({
                               : availableFeatures;
                             return (
                               <>
-                                <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gold/10 bg-background/30">
-                                  <Search className="w-3 h-3 text-ink/30 shrink-0" />
+                                <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gold/15 bg-background/30">
+                                  <Search className="w-3 h-3 text-ink/35 shrink-0" />
                                   <input
                                     type="text"
                                     placeholder={q ? `${displayed.length} result${displayed.length !== 1 ? 's' : ''}` : `${availableFeatures.length} local features — search all…`}
                                     value={featureSearch}
                                     onChange={e => setFeatureSearch(e.target.value)}
-                                    className="flex-1 bg-transparent text-xs outline-none placeholder:text-ink/30 text-ink py-0.5"
+                                    className="flex-1 bg-transparent text-xs outline-none placeholder:text-ink/35 text-ink py-0.5"
                                   />
                                   {featureSearch && (
-                                    <button type="button" onClick={() => setFeatureSearch('')} className="text-ink/30 hover:text-ink/60 text-sm leading-none">×</button>
+                                    <button type="button" onClick={() => setFeatureSearch('')} className="text-ink/35 hover:text-ink/65 text-sm leading-none">×</button>
                                   )}
                                 </div>
-                                <div className="grid grid-cols-[minmax(0,1fr)] px-3 py-2 bg-gold/5 border-b border-gold/10">
-                                  <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Feature</span>
+                                <div className="grid grid-cols-[minmax(0,1fr)] px-3 py-2 bg-gold/5 border-b border-gold/15">
+                                  <span className="text-[9px] uppercase font-black tracking-widest text-gold/65">Feature</span>
                                 </div>
                                 <div className="divide-y divide-gold/5 max-h-[14rem] overflow-y-auto custom-scrollbar">
                                   {displayed.map(f => (
                                     <label key={f.id} className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-gold/5 group transition-colors">
                                       <div className={`w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center transition-all ${
-                                        (editingAdv.configuration?.pool || []).includes(f.id) ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/60'
+                                        (editingAdv.configuration?.pool || []).includes(f.id) ? 'bg-gold border-gold' : 'border-gold/35 group-hover:border-gold/65'
                                       }`}>
-                                        {(editingAdv.configuration?.pool || []).includes(f.id) && <Check className="w-2.5 h-2.5 text-white" />}
+                                        {(editingAdv.configuration?.pool || []).includes(f.id) && <Check className="w-2.5 h-2.5 text-[var(--primary-foreground)]" />}
                                       </div>
                                       <input
                                         type="checkbox"
@@ -2335,11 +2335,11 @@ function AdvancementManager({
                                           setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, pool }});
                                         }}
                                       />
-                                      <span className="text-xs font-bold text-ink">{f.name} <span className="text-ink/40 font-normal">(Lvl {f.level})</span></span>
+                                      <span className="text-xs font-bold text-ink">{f.name} <span className="text-ink/45 font-normal">(Lvl {f.level})</span></span>
                                     </label>
                                   ))}
                                   {displayed.length === 0 && (
-                                    <p className="px-3 py-4 text-[10px] italic text-ink/30">
+                                    <p className="px-3 py-4 text-[10px] italic text-ink/35">
                                       {q ? `No features match "${featureSearch}".` : 'No features created yet.'}
                                     </p>
                                   )}
@@ -2358,14 +2358,14 @@ function AdvancementManager({
               {editingAdv.type === 'HitPoints' && (
                 <div className="grid xl:grid-cols-[minmax(260px,320px)_minmax(320px,1fr)] gap-5 items-start">
                   <fieldset className="config-fieldset bg-background/20">
-                    <legend className="section-label text-gold/60 px-1">Hit Point Details</legend>
+                    <legend className="section-label text-gold/65 px-1">Hit Point Details</legend>
                     <div className="space-y-1.5">
                       <label className="field-label">Hit Die</label>
                       <Select
                         value={String(editingAdv.configuration?.hitDie || resolvedDefaultHitDie)}
                         onValueChange={val => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, hitDie: parseInt(val ?? String(resolvedDefaultHitDie)) }})}
                       >
-                        <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                        <SelectTrigger className="w-full h-9 bg-background/50 border-gold/15">
                           <SelectValue>{`d${editingAdv.configuration?.hitDie || resolvedDefaultHitDie}`}</SelectValue>
                         </SelectTrigger>
                         <SelectContent>
@@ -2376,47 +2376,47 @@ function AdvancementManager({
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="space-y-2 rounded-md border border-gold/10 bg-background/55 p-3">
+                    <div className="space-y-2 rounded-md border border-gold/15 bg-background/55 p-3">
                       <div className="flex items-center justify-between text-xs">
-                        <span className="text-ink/50">Hit Dice</span>
+                        <span className="text-ink/55">Hit Dice</span>
                         <span className="font-black text-ink">d{editingAdv.configuration?.hitDie || resolvedDefaultHitDie}</span>
                       </div>
                       <div className="flex items-center justify-between text-xs">
-                        <span className="text-ink/50">Hit Dice Gained / Level</span>
+                        <span className="text-ink/55">Hit Dice Gained / Level</span>
                         <span className="font-black text-ink">1</span>
                       </div>
                     </div>
                   </fieldset>
 
-                  <div className="bg-background/20 border border-gold/10 p-4 rounded-md">
+                  <div className="bg-background/20 border border-gold/15 p-4 rounded-md">
                     <div className="mb-3">
-                      <h4 className="text-sm uppercase font-black tracking-widest text-gold/80">Hit Point Preview</h4>
-                      <p className="text-[10px] text-ink/60 mt-1">Foundry treats this as a class-level hit die definition, so matching the class default will usually produce the cleanest export.</p>
+                      <h4 className="text-sm uppercase font-black tracking-widest text-gold/85">Hit Point Preview</h4>
+                      <p className="text-[10px] text-ink/65 mt-1">Foundry treats this as a class-level hit die definition, so matching the class default will usually produce the cleanest export.</p>
                     </div>
                     <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
-                      <div className="rounded-md border border-gold/10 bg-background/55 px-3 py-3">
-                        <p className="text-[9px] uppercase font-black tracking-widest text-gold/60">Selected Die</p>
+                      <div className="rounded-md border border-gold/15 bg-background/55 px-3 py-3">
+                        <p className="text-[9px] uppercase font-black tracking-widest text-gold/65">Selected Die</p>
                         <p className="mt-2 text-lg font-serif font-black text-ink">d{editingAdv.configuration?.hitDie || resolvedDefaultHitDie}</p>
                       </div>
-                      <div className="rounded-md border border-gold/10 bg-background/55 px-3 py-3">
-                        <p className="text-[9px] uppercase font-black tracking-widest text-gold/60">Class Default</p>
+                      <div className="rounded-md border border-gold/15 bg-background/55 px-3 py-3">
+                        <p className="text-[9px] uppercase font-black tracking-widest text-gold/65">Class Default</p>
                         <p className="mt-2 text-lg font-serif font-black text-ink">d{resolvedDefaultHitDie}</p>
                       </div>
-                      <div className="rounded-md border border-gold/10 bg-background/55 px-3 py-3">
-                        <p className="text-[9px] uppercase font-black tracking-widest text-gold/60">Average</p>
+                      <div className="rounded-md border border-gold/15 bg-background/55 px-3 py-3">
+                        <p className="text-[9px] uppercase font-black tracking-widest text-gold/65">Average</p>
                         <p className="mt-2 text-lg font-serif font-black text-ink">{Math.floor((Number(editingAdv.configuration?.hitDie || resolvedDefaultHitDie) / 2)) + 1}</p>
                       </div>
                     </div>
-                    <div className="mt-3 border border-gold/10 rounded-md overflow-hidden">
-                      <div className="grid grid-cols-[minmax(0,1fr)_5rem] px-3 py-2 bg-background/60 border-b border-gold/10">
-                        <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Average HP</span>
-                        <span className="text-[9px] uppercase font-black tracking-widest text-gold/60 text-right">Total</span>
+                    <div className="mt-3 border border-gold/15 rounded-md overflow-hidden">
+                      <div className="grid grid-cols-[minmax(0,1fr)_5rem] px-3 py-2 bg-background/60 border-b border-gold/15">
+                        <span className="text-[9px] uppercase font-black tracking-widest text-gold/65">Average HP</span>
+                        <span className="text-[9px] uppercase font-black tracking-widest text-gold/65 text-right">Total</span>
                       </div>
                       <div className="divide-y divide-gold/5">
                         {[5, 11, 17].map((level) => (
                           <div key={level} className="grid grid-cols-[minmax(0,1fr)_5rem] px-3 py-2 text-xs">
                             <span className="font-bold text-ink">Level {level}</span>
-                            <span className="text-right text-ink/70">{averageHitPointsAtLevel(level)}</span>
+                            <span className="text-right text-ink/75">{averageHitPointsAtLevel(level)}</span>
                           </div>
                         ))}
                       </div>
@@ -2439,7 +2439,7 @@ function AdvancementManager({
                       value={editingAdv.configuration?.scalingColumnId || ''}
                       onValueChange={val => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, scalingColumnId: val }})}
                     >
-                      <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                      <SelectTrigger className="w-full h-9 bg-background/50 border-gold/15">
                         <SelectValue>
                           {selectedScalingColumn?.name || 'Select Column...'}
                         </SelectValue>
@@ -2452,10 +2452,10 @@ function AdvancementManager({
                     </Select>
                   </div>
 
-                  <div className="bg-background/20 border border-gold/10 p-4 rounded-md h-full">
+                  <div className="bg-background/20 border border-gold/15 p-4 rounded-md h-full">
                     <div className="mb-3">
-                      <h4 className="text-sm uppercase font-black tracking-widest text-gold/80">Scale Preview</h4>
-                      <p className="text-[10px] text-ink/60 mt-1">Selected scale values appear here so you can verify the progression before saving.</p>
+                      <h4 className="text-sm uppercase font-black tracking-widest text-gold/85">Scale Preview</h4>
+                      <p className="text-[10px] text-ink/65 mt-1">Selected scale values appear here so you can verify the progression before saving.</p>
                     </div>
                     {selectedScalingColumn ? (
                       <div className="space-y-3">
@@ -2463,10 +2463,10 @@ function AdvancementManager({
                           <p className="text-sm font-bold text-ink">{selectedScalingColumn.name}</p>
                           <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-ink/45">
                             {selectedScalingColumn.identifier && (
-                              <span>Identifier: <code className="font-mono text-ink/60">{selectedScalingColumn.identifier}</code></span>
+                              <span>Identifier: <code className="font-mono text-ink/65">{selectedScalingColumn.identifier}</code></span>
                             )}
                             <span>·</span>
-                            <span>Type: <span className="font-bold text-ink/70">{selectedScalingColumn.type || 'number'}</span></span>
+                            <span>Type: <span className="font-bold text-ink/75">{selectedScalingColumn.type || 'number'}</span></span>
                             {selectedScalingColumn.type === 'distance' && (selectedScalingColumn.distance_units || selectedScalingColumn.distanceUnits) && (
                               <>
                                 <span>·</span>
@@ -2475,10 +2475,10 @@ function AdvancementManager({
                             )}
                           </div>
                         </div>
-                        <div className="border border-gold/10 rounded-md overflow-hidden">
-                          <div className="grid grid-cols-2 bg-background/60 border-b border-gold/10 px-3 py-2">
-                            <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Level</span>
-                            <span className="text-[9px] uppercase font-black tracking-widest text-gold/60 text-right">Value</span>
+                        <div className="border border-gold/15 rounded-md overflow-hidden">
+                          <div className="grid grid-cols-2 bg-background/60 border-b border-gold/15 px-3 py-2">
+                            <span className="text-[9px] uppercase font-black tracking-widest text-gold/65">Level</span>
+                            <span className="text-[9px] uppercase font-black tracking-widest text-gold/65 text-right">Value</span>
                           </div>
                           <div className="divide-y divide-gold/5 overflow-y-auto max-h-[300px] custom-scrollbar">
                             {Object.entries(selectedScalingColumn.values || {})
@@ -2486,7 +2486,7 @@ function AdvancementManager({
                               .map(([level, value]) => (
                                 <div key={level} className="grid grid-cols-2 px-3 py-2 text-xs">
                                   <span className="font-bold text-ink">Level {level}</span>
-                                  <span className="text-right text-ink/70">{String(value)}</span>
+                                  <span className="text-right text-ink/75">{String(value)}</span>
                                 </div>
                               ))}
                             {Object.keys(selectedScalingColumn.values || {}).length === 0 && (
@@ -2506,14 +2506,14 @@ function AdvancementManager({
               {editingAdv.type === 'Size' && (
                 <div className="grid xl:grid-cols-[minmax(260px,320px)_minmax(320px,1fr)] gap-5 items-start">
                   <fieldset className="config-fieldset bg-background/20">
-                    <legend className="section-label text-gold/60 px-1">Allowed Sizes</legend>
+                    <legend className="section-label text-gold/65 px-1">Allowed Sizes</legend>
                     <div className="grid sm:grid-cols-2 gap-2">
                       {Object.entries(SIZE_LABELS).map(([sizeId, label]) => {
                         const isSelected = selectedSizeIds.includes(sizeId);
                         return (
-                          <label key={sizeId} className="flex items-center gap-2 px-3 py-2 rounded-md border border-gold/10 bg-background/55 cursor-pointer hover:bg-gold/5">
-                            <div className={`w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center transition-all ${isSelected ? 'bg-gold border-gold' : 'border-gold/30 hover:border-gold/60'}`}>
-                              {isSelected && <Check className="w-2.5 h-2.5 text-white" />}
+                          <label key={sizeId} className="flex items-center gap-2 px-3 py-2 rounded-md border border-gold/15 bg-background/55 cursor-pointer hover:bg-gold/5">
+                            <div className={`w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center transition-all ${isSelected ? 'bg-gold border-gold' : 'border-gold/35 hover:border-gold/65'}`}>
+                              {isSelected && <Check className="w-2.5 h-2.5 text-[var(--primary-foreground)]" />}
                             </div>
                             <input
                               type="checkbox"
@@ -2526,21 +2526,21 @@ function AdvancementManager({
                         );
                       })}
                     </div>
-                    <p className="text-[9px] text-ink/40">
+                    <p className="text-[9px] text-ink/45">
                       Foundry supports size advancements as a set of valid size outcomes. We also keep the first selected size as the legacy primary value for older export paths.
                     </p>
                   </fieldset>
 
-                  <div className="bg-background/20 border border-gold/10 p-4 rounded-md h-full">
+                  <div className="bg-background/20 border border-gold/15 p-4 rounded-md h-full">
                     <div className="mb-3">
-                      <h4 className="text-sm uppercase font-black tracking-widest text-gold/80">Size Preview</h4>
-                      <p className="text-[10px] text-ink/60 mt-1">These are the sizes that will be available when this advancement is resolved.</p>
+                      <h4 className="text-sm uppercase font-black tracking-widest text-gold/85">Size Preview</h4>
+                      <p className="text-[10px] text-ink/65 mt-1">These are the sizes that will be available when this advancement is resolved.</p>
                     </div>
                     {selectedSizeIds.length > 0 ? (
                       <div className="space-y-3">
                         <div className="flex flex-wrap gap-2">
                           {selectedSizeIds.map((sizeId) => (
-                            <span key={sizeId} className="px-2.5 py-1 rounded-md bg-gold/10 border border-gold/20 text-xs font-bold text-ink">
+                            <span key={sizeId} className="px-2.5 py-1 rounded-md bg-gold/15 border border-gold/25 text-xs font-bold text-ink">
                               {SIZE_LABELS[sizeId] || sizeId}
                             </span>
                           ))}
@@ -2565,7 +2565,7 @@ function AdvancementManager({
 
                     {/* Details */}
                     <fieldset className="config-fieldset">
-                      <legend className="section-label text-gold/60 px-1">Trait Details</legend>
+                      <legend className="section-label text-gold/65 px-1">Trait Details</legend>
                       <div className="space-y-1.5">
                         <label className="field-label">Mode</label>
                         {TRAIT_MODE_ENABLED_TYPES.has(traitType) ? (
@@ -2573,7 +2573,7 @@ function AdvancementManager({
                             value={editingAdv.configuration?.mode || 'default'}
                             onValueChange={setTraitMode}
                           >
-                            <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                            <SelectTrigger className="w-full h-9 bg-background/50 border-gold/15">
                               <SelectValue>
                                 {TRAIT_MODE_LABELS[editingAdv.configuration?.mode || 'default'] || editingAdv.configuration?.mode}
                               </SelectValue>
@@ -2586,11 +2586,11 @@ function AdvancementManager({
                             </SelectContent>
                           </Select>
                         ) : (
-                          <div className="h-9 rounded-md border border-gold/10 bg-background/50 px-3 flex items-center text-sm font-bold text-ink">
+                          <div className="h-9 rounded-md border border-gold/15 bg-background/50 px-3 flex items-center text-sm font-bold text-ink">
                             Default
                           </div>
                         )}
-                        <p className="text-[9px] text-ink/40 italic">Gain a trait or proficiency.</p>
+                        <p className="text-[9px] text-ink/45 italic">Gain a trait or proficiency.</p>
                       </div>
                       {TRAIT_MODE_ENABLED_TYPES.has(traitType) && (
                         <div className="space-y-1.5 mt-3">
@@ -2599,7 +2599,7 @@ function AdvancementManager({
                             value={editingAdv.configuration?.poolSource || 'static'}
                             onValueChange={setTraitPoolSource}
                           >
-                            <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                            <SelectTrigger className="w-full h-9 bg-background/50 border-gold/15">
                               <SelectValue>
                                 {TRAIT_POOL_SOURCE_LABELS[editingAdv.configuration?.poolSource || 'static']}
                               </SelectValue>
@@ -2609,7 +2609,7 @@ function AdvancementManager({
                               <SelectItem value="proficient">Actor's Proficiencies</SelectItem>
                             </SelectContent>
                           </Select>
-                          <p className="text-[9px] text-ink/40 italic">
+                          <p className="text-[9px] text-ink/45 italic">
                             {(editingAdv.configuration?.poolSource || 'static') === 'proficient'
                               ? "Pool is derived at runtime from the actor's current proficiencies. Set Number to Choose to 0 to auto-apply to every match (e.g. \"All tools you're proficient in gain expertise\")."
                               : 'Pool comes from the authored Choices list below.'}
@@ -2618,35 +2618,35 @@ function AdvancementManager({
                       )}
                       <label className="flex items-start gap-2.5 cursor-pointer group mt-3">
                         <div className={`w-4 h-4 mt-0.5 rounded border shrink-0 flex items-center justify-center transition-all ${
-                          traitAllowsReplacements ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/60'
+                          traitAllowsReplacements ? 'bg-gold border-gold' : 'border-gold/35 group-hover:border-gold/65'
                         }`}>
-                          {traitAllowsReplacements && <Check className="w-2.5 h-2.5 text-white" />}
+                          {traitAllowsReplacements && <Check className="w-2.5 h-2.5 text-[var(--primary-foreground)]" />}
                         </div>
                         <input type="checkbox" className="hidden"
                           checked={traitAllowsReplacements}
                           onChange={e => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, allowReplacements: e.target.checked }})}
                         />
                         <div>
-                          <span className="text-[10px] uppercase font-bold text-ink/70 block">Allow Replacements</span>
-                          <span className="text-[9px] text-ink/40">If a trait is already set on the actor, allow the player to choose from any other trait as a replacement.</span>
+                          <span className="text-[10px] uppercase font-bold text-ink/75 block">Allow Replacements</span>
+                          <span className="text-[9px] text-ink/45">If a trait is already set on the actor, allow the player to choose from any other trait as a replacement.</span>
                         </div>
                       </label>
                     </fieldset>
 
                     {/* Guaranteed */}
                     <fieldset className="config-fieldset space-y-2 bg-background/25">
-                      <legend className="section-label text-gold/60 px-1">Guaranteed</legend>
-                      <p className="text-[9px] text-ink/40 italic">The following traits will be granted to the character as long as they don't already possess that trait.</p>
+                      <legend className="section-label text-gold/65 px-1">Guaranteed</legend>
+                      <p className="text-[9px] text-ink/45 italic">The following traits will be granted to the character as long as they don't already possess that trait.</p>
                       <div className="space-y-1 min-h-[1.5rem]">
                         {(editingAdv.configuration?.fixed || []).length === 0 ? (
-                          <p className="text-[9px] text-ink/20 italic">None selected — check Guaranteed →</p>
+                          <p className="text-[9px] text-ink/25 italic">None selected — check Guaranteed →</p>
                         ) : (
                           (editingAdv.configuration?.fixed || []).map((id: string, idx: number) => {
                             const found = (traitOptionsMap[editingAdv.configuration?.type] || []).find((t: any) => t.id === id);
                             return (
                               <div key={`${id}-${idx}`} className="flex items-center gap-2">
-                                <span className="text-gold/70 text-xs">→</span>
-                                <span className="text-[10px] text-ink/70">{found?.name || id}</span>
+                                <span className="text-gold/75 text-xs">→</span>
+                                <span className="text-[10px] text-ink/75">{found?.name || id}</span>
                               </div>
                             );
                           })
@@ -2657,23 +2657,23 @@ function AdvancementManager({
                     {/* Choices */}
                     <fieldset className="config-fieldset space-y-2 bg-background/25">
                       <legend className="section-label text-sky-500/60 px-1">Choices</legend>
-                      <p className="text-[9px] text-ink/40 italic">The following traits will be presented as a choice to the player.</p>
+                      <p className="text-[9px] text-ink/45 italic">The following traits will be presented as a choice to the player.</p>
                       <div className="space-y-1 min-h-[1.5rem] mb-2">
                         {(editingAdv.configuration?.options || []).length === 0 ? (
-                          <p className="text-[9px] text-ink/20 italic">None selected — check Choice Pool →</p>
+                          <p className="text-[9px] text-ink/25 italic">None selected — check Choice Pool →</p>
                         ) : (
                           (editingAdv.configuration?.options || []).map((id: string, idx: number) => {
                             const found = (traitOptionsMap[editingAdv.configuration?.type] || []).find((t: any) => t.id === id);
                             return (
                               <div key={`${id}-${idx}`} className="flex items-center gap-2">
                                 <span className="text-sky-500/70 text-xs">⚙</span>
-                                <span className="text-[10px] text-ink/70">{found?.name || id}</span>
+                                <span className="text-[10px] text-ink/75">{found?.name || id}</span>
                               </div>
                             );
                           })
                         )}
                       </div>
-                      <div className="pt-2 border-t border-gold/10 space-y-1.5">
+                      <div className="pt-2 border-t border-gold/15 space-y-1.5">
                         <div className="flex items-center justify-between">
                           <label className="field-label">Number to Choose</label>
                           <button
@@ -2693,7 +2693,7 @@ function AdvancementManager({
                             value={editingAdv.configuration?.scalingColumnId || ''}
                             onValueChange={val => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, scalingColumnId: val }})}
                           >
-                            <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                            <SelectTrigger className="w-full h-9 bg-background/50 border-gold/15">
                               <SelectValue>
                                 {availableScalingColumns.find(c => c.id === editingAdv.configuration?.scalingColumnId)?.name || 'Select Column...'}
                               </SelectValue>
@@ -2708,7 +2708,7 @@ function AdvancementManager({
                           <Input type="number" min="0"
                             value={editingAdv.configuration?.choiceCount || 0}
                             onChange={e => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, choiceCount: parseInt(e.target.value) }})}
-                            className="w-full h-9 bg-background/50 border-gold/10"
+                            className="w-full h-9 bg-background/50 border-gold/15"
                           />
                         )}
                       </div>
@@ -2718,7 +2718,7 @@ function AdvancementManager({
 
                   {/* Right column: Trait Pool */}
                   <fieldset className="config-fieldset bg-background/25">
-                    <legend className="section-label text-gold/60 px-1">Traits</legend>
+                    <legend className="section-label text-gold/65 px-1">Traits</legend>
                     <div className="space-y-1.5">
                       <label className="field-label">Trait Type</label>
                       <Select
@@ -2734,7 +2734,7 @@ function AdvancementManager({
                           }
                         })}
                       >
-                        <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                        <SelectTrigger className="w-full h-9 bg-background/50 border-gold/15">
                           <SelectValue>
                             {TRAIT_TYPE_LABELS[editingAdv.configuration?.type || 'skills'] || editingAdv.configuration?.type}
                           </SelectValue>
@@ -2753,10 +2753,10 @@ function AdvancementManager({
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="border border-gold/10 rounded-md overflow-hidden">
-                      <div className={`grid ${traitAllowsReplacements ? 'grid-cols-[1fr_5rem_5rem_5rem]' : 'grid-cols-[1fr_5rem_5rem]'} bg-gold/5 border-b border-gold/10 px-3 py-2`}>
-                        <span className="text-[9px] uppercase font-black text-ink/40 tracking-widest leading-none flex items-center">Trait</span>
-                        <span className="text-[9px] uppercase font-black text-gold/60 tracking-widest text-center leading-none flex items-center justify-center">Guaranteed</span>
+                    <div className="border border-gold/15 rounded-md overflow-hidden">
+                      <div className={`grid ${traitAllowsReplacements ? 'grid-cols-[1fr_5rem_5rem_5rem]' : 'grid-cols-[1fr_5rem_5rem]'} bg-gold/5 border-b border-gold/15 px-3 py-2`}>
+                        <span className="text-[9px] uppercase font-black text-ink/45 tracking-widest leading-none flex items-center">Trait</span>
+                        <span className="text-[9px] uppercase font-black text-gold/65 tracking-widest text-center leading-none flex items-center justify-center">Guaranteed</span>
                         <span className="text-[9px] uppercase font-black text-sky-500/60 tracking-widest text-center leading-none flex items-center justify-center">Choice Pool</span>
                         {traitAllowsReplacements && (
                           <span className="text-[9px] uppercase font-black text-purple-500/60 tracking-widest text-center leading-none flex items-center justify-center">Replace</span>
@@ -2789,9 +2789,9 @@ function AdvancementManager({
                                   <div className="flex flex-col items-center gap-1">
                                     <label className="cursor-pointer">
                                       <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
-                                        allFixed ? 'bg-gold border-gold' : 'border-gold/30 hover:border-gold/50'
+                                        allFixed ? 'bg-gold border-gold' : 'border-gold/35 hover:border-gold/55'
                                       }`}>
-                                        {allFixed && <Check className="w-2.5 h-2.5 text-white" />}
+                                        {allFixed && <Check className="w-2.5 h-2.5 text-[var(--primary-foreground)]" />}
                                       </div>
                                       <input
                                         type="checkbox"
@@ -2807,7 +2807,7 @@ function AdvancementManager({
                                   <div className="flex flex-col items-center gap-1">
                                     <label className="cursor-pointer">
                                       <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
-                                        allOptions ? 'bg-sky-500 border-sky-500' : 'border-gold/30 hover:border-sky-400/50'
+                                        allOptions ? 'bg-sky-500 border-sky-500' : 'border-gold/35 hover:border-sky-400/50'
                                       }`}>
                                         {allOptions && <Check className="w-2.5 h-2.5 text-white" />}
                                       </div>
@@ -2826,7 +2826,7 @@ function AdvancementManager({
                                   <div className="flex flex-col items-center gap-1">
                                       <label className="cursor-pointer">
                                         <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
-                                          allReplacements ? 'bg-purple-500 border-purple-500' : 'border-gold/30 hover:border-purple-400/50'
+                                          allReplacements ? 'bg-purple-500 border-purple-500' : 'border-gold/35 hover:border-purple-400/50'
                                         }`}>
                                           {allReplacements && <Check className="w-2.5 h-2.5 text-white" />}
                                         </div>
@@ -2849,13 +2849,13 @@ function AdvancementManager({
                                   const isReplacement = (editingAdv.configuration?.replacements || []).includes(t.id);
                                   return (
                                     <div key={t.id} className={`grid ${traitAllowsReplacements ? 'grid-cols-[1fr_5rem_5rem_5rem]' : 'grid-cols-[1fr_5rem_5rem]'} px-3 py-2 hover:bg-gold/5 transition-colors items-center group`}>
-                                      <span className="text-xs text-ink/80 truncate pl-5">{t.name}</span>
+                                      <span className="text-xs text-ink/85 truncate pl-5">{t.name}</span>
                                       <div className="flex justify-center">
                                         <label className="cursor-pointer">
                                           <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
-                                            isFixed ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/50'
+                                            isFixed ? 'bg-gold border-gold' : 'border-gold/35 group-hover:border-gold/55'
                                           }`}>
-                                            {isFixed && <Check className="w-2.5 h-2.5 text-white" />}
+                                            {isFixed && <Check className="w-2.5 h-2.5 text-[var(--primary-foreground)]" />}
                                           </div>
                                           <input type="checkbox" className="hidden" checked={isFixed}
                                             onChange={e => toggleTraitFixed(t.id, e.target.checked)}
@@ -2865,7 +2865,7 @@ function AdvancementManager({
                                       <div className="flex justify-center">
                                         <label className="cursor-pointer">
                                           <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
-                                            isOption ? 'bg-sky-500 border-sky-500' : 'border-gold/30 group-hover:border-sky-400/50'
+                                            isOption ? 'bg-sky-500 border-sky-500' : 'border-gold/35 group-hover:border-sky-400/50'
                                           }`}>
                                             {isOption && <Check className="w-2.5 h-2.5 text-white" />}
                                           </div>
@@ -2878,7 +2878,7 @@ function AdvancementManager({
                                       <div className="flex justify-center">
                                           <label className="cursor-pointer">
                                             <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
-                                              isReplacement ? 'bg-purple-500 border-purple-500' : 'border-gold/30 group-hover:border-purple-400/50'
+                                              isReplacement ? 'bg-purple-500 border-purple-500' : 'border-gold/35 group-hover:border-purple-400/50'
                                             }`}>
                                               {isReplacement && <Check className="w-2.5 h-2.5 text-white" />}
                                             </div>
@@ -2900,13 +2900,13 @@ function AdvancementManager({
                           const isReplacement = (editingAdv.configuration?.replacements || []).includes(t.id);
                           return (
                             <div key={t.id} className={`grid ${traitAllowsReplacements ? 'grid-cols-[1fr_5rem_5rem_5rem]' : 'grid-cols-[1fr_5rem_5rem]'} px-3 py-2 hover:bg-gold/5 transition-colors items-center group`}>
-                              <span className="text-xs text-ink/80 truncate">{t.name}</span>
+                              <span className="text-xs text-ink/85 truncate">{t.name}</span>
                               <div className="flex justify-center">
                                 <label className="cursor-pointer">
                                   <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
-                                    isFixed ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/50'
+                                    isFixed ? 'bg-gold border-gold' : 'border-gold/35 group-hover:border-gold/55'
                                   }`}>
-                                    {isFixed && <Check className="w-2.5 h-2.5 text-white" />}
+                                    {isFixed && <Check className="w-2.5 h-2.5 text-[var(--primary-foreground)]" />}
                                   </div>
                                   <input type="checkbox" className="hidden" checked={isFixed}
                                     onChange={e => toggleTraitFixed(t.id, e.target.checked)}
@@ -2916,7 +2916,7 @@ function AdvancementManager({
                               <div className="flex justify-center">
                                 <label className="cursor-pointer">
                                   <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
-                                    isOption ? 'bg-sky-500 border-sky-500' : 'border-gold/30 group-hover:border-sky-400/50'
+                                    isOption ? 'bg-sky-500 border-sky-500' : 'border-gold/35 group-hover:border-sky-400/50'
                                   }`}>
                                     {isOption && <Check className="w-2.5 h-2.5 text-white" />}
                                   </div>
@@ -2929,7 +2929,7 @@ function AdvancementManager({
                                 <div className="flex justify-center">
                                   <label className="cursor-pointer">
                                     <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
-                                      isReplacement ? 'bg-purple-500 border-purple-500' : 'border-gold/30 group-hover:border-purple-400/50'
+                                      isReplacement ? 'bg-purple-500 border-purple-500' : 'border-gold/35 group-hover:border-purple-400/50'
                                     }`}>
                                       {isReplacement && <Check className="w-2.5 h-2.5 text-white" />}
                                     </div>
@@ -2943,7 +2943,7 @@ function AdvancementManager({
                           );
                         })}
                         {traitOptions.length === 0 && (
-                          <p className="text-[10px] italic text-ink/40 px-3 py-4">Loading options or none available...</p>
+                          <p className="text-[10px] italic text-ink/45 px-3 py-4">Loading options or none available...</p>
                         )}
                       </div>
                     </div>
@@ -2964,8 +2964,8 @@ function AdvancementManager({
                         is always plain stats (feats can't recursively
                         grant feats through an ASI). */}
                     {!isFeatContext && (
-                      <fieldset className="border border-gold/10 rounded-md px-4 pt-1 pb-3 space-y-3">
-                        <legend className="section-label text-gold/60 px-1">Player Choice</legend>
+                      <fieldset className="border border-gold/15 rounded-md px-4 pt-1 pb-3 space-y-3">
+                        <legend className="section-label text-gold/65 px-1">Player Choice</legend>
                         <Select
                           value={editingAdv.configuration?.choiceType || 'stats'}
                           onValueChange={(val) => setEditingAdv({
@@ -2973,7 +2973,7 @@ function AdvancementManager({
                             configuration: { ...editingAdv.configuration, choiceType: val },
                           })}
                         >
-                          <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                          <SelectTrigger className="w-full h-9 bg-background/50 border-gold/15">
                             <SelectValue>
                               {(() => {
                                 const v = editingAdv.configuration?.choiceType || 'stats';
@@ -2989,19 +2989,19 @@ function AdvancementManager({
                             <SelectItem value="either">Player's choice (stats or feat)</SelectItem>
                           </SelectContent>
                         </Select>
-                        <p className="text-[10px] text-ink/40">
+                        <p className="text-[10px] text-ink/45">
                           Controls what the character builder offers at this level. <em>Either</em> shows both buttons; the player picks one path.
                         </p>
                       </fieldset>
                     )}
-                    <fieldset className="border border-gold/10 rounded-md px-4 pt-1 pb-3 space-y-3">
-                      <legend className="section-label text-gold/60 px-1">Improvement Details</legend>
+                    <fieldset className="border border-gold/15 rounded-md px-4 pt-1 pb-3 space-y-3">
+                      <legend className="section-label text-gold/65 px-1">Improvement Details</legend>
                       <div className="space-y-1.5">
                         <label className="field-label">Point Cap</label>
                         <Input type="number" min="0"
                           value={editingAdv.configuration?.cap ?? 2}
                           onChange={e => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, cap: parseInt(e.target.value) || 0 }})}
-                          className="w-full h-9 bg-background/50 border-gold/10"
+                          className="w-full h-9 bg-background/50 border-gold/15"
                         />
                       </div>
                       <div className="space-y-1.5">
@@ -3009,28 +3009,28 @@ function AdvancementManager({
                         <Input type="number" min="0"
                           value={editingAdv.configuration?.max ?? ''}
                           onChange={e => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, max: e.target.value === '' ? '' : (parseInt(e.target.value) || 0) }})}
-                          className="w-full h-9 bg-background/50 border-gold/10"
+                          className="w-full h-9 bg-background/50 border-gold/15"
                         />
                       </div>
                     </fieldset>
 
-                    <div className="rounded-md border border-gold/10 bg-background/55 p-3">
+                    <div className="rounded-md border border-gold/15 bg-background/55 p-3">
                       <div className="flex items-center justify-between gap-3">
                         <button
                           type="button"
                           onClick={() => setAsiPoints((editingAdv.configuration?.points ?? 2) - 1)}
-                          className="w-7 h-7 rounded border border-gold/20 bg-gold/5 text-gold/70 flex items-center justify-center hover:bg-gold/10"
+                          className="w-7 h-7 rounded border border-gold/25 bg-gold/5 text-gold/75 flex items-center justify-center hover:bg-gold/15"
                         >
                           <Minus className="w-3.5 h-3.5" />
                         </button>
                         <div className="text-center min-w-[3rem]">
-                          <p className="text-[9px] uppercase font-black tracking-widest text-gold/60">Points</p>
+                          <p className="text-[9px] uppercase font-black tracking-widest text-gold/65">Points</p>
                           <p className="mt-1 text-3xl font-serif font-black text-ink">{editingAdv.configuration?.points ?? 2}</p>
                         </div>
                         <button
                           type="button"
                           onClick={() => setAsiPoints((editingAdv.configuration?.points ?? 2) + 1)}
-                          className="w-7 h-7 rounded border border-gold/20 bg-gold/5 text-gold/70 flex items-center justify-center hover:bg-gold/10"
+                          className="w-7 h-7 rounded border border-gold/25 bg-gold/5 text-gold/75 flex items-center justify-center hover:bg-gold/15"
                         >
                           <Plus className="w-3.5 h-3.5" />
                         </button>
@@ -3041,16 +3041,16 @@ function AdvancementManager({
                     </div>
                   </div>
 
-                  <fieldset className="border border-gold/10 rounded-md px-4 pt-3 pb-4 space-y-3">
+                  <fieldset className="border border-gold/15 rounded-md px-4 pt-3 pb-4 space-y-3">
                     <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
                       {ABILITY_ORDER.map((stat) => (
-                        <div key={stat} className="rounded-md border border-gold/10 bg-background/55 px-3 py-3 space-y-2">
+                        <div key={stat} className="rounded-md border border-gold/15 bg-background/55 px-3 py-3 space-y-2">
                           <div className="flex items-start justify-between gap-2">
                             <span className="text-sm font-serif font-black text-ink">{ABILITY_LABELS[stat]}</span>
                             <button
                               type="button"
                               onClick={() => toggleAsiLock(stat)}
-                              className={`w-7 h-7 rounded border flex items-center justify-center ${editingAdv.configuration?.locked?.[stat] ? 'bg-blood/10 border-blood/30 text-blood' : 'bg-gold/5 border-gold/20 text-gold/50 hover:bg-gold/10'}`}
+                              className={`w-7 h-7 rounded border flex items-center justify-center ${editingAdv.configuration?.locked?.[stat] ? 'bg-blood/10 border-blood/30 text-blood' : 'bg-gold/5 border-gold/25 text-gold/55 hover:bg-gold/15'}`}
                             >
                               <Lock className="w-3 h-3" />
                             </button>
@@ -3059,22 +3059,22 @@ function AdvancementManager({
                             <button
                               type="button"
                               onClick={() => setAsiFixedValue(stat, (editingAdv.configuration?.fixed?.[stat] ?? 0) - 1)}
-                              className="w-7 h-7 rounded border border-gold/20 bg-gold/5 text-gold/70 flex items-center justify-center hover:bg-gold/10"
+                              className="w-7 h-7 rounded border border-gold/25 bg-gold/5 text-gold/75 flex items-center justify-center hover:bg-gold/15"
                             >
                               <Minus className="w-3.5 h-3.5" />
                             </button>
-                            <div className="w-12 h-10 rounded-md border border-gold/10 bg-card/70 flex items-center justify-center text-2xl font-serif font-black text-ink">
+                            <div className="w-12 h-10 rounded-md border border-gold/15 bg-card/70 flex items-center justify-center text-2xl font-serif font-black text-ink">
                               {editingAdv.configuration?.fixed?.[stat] ?? 0}
                             </div>
                             <button
                               type="button"
                               onClick={() => setAsiFixedValue(stat, (editingAdv.configuration?.fixed?.[stat] ?? 0) + 1)}
-                              className="w-7 h-7 rounded border border-gold/20 bg-gold/5 text-gold/70 flex items-center justify-center hover:bg-gold/10"
+                              className="w-7 h-7 rounded border border-gold/25 bg-gold/5 text-gold/75 flex items-center justify-center hover:bg-gold/15"
                             >
                               <Plus className="w-3.5 h-3.5" />
                             </button>
                           </div>
-                          <p className="text-[9px] text-center text-ink/40">
+                          <p className="text-[9px] text-center text-ink/45">
                             {editingAdv.configuration?.locked?.[stat] ? 'Locked for players' : 'Available unless capped'}
                           </p>
                         </div>
@@ -3086,8 +3086,8 @@ function AdvancementManager({
 
               {/* ── GrantSpells (Layer-2, Spellbook Manager) ── */}
               {editingAdv.type === 'GrantSpells' && (
-                <fieldset className="border border-gold/10 rounded-md px-4 pt-1 pb-4">
-                  <legend className="section-label text-gold/60 px-1">Grant Spells</legend>
+                <fieldset className="border border-gold/15 rounded-md px-4 pt-1 pb-4">
+                  <legend className="section-label text-gold/65 px-1">Grant Spells</legend>
                   <GrantSpellsConfigEditor
                     configuration={editingAdv.configuration || {}}
                     onChange={(next) => setEditingAdv({ ...editingAdv, configuration: next })}
@@ -3097,8 +3097,8 @@ function AdvancementManager({
 
               {/* ── ExtendSpellList (Layer-2, Spellbook Manager) ── */}
               {editingAdv.type === 'ExtendSpellList' && (
-                <fieldset className="border border-gold/10 rounded-md px-4 pt-1 pb-4">
-                  <legend className="section-label text-gold/60 px-1">Extend Spell List</legend>
+                <fieldset className="border border-gold/15 rounded-md px-4 pt-1 pb-4">
+                  <legend className="section-label text-gold/65 px-1">Extend Spell List</legend>
                   <ExtendSpellListConfigEditor
                     configuration={editingAdv.configuration || {}}
                     onChange={(next) => setEditingAdv({ ...editingAdv, configuration: next })}
@@ -3167,7 +3167,7 @@ function AdvancementManager({
                 return (
                   <div className="grid xl:grid-cols-[minmax(280px,0.9fr)_minmax(0,1.1fr)] gap-5 items-start">
                     <fieldset className="config-fieldset bg-background/20">
-                      <legend className="section-label text-gold/60 px-1">Target</legend>
+                      <legend className="section-label text-gold/65 px-1">Target</legend>
                       <div className="space-y-3">
                         <div className="space-y-1.5">
                           <label className="field-label">Target Kind</label>
@@ -3178,7 +3178,7 @@ function AdvancementManager({
                               setTargetKind(val);
                             }}
                           >
-                            <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                            <SelectTrigger className="w-full h-9 bg-background/50 border-gold/15">
                               <SelectValue>{kind === 'feat' ? 'Feat' : 'Class Feature'}</SelectValue>
                             </SelectTrigger>
                             <SelectContent>
@@ -3212,7 +3212,7 @@ function AdvancementManager({
                     </fieldset>
 
                     <fieldset className="config-fieldset bg-background/20">
-                      <legend className="section-label text-gold/60 px-1">Bump Amount</legend>
+                      <legend className="section-label text-gold/65 px-1">Bump Amount</legend>
                       <div className="space-y-3">
                         <div className="space-y-1.5">
                           <label className="field-label">Amount Formula</label>
@@ -3220,27 +3220,27 @@ function AdvancementManager({
                             value={amount}
                             onChange={(e) => setAmount(e.target.value)}
                             placeholder="e.g. +1, @prof, @scale.amulet-of-the-devout.charges"
-                            className="h-9 bg-background/50 border-gold/10 placeholder:text-ink/20 font-mono text-[12px]"
+                            className="h-9 bg-background/50 border-gold/15 placeholder:text-ink/25 font-mono text-[12px]"
                           />
                           <p className="text-[10px] text-ink/45">
-                            Stored verbatim. Plain numbers like <code className="font-mono text-ink/60">1</code> mean
-                            "add 1 to the target's <code className="font-mono text-ink/60">uses.max</code>." Formulas
-                            like <code className="font-mono text-ink/60">@prof</code> or
-                            <code className="font-mono text-ink/60"> @scale.&lt;owner&gt;.&lt;col&gt;</code> are
+                            Stored verbatim. Plain numbers like <code className="font-mono text-ink/65">1</code> mean
+                            "add 1 to the target's <code className="font-mono text-ink/65">uses.max</code>." Formulas
+                            like <code className="font-mono text-ink/65">@prof</code> or
+                            <code className="font-mono text-ink/65"> @scale.&lt;owner&gt;.&lt;col&gt;</code> are
                             evaluated against the character at apply time.
                           </p>
                         </div>
 
-                        <div className="border border-gold/10 rounded-md bg-card/40 px-3 py-2.5 space-y-1">
-                          <p className="text-[10px] uppercase font-black tracking-widest text-gold/60">Resolution</p>
+                        <div className="border border-gold/15 rounded-md bg-card/40 px-3 py-2.5 space-y-1">
+                          <p className="text-[10px] uppercase font-black tracking-widest text-gold/65">Resolution</p>
                           <p className="text-[10px] text-ink/55 leading-snug">
                             When this advancement applies, the character builder finds the target
-                            on the sheet and adds the amount to its <code className="font-mono text-ink/60">uses.max</code>.
-                            If the target is <span className="font-bold text-ink/70">not present</span> on the character,
+                            on the sheet and adds the amount to its <code className="font-mono text-ink/65">uses.max</code>.
+                            If the target is <span className="font-bold text-ink/75">not present</span> on the character,
                             the builder logs a warning so you can pass the note along to the DM — the rest of the
                             granting feat / item still applies.
                           </p>
-                          <p className="text-[10px] text-ink/40 italic">
+                          <p className="text-[10px] text-ink/45 italic">
                             Note: runtime application is queued — see docs/handoff-phase-c-itembumpuses.md.
                           </p>
                         </div>

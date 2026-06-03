@@ -401,7 +401,7 @@ export function CompendiumBrowserShell<TRow>(props: CompendiumBrowserShellProps<
           type="button"
           variant="outline"
           size="sm"
-          className="h-8 border-gold/20 text-gold hover:bg-gold/5 gap-2"
+          className="h-8 border-gold/25 text-gold hover:bg-gold/5 gap-2"
           title="List settings"
         >
           <Settings className="w-3.5 h-3.5" />
@@ -409,7 +409,7 @@ export function CompendiumBrowserShell<TRow>(props: CompendiumBrowserShellProps<
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-56 p-2">
-        <div className="text-[10px] uppercase tracking-widest text-ink/45 px-1 pb-1.5 mb-1 border-b border-gold/10">
+        <div className="text-[10px] uppercase tracking-widest text-ink/45 px-1 pb-1.5 mb-1 border-b border-gold/15">
           Visible columns
         </div>
         <div className="space-y-0.5">
@@ -425,7 +425,7 @@ export function CompendiumBrowserShell<TRow>(props: CompendiumBrowserShellProps<
                 <span>{col.label}</span>
                 <span className={cn(
                   'inline-flex items-center justify-center w-4 h-4 rounded border text-[10px]',
-                  visible ? 'border-gold/40 bg-gold/15 text-gold' : 'border-gold/10 text-transparent',
+                  visible ? 'border-gold/45 bg-gold/15 text-gold' : 'border-gold/15 text-transparent',
                 )}>
                   {visible ? '✓' : ''}
                 </span>
@@ -433,7 +433,7 @@ export function CompendiumBrowserShell<TRow>(props: CompendiumBrowserShellProps<
             );
           })}
         </div>
-        <div className="text-[10px] text-ink/40 px-1 pt-1.5 mt-1 border-t border-gold/10 italic">
+        <div className="text-[10px] text-ink/45 px-1 pt-1.5 mt-1 border-t border-gold/15 italic">
           Hiding columns widens the remaining ones.
         </div>
       </PopoverContent>
@@ -460,12 +460,12 @@ export function CompendiumBrowserShell<TRow>(props: CompendiumBrowserShellProps<
       variant="outline"
       size="sm"
       onClick={() => setFavoritesOverlayOpen(true)}
-      className="h-8 border-gold/20 text-gold hover:bg-gold/5 gap-2"
+      className="h-8 border-gold/25 text-gold hover:bg-gold/5 gap-2"
       title="Show favorites"
     >
       <Star className="w-3.5 h-3.5" />
       <span className="hidden sm:inline">Favorites</span>
-      <span className="text-[10px] font-mono tabular-nums text-gold/70">{favorites.size}</span>
+      <span className="text-[10px] font-mono tabular-nums text-gold/75">{favorites.size}</span>
     </Button>
   ) : null;
 
@@ -514,16 +514,16 @@ export function CompendiumBrowserShell<TRow>(props: CompendiumBrowserShellProps<
   ) => (
     <>
       {favoritesScopePicker ?? (skipDefaultHeader ? null : (
-        <div className="flex items-center justify-between gap-2 border-b border-gold/10 bg-background/35 px-3 py-2.5 shrink-0">
+        <div className="flex items-center justify-between gap-2 border-b border-gold/15 bg-background/35 px-3 py-2.5 shrink-0">
           <div className="flex items-center gap-2">
-            <Star className="w-3.5 h-3.5 text-gold/80 fill-gold/40" />
-            <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold/70">Favorites</span>
+            <Star className="w-3.5 h-3.5 text-gold/85 fill-gold/45" />
+            <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold/75">Favorites</span>
           </div>
           <span className="text-[10px] text-ink/45">{favorites.size}</span>
         </div>
       ))}
       {favorites.size === 0 ? (
-        <div className="px-4 py-8 text-center text-xs text-ink/40 italic">
+        <div className="px-4 py-8 text-center text-xs text-ink/45 italic">
           {favoritesEmptyMessage}
         </div>
       ) : (
@@ -599,7 +599,7 @@ export function CompendiumBrowserShell<TRow>(props: CompendiumBrowserShellProps<
             className="flex w-[260px] flex-none flex-col"
             style={{ height: `${paneHeight}px` }}
           >
-            <Card className="border-gold/10 bg-card/50 overflow-hidden h-full">
+            <Card className="border-gold/15 bg-card/50 overflow-hidden h-full">
               <CardContent className="p-0 flex flex-col h-full">
                 {renderFavoritesContent((id) => onSelect(id))}
               </CardContent>
@@ -613,15 +613,15 @@ export function CompendiumBrowserShell<TRow>(props: CompendiumBrowserShellProps<
             pane gets the rest. */}
         <Card
           className={cn(
-            'border-gold/10 bg-card/50 overflow-hidden flex-col flex-1 lg:flex lg:flex-1 xl:flex-none xl:w-[520px]',
+            'border-gold/15 bg-card/50 overflow-hidden flex-col flex-1 lg:flex lg:flex-1 xl:flex-none xl:w-[520px]',
             activeView === 'list' ? 'flex' : 'hidden lg:flex',
           )}
           style={{ height: `${paneHeight}px` }}
         >
           <CardContent className="p-0">
-            <div className="border-b border-gold/10 bg-background/35">
+            <div className="border-b border-gold/15 bg-background/35">
               <div
-                className="grid gap-2 px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.18em] text-gold/70 items-center"
+                className="grid gap-2 px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.18em] text-gold/75 items-center"
                 style={{ gridTemplateColumns: gridTemplate }}
               >
                 {visibleColumns.map((col) => {
@@ -650,7 +650,7 @@ export function CompendiumBrowserShell<TRow>(props: CompendiumBrowserShellProps<
                           'inline-flex items-center gap-1 transition-colors hover:text-gold',
                           justifyClass,
                           flexJustifyClass,
-                          isActive ? 'text-gold' : 'text-gold/70',
+                          isActive ? 'text-gold' : 'text-gold/75',
                         )}
                         title={`Sort by ${col.label}${isActive ? ` (${sortDir})` : ''}`}
                       >
@@ -698,7 +698,7 @@ export function CompendiumBrowserShell<TRow>(props: CompendiumBrowserShellProps<
                       }}
                       className={cn(
                         'grid w-full items-center gap-2 px-3 text-left transition-colors cursor-pointer',
-                        selected ? 'bg-gold/10' : 'hover:bg-gold/5',
+                        selected ? 'bg-gold/15' : 'hover:bg-gold/5',
                       )}
                       style={{ gridTemplateColumns: gridTemplate, height: `${rowHeight}px` }}
                     >
@@ -718,7 +718,7 @@ export function CompendiumBrowserShell<TRow>(props: CompendiumBrowserShellProps<
             lg+ it absorbs flex-1 so list+detail share the body width. */}
         <Card
           className={cn(
-            'border-gold/10 bg-card/50 overflow-hidden flex-col flex-1 lg:flex lg:flex-1',
+            'border-gold/15 bg-card/50 overflow-hidden flex-col flex-1 lg:flex lg:flex-1',
             activeView === 'detail' ? 'flex' : 'hidden lg:flex',
           )}
           style={{ height: `${paneHeight}px` }}
@@ -757,15 +757,15 @@ export function CompendiumBrowserShell<TRow>(props: CompendiumBrowserShellProps<
         <div className="fixed inset-0 z-50" role="dialog" aria-modal="true">
           {/* Backdrop — click to close. */}
           <div
-            className="absolute inset-0 bg-ink/40 backdrop-blur-sm animate-in fade-in duration-150"
+            className="absolute inset-0 bg-ink/45 backdrop-blur-sm animate-in fade-in duration-150"
             onClick={() => setFavoritesOverlayOpen(false)}
           />
           {/* Slide-out panel from the left. */}
-          <div className="absolute inset-y-0 left-0 w-[300px] max-w-[85vw] bg-card border-r border-gold/20 shadow-2xl flex flex-col animate-in slide-in-from-left duration-200">
+          <div className="absolute inset-y-0 left-0 w-[300px] max-w-[85vw] bg-card border-r border-gold/25 shadow-2xl flex flex-col animate-in slide-in-from-left duration-200">
             <div className="flex items-center justify-between border-b border-gold/15 px-3 py-2 shrink-0">
               <div className="flex items-center gap-2">
-                <Star className="w-3.5 h-3.5 text-gold/80 fill-gold/40" />
-                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold/70">Favorites</span>
+                <Star className="w-3.5 h-3.5 text-gold/85 fill-gold/45" />
+                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold/75">Favorites</span>
                 <span className="text-[10px] text-ink/45">{favorites.size}</span>
               </div>
               <Button
@@ -773,7 +773,7 @@ export function CompendiumBrowserShell<TRow>(props: CompendiumBrowserShellProps<
                 variant="ghost"
                 size="sm"
                 onClick={() => setFavoritesOverlayOpen(false)}
-                className="h-7 w-7 p-0 text-ink/50 hover:text-gold"
+                className="h-7 w-7 p-0 text-ink/55 hover:text-gold"
                 title="Close favorites"
               >
                 <X className="w-4 h-4" />

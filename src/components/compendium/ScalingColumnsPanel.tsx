@@ -177,7 +177,7 @@ export default function ScalingColumnsPanel({
 
   return (
     <>
-    <div className="p-4 border border-gold/20 bg-card/50 space-y-4 rounded-xl">
+    <div className="p-4 border border-gold/25 bg-card/50 space-y-4 rounded-xl">
       <div className="section-header">
         <h2 className="label-text text-gold uppercase tracking-tighter">{label}</h2>
         <Button size="sm" className="h-6 btn-gold" onClick={() => setEditingColumnId(null)}>
@@ -192,7 +192,7 @@ export default function ScalingColumnsPanel({
             : col.values) as Record<string, any> || {};
           const breakpoints = getScalingBreakpoints(valuesMap);
           return (
-            <div key={col.id} className="p-3 bg-gold/5 border border-gold/10 rounded space-y-2 group relative">
+            <div key={col.id} className="p-3 bg-gold/5 border border-gold/15 rounded space-y-2 group relative">
               <div className="flex items-center justify-between">
                 <Input
                   value={nameDrafts[col.id] ?? col.name ?? ''}
@@ -229,7 +229,7 @@ export default function ScalingColumnsPanel({
               </div>
 
               <details className="group/details">
-                <summary className="text-[9px] uppercase font-black tracking-widest text-gold/50 cursor-pointer select-none flex items-center justify-between hover:text-gold transition-colors [&::-webkit-details-marker]:hidden">
+                <summary className="text-[9px] uppercase font-black tracking-widest text-gold/55 cursor-pointer select-none flex items-center justify-between hover:text-gold transition-colors [&::-webkit-details-marker]:hidden">
                   Breakpoints
                   <ChevronDown className="w-3 h-3 transition-transform group-open/details:rotate-180" />
                 </summary>
@@ -237,15 +237,15 @@ export default function ScalingColumnsPanel({
                   {breakpoints.length > 0 ? (
                     <div className="flex flex-col gap-1 w-full">
                       {breakpoints.map(([level, value]) => (
-                        <div key={level} className="flex items-center gap-3 rounded border border-gold/10 bg-background/60 px-3 py-1.5 w-full">
+                        <div key={level} className="flex items-center gap-3 rounded border border-gold/15 bg-background/60 px-3 py-1.5 w-full">
                           <span className="text-[9px] font-black tracking-widest text-gold whitespace-nowrap min-w-[2.5rem]">Lvl {level}</span>
-                          <div className="h-px bg-gold/10 flex-1" />
+                          <div className="h-px bg-gold/15 flex-1" />
                           <span className="text-[11px] font-black text-ink">{String(value)}</span>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <p className="text-[10px] text-ink/30 italic">No saved matrix values yet.</p>
+                    <p className="text-[10px] text-ink/35 italic">No saved matrix values yet.</p>
                   )}
                 </div>
               </details>
@@ -255,7 +255,7 @@ export default function ScalingColumnsPanel({
                   variant="ghost"
                   size="sm"
                   onClick={() => setEditingColumnId(col.id)}
-                  className="w-full h-6 text-[9px] font-bold uppercase tracking-widest text-gold/60 hover:text-gold hover:bg-gold/5 border border-gold/10"
+                  className="w-full h-6 text-[9px] font-bold uppercase tracking-widest text-gold/65 hover:text-gold hover:bg-gold/5 border border-gold/15"
                 >
                   Open Full Matrix Editor
                 </Button>
@@ -264,7 +264,7 @@ export default function ScalingColumnsPanel({
           );
         })}
         {displayColumns.length === 0 && (
-          <p className="text-[10px] text-ink/30 text-center italic py-4">
+          <p className="text-[10px] text-ink/35 text-center italic py-4">
             No {noun}s defined.
           </p>
         )}

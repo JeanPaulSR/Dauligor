@@ -391,7 +391,7 @@ export default function TagsExplorer({ userProfile }: { userProfile: any }) {
   }, [displayedAllTags]);
 
   if (!canManageTags) {
-    return <div className="text-center py-20 font-serif text-2xl text-ink/40">Access Denied</div>;
+    return <div className="text-center py-20 font-serif text-2xl text-ink/45">Access Denied</div>;
   }
 
   // Proposal mode mounts a wrapper that already labels the page
@@ -457,7 +457,7 @@ export default function TagsExplorer({ userProfile }: { userProfile: any }) {
               <TagsIcon className="w-7 h-7 text-gold" />
               Tag Management
             </h1>
-            <p className="description-text mt-1 text-ink/60">Organize and curate the compendium taxonomy.</p>
+            <p className="description-text mt-1 text-ink/65">Organize and curate the compendium taxonomy.</p>
           </div>
         </div>
       )}
@@ -548,7 +548,7 @@ export default function TagsExplorer({ userProfile }: { userProfile: any }) {
             </Button>
             {selectedGroup && (
               <>
-                <span className="text-ink/30">/</span>
+                <span className="text-ink/35">/</span>
                 <span className="text-xs uppercase tracking-widest font-bold text-ink truncate">
                   {selectedGroup.name}
                 </span>
@@ -576,10 +576,10 @@ export default function TagsExplorer({ userProfile }: { userProfile: any }) {
             // full height (matches the surrounding rail / detail
             // cards). Without it the placeholder is "shorter than its
             // neighbours" when no group is selected.
-            <Card className="border-gold/10 bg-card/40 flex flex-col flex-1 items-center justify-center text-center p-10">
-              <TagsIcon className="w-10 h-10 text-gold/30 mb-3" />
-              <p className="description-text text-ink/60">Select a tag group from the rail</p>
-              <p className="text-[11px] text-ink/40 mt-1">or use <span className="text-gold/80">+ New Group</span> to create one.</p>
+            <Card className="border-gold/15 bg-card/40 flex flex-col flex-1 items-center justify-center text-center p-10">
+              <TagsIcon className="w-10 h-10 text-gold/35 mb-3" />
+              <p className="description-text text-ink/65">Select a tag group from the rail</p>
+              <p className="text-[11px] text-ink/45 mt-1">or use <span className="text-gold/85">+ New Group</span> to create one.</p>
             </Card>
           )}
         </div>
@@ -616,7 +616,7 @@ export default function TagsExplorer({ userProfile }: { userProfile: any }) {
             </Button>
             {selectedTagId && (
               <>
-                <span className="text-ink/30">/</span>
+                <span className="text-ink/35">/</span>
                 <span className="text-xs uppercase tracking-widest font-bold text-ink truncate">
                   {tagsInSelectedGroup.find((t) => t.id === selectedTagId)?.name ?? 'Tag'}
                 </span>
@@ -730,8 +730,8 @@ function GroupRail({
     // `flex-1` so the rail stretches to the grid row's full height —
     // matches the tree + detail columns and prevents the visual
     // "shorter than its neighbours" look when the group list is small.
-    <Card className="border-gold/20 bg-card/50 flex flex-col flex-1 min-h-0 overflow-hidden">
-      <div className="p-3 border-b border-gold/10 bg-gold/5 space-y-2">
+    <Card className="border-gold/25 bg-card/50 flex flex-col flex-1 min-h-0 overflow-hidden">
+      <div className="p-3 border-b border-gold/15 bg-gold/5 space-y-2">
         <div className="flex items-center justify-between">
           <h3 className="label-text text-gold">Groups</h3>
           <Button size="sm" onClick={onOpenCreateGroup} className="h-6 px-2 btn-gold-solid text-[10px] gap-1">
@@ -750,9 +750,9 @@ function GroupRail({
 
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         {loading ? (
-          <p className="text-[11px] italic text-ink/40 text-center py-6">Loading…</p>
+          <p className="text-[11px] italic text-ink/45 text-center py-6">Loading…</p>
         ) : filteredGroups.length === 0 ? (
-          <p className="text-[11px] italic text-ink/40 text-center py-6">No groups match.</p>
+          <p className="text-[11px] italic text-ink/45 text-center py-6">No groups match.</p>
         ) : (
           <ul className="divide-y divide-gold/5">
             {filteredGroups.map((group) => {
@@ -795,11 +795,11 @@ function GroupRail({
                         ? 'bg-gold/15 border-r-4 border-r-gold border-l-transparent text-gold font-bold'
                         : drafted
                           ? 'bg-archive-blue/5 border-l-archive-blue/60 text-archive-blue hover:bg-archive-blue/10'
-                          : 'border-l-transparent text-ink/70 hover:bg-gold/5',
+                          : 'border-l-transparent text-ink/75 hover:bg-gold/5',
                     )}
                   >
                     <span className="text-sm truncate">{group.name}</span>
-                    <span className="text-[10px] font-bold tabular-nums text-ink/50 flex items-center gap-1 shrink-0">
+                    <span className="text-[10px] font-bold tabular-nums text-ink/55 flex items-center gap-1 shrink-0">
                       {rootCount}
                       {subtagCount > 0 && (
                         <span className="inline-flex items-center text-amber-500/80">
@@ -1061,7 +1061,7 @@ function TagTreePane({
           'group grid items-center gap-2 p-1 cursor-pointer transition-colors border-l-4',
           'grid-cols-[minmax(0,1fr)_3.5rem] lg:grid-cols-[minmax(0,1fr)_3.5rem_2rem]',
           isSelected
-            ? 'bg-gold/10 border-gold'
+            ? 'bg-gold/15 border-gold'
             : drafted
               ? 'bg-archive-blue/5 border-archive-blue/60 hover:bg-archive-blue/10'
               : 'border-transparent hover:bg-gold/5 hover:border-gold',
@@ -1086,7 +1086,7 @@ function TagTreePane({
                   e.stopPropagation();
                   toggleRootCollapsed(tag.id);
                 }}
-                className="w-3.5 h-3.5 flex items-center justify-center text-ink/50 hover:text-gold shrink-0"
+                className="w-3.5 h-3.5 flex items-center justify-center text-ink/55 hover:text-gold shrink-0"
                 title={isCollapsed ? 'Expand subtags' : 'Collapse subtags'}
               >
                 {isCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
@@ -1095,7 +1095,7 @@ function TagTreePane({
               <span className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
             )
           ) : (
-            <CornerDownRight className="w-3.5 h-3.5 text-ink/30 shrink-0" />
+            <CornerDownRight className="w-3.5 h-3.5 text-ink/35 shrink-0" />
           )}
           <span className="truncate min-w-0">{tag.name}</span>
           {hasSubtags && (
@@ -1104,7 +1104,7 @@ function TagTreePane({
                 'text-[9px] font-bold uppercase tracking-widest px-1 py-0.5 border shrink-0',
                 isCollapsed
                   ? 'bg-amber-500/10 border-amber-500/30 text-amber-500'
-                  : 'bg-gold/10 border-gold/20 text-gold/80',
+                  : 'bg-gold/15 border-gold/25 text-gold/85',
               )}
               title={`${subtagCount} subtag${subtagCount === 1 ? '' : 's'}`}
             >
@@ -1121,8 +1121,8 @@ function TagTreePane({
             className={cn(
               'text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 border whitespace-nowrap text-center transition-colors',
               total > 0
-                ? 'bg-gold/10 border-gold/20 text-gold/80 group-hover:bg-gold/20 group-hover:text-gold'
-                : 'bg-background/30 border-ink/10 text-ink/30 italic',
+                ? 'bg-gold/15 border-gold/25 text-gold/85 group-hover:bg-gold/25 group-hover:text-gold'
+                : 'bg-background/30 border-ink/15 text-ink/35 italic',
             )}
             title={summarizeBreakdown(breakdown)}
           >
@@ -1146,7 +1146,7 @@ function TagTreePane({
                 setAddingSubtagOfId(tag.id);
                 setNewSubtagName('');
               }}
-              className="h-7 w-7 p-0 text-ink/40 hover:text-gold opacity-0 group-hover:opacity-100 transition-opacity"
+              className="h-7 w-7 p-0 text-ink/45 hover:text-gold opacity-0 group-hover:opacity-100 transition-opacity"
               title="Add a subtag"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -1161,20 +1161,20 @@ function TagTreePane({
     <form
       key={`add-subtag-${parentTagId}`}
       onSubmit={(e) => handleAddSubtag(e, parentTagId)}
-      className="flex items-center gap-2 p-1 bg-gold/5 border-l-4 border-gold/40"
+      className="flex items-center gap-2 p-1 bg-gold/5 border-l-4 border-gold/45"
       style={{ paddingLeft: '24px' }}
     >
-      <CornerDownRight className="w-3.5 h-3.5 text-gold/60 shrink-0" />
+      <CornerDownRight className="w-3.5 h-3.5 text-gold/65 shrink-0" />
       <Input
         value={newSubtagName}
         onChange={(e) => setNewSubtagName(e.target.value)}
         placeholder="New subtag name..."
         autoFocus
-        className="h-7 text-sm font-bold flex-1 bg-background border-gold/30"
+        className="h-7 text-sm font-bold flex-1 bg-background border-gold/35"
         onKeyDown={(e) => { if (e.key === 'Escape') { setAddingSubtagOfId(null); setNewSubtagName(''); } }}
       />
       <Button type="submit" size="sm" disabled={!newSubtagName.trim()} className="h-7 px-2 btn-gold-solid text-[10px] shrink-0">Add</Button>
-      <Button type="button" variant="ghost" size="sm" onClick={() => { setAddingSubtagOfId(null); setNewSubtagName(''); }} className="h-7 w-7 p-0 text-ink/40 shrink-0"><X className="w-4 h-4" /></Button>
+      <Button type="button" variant="ghost" size="sm" onClick={() => { setAddingSubtagOfId(null); setNewSubtagName(''); }} className="h-7 w-7 p-0 text-ink/45 shrink-0"><X className="w-4 h-4" /></Button>
     </form>
   );
 
@@ -1200,22 +1200,22 @@ function TagTreePane({
   const filterEmptyState = rows.length === 0 && isFiltering;
 
   return (
-    <Card className="border-gold/20 bg-card flex flex-col flex-1 min-h-0 overflow-hidden">
+    <Card className="border-gold/25 bg-card flex flex-col flex-1 min-h-0 overflow-hidden">
       {/* Toolbar — group header (top), then the New Tag form +
           filter on a second row. The previous bottom-of-pane Add
           form moved up here because the long scroll past the tree
           to reach it was the main "awkward" complaint in the
           redesign pass. */}
-      <div className="p-4 border-b border-gold/10 bg-gold/5 space-y-2">
+      <div className="p-4 border-b border-gold/15 bg-gold/5 space-y-2">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h2 className="h3-title text-gold truncate flex items-center gap-2">
               <TagsIcon className="w-5 h-5" />
               {group.name}
-              <span className="text-xs bg-gold/20 text-gold px-2 py-0.5 shrink-0">{tags.length}</span>
+              <span className="text-xs bg-gold/25 text-gold px-2 py-0.5 shrink-0">{tags.length}</span>
             </h2>
             {(group.description || (group.classifications?.length ?? 0) > 0) && (
-              <p className="text-[11px] text-ink/50 mt-0.5 truncate">
+              <p className="text-[11px] text-ink/55 mt-0.5 truncate">
                 {(group.classifications ?? (group.category ? [group.category] : [])).join(' · ')}
                 {group.description ? <> — {group.description}</> : null}
               </p>
@@ -1255,8 +1255,8 @@ function TagTreePane({
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-1">
-        <div className="grid grid-cols-[1fr_auto] gap-2 mb-2 p-2 border-b border-gold/20 pb-2 items-center">
-          <span className="label-text text-ink/40 pl-2">Name</span>
+        <div className="grid grid-cols-[1fr_auto] gap-2 mb-2 p-2 border-b border-gold/25 pb-2 items-center">
+          <span className="label-text text-ink/45 pl-2">Name</span>
           {rootsWithKids.length > 0 ? (
             (() => {
               const allCollapsed = rootsWithKids.every((r) => collapsedRoots.has(r.id));
@@ -1267,24 +1267,24 @@ function TagTreePane({
                     if (allCollapsed) setCollapsedRoots(new Set());
                     else setCollapsedRoots(new Set(rootsWithKids.map((r) => r.id)));
                   }}
-                  className="text-[10px] uppercase tracking-widest font-bold text-ink/40 hover:text-gold flex items-center gap-1 pr-2"
+                  className="text-[10px] uppercase tracking-widest font-bold text-ink/45 hover:text-gold flex items-center gap-1 pr-2"
                 >
                   {allCollapsed ? <><ChevronDown className="w-3 h-3" /> Expand all</> : <><ChevronRight className="w-3 h-3" /> Collapse all</>}
                 </button>
               );
             })()
           ) : (
-            <span className="label-text text-ink/40 text-right pr-2">Usage</span>
+            <span className="label-text text-ink/45 text-right pr-2">Usage</span>
           )}
         </div>
         {tags.length === 0 ? (
           <div className="empty-state">
-            <TagsIcon className="w-8 h-8 text-gold/20 mb-3" />
+            <TagsIcon className="w-8 h-8 text-gold/25 mb-3" />
             <p className="description-text">No tags in this group yet.</p>
-            <p className="label-text text-gold/40 mt-1">Use the form above to add the first one</p>
+            <p className="label-text text-gold/45 mt-1">Use the form above to add the first one</p>
           </div>
         ) : filterEmptyState ? (
-          <div className="text-center py-8 text-ink/40 italic text-sm">No tags match "{tagFilter}".</div>
+          <div className="text-center py-8 text-ink/45 italic text-sm">No tags match "{tagFilter}".</div>
         ) : (
           rows
         )}
@@ -1332,8 +1332,8 @@ function RightPane({
       // empty card stretch to the right pane's full height so the
       // explorer column doesn't look truncated when nothing is
       // selected — same fill behaviour as TagDetailPanel + GroupSettingsPanel.
-      <Card className="border-gold/10 bg-card/30 hidden lg:flex flex-1 items-center justify-center text-center p-6">
-        <p className="text-[11px] text-ink/30 italic">Select a group to see options.</p>
+      <Card className="border-gold/15 bg-card/30 hidden lg:flex flex-1 items-center justify-center text-center p-6">
+        <p className="text-[11px] text-ink/35 italic">Select a group to see options.</p>
       </Card>
     );
   }
@@ -1712,7 +1712,7 @@ function TagDetailPanel({
             ? 'border-blood/40 bg-card'
             : isTagDrafted
               ? 'border-archive-blue/40 bg-card'
-              : 'border-gold/20 bg-card',
+              : 'border-gold/25 bg-card',
         )}
       >
         {/* ── HEADER — always-editable name input ──────────────
@@ -1730,14 +1730,14 @@ function TagDetailPanel({
               ? 'border-blood/20 bg-blood/5'
               : isTagDrafted
                 ? 'border-archive-blue/20 bg-archive-blue/5'
-                : 'border-gold/10 bg-gold/5',
+                : 'border-gold/15 bg-gold/5',
           )}
         >
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1 space-y-1">
               <div className="flex items-center gap-2">
                 {isSubtag && (
-                  <CornerDownRight className="w-4 h-4 text-ink/40 shrink-0" />
+                  <CornerDownRight className="w-4 h-4 text-ink/45 shrink-0" />
                 )}
                 <Input
                   value={draftName}
@@ -1761,7 +1761,7 @@ function TagDetailPanel({
                       size="sm"
                       onClick={() => setDraftName(savedName)}
                       disabled={savingName}
-                      className="h-7 w-7 p-0 text-ink/40"
+                      className="h-7 w-7 p-0 text-ink/45"
                       title="Revert"
                     >
                       <X className="w-4 h-4" />
@@ -1778,9 +1778,9 @@ function TagDetailPanel({
                   </div>
                 )}
               </div>
-              <p className="text-[11px] text-ink/50 truncate">
+              <p className="text-[11px] text-ink/55 truncate">
                 {group.name}
-                {parentTag && <> <span className="text-ink/30">›</span> {parentTag.name}</>}
+                {parentTag && <> <span className="text-ink/35">›</span> {parentTag.name}</>}
               </p>
               {!isTagPendingDelete && isTagDrafted && (
                 <span className="inline-block px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest bg-archive-blue/15 text-archive-blue rounded">
@@ -1792,7 +1792,7 @@ function TagDetailPanel({
               variant="ghost"
               size="sm"
               onClick={onClose}
-              className="h-7 w-7 p-0 text-ink/40 hover:text-ink shrink-0"
+              className="h-7 w-7 p-0 text-ink/45 hover:text-ink shrink-0"
               title="Close detail"
             >
               <X className="w-4 h-4" />
@@ -1837,7 +1837,7 @@ function TagDetailPanel({
                     variant="ghost"
                     onClick={() => setDraftDescription(savedDescription)}
                     disabled={savingDescription}
-                    className="h-6 text-[10px] text-ink/40 hover:text-ink"
+                    className="h-6 text-[10px] text-ink/45 hover:text-ink"
                   >
                     Revert
                   </Button>
@@ -1875,11 +1875,11 @@ function TagDetailPanel({
               Optional. Common on doctrinal tags (branches of magic, schools, factions, etc.).
             </p>
             {linkedArticleId ? (
-              <div className="flex items-center justify-between gap-2 p-2 rounded border border-gold/20 bg-gold/5">
+              <div className="flex items-center justify-between gap-2 p-2 rounded border border-gold/25 bg-gold/5">
                 <div className="flex items-center gap-2 min-w-0">
                   <Link
                     to={`/wiki/article/${linkedArticleId}`}
-                    className="flex items-center gap-2 min-w-0 hover:text-gold text-ink/80"
+                    className="flex items-center gap-2 min-w-0 hover:text-gold text-ink/85"
                     title="Open the linked article"
                   >
                     <BookOpen className="w-3.5 h-3.5 text-gold shrink-0" />
@@ -1894,7 +1894,7 @@ function TagDetailPanel({
                     variant="ghost"
                     onClick={() => setLinkArticleOpen((p) => !p)}
                     disabled={savingLinkedArticle}
-                    className="h-6 text-[10px] text-gold/70 hover:text-gold"
+                    className="h-6 text-[10px] text-gold/75 hover:text-gold"
                   >
                     Change
                   </Button>
@@ -1903,7 +1903,7 @@ function TagDetailPanel({
                     variant="ghost"
                     onClick={() => handleSetLinkedArticle(null)}
                     disabled={savingLinkedArticle}
-                    className="h-6 text-[10px] text-ink/40 hover:text-blood gap-1"
+                    className="h-6 text-[10px] text-ink/45 hover:text-blood gap-1"
                     title="Clear linked article"
                   >
                     <X className="w-3 h-3" />
@@ -1915,17 +1915,17 @@ function TagDetailPanel({
                 type="button"
                 onClick={() => setLinkArticleOpen((p) => !p)}
                 disabled={savingLinkedArticle}
-                className="w-full text-left p-2 rounded border border-dashed border-gold/20 hover:border-gold/40 hover:bg-gold/5 transition-colors text-xs text-ink/50 italic flex items-center gap-2"
+                className="w-full text-left p-2 rounded border border-dashed border-gold/25 hover:border-gold/45 hover:bg-gold/5 transition-colors text-xs text-ink/55 italic flex items-center gap-2"
               >
-                <Plus className="w-3 h-3 text-gold/60" />
+                <Plus className="w-3 h-3 text-gold/65" />
                 Link a lore article…
               </button>
             )}
 
             {linkArticleOpen && (
               <div className="relative">
-                <div className="absolute z-10 left-0 right-0 bg-card border border-gold/30 rounded shadow-lg max-h-64 overflow-y-auto custom-scrollbar">
-                  <div className="p-2 border-b border-gold/10">
+                <div className="absolute z-10 left-0 right-0 bg-card border border-gold/35 rounded shadow-lg max-h-64 overflow-y-auto custom-scrollbar">
+                  <div className="p-2 border-b border-gold/15">
                     <SearchInput
                       autoFocus
                       value={linkArticleSearch}
@@ -1935,7 +1935,7 @@ function TagDetailPanel({
                     />
                   </div>
                   {linkArticleOptions === null ? (
-                    <p className="text-[11px] italic text-ink/40 text-center py-3">
+                    <p className="text-[11px] italic text-ink/45 text-center py-3">
                       Loading…
                     </p>
                   ) : (
@@ -1948,7 +1948,7 @@ function TagDetailPanel({
                         : linkArticleOptions;
                       if (visible.length === 0) {
                         return (
-                          <p className="text-[11px] italic text-ink/40 text-center py-3">
+                          <p className="text-[11px] italic text-ink/45 text-center py-3">
                             No match.
                           </p>
                         );
@@ -1965,7 +1965,7 @@ function TagDetailPanel({
                                   disabled={savingLinkedArticle}
                                   className={cn(
                                     'w-full flex items-center justify-between gap-2 px-3 py-1.5 hover:bg-gold/5 text-left',
-                                    isSelected && 'bg-gold/10',
+                                    isSelected && 'bg-gold/15',
                                   )}
                                 >
                                   <span className="text-xs text-ink truncate">
@@ -1981,7 +1981,7 @@ function TagDetailPanel({
                             );
                           })}
                           {visible.length > 50 && (
-                            <li className="px-3 py-1.5 text-[10px] text-ink/40 italic text-center">
+                            <li className="px-3 py-1.5 text-[10px] text-ink/45 italic text-center">
                               + {visible.length - 50} more — narrow your search
                             </li>
                           )}
@@ -1998,27 +1998,27 @@ function TagDetailPanel({
           <section className="space-y-1.5">
             <h4 className="label-text text-gold">Hierarchy</h4>
             <div className="grid grid-cols-2 gap-2">
-              <div className="p-2 rounded border border-gold/10">
-                <div className="text-[9px] uppercase tracking-widest text-ink/40 mb-0.5">
+              <div className="p-2 rounded border border-gold/15">
+                <div className="text-[9px] uppercase tracking-widest text-ink/45 mb-0.5">
                   Parent
                 </div>
-                <div className="text-sm text-ink/80">
+                <div className="text-sm text-ink/85">
                   {parentTag ? (
                     parentTag.name
                   ) : (
-                    <span className="italic text-ink/40">Root tag</span>
+                    <span className="italic text-ink/45">Root tag</span>
                   )}
                 </div>
               </div>
-              <div className="p-2 rounded border border-gold/10">
-                <div className="text-[9px] uppercase tracking-widest text-ink/40 mb-0.5">
+              <div className="p-2 rounded border border-gold/15">
+                <div className="text-[9px] uppercase tracking-widest text-ink/45 mb-0.5">
                   Subtags
                 </div>
-                <div className="text-sm text-ink/80">
+                <div className="text-sm text-ink/85">
                   {childCount > 0 ? (
                     `${childCount} subtag${childCount === 1 ? '' : 's'}`
                   ) : (
-                    <span className="italic text-ink/40">None</span>
+                    <span className="italic text-ink/45">None</span>
                   )}
                 </div>
               </div>
@@ -2119,15 +2119,15 @@ function TagDetailPanel({
             <h4 className="label-text text-gold">
               References
               {tagUsage && total > 0 && (
-                <span className="ml-2 text-ink/60 font-normal">
+                <span className="ml-2 text-ink/65 font-normal">
                   — {total} total
                 </span>
               )}
             </h4>
             {!tagUsage ? (
-              <p className="text-sm text-ink/40 italic">Counting…</p>
+              <p className="text-sm text-ink/45 italic">Counting…</p>
             ) : total === 0 ? (
-              <p className="text-sm text-ink/50 italic">
+              <p className="text-sm text-ink/55 italic">
                 Not used anywhere yet — safe to delete or repurpose.
               </p>
             ) : (
@@ -2135,7 +2135,7 @@ function TagDetailPanel({
                 {/* Proportional usage bar — same colour key as the
                     rows below. */}
                 <div
-                  className="flex w-full overflow-hidden rounded-full bg-ink/10"
+                  className="flex w-full overflow-hidden rounded-full bg-ink/15"
                   style={{ height: '8px' }}
                   title={summarizeBreakdown(breakdown)}
                 >
@@ -2151,7 +2151,7 @@ function TagDetailPanel({
                     );
                   })}
                 </div>
-                <ul className="border border-gold/10 rounded divide-y divide-gold/10">
+                <ul className="border border-gold/15 rounded divide-y divide-gold/15">
                   {REFERENCE_KINDS.filter(
                     (k) => ((breakdown?.[k.key] as number) ?? 0) > 0,
                   ).map((k) => (
@@ -2163,7 +2163,7 @@ function TagDetailPanel({
                         <span
                           className={`w-2 h-2 rounded-full ${k.color} shrink-0`}
                         />
-                        <span className="text-sm text-ink/80">{k.label}</span>
+                        <span className="text-sm text-ink/85">{k.label}</span>
                       </div>
                       <span className="text-sm font-mono tabular-nums text-gold">
                         {(breakdown?.[k.key] as number) ?? 0}
@@ -2271,13 +2271,13 @@ function SystemClassificationsField({
             .map((c) => (
               <span
                 key={c}
-                className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest bg-gold/15 text-gold border border-gold/30 rounded"
+                className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest bg-gold/15 text-gold border border-gold/35 rounded"
               >
                 {c}
                 <button
                   type="button"
                   onClick={() => onToggle(c)}
-                  className="p-0.5 hover:bg-gold/20 rounded"
+                  className="p-0.5 hover:bg-gold/25 rounded"
                   title={`Remove ${c}`}
                 >
                   <X className="w-2.5 h-2.5" />
@@ -2292,10 +2292,10 @@ function SystemClassificationsField({
         <button
           type="button"
           onClick={() => setOpen((p) => !p)}
-          className="w-full flex items-center justify-between gap-2 px-3 h-8 text-xs text-ink/60 border border-gold/20 rounded bg-background/40 hover:border-gold/40 transition-colors"
+          className="w-full flex items-center justify-between gap-2 px-3 h-8 text-xs text-ink/65 border border-gold/25 rounded bg-background/40 hover:border-gold/45 transition-colors"
         >
           <span className="flex items-center gap-2">
-            <Plus className="w-3 h-3 text-gold/60" />
+            <Plus className="w-3 h-3 text-gold/65" />
             Add classification…
           </span>
           <ChevronDown
@@ -2303,8 +2303,8 @@ function SystemClassificationsField({
           />
         </button>
         {open && (
-          <div className="absolute z-10 left-0 right-0 mt-1 bg-card border border-gold/30 rounded shadow-lg max-h-64 overflow-y-auto custom-scrollbar">
-            <div className="p-2 border-b border-gold/10">
+          <div className="absolute z-10 left-0 right-0 mt-1 bg-card border border-gold/35 rounded shadow-lg max-h-64 overflow-y-auto custom-scrollbar">
+            <div className="p-2 border-b border-gold/15">
               <SearchInput
                 autoFocus
                 value={search}
@@ -2314,7 +2314,7 @@ function SystemClassificationsField({
               />
             </div>
             {visible.length === 0 ? (
-              <p className="text-[11px] italic text-ink/40 text-center py-3">
+              <p className="text-[11px] italic text-ink/45 text-center py-3">
                 No match.
               </p>
             ) : (
@@ -2328,14 +2328,14 @@ function SystemClassificationsField({
                         onClick={() => onToggle(opt)}
                         className={cn(
                           'w-full flex items-start justify-between gap-2 px-3 py-1.5 hover:bg-gold/5 text-left',
-                          isSelected && 'bg-gold/10',
+                          isSelected && 'bg-gold/15',
                         )}
                       >
                         <div className="min-w-0">
                           <div className="text-xs font-bold text-ink uppercase tracking-widest">
                             {opt}
                           </div>
-                          <div className="text-[10px] text-ink/50 truncate normal-case">
+                          <div className="text-[10px] text-ink/55 truncate normal-case">
                             {HELP[opt] ?? 'Classification slot'}
                           </div>
                         </div>
@@ -2408,7 +2408,7 @@ function CustomClassificationsField({
           ))}
         </div>
       ) : (
-        <p className="text-[11px] text-ink/40 italic">
+        <p className="text-[11px] text-ink/45 italic">
           No custom slots on this group yet.
         </p>
       )}
@@ -2416,7 +2416,7 @@ function CustomClassificationsField({
       <div className="flex items-center justify-between gap-2 pt-1">
         <Link
           to="/compendium/tags/classifications"
-          className="inline-flex items-center gap-1.5 text-[11px] text-gold/70 hover:text-gold underline-offset-2 hover:underline"
+          className="inline-flex items-center gap-1.5 text-[11px] text-gold/75 hover:text-gold underline-offset-2 hover:underline"
         >
           <Settings2 className="w-3 h-3" />
           Manage classifications…
@@ -2424,7 +2424,7 @@ function CustomClassificationsField({
         <button
           type="button"
           onClick={() => setLegacyOpen((p) => !p)}
-          className="text-[10px] text-ink/40 hover:text-ink underline-offset-2 hover:underline"
+          className="text-[10px] text-ink/45 hover:text-ink underline-offset-2 hover:underline"
         >
           {legacyOpen ? 'Hide' : 'Show'} legacy add
         </button>
@@ -2588,7 +2588,7 @@ function GroupSettingsPanel({
           ? 'border-blood/40 bg-card'
           : isGroupDrafted
             ? 'border-archive-blue/40 bg-card'
-            : 'border-gold/20 bg-card',
+            : 'border-gold/25 bg-card',
       )}
     >
       {/* HEADER — always-editable Name input + breadcrumb. Mirrors
@@ -2606,7 +2606,7 @@ function GroupSettingsPanel({
             ? 'border-blood/20 bg-blood/5'
             : isGroupDrafted
               ? 'border-archive-blue/20 bg-archive-blue/5'
-              : 'border-gold/10 bg-gold/5',
+              : 'border-gold/15 bg-gold/5',
         )}
       >
         <div className="flex items-start justify-between gap-2">
@@ -2622,10 +2622,10 @@ function GroupSettingsPanel({
               )}
               title="Group name"
             />
-            <p className="text-[11px] text-ink/50 truncate">
+            <p className="text-[11px] text-ink/55 truncate">
               Tag group
               {classifications.length > 0 && (
-                <> <span className="text-ink/30">›</span> {classifications.join(' · ')}</>
+                <> <span className="text-ink/35">›</span> {classifications.join(' · ')}</>
               )}
             </p>
             {!isGroupPendingDelete && isGroupDrafted && (
@@ -2697,7 +2697,7 @@ function GroupSettingsPanel({
       </fieldset>
 
       {!isGroupPendingDelete && (
-        <div className="p-4 border-t border-gold/10 bg-background/50 flex items-center justify-between gap-2">
+        <div className="p-4 border-t border-gold/15 bg-background/50 flex items-center justify-between gap-2">
           <Button variant="ghost" size="sm" onClick={handleDelete} className="btn-danger gap-2 text-[11px]">
             <Trash2 className="w-3.5 h-3.5" /> Delete group
           </Button>
@@ -2803,8 +2803,8 @@ function CreateGroupDialog({
                   className={cn(
                     'px-2 py-1 text-[10px] font-bold uppercase tracking-widest transition-colors border',
                     classifications.includes(cls)
-                      ? 'bg-gold text-white border-gold'
-                      : 'bg-background/50 text-ink/60 border-gold/20 hover:border-gold/40',
+                      ? 'bg-gold text-[var(--primary-foreground)] border-gold'
+                      : 'bg-background/50 text-ink/65 border-gold/25 hover:border-gold/45',
                   )}
                 >
                   {cls}
@@ -2816,9 +2816,9 @@ function CreateGroupDialog({
             <label className="field-label">Custom Classifications</label>
             <div className="flex flex-wrap gap-1">
               {classifications.filter((c) => !SYSTEM_CLASSIFICATIONS.includes(c)).map((cls) => (
-                <span key={cls} className="pl-2 pr-1 py-0.5 bg-gold/10 text-gold text-[10px] font-bold uppercase tracking-widest flex items-center gap-1 border border-gold/20">
+                <span key={cls} className="pl-2 pr-1 py-0.5 bg-gold/15 text-gold text-[10px] font-bold uppercase tracking-widest flex items-center gap-1 border border-gold/25">
                   {cls}
-                  <button type="button" onClick={() => setClassifications((prev) => prev.filter((c) => c !== cls))} className="p-0.5 hover:bg-gold/20">
+                  <button type="button" onClick={() => setClassifications((prev) => prev.filter((c) => c !== cls))} className="p-0.5 hover:bg-gold/25">
                     <X className="w-3 h-3" />
                   </button>
                 </span>
@@ -2831,7 +2831,7 @@ function CreateGroupDialog({
           </div>
           <div className="space-y-1.5">
             <label className="field-label">Description</label>
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="w-full text-sm p-2 border border-gold/20 bg-background/50 outline-none min-h-[60px]" placeholder="Optional…" />
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="w-full text-sm p-2 border border-gold/25 bg-background/50 outline-none min-h-[60px]" placeholder="Optional…" />
           </div>
         </div>
         <DialogFooter className="dialog-footer">
@@ -2892,7 +2892,7 @@ function MergeDialog({
           <div className="data-table">
             <div className="data-table-body max-h-72">
               {candidates.length === 0 ? (
-                <p className="text-sm text-ink/40 italic px-3 py-4">No other tags in this group match.</p>
+                <p className="text-sm text-ink/45 italic px-3 py-4">No other tags in this group match.</p>
               ) : candidates.map((candidate) => {
                 const b = tagUsage?.get(candidate.id);
                 const t = b?.total ?? 0;
@@ -2906,10 +2906,10 @@ function MergeDialog({
                     className="data-table-row grid grid-cols-[1fr_auto] gap-2 px-3 py-2 text-left disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <span className="text-sm text-ink truncate flex items-center gap-1.5">
-                      {isSubtag && <CornerDownRight className="w-3 h-3 text-ink/30 shrink-0" />}
+                      {isSubtag && <CornerDownRight className="w-3 h-3 text-ink/35 shrink-0" />}
                       {candidate.name}
                     </span>
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-ink/50">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-ink/55">
                       {t > 0 ? `${t} use${t === 1 ? '' : 's'}` : 'unused'}
                     </span>
                   </button>
@@ -2968,7 +2968,7 @@ function MoveDialog({
           <div className="data-table">
             <div className="data-table-body max-h-72">
               {candidates.length === 0 ? (
-                <p className="text-sm text-ink/40 italic px-3 py-4">No other root tags in this group.</p>
+                <p className="text-sm text-ink/45 italic px-3 py-4">No other root tags in this group.</p>
               ) : candidates.map((candidate) => (
                 <button
                   key={candidate.id}

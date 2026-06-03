@@ -83,7 +83,7 @@ export default function SourceDetail({ userProfile }: { userProfile: any }) {
     return (
       <div className="max-w-4xl mx-auto text-center py-20">
         <h2 className="text-3xl font-serif text-ink mb-4">Source Not Found</h2>
-        <p className="text-ink/60 mb-8 italic">This document appears to have been lost to time or never existed.</p>
+        <p className="text-ink/65 mb-8 italic">This document appears to have been lost to time or never existed.</p>
         <Link to="/sources">
           <Button variant="outline" className="border-gold text-gold">
             Return to Sources
@@ -101,7 +101,7 @@ export default function SourceDetail({ userProfile }: { userProfile: any }) {
             variant="ghost"
             size="sm"
             onClick={() => navigate('/sources')}
-            className="text-ink/60 hover:text-gold gap-2"
+            className="text-ink/65 hover:text-gold gap-2"
           >
             <ChevronLeft className="w-4 h-4" /> Back to Sources
           </Button>
@@ -114,13 +114,13 @@ export default function SourceDetail({ userProfile }: { userProfile: any }) {
                 size="sm"
                 disabled={exporting}
                 onClick={handleExport}
-                className="border-gold/20 text-gold hover:bg-gold/10 gap-2"
+                className="border-gold/25 text-gold hover:bg-gold/15 gap-2"
               >
                 <Download className="w-4 h-4" /> {exporting ? 'Exporting...' : 'Export for Foundry'}
               </Button>
 
               <Link to={`/sources/edit/${source.id}`}>
-                <Button variant="outline" size="sm" className="border-gold/20 text-gold hover:bg-gold/5 gap-2">
+                <Button variant="outline" size="sm" className="border-gold/25 text-gold hover:bg-gold/5 gap-2">
                   <Edit className="w-4 h-4" /> Edit Source
                 </Button>
               </Link>
@@ -135,7 +135,7 @@ export default function SourceDetail({ userProfile }: { userProfile: any }) {
           <motion.div 
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="aspect-[3/4] rounded-xl overflow-hidden shadow-2xl border border-gold/20 bg-card"
+            className="aspect-[3/4] rounded-xl overflow-hidden shadow-2xl border border-gold/25 bg-card"
           >
             {source.imageUrl ? (
               <img 
@@ -145,19 +145,19 @@ export default function SourceDetail({ userProfile }: { userProfile: any }) {
                 referrerPolicy="no-referrer"
               />
             ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center text-gold/20 p-8 text-center">
+              <div className="w-full h-full flex flex-col items-center justify-center text-gold/25 p-8 text-center">
                 <Book className="w-16 h-16 mb-4" />
                 <span className="font-serif italic text-sm">No cover image available</span>
               </div>
             )}
           </motion.div>
 
-          <div className="space-y-6 bg-card/40 p-6 rounded-xl border border-gold/10 backdrop-blur-sm">
+          <div className="space-y-6 bg-card/40 p-6 rounded-xl border border-gold/15 backdrop-blur-sm">
             <div className="space-y-1">
-              <h4 className="label-text text-gold/60">Content Tags</h4>
+              <h4 className="label-text text-gold/65">Content Tags</h4>
               <div className="flex flex-wrap gap-2 pt-1">
                 {source.tags?.length > 0 ? source.tags.map((tag: string) => (
-                  <Badge key={tag} variant="outline" className="bg-gold/5 border-gold/20 text-gold label-text">
+                  <Badge key={tag} variant="outline" className="bg-gold/5 border-gold/25 text-gold label-text">
                     {tag}
                   </Badge>
                 )) : (
@@ -167,7 +167,7 @@ export default function SourceDetail({ userProfile }: { userProfile: any }) {
             </div>
 
             {(source.external_url || source.url) && (
-              <div className="pt-4 border-t border-gold/10">
+              <div className="pt-4 border-t border-gold/15">
                 <a 
                   href={source.external_url || source.url} 
                   target="_blank" 
@@ -181,13 +181,13 @@ export default function SourceDetail({ userProfile }: { userProfile: any }) {
               </div>
             )}
 
-            <div className="pt-4 border-t border-gold/10 space-y-3">
-              <div className="flex items-center gap-2 text-xs text-ink/60">
-                <Calendar className="w-3.5 h-3.5 text-gold/60" />
+            <div className="pt-4 border-t border-gold/15 space-y-3">
+              <div className="flex items-center gap-2 text-xs text-ink/65">
+                <Calendar className="w-3.5 h-3.5 text-gold/65" />
                 <span>Added: {new Date(source.createdAt).toLocaleDateString()}</span>
               </div>
-              <div className="flex items-center gap-2 text-xs text-ink/60">
-                <Clock className="w-3.5 h-3.5 text-gold/60" />
+              <div className="flex items-center gap-2 text-xs text-ink/65">
+                <Clock className="w-3.5 h-3.5 text-gold/65" />
                 <span>Updated: {new Date(source.updatedAt).toLocaleDateString()}</span>
               </div>
             </div>
@@ -209,7 +209,7 @@ export default function SourceDetail({ userProfile }: { userProfile: any }) {
           </motion.div>
 
           {/* Linked Content */}
-          <div className="pt-12 border-t border-gold/10">
+          <div className="pt-12 border-t border-gold/15">
             <h3 className="h3-title mb-6 flex items-center gap-2">
               <Tag className="w-5 h-5 text-gold" /> Linked Content
             </h3>
@@ -217,7 +217,7 @@ export default function SourceDetail({ userProfile }: { userProfile: any }) {
             <div className="space-y-8">
               {/* Classes Section */}
               <div className="space-y-4">
-                <h4 className="label-text text-gold/60 flex items-center gap-2">
+                <h4 className="label-text text-gold/65 flex items-center gap-2">
                   <Sword className="w-3 h-3" /> Classes ({linkedClasses.length})
                 </h4>
                 {linkedClasses.length > 0 ? (
@@ -229,9 +229,9 @@ export default function SourceDetail({ userProfile }: { userProfile: any }) {
                       );
                       return (
                       <Link key={cls.id} to={`/compendium/classes/view/${slug ?? cls.id}`}>
-                        <div className="p-3 rounded-lg bg-card/30 border border-gold/10 hover:border-gold/30 hover:bg-gold/5 transition-all flex items-center justify-between group">
+                        <div className="p-3 rounded-lg bg-card/30 border border-gold/15 hover:border-gold/35 hover:bg-gold/5 transition-all flex items-center justify-between group">
                           <span className="h3-title text-lg group-hover:text-gold transition-colors">{cls.name}</span>
-                          <Badge variant="outline" className="label-text h-4 px-1.5 border-gold/10">View</Badge>
+                          <Badge variant="outline" className="label-text h-4 px-1.5 border-gold/15">View</Badge>
                         </div>
                       </Link>
                       );
@@ -245,8 +245,8 @@ export default function SourceDetail({ userProfile }: { userProfile: any }) {
               {/* Other Placeholders */}
               <div className="grid grid-cols-2 gap-4">
                 {['Spells', 'Items', 'Bestiary'].map(type => (
-                  <div key={type} className="p-4 rounded-lg bg-card/20 border border-dashed border-gold/10 flex items-center justify-between group cursor-not-allowed opacity-50">
-                    <span className="font-serif italic text-ink/60">{type}</span>
+                  <div key={type} className="p-4 rounded-lg bg-card/20 border border-dashed border-gold/15 flex items-center justify-between group cursor-not-allowed opacity-50">
+                    <span className="font-serif italic text-ink/65">{type}</span>
                     <Badge variant="outline" className="text-[8px] uppercase tracking-tighter">Coming Soon</Badge>
                   </div>
                 ))}

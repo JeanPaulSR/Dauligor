@@ -519,7 +519,7 @@ export function ClassList({
         <div className="space-y-2">
           <div className="flex items-center gap-3">
              {selectionMode && onCancelSelection ? (
-               <Button variant="ghost" size="sm" onClick={onCancelSelection} className="text-ink/60 hover:text-ink -ml-2 mb-2 p-0 h-auto gap-1 text-[10px] uppercase font-bold tracking-widest">
+               <Button variant="ghost" size="sm" onClick={onCancelSelection} className="text-ink/65 hover:text-ink -ml-2 mb-2 p-0 h-auto gap-1 text-[10px] uppercase font-bold tracking-widest">
                  <ChevronLeft className="w-3 h-3" /> Back
                </Button>
              ) : (
@@ -539,7 +539,7 @@ export function ClassList({
         <div className="flex items-center gap-3">
           {isAdmin && (
             <Link to="/compendium/tags">
-              <Button variant="outline" size="sm" className="border-gold/20 text-gold gap-2 hover:bg-gold/10">
+              <Button variant="outline" size="sm" className="border-gold/25 text-gold gap-2 hover:bg-gold/15">
                 <Settings2 className="w-4 h-4" /> Manage Tags
               </Button>
             </Link>
@@ -558,7 +558,7 @@ export function ClassList({
                 size="sm"
                 onClick={handleImportClick}
                 disabled={isImporting}
-                className="border-gold/20 text-gold gap-2 hover:bg-gold/10"
+                className="border-gold/25 text-gold gap-2 hover:bg-gold/15"
               >
                 <Upload className="w-4 h-4" /> Import Class
               </Button>
@@ -566,7 +566,7 @@ export function ClassList({
           )}
           {canManage && (
             <Link to={newClassHref}>
-              <Button className="btn-gold-solid gap-2 shadow-lg shadow-gold/20">
+              <Button className="btn-gold-solid gap-2 shadow-lg shadow-gold/25">
                 <Plus className="w-4 h-4" /> New Class
               </Button>
             </Link>
@@ -615,13 +615,13 @@ export function ClassList({
       />
 
       <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-        <DialogContent className="bg-card border-gold/30">
+        <DialogContent className="bg-card border-gold/35">
           <DialogHeader>
             <DialogTitle className="font-serif text-2xl text-blood flex items-center gap-2">
               <AlertTriangle className="w-6 h-6" />
               Confirm Deletion
             </DialogTitle>
-            <DialogDescription className="text-ink/60">
+            <DialogDescription className="text-ink/65">
               Are you sure you want to delete the class <span className="font-bold text-ink">"{classToDelete?.name}"</span>? 
               This action is permanent and will remove all associated data from the archive.
             </DialogDescription>
@@ -631,7 +631,7 @@ export function ClassList({
               variant="ghost" 
               onClick={() => setDeleteConfirmOpen(false)}
               disabled={isDeleting}
-              className="text-ink/40 hover:text-ink"
+              className="text-ink/45 hover:text-ink"
             >
               Cancel
             </Button>
@@ -649,34 +649,34 @@ export function ClassList({
       {isLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
           {[1, 2, 3, 4, 5, 6].map(i => (
-            <div key={i} className="aspect-[4/3] bg-gold/5 animate-pulse rounded-lg border border-gold/10" />
+            <div key={i} className="aspect-[4/3] bg-gold/5 animate-pulse rounded-lg border border-gold/15" />
           ))}
         </div>
       ) : filteredClasses.length > 0 ? (
         <div className="space-y-16">
           {filteredClasses.filter(c => !c.category || c.category === 'core').length > 0 && (
             <div className="space-y-6">
-              <h2 className="h2-title text-gold border-b border-gold/20 pb-2">Core Classes</h2>
+              <h2 className="h2-title text-gold border-b border-gold/25 pb-2">Core Classes</h2>
               {renderClassGrid(filteredClasses.filter(c => !c.category || c.category === 'core'))}
             </div>
           )}
           {filteredClasses.filter(c => c.category === 'alternate').length > 0 && (
             <div className="space-y-6">
-              <h2 className="h2-title text-gold border-b border-gold/20 pb-2">Alternate Classes</h2>
+              <h2 className="h2-title text-gold border-b border-gold/25 pb-2">Alternate Classes</h2>
               {renderClassGrid(filteredClasses.filter(c => c.category === 'alternate'))}
             </div>
           )}
           {filteredClasses.filter(c => c.category === 'new').length > 0 && (
             <div className="space-y-6">
-              <h2 className="h2-title text-gold border-b border-gold/20 pb-2">New Classes</h2>
+              <h2 className="h2-title text-gold border-b border-gold/25 pb-2">New Classes</h2>
               {renderClassGrid(filteredClasses.filter(c => c.category === 'new'))}
             </div>
           )}
         </div>
       ) : (
-        <div className="text-center py-20 bg-card rounded-3xl border border-dashed border-gold/20">
-          <BookOpen className="w-12 h-12 text-gold/20 mx-auto mb-4" />
-          <h3 className="font-serif text-xl text-ink/60 italic">No classes found matching your search.</h3>
+        <div className="text-center py-20 bg-card rounded-3xl border border-dashed border-gold/25">
+          <BookOpen className="w-12 h-12 text-gold/25 mx-auto mb-4" />
+          <h3 className="font-serif text-xl text-ink/65 italic">No classes found matching your search.</h3>
           <Button 
             variant="link" 
             onClick={() => {

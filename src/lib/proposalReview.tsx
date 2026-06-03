@@ -166,12 +166,12 @@ export function ReviewFieldHighlight({
 }) {
   const changed = useFieldChanged(columnKey);
   const wrapperClass = changed
-    ? `relative pl-3 border-l-2 border-gold/60 bg-gold/5 rounded-r-md py-2 pr-2 ${className ?? ''}`
+    ? `relative pl-3 border-l-2 border-gold/65 bg-gold/5 rounded-r-md py-2 pr-2 ${className ?? ''}`
     : (className ?? undefined);
   return (
     <div className={wrapperClass} data-review-changed={changed || undefined}>
       {changed && (
-        <span className="inline-block mb-1 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest bg-gold/20 text-gold rounded">
+        <span className="inline-block mb-1 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest bg-gold/25 text-gold rounded">
           Changed
         </span>
       )}

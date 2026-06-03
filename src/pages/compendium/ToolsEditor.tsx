@@ -83,12 +83,12 @@ export default function ToolsEditor({
       renderExtraBadges={({ entry }) => (
         <>
           {entry.tool_type && (
-            <span className="text-[10px] px-2 py-0.5 bg-ink/10 text-ink/70 rounded-full font-bold uppercase tracking-tighter">
+            <span className="text-[10px] px-2 py-0.5 bg-ink/15 text-ink/75 rounded-full font-bold uppercase tracking-tighter">
               {entry.tool_type}
             </span>
           )}
           {entry.rarity && entry.rarity !== 'none' && (
-            <span className="text-[10px] px-2 py-0.5 bg-gold/10 text-gold rounded-full font-bold">
+            <span className="text-[10px] px-2 py-0.5 bg-gold/15 text-gold rounded-full font-bold">
               {entry.rarity}
             </span>
           )}

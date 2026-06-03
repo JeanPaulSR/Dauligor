@@ -6,6 +6,7 @@
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { onAuthChange, getSessionToken, type Identity } from './lib/auth';
+import { resolveThemeVars, THEME_VAR_NAMES, type ActiveTheme } from './lib/theme';
 import { WikiPreviewContext, type WikiPreviewCampaign } from './lib/wikiPreviewContext';
 import { fetchDocument, upsertDocument, fetchCollection, checkFoundationUpdate, clearCache } from './lib/d1';
 import { setCurrentUserRole } from './lib/currentUser';
@@ -29,6 +30,7 @@ import StatusesEditor from './pages/admin/StatusesEditor';
 import ImageManager from './pages/admin/ImageManager';
 import ImageViewer from './pages/admin/ImageViewer';
 import Settings from './pages/core/Settings';
+import AppearanceLab from './pages/core/AppearanceLab'; // TEMP: Phase-2 preview harness
 import Profile from './pages/core/Profile';
 import Construction from './pages/core/Construction';
 import Sources from './pages/sources/Sources';
@@ -91,7 +93,7 @@ function RouteAwareFooter() {
   const p = location.pathname;
   if (p.startsWith('/system/') || p.startsWith('/compendium/system-pages')) return null;
   return (
-    <footer className="bg-card border-t border-gold/10 text-ink py-8 mt-auto">
+    <footer className="bg-card border-t border-gold/15 text-ink py-8 mt-auto">
       <div className="container mx-auto px-4 text-center opacity-70">
         <p className="font-serif italic">"This site contains material used under the Open Game License (OGL). All original content is the property of its respective creators. Access to this website is restricted to registered players for use within private tabletop roleplaying sessions."</p>
         <p className="text-xs mt-2">© 2026 Dauligor: Compendium and Lore Manager</p>
@@ -120,22 +122,41 @@ export default function App() {
     setCurrentUserRole(effectiveProfile?.role ?? null);
   }, [effectiveProfile?.role]);
 
+  // A custom theme (if the user has one active) is `{ base_preset, tokens }`,
+  // attached by /api/me. The key drives the effect so it re-runs when the
+  // theme's contents change, not just its identity.
+  const activeTheme = (effectiveProfile?.active_theme ?? null) as ActiveTheme | null;
+  const activeThemeKey = activeTheme
+    ? `${activeTheme.base_preset}:${JSON.stringify(activeTheme.tokens ?? {})}`
+    : '';
+
   useEffect(() => {
-    const theme = effectiveProfile?.theme || 'parchment';
-    document.documentElement.classList.remove('light', 'dark', 'parchment');
-    document.documentElement.classList.add(theme);
-    
-    if (effectiveProfile?.accent_color) {
-      document.documentElement.style.setProperty('--gold', effectiveProfile.accent_color);
-      document.documentElement.style.setProperty('--primary', effectiveProfile.accent_color);
-      document.documentElement.style.setProperty('--ring', effectiveProfile.accent_color);
+    const root = document.documentElement;
+    const baseClass = activeTheme?.base_preset || effectiveProfile?.theme || 'parchment';
+    root.classList.remove('light', 'dark', 'parchment');
+    root.classList.add(baseClass);
+
+    // Clear any previously-injected custom-theme vars first, so switching
+    // themes — or reverting to a built-in preset — never leaves stale overrides.
+    THEME_VAR_NAMES.forEach((v) => root.style.removeProperty(v));
+
+    if (activeTheme) {
+      // Full custom theme: inject the resolved token set over the preset class.
+      const vars = resolveThemeVars(activeTheme);
+      for (const [k, val] of Object.entries(vars)) root.style.setProperty(k, val);
+    } else if (effectiveProfile?.accent_color) {
+      // Legacy accent-only personalisation (users without a custom theme).
+      root.style.setProperty('--gold', effectiveProfile.accent_color);
+      root.style.setProperty('--primary', effectiveProfile.accent_color);
+      root.style.setProperty('--ring', effectiveProfile.accent_color);
     } else {
-      const defaultColor = theme === 'parchment' ? '#c5a059' : '#3b82f6';
-      document.documentElement.style.setProperty('--gold', defaultColor);
-      document.documentElement.style.setProperty('--primary', defaultColor);
-      document.documentElement.style.setProperty('--ring', defaultColor);
+      const defaultColor = baseClass === 'parchment' ? '#c5a059' : '#3b82f6';
+      root.style.setProperty('--gold', defaultColor);
+      root.style.setProperty('--primary', defaultColor);
+      root.style.setProperty('--ring', defaultColor);
     }
-  }, [effectiveProfile?.theme, effectiveProfile?.accent_color]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveProfile?.theme, effectiveProfile?.accent_color, activeThemeKey]);
 
   // Global Foundation Sync Polling
   const [lastFoundationTimestamp, setLastFoundationTimestamp] = useState<string | null>(null);
@@ -461,6 +482,7 @@ export default function App() {
                       can sit alongside. */}
                   <Route path="/dev/bbcode" element={<AdminOnly userProfile={effectiveProfile}><BBCodeTester userProfile={effectiveProfile} /></AdminOnly>} />
                   <Route path="/settings" element={<Settings user={user} userProfile={effectiveProfile} />} />
+                  <Route path="/appearance-lab" element={<AppearanceLab />} /> {/* TEMP: Phase-2 preview harness */}
                   <Route path="/profile/:username" element={<Profile viewerProfile={effectiveProfile} />} />
                   <Route path="/construction" element={<Construction />} />
                   <Route path="/characters" element={<CharacterList userProfile={effectiveProfile} />} />

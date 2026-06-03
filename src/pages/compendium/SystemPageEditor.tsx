@@ -212,12 +212,12 @@ export default function SystemPageEditor({ userProfile }: { userProfile?: any })
   }, [handleSave, saving]);
 
   if (loading) {
-    return <div className="max-w-6xl mx-auto px-4 py-10 text-ink/40 italic">Loading…</div>;
+    return <div className="max-w-6xl mx-auto px-4 py-10 text-ink/45 italic">Loading…</div>;
   }
   if (missing) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-10 text-center">
-        <h1 className="h2-title text-ink/60">System page not found</h1>
+        <h1 className="h2-title text-ink/65">System page not found</h1>
         <Button variant="ghost" className="text-gold mt-4" onClick={() => navigate('/compendium/system-pages')}>
           Back to list
         </Button>
@@ -236,20 +236,20 @@ export default function SystemPageEditor({ userProfile }: { userProfile?: any })
           variant="ghost"
           size="sm"
           onClick={() => navigate('/compendium/system-pages')}
-          className="text-ink/60 hover:text-ink gap-1 -ml-2"
+          className="text-ink/65 hover:text-ink gap-1 -ml-2"
         >
           <ChevronLeft className="w-4 h-4" /> System Pages
         </Button>
         <div className="flex-1 min-w-0 text-center">
-          <span className="font-serif text-gold/80 truncate text-lg">
+          <span className="font-serif text-gold/85 truncate text-lg">
             {name || (isNew ? 'New System Page' : 'Untitled')}
           </span>
-          {isNew ? <span className="ml-2 text-[10px] uppercase tracking-widest text-gold/60">draft</span> : null}
+          {isNew ? <span className="ml-2 text-[10px] uppercase tracking-widest text-gold/65">draft</span> : null}
         </div>
         <Button
           onClick={handleSave}
           disabled={saving}
-          className="btn-gold-solid gap-2 shadow-lg shadow-gold/20"
+          className="btn-gold-solid gap-2 shadow-lg shadow-gold/25"
           title="Save (Ctrl/⌘ S)"
         >
           <Save className="w-4 h-4" /> {saving ? 'Saving…' : 'Save'}
@@ -266,8 +266,8 @@ export default function SystemPageEditor({ userProfile }: { userProfile?: any })
             className={cn(
               'browser-row flex items-center gap-2',
               selected === 'page'
-                ? 'bg-gold/20 border-r-4 border-r-gold text-gold font-bold'
-                : 'text-ink/70',
+                ? 'bg-gold/25 border-r-4 border-r-gold text-gold font-bold'
+                : 'text-ink/75',
             )}
           >
             <Layers className="w-3.5 h-3.5 shrink-0" />
@@ -275,14 +275,14 @@ export default function SystemPageEditor({ userProfile }: { userProfile?: any })
           </button>
 
           <div className="px-3 pt-4 pb-1 flex items-center justify-between">
-            <p className="label-text text-gold/60">
+            <p className="label-text text-gold/65">
               Entries {entries.length > 0 ? `· ${entries.length}` : ''}
             </p>
           </div>
 
           <div className="flex-grow overflow-y-auto">
             {entries.length === 0 ? (
-              <p className="px-3 py-3 text-xs text-ink/40 italic">No entries yet.</p>
+              <p className="px-3 py-3 text-xs text-ink/45 italic">No entries yet.</p>
             ) : (
               entries.map((entry, index) => {
                 const isSelected = selected === entry.id;
@@ -291,7 +291,7 @@ export default function SystemPageEditor({ userProfile }: { userProfile?: any })
                     key={entry.id}
                     className={cn(
                       'group flex items-stretch border-b border-gold/5 transition-colors',
-                      isSelected ? 'bg-gold/20 border-r-4 border-r-gold' : 'hover:bg-gold/5',
+                      isSelected ? 'bg-gold/25 border-r-4 border-r-gold' : 'hover:bg-gold/5',
                     )}
                   >
                     <button
@@ -302,14 +302,14 @@ export default function SystemPageEditor({ userProfile }: { userProfile?: any })
                         isSelected ? 'text-gold font-bold' : 'text-ink/75',
                       )}
                     >
-                      {entry.name || <span className="italic text-ink/40">untitled</span>}
+                      {entry.name || <span className="italic text-ink/45">untitled</span>}
                     </button>
                     <div className="flex items-center gap-0.5 px-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); moveEntry(index, -1); }}
                         disabled={index === 0}
-                        className="text-ink/40 hover:text-gold disabled:opacity-20 p-1"
+                        className="text-ink/45 hover:text-gold disabled:opacity-20 p-1"
                         title="Move up"
                       >
                         <ArrowUp className="w-3 h-3" />
@@ -318,7 +318,7 @@ export default function SystemPageEditor({ userProfile }: { userProfile?: any })
                         type="button"
                         onClick={(e) => { e.stopPropagation(); moveEntry(index, 1); }}
                         disabled={index === entries.length - 1}
-                        className="text-ink/40 hover:text-gold disabled:opacity-20 p-1"
+                        className="text-ink/45 hover:text-gold disabled:opacity-20 p-1"
                         title="Move down"
                       >
                         <ArrowDown className="w-3 h-3" />
@@ -326,7 +326,7 @@ export default function SystemPageEditor({ userProfile }: { userProfile?: any })
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); removeEntry(entry); }}
-                        className="text-ink/40 hover:text-blood p-1"
+                        className="text-ink/45 hover:text-blood p-1"
                         title="Remove"
                       >
                         <Trash2 className="w-3 h-3" />
@@ -338,7 +338,7 @@ export default function SystemPageEditor({ userProfile }: { userProfile?: any })
             )}
           </div>
 
-          <div className="border-t border-gold/10 p-2">
+          <div className="border-t border-gold/15 p-2">
             <Button size="sm" onClick={addEntry} className="w-full btn-gold gap-2 h-8">
               <Plus className="w-3.5 h-3.5" /> Add Entry
             </Button>
@@ -373,7 +373,7 @@ export default function SystemPageEditor({ userProfile }: { userProfile?: any })
               onRemove={() => removeEntry(selectedEntry)}
             />
           ) : (
-            <p className="text-ink/40 italic">Select an entry from the left to edit it, or add a new one.</p>
+            <p className="text-ink/45 italic">Select an entry from the left to edit it, or add a new one.</p>
           )}
         </div>
       </div>
@@ -401,7 +401,7 @@ function PageMetaForm({
   return (
     <div className="max-w-3xl space-y-6">
       <header>
-        <p className="label-text text-gold/70">Page Details</p>
+        <p className="label-text text-gold/75">Page Details</p>
         <h2 className="h2-title mt-1">{isNew ? 'New System Page' : 'Page'}</h2>
       </header>
 
@@ -426,7 +426,7 @@ function PageMetaForm({
             className="field-input font-mono"
           />
           <p className="field-hint">
-            URL slug + the <code className="text-gold/80">&amp;</code> reference kind:{' '}
+            URL slug + the <code className="text-gold/85">&amp;</code> reference kind:{' '}
             <code>&amp;{effectiveIdentifier || 'kind'}[entry]</code> &rarr; <code>/system/{effectiveIdentifier || 'kind'}</code>
           </p>
         </div>
@@ -469,14 +469,14 @@ function EntryForm({ entry, index, total, onPatch, onMove, onRemove }: EntryForm
     <div className="max-w-3xl space-y-6">
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="label-text text-gold/70">Entry {index + 1} of {total}</p>
+          <p className="label-text text-gold/75">Entry {index + 1} of {total}</p>
           <h2 className="h2-title mt-1 truncate">{entry.name || 'Untitled'}</h2>
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <Button variant="ghost" size="sm" onClick={() => onMove(-1)} disabled={index === 0} className="h-7 w-7 p-0 text-ink/50 hover:text-gold disabled:opacity-30" title="Move up">
+          <Button variant="ghost" size="sm" onClick={() => onMove(-1)} disabled={index === 0} className="h-7 w-7 p-0 text-ink/55 hover:text-gold disabled:opacity-30" title="Move up">
             <ArrowUp className="w-3.5 h-3.5" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => onMove(1)} disabled={index === total - 1} className="h-7 w-7 p-0 text-ink/50 hover:text-gold disabled:opacity-30" title="Move down">
+          <Button variant="ghost" size="sm" onClick={() => onMove(1)} disabled={index === total - 1} className="h-7 w-7 p-0 text-ink/55 hover:text-gold disabled:opacity-30" title="Move down">
             <ArrowDown className="w-3.5 h-3.5" />
           </Button>
           <Button variant="ghost" size="sm" onClick={onRemove} className="h-7 w-7 p-0 btn-danger" title="Delete entry">

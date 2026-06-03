@@ -102,7 +102,7 @@ export default function ReferenceSheetDialog({
         typeof document !== "undefined" &&
         createPortal(
           <div
-            className="fixed z-[160] rounded-xl border border-gold/20 bg-card shadow-2xl"
+            className="fixed z-[160] rounded-xl border border-gold/25 bg-card shadow-2xl"
             style={{
               left: position?.x ?? 24,
               top: position?.y ?? 24,
@@ -116,7 +116,7 @@ export default function ReferenceSheetDialog({
               onMouseDown={handleHeaderMouseDown}
             >
               <div className="flex items-center gap-3 min-w-0">
-                <GripVertical className="h-4 w-4 shrink-0 text-gold/50" />
+                <GripVertical className="h-4 w-4 shrink-0 text-gold/55" />
                 <div className="min-w-0">
                   <h2 className="dialog-title truncate">{title}</h2>
                   <p className="field-hint mt-1 max-w-3xl text-gold/55">
@@ -130,14 +130,14 @@ export default function ReferenceSheetDialog({
                 variant="ghost"
                 size="sm"
                 onClick={() => setOpen(false)}
-                className="h-8 w-8 p-0 text-gold/70 hover:bg-gold/10 hover:text-gold"
+                className="h-8 w-8 p-0 text-gold/75 hover:bg-gold/15 hover:text-gold"
               >
                 <X className="h-4 w-4" />
               </Button>
             </div>
 
             <div className="dialog-body h-[calc(100%-4.5rem)] space-y-5 overflow-y-auto custom-scrollbar">
-              <div className="rounded-md border border-gold/20 bg-gold/5 p-4">
+              <div className="rounded-md border border-gold/25 bg-gold/5 p-4">
                 <p className="text-sm font-bold text-gold">
                   This reference sheet is meant to be used for Foundry correct formulas. Use the Dauligor formula, as the Import Module will handle the conversion.
                 </p>
@@ -159,7 +159,7 @@ export default function ReferenceSheetDialog({
                         >
                           <span className="text-xs font-black text-ink/85">{row.label}</span>
                           <code className="text-[10px] text-gold break-all">{row.authoring}</code>
-                          <code className="text-[10px] text-gold/80 break-all">{row.foundry}</code>
+                          <code className="text-[10px] text-gold/85 break-all">{row.foundry}</code>
                         </div>
                       ))}
                     </div>
@@ -180,7 +180,7 @@ export default function ReferenceSheetDialog({
                     )}
 
                     {section.notes && section.notes.length > 0 && (
-                      <div className="rounded-md border border-gold/10 bg-background/30 p-3">
+                      <div className="rounded-md border border-gold/15 bg-background/30 p-3">
                         {section.notes.map((note) => (
                           <p key={note} className="field-hint">
                             {note}
@@ -194,7 +194,7 @@ export default function ReferenceSheetDialog({
                 if (section.isDropdown) {
                   return (
                     <details key={section.id} className="config-fieldset group">
-                      <summary className="text-sm font-black uppercase tracking-widest text-gold px-1 cursor-pointer hover:text-gold/80 outline-none list-item">
+                      <summary className="text-sm font-black uppercase tracking-widest text-gold px-1 cursor-pointer hover:text-gold/85 outline-none list-item">
                         {section.title}
                       </summary>
                       {content}

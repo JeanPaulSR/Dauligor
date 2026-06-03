@@ -164,12 +164,12 @@ export default function WeaponsEditor({
       renderExtraBadges={({ entry, lookups }) => (
         <>
           {entry.weapon_type && (
-            <span className="text-[10px] px-2 py-0.5 bg-ink/10 text-ink/70 rounded-full font-bold">
+            <span className="text-[10px] px-2 py-0.5 bg-ink/15 text-ink/75 rounded-full font-bold">
               {entry.weapon_type}
             </span>
           )}
           {entry.rarity && entry.rarity !== 'none' && (
-            <span className="text-[10px] px-2 py-0.5 bg-gold/10 text-gold rounded-full font-bold">
+            <span className="text-[10px] px-2 py-0.5 bg-gold/15 text-gold rounded-full font-bold">
               {entry.rarity}
             </span>
           )}
@@ -187,7 +187,7 @@ export default function WeaponsEditor({
               <span
                 key={pid}
                 title={prop.description}
-                className="text-[9px] px-1.5 py-0.5 bg-ink/5 border border-ink/10 text-ink/60 rounded uppercase tracking-tighter cursor-help"
+                className="text-[9px] px-1.5 py-0.5 bg-ink/5 border border-ink/15 text-ink/65 rounded uppercase tracking-tighter cursor-help"
               >
                 {prop.name}
               </span>

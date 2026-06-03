@@ -41,7 +41,7 @@ export function useUnsavedChangesWarning(isDirty: boolean) {
           modalOverlay.className = "fixed inset-0 z-[9999] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200";
           
           const modalContent = document.createElement('div');
-          modalContent.className = "bg-card border border-gold/20 shadow-2xl rounded-xl p-6 max-w-md w-full animate-in zoom-in-95 duration-200 pointer-events-auto";
+          modalContent.className = "bg-card border border-gold/25 shadow-2xl rounded-xl p-6 max-w-md w-full animate-in zoom-in-95 duration-200 pointer-events-auto";
           // Prevent clicks inside the modal from bubbling up and triggering the listener again
           modalContent.onclick = (ev) => ev.stopPropagation();
           
@@ -50,7 +50,7 @@ export function useUnsavedChangesWarning(isDirty: boolean) {
           title.textContent = "Unsaved Changes";
           
           const msg = document.createElement('p');
-          msg.className = "text-ink/80 mb-6 font-sans text-sm";
+          msg.className = "text-ink/85 mb-6 font-sans text-sm";
           msg.textContent = "You have unsaved changes. Are you sure you want to leave? Your changes will be lost.";
           
           const buttonContainer = document.createElement('div');
@@ -58,7 +58,7 @@ export function useUnsavedChangesWarning(isDirty: boolean) {
           
           const cancelBtn = document.createElement('button');
           cancelBtn.type = "button";
-          cancelBtn.className = "px-4 py-2 rounded-md border border-ink/20 text-ink/80 hover:bg-ink/5 transition-colors";
+          cancelBtn.className = "px-4 py-2 rounded-md border border-ink/25 text-ink/85 hover:bg-ink/5 transition-colors";
           cancelBtn.textContent = "Cancel";
           cancelBtn.onclick = () => {
             document.body.removeChild(modalOverlay);

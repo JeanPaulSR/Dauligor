@@ -99,8 +99,8 @@ export default function FeaturesView({
               className={cn(
                 "browser-row",
                 effectiveSelectedId === item.id
-                  ? 'bg-gold/20 border-r-4 border-r-gold text-gold font-bold shadow-inner'
-                  : 'text-ink/70'
+                  ? 'bg-gold/25 border-r-4 border-r-gold text-gold font-bold shadow-inner'
+                  : 'text-ink/75'
               )}
             >
               <div className="flex flex-col gap-0.5">
@@ -116,9 +116,9 @@ export default function FeaturesView({
       <div className="browser-content custom-scrollbar" style={{ maxHeight }}>
         {selectedItem ? (
           <div className="space-y-6 animate-in fade-in duration-300">
-            <div className="flex items-baseline justify-between border-b border-gold/10 pb-4">
+            <div className="flex items-baseline justify-between border-b border-gold/15 pb-4">
               <h4 className="text-lg font-bold text-gold uppercase tracking-tight">{selectedItem.name}</h4>
-              <span className="text-[10px] font-bold text-gold/40 italic bg-gold/5 px-2 py-0.5 rounded border border-gold/10 uppercase">Level {selectedItem.level}</span>
+              <span className="text-[10px] font-bold text-gold/45 italic bg-gold/5 px-2 py-0.5 rounded border border-gold/15 uppercase">Level {selectedItem.level}</span>
             </div>
             
             <div className="prose prose-gold prose-sm max-w-none">
@@ -126,7 +126,7 @@ export default function FeaturesView({
             </div>
 
             {!hideAdvancements && linkedAdvancements.length > 0 && (
-              <div className="space-y-4 pt-6 mt-6 border-t border-gold/10 block not-prose">
+              <div className="space-y-4 pt-6 mt-6 border-t border-gold/15 block not-prose">
                 {linkedAdvancements.map((adv, idx) => {
                   const isExpanded = expandedAdvancements[adv._id || idx] || false;
                   const advTitle = adv.title || adv.configuration?.title || adv.type;
@@ -146,17 +146,17 @@ export default function FeaturesView({
                               <BookOpen className="w-4 h-4 text-gold" />
                               <span className="text-xs font-bold uppercase tracking-widest text-gold">{advTitle}</span>
                             </div>
-                            <div className="h-px bg-gold/10 flex-grow" />
+                            <div className="h-px bg-gold/15 flex-grow" />
                             <div className={`transform transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}>
                               <ChevronLeft className="w-4 h-4 text-gold -rotate-90" />
                             </div>
                           </button>
 
                           {isExpanded && (
-                            <div className="animate-in fade-in slide-in-from-top-2 duration-300 bg-gold/5 border border-gold/20 rounded p-4">
+                            <div className="animate-in fade-in slide-in-from-top-2 duration-300 bg-gold/5 border border-gold/25 rounded p-4">
                               <div className="flex items-center justify-between mb-4">
                                 <span className="text-[11px] font-bold text-ink uppercase tracking-tight">{advTitle}</span>
-                                {!hideAdvancementTypes && <span className="text-[9px] font-medium text-gold/60 uppercase">{adv.type}</span>}
+                                {!hideAdvancementTypes && <span className="text-[9px] font-medium text-gold/65 uppercase">{adv.type}</span>}
                               </div>
                               
                               {isOptionGroup && !hideChoices ? (() => {
@@ -168,7 +168,7 @@ export default function FeaturesView({
                                   !exclusions.includes(item.id)
                                 );
                                 if (groupItems.length === 0) {
-                                  return <p className="text-xs text-ink/40 italic">No options available for this group.</p>;
+                                  return <p className="text-xs text-ink/45 italic">No options available for this group.</p>;
                                 }
                                 return (
                                   <ModularChoiceView 
@@ -182,7 +182,7 @@ export default function FeaturesView({
                               })() : (
                                 <div className="flex flex-wrap gap-2">
                                   {adv.configuration?.pool?.map((item: string, i: number) => (
-                                    <span key={i} className="px-2 py-1 bg-background/50 border border-gold/10 rounded text-[11px] font-medium text-ink/80">
+                                    <span key={i} className="px-2 py-1 bg-background/50 border border-gold/15 rounded text-[11px] font-medium text-ink/85">
                                       {item}
                                     </span>
                                   ))}
@@ -192,13 +192,13 @@ export default function FeaturesView({
                           )}
                         </>
                       ) : (
-                        <div className="bg-gold/5 border border-gold/20 rounded p-3 flex flex-col gap-1">
+                        <div className="bg-gold/5 border border-gold/25 rounded p-3 flex flex-col gap-1">
                           <div className="flex items-center justify-between">
                             <span className="text-[11px] font-bold text-ink uppercase tracking-tight">{advTitle}</span>
-                            {!hideAdvancementTypes && <span className="text-[9px] font-medium text-gold/60 uppercase">{adv.type}</span>}
+                            {!hideAdvancementTypes && <span className="text-[9px] font-medium text-gold/65 uppercase">{adv.type}</span>}
                           </div>
                           {adv.type === 'Trait' && (
-                            <p className="text-[10px] text-ink/60 italic">Gains proficiency in {adv.configuration?.type || 'Trait'}</p>
+                            <p className="text-[10px] text-ink/65 italic">Gains proficiency in {adv.configuration?.type || 'Trait'}</p>
                           )}
                         </div>
                       )}
@@ -209,7 +209,7 @@ export default function FeaturesView({
             )}
           </div>
         ) : (
-          <div className="h-full flex items-center justify-center text-ink/20 italic text-sm">
+          <div className="h-full flex items-center justify-center text-ink/25 italic text-sm">
             Select a feature to view details
           </div>
         )}

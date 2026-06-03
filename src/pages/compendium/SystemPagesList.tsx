@@ -79,14 +79,14 @@ export default function SystemPagesList({ userProfile }: { userProfile?: any }) 
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div className="space-y-2">
           <h1 className="h2-title uppercase">System Pages</h1>
-          <p className="text-sm text-ink/60 max-w-2xl">
+          <p className="text-sm text-ink/65 max-w-2xl">
             Site wide consistent reference articles.
           </p>
         </div>
         {isAdmin ? (
           <Button
             onClick={() => navigate('/compendium/system-pages/new')}
-            className="btn-gold-solid gap-2 shadow-lg shadow-gold/20 shrink-0"
+            className="btn-gold-solid gap-2 shadow-lg shadow-gold/25 shrink-0"
           >
             <Plus className="w-4 h-4" /> New System Page
           </Button>
@@ -96,7 +96,7 @@ export default function SystemPagesList({ userProfile }: { userProfile?: any }) 
       {/* Search — appears once there's anything to filter. */}
       {pages.length > 1 ? (
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink/30 pointer-events-none" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink/35 pointer-events-none" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -108,13 +108,13 @@ export default function SystemPagesList({ userProfile }: { userProfile?: any }) 
 
       {/* List */}
       {loading ? (
-        <div className="text-ink/40 italic py-8 text-center">Loading…</div>
+        <div className="text-ink/45 italic py-8 text-center">Loading…</div>
       ) : pages.length === 0 ? (
         <div className="empty-state">
-          <BookMarked className="w-12 h-12 text-gold/20 mb-3" />
+          <BookMarked className="w-12 h-12 text-gold/25 mb-3" />
           <p className="description-text">No system pages yet.</p>
           {isAdmin ? (
-            <p className="label-text text-gold/40 mt-1">Create one to start a reference glossary.</p>
+            <p className="label-text text-gold/45 mt-1">Create one to start a reference glossary.</p>
           ) : null}
         </div>
       ) : filtered.length === 0 ? (
@@ -129,7 +129,7 @@ export default function SystemPagesList({ userProfile }: { userProfile?: any }) 
           </button>
         </div>
       ) : (
-        <div className="border border-gold/15 rounded-md overflow-hidden bg-card/40 divide-y divide-gold/10">
+        <div className="border border-gold/15 rounded-md overflow-hidden bg-card/40 divide-y divide-gold/15">
           {filtered.map((page) => (
             <div
               key={page.id}
@@ -142,10 +142,10 @@ export default function SystemPagesList({ userProfile }: { userProfile?: any }) 
                   openView(page);
                 }
               }}
-              className="group flex items-center gap-4 px-4 py-3 hover:bg-gold/5 transition-colors cursor-pointer outline-none focus-visible:bg-gold/5 focus-visible:ring-1 focus-visible:ring-gold/30"
+              className="group flex items-center gap-4 px-4 py-3 hover:bg-gold/5 transition-colors cursor-pointer outline-none focus-visible:bg-gold/5 focus-visible:ring-1 focus-visible:ring-gold/35"
             >
               <div className="flex-1 min-w-0">
-                <h3 className="font-serif text-base font-semibold text-gold truncate group-hover:underline decoration-gold/40">
+                <h3 className="font-serif text-base font-semibold text-gold truncate group-hover:underline decoration-gold/45">
                   {page.name}
                 </h3>
               </div>
@@ -158,7 +158,7 @@ export default function SystemPagesList({ userProfile }: { userProfile?: any }) 
                       e.stopPropagation();
                       navigate(`/compendium/system-pages/edit/${page.id}`);
                     }}
-                    className="h-7 px-2 text-gold hover:bg-gold/10 gap-1"
+                    className="h-7 px-2 text-gold hover:bg-gold/15 gap-1"
                     title="Edit"
                   >
                     <Pencil className="w-3.5 h-3.5" /> Edit

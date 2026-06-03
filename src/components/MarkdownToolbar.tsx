@@ -285,20 +285,20 @@ export default function MarkdownToolbar({
   ];
 
   return (
-    <div className={`shrink-0 z-20 border-b border-gold/10 bg-card/95 rounded-t-md flex flex-col`}>
+    <div className={`shrink-0 z-20 border-b border-gold/15 bg-card/95 rounded-t-md flex flex-col`}>
       <div className={`flex flex-wrap items-center justify-between gap-1 p-1`}>
         <div className="flex flex-wrap items-center gap-0.5">
           {label && (
-            <div className="px-2 py-1 mr-1 border-r border-gold/10 flex items-center">
+            <div className="px-2 py-1 mr-1 border-r border-gold/15 flex items-center">
               <span className="label-text whitespace-nowrap">{label}</span>
             </div>
           )}
-          <div className="flex items-center gap-0.5 mr-2 pr-2 border-r border-gold/10">
+          <div className="flex items-center gap-0.5 mr-2 pr-2 border-r border-gold/15">
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              className="h-7 w-7 p-0 text-gold/60 hover:text-gold"
+              className="h-7 w-7 p-0 text-gold/65 hover:text-gold"
               onClick={() => isWYSIWYG ? editor?.chain().focus().undo().run() : document.execCommand('undo')}
               title="Undo (Ctrl+Z)"
             >
@@ -308,7 +308,7 @@ export default function MarkdownToolbar({
               type="button"
               variant="ghost"
               size="sm"
-              className="h-7 w-7 p-0 text-gold/60 hover:text-gold"
+              className="h-7 w-7 p-0 text-gold/65 hover:text-gold"
               onClick={() => isWYSIWYG ? editor?.chain().focus().redo().run() : document.execCommand('redo')}
               title="Redo (Ctrl+Y)"
             >
@@ -322,7 +322,7 @@ export default function MarkdownToolbar({
               type="button"
               variant="ghost"
               size="sm"
-              className={`h-7 w-7 p-0 transition-colors ${tool.active ? 'text-gold bg-gold/20' : 'text-gold/60 hover:text-gold hover:bg-gold/10'}`}
+              className={`h-7 w-7 p-0 transition-colors ${tool.active ? 'text-gold bg-gold/25' : 'text-gold/65 hover:text-gold hover:bg-gold/15'}`}
               onClick={tool.action}
               title={tool.label}
             >
@@ -337,7 +337,7 @@ export default function MarkdownToolbar({
               type="button"
               variant="ghost"
               size="sm"
-              className={`h-7 px-2 label-text gap-1.5 transition-colors ${isWYSIWYG ? 'text-gold bg-gold/10' : 'text-gold/60 hover:text-gold'}`}
+              className={`h-7 px-2 label-text gap-1.5 transition-colors ${isWYSIWYG ? 'text-gold bg-gold/15' : 'text-gold/65 hover:text-gold'}`}
               onClick={onToggleWYSIWYG}
               title={isWYSIWYG ? "Switch to BBCode Source" : "Switch to Visual Editor"}
             >
@@ -350,7 +350,7 @@ export default function MarkdownToolbar({
       {/* Table tools sub-toolbar */}
       {isWYSIWYG && hasTable && (
         <div 
-          className="flex flex-wrap items-center gap-3 p-2 border-t border-gold/10 bg-gold/5 text-xs overflow-x-auto whitespace-nowrap custom-scrollbar"
+          className="flex flex-wrap items-center gap-3 p-2 border-t border-gold/15 bg-gold/5 text-xs overflow-x-auto whitespace-nowrap custom-scrollbar"
           onWheel={(e) => {
             if (e.deltaY !== 0) {
               e.currentTarget.scrollLeft += e.deltaY;
@@ -362,7 +362,7 @@ export default function MarkdownToolbar({
             type="button" 
             variant="ghost" 
             size="sm" 
-            className={`h-7 px-2 py-0 hover:text-gold hover:bg-gold/10 flex items-center gap-1 ${isTableToolsCollapsed ? 'text-gold' : 'text-gold/60'}`}
+            className={`h-7 px-2 py-0 hover:text-gold hover:bg-gold/15 flex items-center gap-1 ${isTableToolsCollapsed ? 'text-gold' : 'text-gold/65'}`}
             onClick={() => setIsTableToolsCollapsed(!isTableToolsCollapsed)}
           >
             <TableIcon className="w-3.5 h-3.5" />
@@ -373,35 +373,35 @@ export default function MarkdownToolbar({
             <div className="flex flex-wrap items-center gap-4 pl-1">
               {/* Column Actions */}
               <div className="flex items-center gap-2">
-                <span className="text-[9px] uppercase font-bold tracking-widest text-gold/40">Col</span>
-                <div className="flex items-center bg-background/50 border border-gold/10 rounded-md overflow-hidden">
-                  <Button type="button" variant="ghost" size="sm" className="h-6 px-2.5 rounded-none border-r border-gold/10 text-gold/60 hover:text-gold hover:bg-gold/10" onClick={() => editor.chain().focus().addColumnBefore().run()} title="Insert Column Before">+ Left</Button>
-                  <Button type="button" variant="ghost" size="sm" className="h-6 px-2.5 rounded-none border-r border-gold/10 text-gold/60 hover:text-gold hover:bg-gold/10" onClick={() => editor.chain().focus().addColumnAfter().run()} title="Insert Column After">+ Right</Button>
+                <span className="text-[9px] uppercase font-bold tracking-widest text-gold/45">Col</span>
+                <div className="flex items-center bg-background/50 border border-gold/15 rounded-md overflow-hidden">
+                  <Button type="button" variant="ghost" size="sm" className="h-6 px-2.5 rounded-none border-r border-gold/15 text-gold/65 hover:text-gold hover:bg-gold/15" onClick={() => editor.chain().focus().addColumnBefore().run()} title="Insert Column Before">+ Left</Button>
+                  <Button type="button" variant="ghost" size="sm" className="h-6 px-2.5 rounded-none border-r border-gold/15 text-gold/65 hover:text-gold hover:bg-gold/15" onClick={() => editor.chain().focus().addColumnAfter().run()} title="Insert Column After">+ Right</Button>
                   <Button type="button" variant="ghost" size="sm" className="h-6 px-2.5 rounded-none text-blood/70 hover:text-blood hover:bg-blood/10" onClick={() => editor.chain().focus().deleteColumn().run()} title="Delete Column">Delete</Button>
                 </div>
               </div>
 
               {/* Row Actions */}
               <div className="flex items-center gap-2">
-                <span className="text-[9px] uppercase font-bold tracking-widest text-gold/40">Row</span>
-                <div className="flex items-center bg-background/50 border border-gold/10 rounded-md overflow-hidden">
-                  <Button type="button" variant="ghost" size="sm" className="h-6 px-2.5 rounded-none border-r border-gold/10 text-gold/60 hover:text-gold hover:bg-gold/10" onClick={() => editor.chain().focus().addRowBefore().run()} title="Insert Row Above">+ Above</Button>
-                  <Button type="button" variant="ghost" size="sm" className="h-6 px-2.5 rounded-none border-r border-gold/10 text-gold/60 hover:text-gold hover:bg-gold/10" onClick={() => editor.chain().focus().addRowAfter().run()} title="Insert Row Below">+ Below</Button>
+                <span className="text-[9px] uppercase font-bold tracking-widest text-gold/45">Row</span>
+                <div className="flex items-center bg-background/50 border border-gold/15 rounded-md overflow-hidden">
+                  <Button type="button" variant="ghost" size="sm" className="h-6 px-2.5 rounded-none border-r border-gold/15 text-gold/65 hover:text-gold hover:bg-gold/15" onClick={() => editor.chain().focus().addRowBefore().run()} title="Insert Row Above">+ Above</Button>
+                  <Button type="button" variant="ghost" size="sm" className="h-6 px-2.5 rounded-none border-r border-gold/15 text-gold/65 hover:text-gold hover:bg-gold/15" onClick={() => editor.chain().focus().addRowAfter().run()} title="Insert Row Below">+ Below</Button>
                   <Button type="button" variant="ghost" size="sm" className="h-6 px-2.5 rounded-none text-blood/70 hover:text-blood hover:bg-blood/10" onClick={() => editor.chain().focus().deleteRow().run()} title="Delete Row">Delete</Button>
                 </div>
               </div>
 
               {/* Cell Actions */}
               <div className="flex items-center gap-2">
-                <span className="text-[9px] uppercase font-bold tracking-widest text-gold/40">Cells</span>
-                <div className="flex items-center bg-background/50 border border-gold/10 rounded-md overflow-hidden">
-                  <Button type="button" variant="ghost" size="sm" className="h-6 px-2.5 rounded-none border-r border-gold/10 text-gold/60 hover:text-gold hover:bg-gold/10" onClick={() => editor.chain().focus().mergeCells().run()} title="Merge Selected Cells">Merge</Button>
-                  <Button type="button" variant="ghost" size="sm" className="h-6 px-2.5 rounded-none text-gold/60 hover:text-gold hover:bg-gold/10" onClick={() => editor.chain().focus().splitCell().run()} title="Split Cell">Split</Button>
+                <span className="text-[9px] uppercase font-bold tracking-widest text-gold/45">Cells</span>
+                <div className="flex items-center bg-background/50 border border-gold/15 rounded-md overflow-hidden">
+                  <Button type="button" variant="ghost" size="sm" className="h-6 px-2.5 rounded-none border-r border-gold/15 text-gold/65 hover:text-gold hover:bg-gold/15" onClick={() => editor.chain().focus().mergeCells().run()} title="Merge Selected Cells">Merge</Button>
+                  <Button type="button" variant="ghost" size="sm" className="h-6 px-2.5 rounded-none text-gold/65 hover:text-gold hover:bg-gold/15" onClick={() => editor.chain().focus().splitCell().run()} title="Split Cell">Split</Button>
                 </div>
               </div>
 
               {/* Danger Actions */}
-              <div className="flex items-center pl-2 border-l border-gold/20">
+              <div className="flex items-center pl-2 border-l border-gold/25">
                 <Button type="button" variant="ghost" size="sm" className="h-6 px-3 py-0 text-blood hover:bg-blood/10 border border-transparent hover:border-blood/20 rounded-md transition-all font-bold tracking-widest text-[10px] uppercase" onClick={() => editor.chain().focus().deleteTable().run()}>Delete Table</Button>
               </div>
             </div>

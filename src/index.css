@@ -19,10 +19,13 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
 
   --color-parchment: #f5f5f0;
-  --color-ink:       var(--ink);
-  --color-gold:      var(--gold);
   --color-blood:     #8b0000;
   --color-archive-blue: #3b82f6;
+  /* NOTE: --color-ink / --color-gold are declared in the `@theme inline` block
+     below (not here). They must resolve `var(--ink)` / `var(--gold)` INLINE at
+     the use site, so a scoped override (e.g. the theme preview pane setting
+     --gold on a wrapper div) actually takes effect. Declaring them in a
+     non-inline @theme block resolves them once at :root and breaks scoping. */
 }
 
 /* Global layout tokens. Any component that needs to position itself
@@ -68,6 +71,9 @@
   --color-card:                       var(--card);
   --color-foreground:                 var(--foreground);
   --color-background:                 var(--background);
+  /* Accent + ink — inline so scoped overrides (theme preview) propagate. */
+  --color-gold:                       var(--gold);
+  --color-ink:                        var(--ink);
   --radius: 0; --radius-sm: 0; --radius-md: 0; --radius-lg: 0;
   --radius-xl: 0; --radius-2xl: 0; --radius-3xl: 0; --radius-4xl: 0;
 }
@@ -233,9 +239,9 @@
   .prose .spoiler {
     @apply bg-ink text-ink transition-colors duration-300 cursor-pointer rounded px-1;
   }
-  .prose .spoiler:hover { @apply bg-gold/20 text-ink; }
-  .prose u   { @apply underline decoration-gold/40; }
-  .prose sub, .prose sup { @apply text-[0.7em] text-gold/60; }
+  .prose .spoiler:hover { @apply bg-gold/25 text-ink; }
+  .prose u   { @apply underline decoration-gold/45; }
+  .prose sub, .prose sup { @apply text-[0.7em] text-gold/65; }
 
   /* Cross-references: [ref|kind|id]Display[/ref] BBCode tag.
      Anchor (linked) variant gets full color + underline on hover; the
@@ -243,7 +249,7 @@
      colorway but no cursor, no underline, so it reads as "this is a
      thing, but you can't click it (yet)". */
   .prose .ref-link {
-    @apply underline decoration-gold/30 decoration-dotted underline-offset-2 transition-colors;
+    @apply underline decoration-gold/35 decoration-dotted underline-offset-2 transition-colors;
     /* !important for the same reason as plain links below: without it the
        colour loses the cascade (to .prose's !important body colour) and
        renders dark/invisible in the preview. The editor escapes this via
@@ -252,7 +258,7 @@
     color: color-mix(in oklab, var(--gold) 85%, transparent) !important;
   }
   .prose a.ref-link:hover {
-    @apply decoration-gold/70 decoration-solid;
+    @apply decoration-gold/75 decoration-solid;
     color: var(--gold) !important;
   }
   .prose span.ref-link.ref-dangling {
@@ -266,7 +272,7 @@
      legible on parchment, light, and dark alike. ref-link anchors keep
      their own gold-dotted treatment above. */
   .prose a:not(.ref-link) {
-    @apply underline decoration-gold/40 underline-offset-2 transition-colors;
+    @apply underline decoration-gold/45 underline-offset-2 transition-colors;
     /* !important matches this file's prose-colour convention (see the
        .prose / body / heading rules above). Without it the colour can
        lose to the @tailwindcss/typography plugin depending on layer
@@ -274,16 +280,16 @@
        same reason. */
     color: var(--gold) !important;
   }
-  .prose a:not(.ref-link):hover { @apply decoration-gold/70; }
+  .prose a:not(.ref-link):hover { @apply decoration-gold/75; }
 
   /* Conditional era/campaign content blocks (staff view) */
   .prose .conditional-block {
-    @apply my-4 rounded-lg border-l-4 border-gold/40 bg-gold/5 overflow-hidden;
+    @apply my-4 rounded-lg border-l-4 border-gold/45 bg-gold/5 overflow-hidden;
   }
-  .prose .conditional-block.era-block { @apply border-gold/40 bg-gold/5; }
+  .prose .conditional-block.era-block { @apply border-gold/45 bg-gold/5; }
   .prose .conditional-block.campaign-block { @apply border-primary/40 bg-primary/5; }
   .prose .conditional-block-label {
-    @apply text-[10px] font-bold uppercase tracking-widest px-4 py-1.5 text-gold/70 bg-gold/10 border-b border-gold/10;
+    @apply text-[10px] font-bold uppercase tracking-widest px-4 py-1.5 text-gold/75 bg-gold/15 border-b border-gold/15;
   }
   .prose .campaign-block .conditional-block-label { @apply text-primary/70 bg-primary/10 border-primary/10; }
   .prose .conditional-block > *:not(.conditional-block-label) { @apply px-4 py-3; }
@@ -291,9 +297,9 @@
   /* ── TipTap / ProseMirror editor surface ────────────────────── */
   .ProseMirror { @apply outline-none min-h-full; }
   .ProseMirror p.is-editor-empty:first-child::before {
-    @apply text-gold/30 content-[attr(data-placeholder)] float-left h-0 pointer-events-none;
+    @apply text-gold/35 content-[attr(data-placeholder)] float-left h-0 pointer-events-none;
   }
-  .ProseMirror blockquote { @apply border-l-2 border-gold/20 pl-4 italic; }
+  .ProseMirror blockquote { @apply border-l-2 border-gold/25 pl-4 italic; }
   .ProseMirror ul { @apply list-disc pl-5; }
   .ProseMirror ol { @apply list-decimal pl-5; }
   /* Links inside the editor surface. The editor content isn't `.prose`,
@@ -302,10 +308,10 @@
      cursor (Link is configured openOnClick:false). Match the theme
      accent and restore the pointer. */
   .ProseMirror a {
-    @apply underline decoration-gold/40 underline-offset-2 cursor-pointer transition-colors;
+    @apply underline decoration-gold/45 underline-offset-2 cursor-pointer transition-colors;
     color: var(--gold) !important;
   }
-  .ProseMirror a:hover { @apply decoration-gold/70; }
+  .ProseMirror a:hover { @apply decoration-gold/75; }
   .ProseMirror .column-resize-handle {
     position: absolute;
     right: -2px; top: 0; bottom: -2px;
@@ -345,7 +351,7 @@
   }
   /* Flavor text, italicized excerpts */
   .description-text {
-    @apply font-serif italic text-ink/70 leading-relaxed;
+    @apply font-serif italic text-ink/75 leading-relaxed;
   }
   /* Tiny gold metadata tag: level badge, source, category */
   .label-text {
@@ -353,14 +359,14 @@
   }
   /* Timestamps, secondary info */
   .muted-text {
-    @apply text-ink/40 text-sm font-sans;
+    @apply text-ink/45 text-sm font-sans;
   }
 
   /* ── Form Fields ─────────────────────────────────────────────── */
 
   /* Label above any form field */
   .field-label {
-    @apply text-[10px] uppercase font-black tracking-widest text-ink/60;
+    @apply text-[10px] uppercase font-black tracking-widest text-ink/65;
   }
   /* Gold variant — config section headers, advancement type labels */
   .section-label {
@@ -368,64 +374,64 @@
   }
   /* Standard height + background for <Input> and <SelectTrigger> */
   .field-input {
-    @apply h-9 bg-background/50 border-gold/10 placeholder:text-ink/20;
+    @apply h-9 bg-background/50 border-gold/15 placeholder:text-ink/25;
   }
   /* Helper / hint text below a field */
   .field-hint {
-    @apply text-[9px] text-ink/40 italic;
+    @apply text-[9px] text-ink/45 italic;
   }
 
   /* ── Page Layout ─────────────────────────────────────────────── */
 
   /* Top bar: page title left, primary action (Save) right */
   .page-header {
-    @apply flex items-center justify-between pb-4 border-b border-gold/20 mb-6;
+    @apply flex items-center justify-between pb-4 border-b border-gold/25 mb-6;
   }
   /* Intra-section divider: small label left, optional Add button right */
   .section-header {
-    @apply flex items-center justify-between border-b border-gold/10 pb-2;
+    @apply flex items-center justify-between border-b border-gold/15 pb-2;
   }
   /* Horizontal rule between major config blocks */
   .section-divider {
-    @apply pt-4 border-t border-gold/10 space-y-4;
+    @apply pt-4 border-t border-gold/15 space-y-4;
   }
   /* Foundry-style bordered fieldset — use with <fieldset> + <legend> */
   .config-fieldset {
-    @apply border border-gold/10 rounded-md px-4 pt-1 pb-4 space-y-3;
+    @apply border border-gold/15 rounded-md px-4 pt-1 pb-4 space-y-3;
   }
 
   /* ── Cards & Containers ──────────────────────────────────────── */
 
   /* Lore / compendium browser listing card */
   .lore-card {
-    @apply bg-card border border-gold/20 rounded-lg shadow-sm hover:shadow-md transition-all duration-300;
+    @apply bg-card border border-gold/25 rounded-lg shadow-sm hover:shadow-md transition-all duration-300;
   }
   /* Editor list-item card: advancement row, feature row, etc. */
   .compendium-card {
-    @apply bg-card/40 border border-gold/10 rounded-lg hover:border-gold/30 hover:bg-card/60 transition-all;
+    @apply bg-card/40 border border-gold/15 rounded-lg hover:border-gold/35 hover:bg-card/60 transition-all;
   }
   /* Dense row inside a pool or grant list */
   .compendium-row {
-    @apply px-3 py-2 bg-gold/5 border border-gold/10 rounded-md hover:bg-gold/10 transition-colors;
+    @apply px-3 py-2 bg-gold/5 border border-gold/15 rounded-md hover:bg-gold/15 transition-colors;
   }
   /* Centered placeholder shown when a list is empty */
   .empty-state {
-    @apply border border-dashed border-gold/20 rounded-xl flex flex-col items-center justify-center text-center bg-gold/5 py-12;
+    @apply border border-dashed border-gold/25 rounded-xl flex flex-col items-center justify-center text-center bg-gold/5 py-12;
   }
 
   /* ── Browser (two-panel split view) ─────────────────────────── */
 
   /* Outer container — pass extra sizing (min-h-[Xpx]) via className or style */
   .browser-panel {
-    @apply flex border border-gold/20 bg-background/20 rounded-sm overflow-hidden;
+    @apply flex border border-gold/25 bg-background/20 rounded-sm overflow-hidden;
   }
   /* Left list panel — set width via w-[Xpx] utility or style prop */
   .browser-sidebar {
-    @apply border-r border-gold/20 bg-gold/5 flex flex-col shrink-0;
+    @apply border-r border-gold/25 bg-gold/5 flex flex-col shrink-0;
   }
   /* Individual selectable row inside .browser-sidebar */
   .browser-row {
-    @apply w-full text-left p-3 text-xs transition-all border-b border-gold/5 hover:bg-gold/10;
+    @apply w-full text-left p-3 text-xs transition-all border-b border-gold/5 hover:bg-gold/15;
   }
   /* Right content / detail pane */
   .browser-content {
@@ -434,7 +440,7 @@
 
   /* ── Navigation ──────────────────────────────────────────────── */
 
-  /* Responsive section/category label in nav panels — add text-gold or text-ink/40 */
+  /* Responsive section/category label in nav panels — add text-gold or text-ink/45 */
   .nav-label {
     @apply text-[9px] lg:text-[10px] font-bold uppercase tracking-widest;
   }
@@ -447,15 +453,15 @@
 
   /* Outer wrapper for any bordered table (trait pool, item pool, scale grid) */
   .data-table {
-    @apply border border-gold/10 rounded-md overflow-hidden;
+    @apply border border-gold/15 rounded-md overflow-hidden;
   }
   /* Sticky header row */
   .data-table-head {
-    @apply bg-gold/5 border-b border-gold/10 px-3 py-2;
+    @apply bg-gold/5 border-b border-gold/15 px-3 py-2;
   }
   /* Column header text inside .data-table-head */
   .data-table-th {
-    @apply text-[9px] uppercase font-black text-ink/40 tracking-widest;
+    @apply text-[9px] uppercase font-black text-ink/45 tracking-widest;
   }
   /* Scrollable body area */
   .data-table-body {
@@ -470,30 +476,30 @@
 
   /* Applied to <table> via Table.configure({ HTMLAttributes: { class: 'editor-table' } }) */
   .editor-table {
-    @apply w-full border-collapse border border-gold/20 my-4 table-auto;
+    @apply w-full border-collapse border border-gold/25 my-4 table-auto;
   }
   /* Applied to <tr> via TableRow.configure */
   .editor-table-row {
-    @apply border-b border-gold/10 hover:bg-gold/5;
+    @apply border-b border-gold/15 hover:bg-gold/5;
   }
   /* Applied to <th> via TableHeader.configure */
   .editor-table-th {
-    @apply p-2 text-left font-bold text-gold border border-gold/20 bg-gold/5;
+    @apply p-2 text-left font-bold text-gold border border-gold/25 bg-gold/5;
   }
   /* Applied to <td> via TableCell.configure */
   .editor-table-td {
-    @apply p-2 border border-gold/10;
+    @apply p-2 border border-gold/15;
   }
 
   /* ── Dialog / Modal Windows ──────────────────────────────────── */
 
   /* Apply to <DialogContent>: sets background, border, removes default padding */
   .dialog-content {
-    @apply bg-card border-gold/20 p-0 overflow-hidden;
+    @apply bg-card border-gold/25 p-0 overflow-hidden;
   }
   /* Dark title bar — apply directly to <DialogHeader> */
   .dialog-header {
-    @apply px-6 py-4 bg-gold/5 border-b border-gold/10;
+    @apply px-6 py-4 bg-gold/5 border-b border-gold/15;
   }
   /* Gold serif title — apply to <DialogTitle> */
   .dialog-title {
@@ -505,18 +511,22 @@
   }
   /* Footer action bar — apply directly to <DialogFooter> */
   .dialog-footer {
-    @apply p-4 bg-background border-t border-gold/10;
+    @apply p-4 bg-background border-t border-gold/15;
   }
 
   /* ── Buttons ──────────────────────────────────────────────────── */
 
   /* Ghost gold — section add-row buttons, minor actions */
   .btn-gold {
-    @apply bg-gold/10 text-gold hover:bg-gold/20 border border-gold/20 font-black uppercase tracking-widest;
+    @apply bg-gold/15 text-gold hover:bg-gold/25 border border-gold/25 font-black uppercase tracking-widest;
   }
   /* Solid gold — primary save / confirm */
   .btn-gold-solid {
-    @apply bg-gold text-white hover:bg-gold/90 font-black uppercase tracking-widest;
+    @apply bg-gold hover:bg-gold/95 font-black uppercase tracking-widest;
+    /* On-highlight text: readable against ANY highlight colour. Presets define
+       this as #fff, so existing themes are unchanged; custom themes get an
+       auto-contrasting value from resolveThemeVars(). */
+    color: var(--primary-foreground);
   }
   /* Ghost danger — delete / destructive actions */
   .btn-danger {
@@ -535,7 +545,7 @@
   /* ── Map Primitives ───────────────────────────────────────────── */
 
   .map-container {
-    @apply relative w-full aspect-video bg-stone-200 rounded-xl overflow-hidden border-4 border-gold/30;
+    @apply relative w-full aspect-video bg-stone-200 rounded-xl overflow-hidden border-4 border-gold/35;
   }
   .map-marker {
     @apply absolute w-4 h-4 bg-blood rounded-full border-2 border-white shadow-lg cursor-pointer hover:scale-125 transition-transform;
@@ -840,7 +850,7 @@ body.character-builder-wide {
 }
 .cb-tab-strip-btn.active {
   background: var(--gold);
-  color: #fff;
+  color: var(--primary-foreground);
   border-color: var(--gold);
   transform: scale(1.08);
   box-shadow: 0 4px 12px color-mix(in srgb, var(--gold) 40%, transparent);
@@ -848,7 +858,7 @@ body.character-builder-wide {
 /* Save button — always gold, even when no step is "active". */
 .cb-tab-strip-btn.save {
   background: var(--gold);
-  color: #fff;
+  color: var(--primary-foreground);
   border-color: var(--gold);
   box-shadow: 0 4px 12px color-mix(in srgb, var(--gold) 35%, transparent);
 }

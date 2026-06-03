@@ -111,7 +111,7 @@ export function BlockMetadataDialog({
                 maxLength={NAME_MAX}
                 autoFocus
               />
-              <p className="text-[11px] text-ink/40">
+              <p className="text-[11px] text-ink/45">
                 {trimmedName.length}/{NAME_MAX}
               </p>
             </div>
@@ -127,7 +127,7 @@ export function BlockMetadataDialog({
                 maxLength={DESCRIPTION_MAX}
                 rows={4}
               />
-              <p className="text-[11px] text-ink/40">
+              <p className="text-[11px] text-ink/45">
                 {description.length}/{DESCRIPTION_MAX}
               </p>
             </div>
@@ -141,7 +141,7 @@ export function BlockMetadataDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={!canSubmit} className="bg-gold text-white">
+            <Button type="submit" disabled={!canSubmit} className="bg-gold text-[var(--primary-foreground)]">
               {submitting ? 'Saving…' : submitCopy}
             </Button>
           </DialogFooter>

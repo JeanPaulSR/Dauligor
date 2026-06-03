@@ -82,7 +82,7 @@ export default class ErrorBoundary extends Component<Props, State> {
               <CardTitle className="text-blood font-serif text-2xl">Archive Error</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6 text-center">
-              <p className="text-ink/70 font-serif italic">
+              <p className="text-ink/75 font-serif italic">
                 {errorMessage}
               </p>
               

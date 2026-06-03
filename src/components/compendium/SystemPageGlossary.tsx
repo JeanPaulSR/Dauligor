@@ -125,7 +125,7 @@ export default function SystemPageGlossary({ page, entries }: SystemPageGlossary
                     'scroll-mt-24 px-5 py-4 border-l-2 transition-colors ' +
                     (isActive
                       ? 'bg-gold/[0.04] border-gold'
-                      : 'border-transparent hover:bg-gold/[0.04] hover:border-gold/40')
+                      : 'border-transparent hover:bg-gold/[0.04] hover:border-gold/45')
                   }
                 >
                   <div className="flex items-center gap-3 mb-1.5">
@@ -133,7 +133,7 @@ export default function SystemPageGlossary({ page, entries }: SystemPageGlossary
                       <img
                         src={entry.imageUrl}
                         alt=""
-                        className="w-9 h-9 object-cover border border-gold/20 shrink-0"
+                        className="w-9 h-9 object-cover border border-gold/25 shrink-0"
                       />
                     ) : null}
                     <h2 className="h2-title text-gold flex-1 min-w-0">{entry.name}</h2>
@@ -141,7 +141,7 @@ export default function SystemPageGlossary({ page, entries }: SystemPageGlossary
                   {entry.body ? (
                     <BBCodeRenderer content={entry.body} />
                   ) : (
-                    <p className="description-text text-ink/40">No description.</p>
+                    <p className="description-text text-ink/45">No description.</p>
                   )}
                 </section>
               );
@@ -155,7 +155,7 @@ export default function SystemPageGlossary({ page, entries }: SystemPageGlossary
           ink and lifts on hover. */}
       {entries.length > 0 ? (
         <aside className="hidden lg:block sticky top-24 self-start">
-          <p className="label-text text-gold/60 mb-3">Contents</p>
+          <p className="label-text text-gold/65 mb-3">Contents</p>
           <nav className="flex flex-col">
             {entries.map((entry) => {
               const isActive = activeId === entry.identifier;
@@ -171,7 +171,7 @@ export default function SystemPageGlossary({ page, entries }: SystemPageGlossary
                     'font-serif text-[15px] leading-snug py-1.5 transition-colors ' +
                     (isActive
                       ? 'text-gold font-semibold'
-                      : 'text-ink/40 hover:text-ink/70')
+                      : 'text-ink/45 hover:text-ink/75')
                   }
                 >
                   {entry.name}

@@ -1105,7 +1105,7 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
       key: 'activities',
       label: 'Activities',
       render: () => (
-        <div className="border-t border-gold/10 pt-4">
+        <div className="border-t border-gold/15 pt-4">
           <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold mb-2">Activities</h3>
           <ActivityEditor
             activities={formData.activities}
@@ -1128,10 +1128,10 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
       key: 'advancement',
       label: 'Advancement',
       render: () => (
-        <div className="border-t border-gold/10 pt-4 space-y-3">
+        <div className="border-t border-gold/15 pt-4 space-y-3">
           <div className="flex items-baseline justify-between gap-3">
             <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Advancement</h3>
-            <span className="text-[10px] text-ink/40 italic">
+            <span className="text-[10px] text-ink/45 italic">
               Default level <span className="font-mono">0</span> = always-on while item is owned.
               Use Bump Uses to add charges to a target feature or feat — Amulet of the Devout
               adds +1 to Channel Divinity, etc.
@@ -1160,10 +1160,10 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
       key: 'scaling',
       label: 'Scaling',
       render: () => (
-        <div className="border-t border-gold/10 pt-4 space-y-3">
+        <div className="border-t border-gold/15 pt-4 space-y-3">
           <div className="flex items-baseline justify-between gap-3">
             <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Item Columns</h3>
-            <span className="text-[10px] text-ink/40 italic">
+            <span className="text-[10px] text-ink/45 italic">
               Per-level progression tables this item owns. Activity formulas
               can reference them as <span className="font-mono">@scale.&lt;identifier&gt;.&lt;column&gt;</span>
               — e.g. Amulet of the Devout adding +1 to Channel Divinity charges.
@@ -1182,8 +1182,8 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
             // Same placeholder pattern FeatsEditor uses for unsaved
             // drafts — columns FK against parent_id, so the panel
             // can't appear until the item has a stable id.
-            <div className="p-4 border border-gold/10 bg-card/30 rounded-xl space-y-2">
-              <p className="text-[11px] text-ink/50 italic leading-relaxed">
+            <div className="p-4 border border-gold/15 bg-card/30 rounded-xl space-y-2">
+              <p className="text-[11px] text-ink/55 italic leading-relaxed">
                 Save this item first to add scaling columns. Columns appear
                 here once the row has a stable id to attach to.
               </p>
@@ -1196,7 +1196,7 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
       key: 'effects',
       label: 'Effects',
       render: () => (
-        <div className="border-t border-gold/10 pt-4">
+        <div className="border-t border-gold/15 pt-4">
           <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold mb-2">Active Effects</h3>
           <ActiveEffectEditor
             effects={formData.effects}
@@ -1214,7 +1214,7 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
       label: (
         <>
           Tags {formData.tagIds.length > 0 && (
-            <span className="ml-1 text-gold/70">({formData.tagIds.length})</span>
+            <span className="ml-1 text-gold/75">({formData.tagIds.length})</span>
           )}
         </>
       ),
@@ -1252,7 +1252,7 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
             'truncate font-serif text-sm',
             drafted ? 'text-archive-blue font-semibold' : 'text-ink',
           )}>
-            {entry.name || <em className="text-ink/40">Untitled</em>}
+            {entry.name || <em className="text-ink/45">Untitled</em>}
           </span>
         );
       },
@@ -1274,7 +1274,7 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
       width: '50px',
       align: 'center',
       render: (entry: any) => (
-        <span className="text-[10px] font-bold text-gold/80">
+        <span className="text-[10px] font-bold text-gold/85">
           {sourceAbbrevById[entry.sourceId] || '—'}
         </span>
       ),
@@ -1285,8 +1285,8 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
   const listEmptyContent = useMemo(() => {
     if (focusModeEnabled && focusMode === 'drafts') {
       return (
-        <div className="px-6 py-12 text-center text-ink/60 max-w-sm mx-auto space-y-2">
-          <p className="font-bold text-ink/80">No items in this block yet.</p>
+        <div className="px-6 py-12 text-center text-ink/65 max-w-sm mx-auto space-y-2">
+          <p className="font-bold text-ink/85">No items in this block yet.</p>
           <p className="text-xs leading-relaxed text-ink/55">
             Click <span className="font-bold text-gold">New Item</span> above to author
             one from scratch, or switch to <span className="font-bold text-gold">Full Catalog</span>
@@ -1415,7 +1415,7 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
           // tolerates both snake and camel so it Just Works.
           if (!id && !formData.name) {
             return (
-              <div className="px-6 py-12 text-center text-ink/50">
+              <div className="px-6 py-12 text-center text-ink/55">
                 Select or create an item to preview it here.
               </div>
             );
@@ -1477,8 +1477,8 @@ function BasicsTab({
     <div className="space-y-4">
       {/* Type discriminator — distinctly styled to signal it drives
           the Mechanics tab. */}
-      <div className="rounded border-2 border-gold/20 bg-gold/3 p-3 space-y-2">
-        <Label className="text-[10px] font-bold uppercase tracking-widest text-gold/80">
+      <div className="rounded border-2 border-gold/25 bg-gold/5 p-3 space-y-2">
+        <Label className="text-[10px] font-bold uppercase tracking-widest text-gold/85">
           Item Type — drives Mechanics tab
         </Label>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -1520,30 +1520,30 @@ function BasicsTab({
         />
         <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
           <ReviewFieldHighlight columnKey="name" className="space-y-0.5">
-            <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Name</Label>
+            <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/45">Name</Label>
             <Input
               value={formData.name}
               onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
-              className="h-8 bg-background/50 border-gold/10 focus:border-gold text-sm"
+              className="h-8 bg-background/50 border-gold/15 focus:border-gold text-sm"
               placeholder="e.g. Flame Tongue Greatsword"
               required
             />
           </ReviewFieldHighlight>
           <ReviewFieldHighlight columnKey="identifier" className="space-y-0.5">
-            <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Identifier</Label>
+            <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/45">Identifier</Label>
             <Input
               value={formData.identifier}
               onChange={(e) => setFormData((prev) => ({ ...prev, identifier: e.target.value }))}
-              className="h-8 bg-background/50 border-gold/10 focus:border-gold font-mono text-sm"
+              className="h-8 bg-background/50 border-gold/15 focus:border-gold font-mono text-sm"
               placeholder={slugify(formData.name || 'item')}
             />
           </ReviewFieldHighlight>
           <ReviewFieldHighlight columnKey="source_id" className="space-y-0.5">
-            <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Source</Label>
+            <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/45">Source</Label>
             <select
               value={formData.sourceId}
               onChange={(e) => setFormData((prev) => ({ ...prev, sourceId: e.target.value }))}
-              className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+              className="w-full h-8 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm"
             >
               <option value="">Select a source</option>
               {sources.map((source) => (
@@ -1552,11 +1552,11 @@ function BasicsTab({
             </select>
           </ReviewFieldHighlight>
           <ReviewFieldHighlight columnKey="page" className="space-y-0.5">
-            <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Page</Label>
+            <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/45">Page</Label>
             <Input
               value={formData.page}
               onChange={(e) => setFormData((prev) => ({ ...prev, page: e.target.value }))}
-              className="h-8 bg-background/50 border-gold/10 focus:border-gold text-sm"
+              className="h-8 bg-background/50 border-gold/15 focus:border-gold text-sm"
               placeholder="207"
             />
           </ReviewFieldHighlight>
@@ -1566,7 +1566,7 @@ function BasicsTab({
       {/* Physical grid — rarity / quantity / weight / price / magical. */}
       <div className="grid gap-3 grid-cols-2 md:grid-cols-5">
         <div className="space-y-0.5">
-          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Rarity</Label>
+          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/45">Rarity</Label>
           <SingleSelectSearch
             value={formData.rarity || 'none'}
             onChange={(val) => setFormData((prev) => ({ ...prev, rarity: val }))}
@@ -1575,7 +1575,7 @@ function BasicsTab({
           />
         </div>
         <div className="space-y-0.5">
-          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Quantity</Label>
+          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/45">Quantity</Label>
           <Input
             type="number"
             min={0}
@@ -1584,11 +1584,11 @@ function BasicsTab({
               ...prev,
               quantity: parseInt(e.target.value || '0', 10) || 0,
             }))}
-            className="h-8 bg-background/50 border-gold/10 focus:border-gold text-sm"
+            className="h-8 bg-background/50 border-gold/15 focus:border-gold text-sm"
           />
         </div>
         <div className="space-y-0.5">
-          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Weight</Label>
+          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/45">Weight</Label>
           <div className="flex gap-1">
             <Input
               type="number"
@@ -1598,7 +1598,7 @@ function BasicsTab({
                 ...prev,
                 weight: { value: parseFloat(e.target.value) || 0, units: prev.weight?.units || 'lb' },
               }))}
-              className="h-8 bg-background/50 border-gold/10 focus:border-gold text-sm flex-1"
+              className="h-8 bg-background/50 border-gold/15 focus:border-gold text-sm flex-1"
             />
             <SingleSelectSearch
               value={formData.weight?.units || 'lb'}
@@ -1612,7 +1612,7 @@ function BasicsTab({
           </div>
         </div>
         <div className="space-y-0.5">
-          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Price</Label>
+          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/45">Price</Label>
           <div className="flex gap-1">
             <Input
               type="number"
@@ -1622,7 +1622,7 @@ function BasicsTab({
                 ...prev,
                 price: { value: parseFloat(e.target.value) || 0, denomination: prev.price?.denomination || 'gp' },
               }))}
-              className="h-8 bg-background/50 border-gold/10 focus:border-gold text-sm flex-1"
+              className="h-8 bg-background/50 border-gold/15 focus:border-gold text-sm flex-1"
             />
             <SingleSelectSearch
               value={formData.price?.denomination || 'gp'}
@@ -1640,14 +1640,14 @@ function BasicsTab({
             checked={!!formData.magical}
             onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, magical: !!checked }))}
           />
-          <span className="text-xs text-ink/70">Magical</span>
+          <span className="text-xs text-ink/75">Magical</span>
         </label>
       </div>
 
       {/* Description — markdown editor takes remaining height via
           `layout: 'fill'` on the sub-tab. */}
       <div className="flex-1 flex flex-col min-h-0 space-y-1">
-        <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Description</Label>
+        <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/45">Description</Label>
         <MarkdownEditor
           value={formData.description}
           onChange={(description) => setFormData((prev) => ({ ...prev, description }))}
@@ -1677,7 +1677,7 @@ function MechanicsTab({
   const itemType = formData.itemType || 'loot';
 
   return (
-    <div className="space-y-4 pt-4 border-t border-gold/10">
+    <div className="space-y-4 pt-4 border-t border-gold/15">
       {/* Base-item FK dropdown for shapes that have one. */}
       {itemType === 'weapon' && (
         <BaseItemSection
@@ -1755,7 +1755,7 @@ function MechanicsTab({
       {itemType === 'container' && <ContainerItemFields formData={formData} setFormData={setFormData} />}
       {itemType === 'loot' && (
         <ActivitySection label="LOOT">
-          <p className="text-[10px] text-ink/40 py-2">
+          <p className="text-[10px] text-ink/45 py-2">
             Loot rows carry no mechanical state — just the subtype (set on
             Basics) and the standard catalog fields. Use the Activities tab
             if the loot row should trigger anything when added to an
@@ -1840,7 +1840,7 @@ function EquippabilitySection({
         <textarea
           value={formData.unidentifiedDescription || ''}
           onChange={(e) => setFormData((prev) => ({ ...prev, unidentifiedDescription: e.target.value }))}
-          className="w-full min-h-[60px] px-3 py-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+          className="w-full min-h-[60px] px-3 py-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm"
           placeholder="A nondescript [item]…"
         />
       </FieldRow>
@@ -1888,7 +1888,7 @@ function PropertiesSection({
               return (
                 <span
                   key={slug}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] uppercase tracking-widest font-black bg-gold/15 border border-gold/30 text-gold"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] uppercase tracking-widest font-black bg-gold/15 border border-gold/35 text-gold"
                 >
                   {label}
                   <button
@@ -1912,11 +1912,11 @@ function PropertiesSection({
             placeholder="Add property..."
             triggerClassName="flex-1"
           />
-          <span className="text-[9px] text-ink/30 italic">
+          <span className="text-[9px] text-ink/35 italic">
             {properties.length} selected
           </span>
         </div>
-        <p className="text-[10px] text-ink/40">
+        <p className="text-[10px] text-ink/45">
           Foundry-aligned slugs (post-20260526-1700: fin / hvy / lgt / lod / two / ver / thr / rch / amm / spc / sil
           for standards; custom slugs like 'lance' or 'superHeavy' pass through verbatim).
         </p>
@@ -1957,7 +1957,7 @@ function WeaponItemFields({
             min={0}
             value={damageBase.number ?? 1}
             onChange={(e) => updateDamageBase({ number: parseInt(e.target.value || '0', 10) || 0 })}
-            className="bg-background/50 border-gold/10"
+            className="bg-background/50 border-gold/15"
           />
         </FieldRow>
         <FieldRow label="Die Size">
@@ -1983,7 +1983,7 @@ function WeaponItemFields({
           <Input
             value={damageBase.bonus ?? ''}
             onChange={(e) => updateDamageBase({ bonus: e.target.value })}
-            className="bg-background/50 border-gold/10 text-xs font-mono"
+            className="bg-background/50 border-gold/15 text-xs font-mono"
             placeholder="@mod"
           />
         </FieldRow>
@@ -1995,7 +1995,7 @@ function WeaponItemFields({
               ...prev,
               magicalBonus: parseInt(e.target.value || '0', 10) || 0,
             }))}
-            className="bg-background/50 border-gold/10"
+            className="bg-background/50 border-gold/15"
           />
         </FieldRow>
       </ActivitySection>
@@ -2006,7 +2006,7 @@ function WeaponItemFields({
             type="number"
             value={range.value ?? ''}
             onChange={(e) => updateRange({ value: e.target.value === '' ? null : parseInt(e.target.value, 10) })}
-            className="bg-background/50 border-gold/10"
+            className="bg-background/50 border-gold/15"
             placeholder="—"
           />
         </FieldRow>
@@ -2015,7 +2015,7 @@ function WeaponItemFields({
             type="number"
             value={range.long ?? ''}
             onChange={(e) => updateRange({ long: e.target.value === '' ? null : parseInt(e.target.value, 10) })}
-            className="bg-background/50 border-gold/10"
+            className="bg-background/50 border-gold/15"
             placeholder="—"
           />
         </FieldRow>
@@ -2024,7 +2024,7 @@ function WeaponItemFields({
             type="number"
             value={range.reach ?? ''}
             onChange={(e) => updateRange({ reach: e.target.value === '' ? null : parseInt(e.target.value, 10) })}
-            className="bg-background/50 border-gold/10"
+            className="bg-background/50 border-gold/15"
             placeholder="5"
           />
         </FieldRow>
@@ -2054,7 +2054,7 @@ function EquipmentItemFields({
   if (!isArmor) {
     return (
       <ActivitySection label="EQUIPMENT">
-        <p className="text-[10px] text-ink/40 py-2">
+        <p className="text-[10px] text-ink/45 py-2">
           Worn gear — no armor stats. Use the Properties section above for any
           item-shape flags (mgc / concentration / custom homebrew slugs).
         </p>
@@ -2072,7 +2072,7 @@ function EquipmentItemFields({
             ...prev,
             armorValue: parseInt(e.target.value || '0', 10) || 0,
           }))}
-          className="bg-background/50 border-gold/10"
+          className="bg-background/50 border-gold/15"
         />
       </FieldRow>
       <FieldRow label="Dex Max" hint="Maximum Dex bonus allowed. Blank = unlimited (light); 2 = medium; 0 = heavy.">
@@ -2083,7 +2083,7 @@ function EquipmentItemFields({
             ...prev,
             armorDex: e.target.value === '' ? null : parseInt(e.target.value, 10),
           }))}
-          className="bg-background/50 border-gold/10"
+          className="bg-background/50 border-gold/15"
           placeholder="—"
         />
       </FieldRow>
@@ -2095,7 +2095,7 @@ function EquipmentItemFields({
             ...prev,
             armorMagicalBonus: parseInt(e.target.value || '0', 10) || 0,
           }))}
-          className="bg-background/50 border-gold/10"
+          className="bg-background/50 border-gold/15"
         />
       </FieldRow>
       <FieldRow label="Strength Required" hint="Heavy armor only — character STR must meet this or take −10ft speed.">
@@ -2106,11 +2106,11 @@ function EquipmentItemFields({
             ...prev,
             strength: e.target.value === '' ? null : parseInt(e.target.value, 10),
           }))}
-          className="bg-background/50 border-gold/10"
+          className="bg-background/50 border-gold/15"
           placeholder="—"
         />
       </FieldRow>
-      <p className="text-[10px] text-ink/40 py-2">
+      <p className="text-[10px] text-ink/45 py-2">
         Stealth disadvantage lives on the Properties section now —
         add the <code>stealthDisadvantage</code> property to flag it.
       </p>
@@ -2135,10 +2135,10 @@ function ConsumableItemFields({
             ...prev,
             magicalBonus: parseInt(e.target.value || '0', 10) || 0,
           }))}
-          className="bg-background/50 border-gold/10"
+          className="bg-background/50 border-gold/15"
         />
       </FieldRow>
-      <p className="text-[10px] text-ink/40 py-2">
+      <p className="text-[10px] text-ink/45 py-2">
         Damage rolls (e.g. potion of healing, acid vial) live in the item's
         Activities — add a Damage activity to author the dice and on-use
         behaviour.
@@ -2177,7 +2177,7 @@ function ToolItemFields({
         <Input
           value={formData.bonus || ''}
           onChange={(e) => setFormData((prev) => ({ ...prev, bonus: e.target.value }))}
-          className="bg-background/50 border-gold/10 text-xs font-mono"
+          className="bg-background/50 border-gold/15 text-xs font-mono"
           placeholder="+1"
         />
       </FieldRow>
@@ -2185,7 +2185,7 @@ function ToolItemFields({
         <Input
           value={formData.chatFlavor || ''}
           onChange={(e) => setFormData((prev) => ({ ...prev, chatFlavor: e.target.value }))}
-          className="bg-background/50 border-gold/10"
+          className="bg-background/50 border-gold/15"
           placeholder="Tinkering away..."
         />
       </FieldRow>
@@ -2228,7 +2228,7 @@ function ContainerItemFields({
               min={0}
               value={capacity.value ?? 0}
               onChange={(e) => updateCapacity({ value: parseFloat(e.target.value) || 0 })}
-              className="bg-background/50 border-gold/10 flex-1"
+              className="bg-background/50 border-gold/15 flex-1"
             />
             {capacity.type === 'weight' && (
               <SingleSelectSearch
@@ -2250,19 +2250,19 @@ function ContainerItemFields({
 
       <ActivitySection label="CONTAINER · CURRENCY">
         <div className="py-2">
-          <p className="text-[10px] text-ink/40 mb-2">
+          <p className="text-[10px] text-ink/45 mb-2">
             Pre-filled coins inside this container. Foundry's 5-coin grid.
           </p>
           <div className="grid grid-cols-5 gap-2">
             {DENOMINATIONS.map(([coin, label]) => (
               <div key={coin} className="space-y-1">
-                <Label className="text-[9px] uppercase tracking-widest text-ink/40 text-center block">{label}</Label>
+                <Label className="text-[9px] uppercase tracking-widest text-ink/45 text-center block">{label}</Label>
                 <Input
                   type="number"
                   min={0}
                   value={(currency as any)[coin] ?? 0}
                   onChange={(e) => updateCurrency(coin, parseInt(e.target.value || '0', 10) || 0)}
-                  className="bg-background/50 border-gold/10 text-center text-xs"
+                  className="bg-background/50 border-gold/15 text-center text-xs"
                 />
               </div>
             ))}

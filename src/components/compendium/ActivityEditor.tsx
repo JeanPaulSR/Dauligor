@@ -423,13 +423,13 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
       {/* Activity list — Foundry-style tree rows */}
       <div className={cn(
         'rounded border overflow-hidden',
-        activityList.length > 0 ? 'border-gold/15 bg-background/20' : 'border-dashed border-gold/10',
+        activityList.length > 0 ? 'border-gold/15 bg-background/20' : 'border-dashed border-gold/15',
       )}>
         {activityList.length === 0 ? (
           <div className="py-8 flex flex-col items-center justify-center text-center">
             <Zap className="w-6 h-6 text-gold/15 mb-2" />
             <p className="text-ink/25 italic text-xs">No activities defined</p>
-            <p className="text-[10px] text-ink/20 mt-0.5">
+            <p className="text-[10px] text-ink/25 mt-0.5">
               Activities drive the mechanical behaviour of this {context === 'spell' ? 'spell' : context === 'item' ? 'item' : 'feature'}
             </p>
           </div>
@@ -447,20 +447,20 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                   'relative group flex items-center gap-2 pl-5 pr-2 py-1.5',
                   'hover:bg-gold/5 cursor-pointer transition-colors',
                   index === 0
-                    ? 'border-l-2 border-l-gold/50'
-                    : 'border-t border-t-gold/10 border-l-2 border-l-gold/10',
+                    ? 'border-l-2 border-l-gold/55'
+                    : 'border-t border-t-gold/15 border-l-2 border-l-gold/15',
                 )}
                 onClick={() => setEditingId(activity.id)}
               >
                 {/* Tree connector */}
-                <span className="absolute left-1.5 top-[9px] text-gold/30 text-[11px] font-bold select-none leading-none">┗</span>
+                <span className="absolute left-1.5 top-[9px] text-gold/35 text-[11px] font-bold select-none leading-none">┗</span>
 
                 {/* Icon */}
-                <div className="w-6 h-6 shrink-0 rounded border border-gold/20 bg-gold/5 flex items-center justify-center overflow-hidden">
+                <div className="w-6 h-6 shrink-0 rounded border border-gold/25 bg-gold/5 flex items-center justify-center overflow-hidden">
                   {isExternal ? (
                     <img src={activity.img} alt="" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
                   ) : (
-                    <KindIcon className="w-3.5 h-3.5 text-gold/70" />
+                    <KindIcon className="w-3.5 h-3.5 text-gold/75" />
                   )}
                 </div>
 
@@ -468,11 +468,11 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                 <div className="flex-1 min-w-0">
                   <span className="text-[12px] font-semibold text-ink/85 leading-none">{activity.name}</span>
                   <div className="flex items-center gap-1.5 mt-0.5">
-                    <span className="text-[9px] uppercase tracking-widest text-ink/30">{kindInfo?.label}</span>
+                    <span className="text-[9px] uppercase tracking-widest text-ink/35">{kindInfo?.label}</span>
                     {activationLabel && (
                       <>
-                        <span className="text-gold/20 leading-none">·</span>
-                        <span className="text-[9px] text-ink/30">{activationLabel}</span>
+                        <span className="text-gold/25 leading-none">·</span>
+                        <span className="text-[9px] text-ink/35">{activationLabel}</span>
                       </>
                     )}
                   </div>
@@ -482,7 +482,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); handleRemoveActivity(activity.id); }}
-                  className="shrink-0 w-6 h-6 flex items-center justify-center text-ink/20 hover:text-blood opacity-0 group-hover:opacity-100 transition-all rounded"
+                  className="shrink-0 w-6 h-6 flex items-center justify-center text-ink/25 hover:text-blood opacity-0 group-hover:opacity-100 transition-all rounded"
                   title="Remove activity"
                 >
                   <Trash2 className="w-3 h-3" />
@@ -495,8 +495,8 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
 
       {/* Activity type selector */}
       <Dialog open={isSelectorOpen} onOpenChange={setIsSelectorOpen}>
-        <DialogContent className="sm:max-w-[440px] bg-card border-gold/20 p-0">
-          <DialogHeader className="px-5 pt-4 pb-3 border-b border-gold/10">
+        <DialogContent className="sm:max-w-[440px] bg-card border-gold/25 p-0">
+          <DialogHeader className="px-5 pt-4 pb-3 border-b border-gold/15">
             <DialogTitle className="dialog-title">Add Activity</DialogTitle>
           </DialogHeader>
           <div className="p-3 overflow-y-auto max-h-[70vh]">
@@ -507,14 +507,14 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                   key={kind}
                   type="button"
                   onClick={() => handleAddActivity(kind)}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded border border-transparent hover:border-gold/20 hover:bg-gold/5 transition-all text-left group"
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded border border-transparent hover:border-gold/25 hover:bg-gold/5 transition-all text-left group"
                 >
-                  <div className="w-7 h-7 rounded border border-gold/15 bg-gold/5 flex items-center justify-center shrink-0 group-hover:border-gold/40 group-hover:bg-gold/10 transition-colors">
-                    <Icon className="w-4 h-4 text-gold/60 group-hover:text-gold transition-colors" />
+                  <div className="w-7 h-7 rounded border border-gold/15 bg-gold/5 flex items-center justify-center shrink-0 group-hover:border-gold/45 group-hover:bg-gold/15 transition-colors">
+                    <Icon className="w-4 h-4 text-gold/65 group-hover:text-gold transition-colors" />
                   </div>
                   <div className="min-w-0">
                     <p className="text-xs font-semibold text-ink/75 group-hover:text-ink/95 leading-none">{label}</p>
-                    <p className="text-[10px] text-ink/30 mt-0.5 leading-snug">{KIND_DESCRIPTIONS[kind]}</p>
+                    <p className="text-[10px] text-ink/35 mt-0.5 leading-snug">{KIND_DESCRIPTIONS[kind]}</p>
                   </div>
                 </button>
               ))}
@@ -524,9 +524,9 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
             {secondaryKinds.length > 0 && (
               <>
                 <div className="flex items-center gap-2 my-2.5">
-                  <div className="flex-1 border-t border-gold/10" />
+                  <div className="flex-1 border-t border-gold/15" />
                   <span className="text-[9px] uppercase tracking-widest text-ink/25">Advanced</span>
-                  <div className="flex-1 border-t border-gold/10" />
+                  <div className="flex-1 border-t border-gold/15" />
                 </div>
                 <div className="space-y-0.5">
                   {secondaryKinds.map(({ kind, label, icon: Icon }) => (
@@ -534,13 +534,13 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                       key={kind}
                       type="button"
                       onClick={() => handleAddActivity(kind)}
-                      className="w-full flex items-center gap-3 px-3 py-2 rounded border border-transparent hover:border-gold/20 hover:bg-gold/5 transition-all text-left group"
+                      className="w-full flex items-center gap-3 px-3 py-2 rounded border border-transparent hover:border-gold/25 hover:bg-gold/5 transition-all text-left group"
                     >
-                      <div className="w-6 h-6 rounded border border-gold/10 bg-gold/5 flex items-center justify-center shrink-0 group-hover:border-gold/30 transition-colors">
-                        <Icon className="w-3.5 h-3.5 text-gold/40 group-hover:text-gold/70 transition-colors" />
+                      <div className="w-6 h-6 rounded border border-gold/15 bg-gold/5 flex items-center justify-center shrink-0 group-hover:border-gold/35 transition-colors">
+                        <Icon className="w-3.5 h-3.5 text-gold/45 group-hover:text-gold/75 transition-colors" />
                       </div>
                       <div className="min-w-0">
-                        <p className="text-[11px] font-semibold text-ink/60 group-hover:text-ink/85 leading-none">{label}</p>
+                        <p className="text-[11px] font-semibold text-ink/65 group-hover:text-ink/85 leading-none">{label}</p>
                         <p className="text-[9px] text-ink/25 mt-0.5 leading-snug">{KIND_DESCRIPTIONS[kind]}</p>
                       </div>
                     </button>
@@ -561,7 +561,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
         <DialogContent className="dialog-content sm:max-w-[95vw] lg:max-w-4xl flex flex-col h-[720px] max-h-[90vh]">
           {editingActivity && (
             <>
-              <DialogHeader className="px-6 pt-5 pb-3 shrink-0 border-b border-gold/10">
+              <DialogHeader className="px-6 pt-5 pb-3 shrink-0 border-b border-gold/15">
                 <div className="flex flex-col gap-3">
                   <DialogTitle className="h1-title text-center text-ink">
                     {editingActivity.name}
@@ -805,7 +805,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
 
                   {activeTab === 'activation' && (
                     <div className="space-y-1">
-                      <div className="flex justify-center border-b border-gold/10 mb-1">
+                      <div className="flex justify-center border-b border-gold/15 mb-1">
                         <Tabs value={activeActivationTab} onValueChange={setActiveActivationTab} className="bg-transparent border-none">
                           <TabsList variant="line" className="h-12 p-0 gap-12">
                             <TabsTrigger value="time" className="tab-trigger-custom-small">
@@ -874,7 +874,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                                           save: { ...editingActivity.save!, abilities: active ? cur.filter(a => a !== ab) : [...cur, ab] }
                                         });
                                       }}
-                                      className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border transition-colors ${active ? 'bg-gold/20 border-gold/50 text-ink/90' : 'bg-transparent border-gold/15 text-ink/35 hover:border-gold/30'}`}
+                                      className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border transition-colors ${active ? 'bg-gold/25 border-gold/55 text-ink/95' : 'bg-transparent border-gold/15 text-ink/35 hover:border-gold/35'}`}
                                     >
                                       {ab}
                                     </button>
@@ -1127,7 +1127,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                                       handleUpdateActivity(editingId!, { spell: { ...editingActivity.spell!, properties: checked ? [...props, prop] : props.filter(p => p !== prop) } });
                                     }}
                                   />
-                                  <span className="text-[9px] uppercase font-black text-ink/60">{prop[0].toUpperCase()}</span>
+                                  <span className="text-[9px] uppercase font-black text-ink/65">{prop[0].toUpperCase()}</span>
                                 </label>
                               ))}
                             </div>
@@ -1315,7 +1315,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                                     checked={Boolean((editingActivity.summon.match as Record<string, unknown> | undefined)?.[flag])}
                                     onCheckedChange={checked => updateSummon({ match: { ...(editingActivity.summon.match || {}), [flag]: !!checked } })}
                                   />
-                                  <span className="text-[9px] uppercase font-black text-ink/60">{flag}</span>
+                                  <span className="text-[9px] uppercase font-black text-ink/65">{flag}</span>
                                 </label>
                               ))}
                             </div>
@@ -1324,11 +1324,11 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                             <div className="grid grid-cols-3 gap-2">
                               {['ac', 'hd', 'hp', 'attackDamage', 'saveDamage', 'healing'].map(field => (
                                 <div key={field}>
-                                  <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest mb-1">{field}</p>
+                                  <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest mb-1">{field}</p>
                                   <Input
                                     value={((editingActivity.summon.bonuses as Record<string, unknown> | undefined)?.[field] as string) || ''}
                                     onChange={e => updateSummon({ bonuses: { ...(editingActivity.summon.bonuses || {}), [field]: e.target.value } })}
-                                    className="h-7 bg-background/40 border-gold/10 text-[9px] font-mono"
+                                    className="h-7 bg-background/40 border-gold/15 text-[9px] font-mono"
                                     placeholder="+2"
                                   />
                                 </div>
@@ -1346,48 +1346,48 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                                     { _id: makeFoundryId(), count: '1', cr: '', level: { min: 0, max: 20 }, name: '', types: [], uuid: null }
                                   ]
                                 })}
-                                className="flex items-center gap-1 text-[10px] uppercase tracking-widest font-black text-gold/50 hover:text-gold transition-colors"
+                                className="flex items-center gap-1 text-[10px] uppercase tracking-widest font-black text-gold/55 hover:text-gold transition-colors"
                               >
                                 <Plus className="w-3 h-3" /> Add
                               </button>
                             </div>
                             <div className="space-y-2">
                               {(editingActivity.summon.profiles || []).map((profile, idx) => (
-                                <div key={profile._id || idx} className="grid grid-cols-6 gap-2 items-end p-2.5 bg-gold/3 border border-gold/8 rounded">
+                                <div key={profile._id || idx} className="grid grid-cols-6 gap-2 items-end p-2.5 bg-gold/5 border border-gold/5 rounded">
                                   <div className="grid gap-1">
-                                    <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest">Name</p>
-                                    <Input value={profile.name} onChange={e => { const p=[...(editingActivity.summon.profiles||[])]; p[idx]={...profile,name:e.target.value}; updateSummon({profiles:p}); }} className="h-7 bg-background/40 border-gold/10 text-xs" />
+                                    <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest">Name</p>
+                                    <Input value={profile.name} onChange={e => { const p=[...(editingActivity.summon.profiles||[])]; p[idx]={...profile,name:e.target.value}; updateSummon({profiles:p}); }} className="h-7 bg-background/40 border-gold/15 text-xs" />
                                   </div>
                                   <div className="grid gap-1">
-                                    <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest">Count</p>
-                                    <Input value={profile.count} onChange={e => { const p=[...(editingActivity.summon.profiles||[])]; p[idx]={...profile,count:e.target.value}; updateSummon({profiles:p}); }} className="h-7 bg-background/40 border-gold/10 text-xs font-mono" />
+                                    <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest">Count</p>
+                                    <Input value={profile.count} onChange={e => { const p=[...(editingActivity.summon.profiles||[])]; p[idx]={...profile,count:e.target.value}; updateSummon({profiles:p}); }} className="h-7 bg-background/40 border-gold/15 text-xs font-mono" />
                                   </div>
                                   <div className="grid gap-1">
-                                    <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest">CR</p>
-                                    <Input value={profile.cr} onChange={e => { const p=[...(editingActivity.summon.profiles||[])]; p[idx]={...profile,cr:e.target.value}; updateSummon({profiles:p}); }} className="h-7 bg-background/40 border-gold/10 text-xs font-mono" />
+                                    <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest">CR</p>
+                                    <Input value={profile.cr} onChange={e => { const p=[...(editingActivity.summon.profiles||[])]; p[idx]={...profile,cr:e.target.value}; updateSummon({profiles:p}); }} className="h-7 bg-background/40 border-gold/15 text-xs font-mono" />
                                   </div>
                                   <div className="grid gap-1">
-                                    <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest">UUID</p>
-                                    <Input value={profile.uuid||''} onChange={e => { const p=[...(editingActivity.summon.profiles||[])]; p[idx]={...profile,uuid:e.target.value||null}; updateSummon({profiles:p}); }} className="h-7 bg-background/40 border-gold/10 text-xs font-mono" />
+                                    <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest">UUID</p>
+                                    <Input value={profile.uuid||''} onChange={e => { const p=[...(editingActivity.summon.profiles||[])]; p[idx]={...profile,uuid:e.target.value||null}; updateSummon({profiles:p}); }} className="h-7 bg-background/40 border-gold/15 text-xs font-mono" />
                                   </div>
                                   <div className="grid gap-1">
-                                    <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest">Level</p>
+                                    <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest">Level</p>
                                     <div className="flex gap-1">
-                                      <Input type="number" value={profile.level.min} onChange={e => { const p=[...(editingActivity.summon.profiles||[])]; p[idx]={...profile,level:{...profile.level,min:parseInt(e.target.value,10)||0}}; updateSummon({profiles:p}); }} className="h-7 bg-background/40 border-gold/10 text-xs text-center no-number-spin" />
-                                      <Input type="number" value={profile.level.max} onChange={e => { const p=[...(editingActivity.summon.profiles||[])]; p[idx]={...profile,level:{...profile.level,max:parseInt(e.target.value,10)||20}}; updateSummon({profiles:p}); }} className="h-7 bg-background/40 border-gold/10 text-xs text-center no-number-spin" />
+                                      <Input type="number" value={profile.level.min} onChange={e => { const p=[...(editingActivity.summon.profiles||[])]; p[idx]={...profile,level:{...profile.level,min:parseInt(e.target.value,10)||0}}; updateSummon({profiles:p}); }} className="h-7 bg-background/40 border-gold/15 text-xs text-center no-number-spin" />
+                                      <Input type="number" value={profile.level.max} onChange={e => { const p=[...(editingActivity.summon.profiles||[])]; p[idx]={...profile,level:{...profile.level,max:parseInt(e.target.value,10)||20}}; updateSummon({profiles:p}); }} className="h-7 bg-background/40 border-gold/15 text-xs text-center no-number-spin" />
                                     </div>
                                   </div>
                                   <button type="button" onClick={() => updateSummon({ profiles: (editingActivity.summon.profiles||[]).filter((_,i)=>i!==idx) })} className="h-7 flex items-center justify-center text-blood/60 hover:text-blood transition-colors">
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </button>
                                   <div className="col-span-6 grid gap-1">
-                                    <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest">Types</p>
-                                    <Input value={(profile.types||[]).join(', ')} onChange={e => { const p=[...(editingActivity.summon.profiles||[])]; p[idx]={...profile,types:parseCsv(e.target.value)}; updateSummon({profiles:p}); }} className="h-7 bg-background/40 border-gold/10 text-xs" placeholder="beast, fey" />
+                                    <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest">Types</p>
+                                    <Input value={(profile.types||[]).join(', ')} onChange={e => { const p=[...(editingActivity.summon.profiles||[])]; p[idx]={...profile,types:parseCsv(e.target.value)}; updateSummon({profiles:p}); }} className="h-7 bg-background/40 border-gold/15 text-xs" placeholder="beast, fey" />
                                   </div>
                                 </div>
                               ))}
                               {!(editingActivity.summon.profiles||[]).length && (
-                                <p className="text-center py-3 text-ink/30 italic text-[10px]">Monster support is still pending, but profiles can already be authored.</p>
+                                <p className="text-center py-3 text-ink/35 italic text-[10px]">Monster support is still pending, but profiles can already be authored.</p>
                               )}
                             </div>
                           </div>
@@ -1431,52 +1431,52 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                                     { _id: makeFoundryId(), cr: '', level: { min: 0, max: 20 }, movement: [], name: '', sizes: [], types: [], uuid: null }
                                   ]
                                 })}
-                                className="flex items-center gap-1 text-[10px] uppercase tracking-widest font-black text-gold/50 hover:text-gold transition-colors"
+                                className="flex items-center gap-1 text-[10px] uppercase tracking-widest font-black text-gold/55 hover:text-gold transition-colors"
                               >
                                 <Plus className="w-3 h-3" /> Add
                               </button>
                             </div>
                             <div className="space-y-2">
                               {(editingActivity.transform.profiles || []).map((profile, idx) => (
-                                <div key={profile._id || idx} className="grid grid-cols-6 gap-2 items-end p-2.5 bg-gold/3 border border-gold/8 rounded">
+                                <div key={profile._id || idx} className="grid grid-cols-6 gap-2 items-end p-2.5 bg-gold/5 border border-gold/5 rounded">
                                   <div className="grid gap-1">
-                                    <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest">Name</p>
-                                    <Input value={profile.name} onChange={e => { const p=[...(editingActivity.transform?.profiles||[])]; p[idx]={...profile,name:e.target.value}; updateTransform({profiles:p}); }} className="h-7 bg-background/40 border-gold/10 text-xs" />
+                                    <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest">Name</p>
+                                    <Input value={profile.name} onChange={e => { const p=[...(editingActivity.transform?.profiles||[])]; p[idx]={...profile,name:e.target.value}; updateTransform({profiles:p}); }} className="h-7 bg-background/40 border-gold/15 text-xs" />
                                   </div>
                                   <div className="grid gap-1">
-                                    <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest">CR</p>
-                                    <Input value={profile.cr||''} onChange={e => { const p=[...(editingActivity.transform?.profiles||[])]; p[idx]={...profile,cr:e.target.value}; updateTransform({profiles:p}); }} className="h-7 bg-background/40 border-gold/10 text-xs font-mono" />
+                                    <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest">CR</p>
+                                    <Input value={profile.cr||''} onChange={e => { const p=[...(editingActivity.transform?.profiles||[])]; p[idx]={...profile,cr:e.target.value}; updateTransform({profiles:p}); }} className="h-7 bg-background/40 border-gold/15 text-xs font-mono" />
                                   </div>
                                   <div className="grid gap-1">
-                                    <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest">UUID</p>
-                                    <Input value={profile.uuid||''} onChange={e => { const p=[...(editingActivity.transform?.profiles||[])]; p[idx]={...profile,uuid:e.target.value||null}; updateTransform({profiles:p}); }} className="h-7 bg-background/40 border-gold/10 text-xs font-mono" />
+                                    <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest">UUID</p>
+                                    <Input value={profile.uuid||''} onChange={e => { const p=[...(editingActivity.transform?.profiles||[])]; p[idx]={...profile,uuid:e.target.value||null}; updateTransform({profiles:p}); }} className="h-7 bg-background/40 border-gold/15 text-xs font-mono" />
                                   </div>
                                   <div className="grid gap-1">
-                                    <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest">Sizes</p>
-                                    <Input value={(profile.sizes||[]).join(', ')} onChange={e => { const p=[...(editingActivity.transform?.profiles||[])]; p[idx]={...profile,sizes:parseCsv(e.target.value)}; updateTransform({profiles:p}); }} className="h-7 bg-background/40 border-gold/10 text-xs" placeholder={CREATURE_SIZE_OPTIONS.map(o => o.value).join(', ')} />
+                                    <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest">Sizes</p>
+                                    <Input value={(profile.sizes||[]).join(', ')} onChange={e => { const p=[...(editingActivity.transform?.profiles||[])]; p[idx]={...profile,sizes:parseCsv(e.target.value)}; updateTransform({profiles:p}); }} className="h-7 bg-background/40 border-gold/15 text-xs" placeholder={CREATURE_SIZE_OPTIONS.map(o => o.value).join(', ')} />
                                   </div>
                                   <div className="grid gap-1">
-                                    <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest">Types</p>
-                                    <Input value={(profile.types||[]).join(', ')} onChange={e => { const p=[...(editingActivity.transform?.profiles||[])]; p[idx]={...profile,types:parseCsv(e.target.value)}; updateTransform({profiles:p}); }} className="h-7 bg-background/40 border-gold/10 text-xs" placeholder="beast" />
+                                    <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest">Types</p>
+                                    <Input value={(profile.types||[]).join(', ')} onChange={e => { const p=[...(editingActivity.transform?.profiles||[])]; p[idx]={...profile,types:parseCsv(e.target.value)}; updateTransform({profiles:p}); }} className="h-7 bg-background/40 border-gold/15 text-xs" placeholder="beast" />
                                   </div>
                                   <button type="button" onClick={() => updateTransform({ profiles: (editingActivity.transform?.profiles||[]).filter((_,i)=>i!==idx) })} className="h-7 flex items-center justify-center text-blood/60 hover:text-blood transition-colors">
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </button>
                                   <div className="col-span-3 grid gap-1">
-                                    <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest">Movement</p>
-                                    <Input value={(profile.movement||[]).join(', ')} onChange={e => { const p=[...(editingActivity.transform?.profiles||[])]; p[idx]={...profile,movement:parseCsv(e.target.value)}; updateTransform({profiles:p}); }} className="h-7 bg-background/40 border-gold/10 text-xs" placeholder={MOVEMENT_TYPE_OPTIONS.map(o => o.value).join(', ')} />
+                                    <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest">Movement</p>
+                                    <Input value={(profile.movement||[]).join(', ')} onChange={e => { const p=[...(editingActivity.transform?.profiles||[])]; p[idx]={...profile,movement:parseCsv(e.target.value)}; updateTransform({profiles:p}); }} className="h-7 bg-background/40 border-gold/15 text-xs" placeholder={MOVEMENT_TYPE_OPTIONS.map(o => o.value).join(', ')} />
                                   </div>
                                   <div className="col-span-3 grid gap-1">
-                                    <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest">Level Range</p>
+                                    <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest">Level Range</p>
                                     <div className="flex gap-2">
-                                      <Input type="number" value={profile.level.min} onChange={e => { const p=[...(editingActivity.transform?.profiles||[])]; p[idx]={...profile,level:{...profile.level,min:parseInt(e.target.value,10)||0}}; updateTransform({profiles:p}); }} className="h-7 bg-background/40 border-gold/10 text-xs text-center no-number-spin" />
-                                      <Input type="number" value={profile.level.max} onChange={e => { const p=[...(editingActivity.transform?.profiles||[])]; p[idx]={...profile,level:{...profile.level,max:parseInt(e.target.value,10)||20}}; updateTransform({profiles:p}); }} className="h-7 bg-background/40 border-gold/10 text-xs text-center no-number-spin" />
+                                      <Input type="number" value={profile.level.min} onChange={e => { const p=[...(editingActivity.transform?.profiles||[])]; p[idx]={...profile,level:{...profile.level,min:parseInt(e.target.value,10)||0}}; updateTransform({profiles:p}); }} className="h-7 bg-background/40 border-gold/15 text-xs text-center no-number-spin" />
+                                      <Input type="number" value={profile.level.max} onChange={e => { const p=[...(editingActivity.transform?.profiles||[])]; p[idx]={...profile,level:{...profile.level,max:parseInt(e.target.value,10)||20}}; updateTransform({profiles:p}); }} className="h-7 bg-background/40 border-gold/15 text-xs text-center no-number-spin" />
                                     </div>
                                   </div>
                                 </div>
                               ))}
                               {!(editingActivity.transform.profiles||[]).length && (
-                                <p className="text-center py-3 text-ink/30 italic text-[10px]">Transform settings can already be authored in a Foundry-like shape.</p>
+                                <p className="text-center py-3 text-ink/35 italic text-[10px]">Transform settings can already be authored in a Foundry-like shape.</p>
                               )}
                             </div>
                           </div>
@@ -1486,7 +1486,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                       {/* ── Applied Effects ── */}
                       <ActivitySection label="APPLIED EFFECTS">
                         {availableEffects.length === 0 ? (
-                          <p className="text-[10px] text-ink/30 italic py-2 text-center">
+                          <p className="text-[10px] text-ink/35 italic py-2 text-center">
                             No effects defined on this feature. Add effects in the Effects tab first.
                           </p>
                         ) : (
@@ -1512,7 +1512,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                                   <button
                                     type="button"
                                     onClick={toggle}
-                                    className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${linked ? 'bg-gold/30 border-gold/60' : 'border-gold/20 hover:border-gold/40'}`}
+                                    className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${linked ? 'bg-gold/35 border-gold/65' : 'border-gold/25 hover:border-gold/45'}`}
                                   >
                                     {linked && <svg className="w-2.5 h-2.5 text-gold" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth={2}><path d="M1.5 5l2.5 2.5 4.5-4.5"/></svg>}
                                   </button>
@@ -1521,23 +1521,23 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                                       <img src={fx.img} alt="" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
                                     </div>
                                   )}
-                                  <span className={`flex-1 text-xs truncate ${linked ? 'text-ink/85 font-medium' : 'text-ink/40'}`}>{fx.name}</span>
+                                  <span className={`flex-1 text-xs truncate ${linked ? 'text-ink/85 font-medium' : 'text-ink/45'}`}>{fx.name}</span>
                                   {linked && (
                                     <div className="flex items-center gap-1 shrink-0">
-                                      <span className="text-[9px] text-ink/30 uppercase tracking-wider">Lvl</span>
+                                      <span className="text-[9px] text-ink/35 uppercase tracking-wider">Lvl</span>
                                       <Input
                                         type="number"
                                         value={linked.level?.min ?? ''}
                                         onChange={e => patchLevel({ min: e.target.value === '' ? null : parseInt(e.target.value) })}
-                                        className="h-6 w-10 text-[10px] text-center bg-background/40 border-gold/10 no-number-spin"
+                                        className="h-6 w-10 text-[10px] text-center bg-background/40 border-gold/15 no-number-spin"
                                         placeholder="—"
                                       />
-                                      <span className="text-[9px] text-ink/20">–</span>
+                                      <span className="text-[9px] text-ink/25">–</span>
                                       <Input
                                         type="number"
                                         value={linked.level?.max ?? ''}
                                         onChange={e => patchLevel({ max: e.target.value === '' ? null : parseInt(e.target.value) })}
-                                        className="h-6 w-10 text-[10px] text-center bg-background/40 border-gold/10 no-number-spin"
+                                        className="h-6 w-10 text-[10px] text-center bg-background/40 border-gold/15 no-number-spin"
                                         placeholder="—"
                                       />
                                     </div>
@@ -1578,7 +1578,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
           @apply text-[10px] uppercase text-gold font-bold tracking-[0.2em] mb-2 block;
         }
         .label-text-xs-custom {
-          @apply text-[9px] uppercase text-ink/40 font-black tracking-widest;
+          @apply text-[9px] uppercase text-ink/45 font-black tracking-widest;
         }
         .form-group-custom {
           @apply relative border-t border-gold/5 pt-4 mt-4 first:border-0 first:pt-0 first:mt-0;

@@ -57,7 +57,7 @@ export function FocalPointPicker({ imageUrl, value, onChange, className }: Focal
           </div>
         </div>
       </div>
-      <p className="label-text text-ink/40">
+      <p className="label-text text-ink/45">
         Click or drag to set the focal point — controls how the image is framed in cards and previews.
       </p>
     </div>

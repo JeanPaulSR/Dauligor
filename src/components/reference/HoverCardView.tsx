@@ -47,7 +47,7 @@ export default function HoverCardView({
     <div
       ref={containerRef}
       {...(variant === 'hover' ? { 'data-hc-card': '', 'data-hc-depth': depth } : {})}
-      className="fixed w-[380px] rounded-lg border border-gold/30 bg-card shadow-2xl shadow-black/50 overflow-hidden"
+      className="fixed w-[380px] rounded-lg border border-gold/35 bg-card shadow-2xl shadow-black/50 overflow-hidden"
       style={style}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
@@ -57,12 +57,12 @@ export default function HoverCardView({
           className="flex items-center gap-2 px-2 py-1 bg-white/5 border-b border-gold/15 cursor-grab active:cursor-grabbing select-none"
           onPointerDown={onTitlePointerDown}
         >
-          <GripHorizontal className="w-3.5 h-3.5 text-ink/40" />
-          <span className="text-[10px] uppercase tracking-wide text-ink/40">drag to move</span>
+          <GripHorizontal className="w-3.5 h-3.5 text-ink/45" />
+          <span className="text-[10px] uppercase tracking-wide text-ink/45">drag to move</span>
           <button
             type="button"
             onClick={onClose}
-            className="ml-auto text-ink/40 hover:text-blood rounded p-0.5"
+            className="ml-auto text-ink/45 hover:text-blood rounded p-0.5"
             title="Close"
           >
             <X className="w-3.5 h-3.5" />
@@ -70,12 +70,12 @@ export default function HoverCardView({
         </div>
       )}
 
-      <div className="relative px-3.5 pt-3 pb-2 border-b border-gold/15 bg-gradient-to-b from-gold/10 to-transparent">
+      <div className="relative px-3.5 pt-3 pb-2 border-b border-gold/15 bg-gradient-to-b from-gold/15 to-transparent">
         {!pinned && (
           <button
             type="button"
             onClick={onPin}
-            className="absolute top-2 right-2 text-ink/40 hover:text-gold hover:bg-gold/10 rounded p-1 leading-none"
+            className="absolute top-2 right-2 text-ink/45 hover:text-gold hover:bg-gold/15 rounded p-1 leading-none"
             title="Pin — pop out into a movable window"
           >
             <Pin className="w-3.5 h-3.5" />
@@ -85,13 +85,13 @@ export default function HoverCardView({
           {loading ? 'Loading…' : (data?.name ?? '—')}
         </div>
         <div className="flex items-center gap-2 mt-1 min-w-0">
-          <span className="shrink-0 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-gold/15 text-gold/80">
+          <span className="shrink-0 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-gold/15 text-gold/85">
             {kind}
           </span>
           {data?.prereq ? (
             <span
               data-hc-prereq={data.prereqFull || data.prereq}
-              className="min-w-0 truncate text-xs italic text-gold/70 cursor-help"
+              className="min-w-0 truncate text-xs italic text-gold/75 cursor-help"
             >
               Prerequisite: {data.prereq}
             </span>
@@ -101,16 +101,16 @@ export default function HoverCardView({
 
       <div className="px-3.5 py-2.5 max-h-[215px] overflow-y-auto custom-scrollbar">
         {loading ? (
-          <p className="text-sm text-ink/40 italic">Loading…</p>
+          <p className="text-sm text-ink/45 italic">Loading…</p>
         ) : data?.summary ? (
           <BBCodeRenderer content={data.summary} className="prose-sm" />
         ) : (
-          <p className="text-sm text-ink/40 italic">No summary available.</p>
+          <p className="text-sm text-ink/45 italic">No summary available.</p>
         )}
       </div>
 
       {pinned && data?.route ? (
-        <div className="px-3.5 py-2 border-t border-dashed border-gold/20">
+        <div className="px-3.5 py-2 border-t border-dashed border-gold/25">
           <button
             type="button"
             onClick={onGoto}

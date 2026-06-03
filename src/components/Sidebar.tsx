@@ -269,8 +269,8 @@ export default function Sidebar({
                 to={item.path} 
                 className={`flex items-center justify-center w-10 h-10 rounded-md transition-all group ${
                   isActive 
-                    ? 'bg-gold/10 text-gold' 
-                    : 'text-ink/70 hover:text-gold hover:bg-gold/5'
+                    ? 'bg-gold/15 text-gold' 
+                    : 'text-ink/75 hover:text-gold hover:bg-gold/5'
                 }`}
               >
                 <item.icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-gold' : 'opacity-70 group-hover:opacity-100'}`} />
@@ -295,15 +295,15 @@ export default function Sidebar({
           // active toggling doesn't shift content horizontally.
           className={`flex items-center gap-2 lg:gap-3 pr-2 py-2 text-xs lg:text-sm rounded-md transition-all group border-l-2 ${
             isActive
-              ? 'bg-gold/10 text-gold font-bold border-gold pl-1.5'
-              : 'text-ink/70 hover:text-gold hover:bg-gold/5 border-transparent pl-1.5'
+              ? 'bg-gold/15 text-gold font-bold border-gold pl-1.5'
+              : 'text-ink/75 hover:text-gold hover:bg-gold/5 border-transparent pl-1.5'
           }`}
         >
           <item.icon className={`w-4 h-4 lg:w-5 lg:h-5 shrink-0 ${isActive ? 'text-gold' : 'opacity-70 group-hover:opacity-100'}`} />
           <span className="truncate">{item.label}</span>
         </Link>
         {item.subItems && (
-          <ul className="mt-1 ml-4 border-l border-gold/10 pl-2 space-y-1">
+          <ul className="mt-1 ml-4 border-l border-gold/15 pl-2 space-y-1">
             {item.subItems.map((subItem: any) => {
               // Active matching: exact path OR an /:id route (e.g.
               // /characters/builder/<id>) that this sub-item points at.
@@ -317,8 +317,8 @@ export default function Sidebar({
                     onClick={() => onClose?.()}
                     className={`flex items-center gap-2 pr-2 py-1.5 text-[10px] lg:text-xs rounded-md transition-all border-l-2 ${
                       isSubActive
-                        ? 'bg-gold/10 text-gold font-bold border-gold pl-1.5'
-                        : 'text-ink/60 hover:text-gold hover:bg-gold/5 border-transparent pl-1.5'
+                        ? 'bg-gold/15 text-gold font-bold border-gold pl-1.5'
+                        : 'text-ink/65 hover:text-gold hover:bg-gold/5 border-transparent pl-1.5'
                     }`}
                   >
                     <span className="truncate">{subItem.label}</span>
@@ -334,7 +334,7 @@ export default function Sidebar({
 
   const sidebarContent = (
     <div className="flex flex-col h-full min-h-0 bg-card">
-      <div className={`p-4 border-b border-gold/10 flex flex-col items-center text-center shrink-0 relative ${isCollapsed && !isOpen ? 'px-2' : ''}`}>
+      <div className={`p-4 border-b border-gold/15 flex flex-col items-center text-center shrink-0 relative ${isCollapsed && !isOpen ? 'px-2' : ''}`}>
         {/* Removed Desktop Toggle Tab in favor of Navbar menu */}
 
         {campaign ? (
@@ -344,12 +344,12 @@ export default function Sidebar({
             className="group flex flex-col items-center text-center transition-all w-full"
           >
             {campaign.imageUrl ? (
-              <div className={`rounded-full overflow-hidden border-2 border-gold/30 mb-3 flex items-center justify-center transition-all group-hover:border-gold/60 shadow-lg shadow-black/20 ${isCollapsed && !isOpen ? 'w-10 h-10 mb-1' : 'w-16 h-16 lg:w-20 lg:h-20 xl:w-24 xl:h-24'}`}>
+              <div className={`rounded-full overflow-hidden border-2 border-gold/35 mb-3 flex items-center justify-center transition-all group-hover:border-gold/65 shadow-lg shadow-black/20 ${isCollapsed && !isOpen ? 'w-10 h-10 mb-1' : 'w-16 h-16 lg:w-20 lg:h-20 xl:w-24 xl:h-24'}`}>
                 <img src={campaign.imageUrl} alt={campaign.name} className="w-full h-full object-cover" />
               </div>
             ) : (
-              <div className={`rounded-full bg-gold/10 border-2 border-gold/30 mb-3 flex items-center justify-center transition-all group-hover:border-gold/60 group-hover:bg-gold/20 ${isCollapsed && !isOpen ? 'w-10 h-10 mb-1' : 'w-16 h-16 lg:w-20 lg:h-20 xl:w-24 xl:h-24'}`}>
-                <Shield className={`${isCollapsed && !isOpen ? 'w-5 h-5' : 'w-8 h-8 lg:w-10 lg:h-10'} text-gold/50 transition-colors group-hover:text-gold`} />
+              <div className={`rounded-full bg-gold/15 border-2 border-gold/35 mb-3 flex items-center justify-center transition-all group-hover:border-gold/65 group-hover:bg-gold/25 ${isCollapsed && !isOpen ? 'w-10 h-10 mb-1' : 'w-16 h-16 lg:w-20 lg:h-20 xl:w-24 xl:h-24'}`}>
+                <Shield className={`${isCollapsed && !isOpen ? 'w-5 h-5' : 'w-8 h-8 lg:w-10 lg:h-10'} text-gold/55 transition-colors group-hover:text-gold`} />
               </div>
             )}
             
@@ -359,8 +359,8 @@ export default function Sidebar({
                   {campaign.name}
                 </h2>
                 <div className="flex items-center justify-center gap-1.5">
-                  <Shield className={`w-3 h-3 ${isStaff ? 'text-gold' : 'text-ink/30'}`} />
-                  <span className={`nav-label ${isStaff ? 'text-gold' : 'text-ink/40'}`}>
+                  <Shield className={`w-3 h-3 ${isStaff ? 'text-gold' : 'text-ink/35'}`} />
+                  <span className={`nav-label ${isStaff ? 'text-gold' : 'text-ink/45'}`}>
                     {(userProfile?.role || 'User').replace('-', ' ')}
                   </span>
                 </div>
@@ -369,8 +369,8 @@ export default function Sidebar({
           </Link>
         ) : (
           <div className="flex flex-col items-center text-center w-full">
-            <div className={`rounded-full bg-gold/10 border-2 border-gold/30 mb-3 flex items-center justify-center transition-all ${isCollapsed && !isOpen ? 'w-10 h-10 mb-1' : 'w-16 h-16 lg:w-20 lg:h-20 xl:w-24 xl:h-24'}`}>
-              <Shield className={`${isCollapsed && !isOpen ? 'w-5 h-5' : 'w-8 h-8 lg:w-10 lg:h-10'} text-gold/50`} />
+            <div className={`rounded-full bg-gold/15 border-2 border-gold/35 mb-3 flex items-center justify-center transition-all ${isCollapsed && !isOpen ? 'w-10 h-10 mb-1' : 'w-16 h-16 lg:w-20 lg:h-20 xl:w-24 xl:h-24'}`}>
+              <Shield className={`${isCollapsed && !isOpen ? 'w-5 h-5' : 'w-8 h-8 lg:w-10 lg:h-10'} text-gold/55`} />
             </div>
             {(!isCollapsed || isOpen) && (
               <div className="w-full space-y-1">
@@ -378,8 +378,8 @@ export default function Sidebar({
                   No Campaign
                 </h2>
                 <div className="flex items-center justify-center gap-1.5">
-                  <Shield className={`w-3 h-3 ${isStaff ? 'text-gold' : 'text-ink/30'}`} />
-                  <span className={`nav-label ${isStaff ? 'text-gold' : 'text-ink/40'}`}>
+                  <Shield className={`w-3 h-3 ${isStaff ? 'text-gold' : 'text-ink/35'}`} />
+                  <span className={`nav-label ${isStaff ? 'text-gold' : 'text-ink/45'}`}>
                     {(userProfile?.role || 'User').replace('-', ' ')}
                   </span>
                 </div>
@@ -403,7 +403,7 @@ export default function Sidebar({
                     <Link 
                       to={`/wiki/article/${article.id}`}
                       onClick={() => onClose?.()}
-                      className="block px-2 py-1.5 text-[10px] lg:text-xs text-ink/70 hover:text-gold hover:bg-gold/5 rounded transition-colors truncate"
+                      className="block px-2 py-1.5 text-[10px] lg:text-xs text-ink/75 hover:text-gold hover:bg-gold/5 rounded transition-colors truncate"
                     >
                       {article.title}
                     </Link>
@@ -424,7 +424,7 @@ export default function Sidebar({
                   {expandedSections[sectionKey] ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                 </button>
               ) : (
-                <div className="h-px bg-gold/10 my-4 mx-2" />
+                <div className="h-px bg-gold/15 my-4 mx-2" />
               )}
               
               <AnimatePresence initial={false}>
@@ -445,7 +445,7 @@ export default function Sidebar({
       </ScrollArea>
 
       {isStaff && (
-        <div className={`p-4 border-t border-gold/10 shrink-0 space-y-2 ${isCollapsed && !isOpen ? 'p-2' : ''}`}>
+        <div className={`p-4 border-t border-gold/15 shrink-0 space-y-2 ${isCollapsed && !isOpen ? 'p-2' : ''}`}>
           {/* Dev — admin-only BBCode tester (and a home for future dev tools) */}
           {isAdmin && (
             <Link to="/dev/bbcode" onClick={() => onClose?.()}>
@@ -453,8 +453,8 @@ export default function Sidebar({
                 <Button
                   size="sm"
                   variant="ghost"
-                  className={`w-full justify-start gap-2 text-xs text-ink/60 hover:text-gold hover:bg-gold/5 ${
-                    location.pathname === '/dev/bbcode' ? 'text-gold bg-gold/10' : ''
+                  className={`w-full justify-start gap-2 text-xs text-ink/65 hover:text-gold hover:bg-gold/5 ${
+                    location.pathname === '/dev/bbcode' ? 'text-gold bg-gold/15' : ''
                   }`}
                 >
                   <Bug className="w-3.5 h-3.5 shrink-0" /> BBCode Tester
@@ -465,7 +465,7 @@ export default function Sidebar({
                     <Button
                       size="icon"
                       variant="ghost"
-                      className="w-10 h-10 mx-auto text-ink/60 hover:text-gold hover:bg-gold/5"
+                      className="w-10 h-10 mx-auto text-ink/65 hover:text-gold hover:bg-gold/5"
                     >
                       <Bug className="w-5 h-5" />
                     </Button>
@@ -482,8 +482,8 @@ export default function Sidebar({
               <Button
                 size="sm"
                 variant="ghost"
-                className={`w-full justify-start gap-2 text-xs text-ink/60 hover:text-gold hover:bg-gold/5 ${
-                  location.pathname === '/admin/images' ? 'text-gold bg-gold/10' : ''
+                className={`w-full justify-start gap-2 text-xs text-ink/65 hover:text-gold hover:bg-gold/5 ${
+                  location.pathname === '/admin/images' ? 'text-gold bg-gold/15' : ''
                 }`}
               >
                 <ImageIcon className="w-3.5 h-3.5 shrink-0" /> Image Manager
@@ -494,7 +494,7 @@ export default function Sidebar({
                   <Button
                     size="icon"
                     variant="ghost"
-                    className="w-10 h-10 mx-auto text-ink/60 hover:text-gold hover:bg-gold/5"
+                    className="w-10 h-10 mx-auto text-ink/65 hover:text-gold hover:bg-gold/5"
                   >
                     <ImageIcon className="w-5 h-5" />
                   </Button>
@@ -507,13 +507,13 @@ export default function Sidebar({
           {/* New Entry */}
           <Link to="/wiki/new" onClick={() => onClose?.()} className="block">
             {(!isCollapsed || isOpen) ? (
-              <Button size="sm" className="w-full bg-gold hover:bg-gold/90 text-white gap-2 shadow-lg shadow-gold/20 text-xs lg:text-sm">
+              <Button size="sm" className="w-full bg-gold hover:bg-gold/95 text-[var(--primary-foreground)] gap-2 shadow-lg shadow-gold/25 text-xs lg:text-sm">
                 <Plus className="w-3 h-3 lg:w-4 lg:h-4" /> New Entry
               </Button>
             ) : (
               <Tooltip>
                 <TooltipTrigger render={
-                  <Button size="icon" className="w-10 h-10 mx-auto bg-gold hover:bg-gold/90 text-white shadow-lg shadow-gold/20">
+                  <Button size="icon" className="w-10 h-10 mx-auto bg-gold hover:bg-gold/95 text-[var(--primary-foreground)] shadow-lg shadow-gold/25">
                     <Plus className="w-5 h-5" />
                   </Button>
                 } />
@@ -529,7 +529,7 @@ export default function Sidebar({
   return (
     <>
       {/* Desktop Sidebar */}
-      <aside className={`hidden md:flex ${isCollapsed ? 'w-16' : 'w-48 lg:w-56 xl:w-64'} border-r border-gold/20 flex-col h-screen sticky top-0 shrink-0 overflow-hidden min-h-0 transition-all duration-300 z-30`}>
+      <aside className={`hidden md:flex ${isCollapsed ? 'w-16' : 'w-48 lg:w-56 xl:w-64'} border-r border-gold/25 flex-col h-screen sticky top-0 shrink-0 overflow-hidden min-h-0 transition-all duration-300 z-30`}>
         {sidebarContent}
       </aside>
 
@@ -551,7 +551,7 @@ export default function Sidebar({
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed inset-y-0 left-0 w-64 bg-card border-r border-gold/20 z-[100] md:hidden shadow-2xl flex flex-col min-h-0"
+              className="fixed inset-y-0 left-0 w-64 bg-card border-r border-gold/25 z-[100] md:hidden shadow-2xl flex flex-col min-h-0"
             >
               <div className="absolute right-2 top-2 z-10">
                 <Button variant="ghost" size="sm" onClick={onClose} className="text-gold">

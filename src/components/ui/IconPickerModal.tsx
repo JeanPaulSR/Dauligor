@@ -513,12 +513,12 @@ export function IconPickerModal({
       >
         {/* Drag-over overlay (admin only) */}
         {canManage && isDraggingOver && (
-          <div className="absolute inset-0 z-30 rounded-xl border-2 border-dashed border-gold bg-gold/10 backdrop-blur-sm flex flex-col items-center justify-center gap-3 pointer-events-none">
+          <div className="absolute inset-0 z-30 rounded-xl border-2 border-dashed border-gold bg-gold/15 backdrop-blur-sm flex flex-col items-center justify-center gap-3 pointer-events-none">
             <Upload className="w-10 h-10 text-gold" />
             <p className="text-sm font-semibold text-gold">
               Drop into {currentPath}/
             </p>
-            <p className="text-xs text-gold/60">Auto-cropped to {sizeLabel} · WebP</p>
+            <p className="text-xs text-gold/65">Auto-cropped to {sizeLabel} · WebP</p>
           </div>
         )}
 
@@ -528,7 +528,7 @@ export function IconPickerModal({
 
         {/* Source tabs — only rendered when more than one source is enabled */}
         {AVAILABLE_SOURCES.length > 1 && (
-          <div className="px-4 pt-2 shrink-0 flex items-center gap-1 border-b border-gold/10">
+          <div className="px-4 pt-2 shrink-0 flex items-center gap-1 border-b border-gold/15">
             {AVAILABLE_SOURCES.map((src) => (
               <button
                 key={src}
@@ -537,7 +537,7 @@ export function IconPickerModal({
                   'px-3 py-1.5 text-[11px] uppercase tracking-widest font-bold transition-colors border-b-2 -mb-px',
                   activeSource === src
                     ? 'text-gold border-gold'
-                    : 'text-ink/40 border-transparent hover:text-gold/70',
+                    : 'text-ink/45 border-transparent hover:text-gold/75',
                 )}
               >
                 {src === 'icons' ? 'Icons' : 'Tokens'}
@@ -547,23 +547,23 @@ export function IconPickerModal({
         )}
 
         {/* Row 1 — path navigation */}
-        <div className="px-4 py-2 border-b border-gold/10 shrink-0 flex items-center gap-2">
+        <div className="px-4 py-2 border-b border-gold/15 shrink-0 flex items-center gap-2">
           <button
             onClick={goUp}
             disabled={atRoot}
             title="Up one level"
             className={cn(
-              'p-1.5 rounded border border-gold/20 transition-colors shrink-0',
+              'p-1.5 rounded border border-gold/25 transition-colors shrink-0',
               atRoot
-                ? 'text-ink/20 border-gold/5 cursor-not-allowed'
-                : 'text-gold hover:bg-gold/10',
+                ? 'text-ink/25 border-gold/5 cursor-not-allowed'
+                : 'text-gold hover:bg-gold/15',
             )}
           >
             <ArrowUp className="w-3.5 h-3.5" />
           </button>
 
           <div className="relative flex-1 min-w-0">
-            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] uppercase tracking-widest text-ink/30 pointer-events-none font-bold">
+            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] uppercase tracking-widest text-ink/35 pointer-events-none font-bold">
               {activeSource}/
             </span>
             <Input
@@ -573,7 +573,7 @@ export function IconPickerModal({
               onBlur={commitPathInput}
               placeholder=""
               spellCheck={false}
-              className="h-8 text-xs bg-background/50 border-gold/20"
+              className="h-8 text-xs bg-background/50 border-gold/25"
               style={{ paddingLeft: `${activeSource.length * 6 + 18}px` }}
             />
           </div>
@@ -584,8 +584,8 @@ export function IconPickerModal({
             className={cn(
               'p-1.5 rounded border transition-colors shrink-0',
               isCurrentPathFavorited
-                ? 'bg-gold/20 text-gold border-gold/40'
-                : 'text-ink/40 hover:text-gold border-gold/20',
+                ? 'bg-gold/25 text-gold border-gold/45'
+                : 'text-ink/45 hover:text-gold border-gold/25',
             )}
           >
             <Star
@@ -601,8 +601,8 @@ export function IconPickerModal({
               className={cn(
                 'p-1.5 rounded border transition-colors shrink-0',
                 creatingFolder
-                  ? 'bg-gold/20 text-gold border-gold/40'
-                  : 'text-gold hover:bg-gold/10 border-gold/20',
+                  ? 'bg-gold/25 text-gold border-gold/45'
+                  : 'text-gold hover:bg-gold/15 border-gold/25',
               )}
             >
               <FolderPlus className="w-3.5 h-3.5" />
@@ -616,8 +616,8 @@ export function IconPickerModal({
               className={cn(
                 'p-1.5 rounded border transition-colors shrink-0',
                 showPrivate
-                  ? 'bg-gold/20 text-gold border-gold/40'
-                  : 'text-ink/40 hover:text-gold border-gold/20',
+                  ? 'bg-gold/25 text-gold border-gold/45'
+                  : 'text-ink/45 hover:text-gold border-gold/25',
               )}
             >
               {showPrivate ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
@@ -626,7 +626,7 @@ export function IconPickerModal({
 
           <button
             onClick={() => { loadFolder(currentPath); setAllIcons(null); }}
-            className="p-1.5 rounded border border-gold/20 text-ink/40 hover:text-gold hover:bg-gold/10 transition-colors shrink-0"
+            className="p-1.5 rounded border border-gold/25 text-ink/45 hover:text-gold hover:bg-gold/15 transition-colors shrink-0"
             title="Refresh"
           >
             <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
@@ -635,7 +635,7 @@ export function IconPickerModal({
 
         {/* Favorites strip */}
         {currentSourceFavorites.length > 0 && (
-          <div className="px-4 py-2 border-b border-gold/10 shrink-0 flex items-start gap-2 flex-wrap">
+          <div className="px-4 py-2 border-b border-gold/15 shrink-0 flex items-start gap-2 flex-wrap">
             <span className="label-text shrink-0 pt-0.5">Favorites</span>
             <div className="flex items-center gap-1 flex-wrap">
               {currentSourceFavorites.map((fav) => {
@@ -646,8 +646,8 @@ export function IconPickerModal({
                     className={cn(
                       'group flex items-center text-[11px] rounded border transition-colors',
                       isActive
-                        ? 'bg-gold/20 text-gold border-gold/40'
-                        : 'border-gold/15 text-ink/55 hover:text-gold hover:border-gold/30',
+                        ? 'bg-gold/25 text-gold border-gold/45'
+                        : 'border-gold/15 text-ink/55 hover:text-gold hover:border-gold/35',
                     )}
                   >
                     <button
@@ -660,7 +660,7 @@ export function IconPickerModal({
                     <button
                       onClick={() => removeFavorite(fav)}
                       title="Remove favorite"
-                      className="pr-1.5 pl-0.5 py-0.5 text-ink/30 hover:text-ink/70"
+                      className="pr-1.5 pl-0.5 py-0.5 text-ink/35 hover:text-ink/75"
                     >
                       <X className="w-2.5 h-2.5" />
                     </button>
@@ -673,8 +673,8 @@ export function IconPickerModal({
 
         {/* Inline create-folder row (admin only) */}
         {canManage && creatingFolder && (
-          <div className="px-4 py-2 border-b border-gold/10 shrink-0 bg-gold/5 flex items-center gap-2">
-            <Folder className="w-3.5 h-3.5 text-gold/60 shrink-0" />
+          <div className="px-4 py-2 border-b border-gold/15 shrink-0 bg-gold/5 flex items-center gap-2">
+            <Folder className="w-3.5 h-3.5 text-gold/65 shrink-0" />
             <Input
               ref={newFolderInputRef}
               value={newFolderName}
@@ -685,7 +685,7 @@ export function IconPickerModal({
               }}
               placeholder="new-folder-name"
               spellCheck={false}
-              className="h-7 text-xs bg-background/50 border-gold/20 flex-1"
+              className="h-7 text-xs bg-background/50 border-gold/25 flex-1"
             />
             <Button
               size="sm"
@@ -698,7 +698,7 @@ export function IconPickerModal({
             </Button>
             <button
               onClick={() => { setCreatingFolder(false); setNewFolderName(''); }}
-              className="text-ink/40 hover:text-ink/60 shrink-0"
+              className="text-ink/45 hover:text-ink/65 shrink-0"
               title="Cancel"
             >
               <X className="w-4 h-4" />
@@ -707,34 +707,34 @@ export function IconPickerModal({
         )}
 
         {/* Row 2 — search, display mode, upload */}
-        <div className="px-4 py-2 border-b border-gold/10 shrink-0 flex items-center gap-3">
+        <div className="px-4 py-2 border-b border-gold/15 shrink-0 flex items-center gap-3">
           <div className="relative flex-1 min-w-0">
             <SearchInput
               value={search}
               onChange={handleSearch}
               placeholder="Filter results…"
               size="sm"
-              className="bg-background/50 border-gold/20"
+              className="bg-background/50 border-gold/25"
             />
             {search && (
               <button
                 onClick={() => setSearch('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink/30 hover:text-ink/60"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink/35 hover:text-ink/65"
               >
                 <X className="w-3 h-3" />
               </button>
             )}
           </div>
 
-          <div className="flex items-center border border-gold/20 rounded shrink-0 overflow-hidden">
+          <div className="flex items-center border border-gold/25 rounded shrink-0 overflow-hidden">
             <button
               onClick={() => setDisplayMode('list')}
               title="List view"
               className={cn(
                 'p-1.5 transition-colors',
                 displayMode === 'list'
-                  ? 'bg-gold/20 text-gold'
-                  : 'text-ink/40 hover:text-gold hover:bg-gold/10',
+                  ? 'bg-gold/25 text-gold'
+                  : 'text-ink/45 hover:text-gold hover:bg-gold/15',
               )}
             >
               <ListIcon className="w-3.5 h-3.5" />
@@ -743,10 +743,10 @@ export function IconPickerModal({
               onClick={() => setDisplayMode('tiles')}
               title="Tile view"
               className={cn(
-                'p-1.5 transition-colors border-l border-gold/20',
+                'p-1.5 transition-colors border-l border-gold/25',
                 displayMode === 'tiles'
-                  ? 'bg-gold/20 text-gold'
-                  : 'text-ink/40 hover:text-gold hover:bg-gold/10',
+                  ? 'bg-gold/25 text-gold'
+                  : 'text-ink/45 hover:text-gold hover:bg-gold/15',
               )}
             >
               <LayoutGrid className="w-3.5 h-3.5" />
@@ -770,7 +770,7 @@ export function IconPickerModal({
 
         {/* Upload panel (admin only) */}
         {canManage && showUpload && (
-          <div className="px-4 py-3 border-b border-gold/10 shrink-0 bg-gold/5 space-y-2.5">
+          <div className="px-4 py-3 border-b border-gold/15 shrink-0 bg-gold/5 space-y-2.5">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="label-text shrink-0">Upload to:</span>
               {([
@@ -784,8 +784,8 @@ export function IconPickerModal({
                   className={cn(
                     'px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest rounded border transition-colors',
                     uploadToTemp === value
-                      ? 'bg-gold/20 text-gold border-gold/40'
-                      : 'text-ink/40 border-gold/10 hover:border-gold/30 hover:text-gold/60',
+                      ? 'bg-gold/25 text-gold border-gold/45'
+                      : 'text-ink/45 border-gold/15 hover:border-gold/35 hover:text-gold/65',
                   )}
                 >
                   {label}
@@ -796,14 +796,14 @@ export function IconPickerModal({
               <Button
                 size="sm"
                 variant="outline"
-                className="border-gold/20 hover:bg-gold/10 gap-2 text-xs h-8"
+                className="border-gold/25 hover:bg-gold/15 gap-2 text-xs h-8"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
               >
                 {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
                 {uploading ? 'Uploading…' : 'Choose File'}
               </Button>
-              <span className="text-[10px] text-ink/40">
+              <span className="text-[10px] text-ink/45">
                 Auto-cropped to {sizeLabel} · WebP
               </span>
             </div>
@@ -843,20 +843,20 @@ export function IconPickerModal({
           const hiddenFailed = sorted.slice(VISIBLE_CAP).filter((q) => q.status === 'error').length;
 
           return (
-            <div className="px-4 py-3 border-b border-gold/10 shrink-0 bg-card/40 space-y-2.5">
+            <div className="px-4 py-3 border-b border-gold/15 shrink-0 bg-card/40 space-y-2.5">
               {/* Aggregate row */}
               <div>
                 <div className="flex items-center justify-between gap-3 mb-1">
-                  <span className="text-[10px] uppercase tracking-widest text-ink/50">
+                  <span className="text-[10px] uppercase tracking-widest text-ink/55">
                     {uploading
                       ? `Uploading · ${settled}/${total} complete${failedCount ? ` · ${failedCount} failed` : ''}`
                       : failedCount && failedCount === total
                         ? `Upload failed (${failedCount}/${total})`
                         : `Upload complete · ${settled}/${total}${failedCount ? ` (${failedCount} failed)` : ''}`}
                   </span>
-                  <span className="text-[10px] text-gold/70 tabular-nums">{aggregatePct}%</span>
+                  <span className="text-[10px] text-gold/75 tabular-nums">{aggregatePct}%</span>
                 </div>
-                <div className="h-1.5 bg-gold/10 rounded-full overflow-hidden">
+                <div className="h-1.5 bg-gold/15 rounded-full overflow-hidden">
                   <div
                     className={cn(
                       'h-full rounded-full transition-all duration-200',
@@ -872,7 +872,7 @@ export function IconPickerModal({
                 {visible.map((item) => (
                   <div key={item.id} className="text-xs">
                     <div className="flex items-center justify-between gap-2 mb-0.5">
-                      <span className="text-ink/60 truncate">{item.name}</span>
+                      <span className="text-ink/65 truncate">{item.name}</span>
                       {item.status === 'done' && (
                         <span className="text-green-400 text-[10px] shrink-0 font-bold">Done</span>
                       )}
@@ -880,14 +880,14 @@ export function IconPickerModal({
                         <span className="text-blood text-[10px] shrink-0 font-bold">Failed</span>
                       )}
                       {item.status === 'uploading' && (
-                        <span className="text-gold/60 text-[10px] shrink-0 tabular-nums">{Math.round(item.progress)}%</span>
+                        <span className="text-gold/65 text-[10px] shrink-0 tabular-nums">{Math.round(item.progress)}%</span>
                       )}
                       {item.status === 'pending' && (
-                        <span className="text-ink/30 text-[10px] shrink-0">Queued</span>
+                        <span className="text-ink/35 text-[10px] shrink-0">Queued</span>
                       )}
                     </div>
                     {item.status === 'uploading' && (
-                      <div className="h-1 bg-gold/10 rounded-full overflow-hidden">
+                      <div className="h-1 bg-gold/15 rounded-full overflow-hidden">
                         <div
                           className="h-full bg-gold rounded-full transition-all duration-200"
                           style={{ width: `${item.progress}%` }}
@@ -920,31 +920,31 @@ export function IconPickerModal({
             displayMode === 'tiles' ? (
               <div className="grid grid-cols-5 sm:grid-cols-7 lg:grid-cols-9 gap-2">
                 {Array.from({ length: 27 }).map((_, i) => (
-                  <div key={i} className="aspect-square bg-gold/5 animate-pulse rounded border border-gold/10" />
+                  <div key={i} className="aspect-square bg-gold/5 animate-pulse rounded border border-gold/15" />
                 ))}
               </div>
             ) : (
               <div className="space-y-1">
                 {Array.from({ length: 8 }).map((_, i) => (
-                  <div key={i} className="h-10 bg-gold/5 animate-pulse rounded border border-gold/10" />
+                  <div key={i} className="h-10 bg-gold/5 animate-pulse rounded border border-gold/15" />
                 ))}
               </div>
             )
           ) : search ? (
             loadingAll ? (
               <div className="flex items-center justify-center py-16">
-                <Loader2 className="w-6 h-6 animate-spin text-gold/40" />
+                <Loader2 className="w-6 h-6 animate-spin text-gold/45" />
               </div>
             ) : displayedIcons.length === 0 ? (
               <div className="empty-state">
-                <Search className="w-10 h-10 text-gold/20 mb-3" />
-                <p className="text-sm text-ink/40 italic">
+                <Search className="w-10 h-10 text-gold/25 mb-3" />
+                <p className="text-sm text-ink/45 italic">
                   No {activeSource === 'tokens' ? 'tokens' : 'icons'} match "{search}"
                 </p>
               </div>
             ) : (
               <>
-                <p className="text-xs text-ink/40 mb-3">
+                <p className="text-xs text-ink/45 mb-3">
                   {displayedIcons.length} result{displayedIcons.length !== 1 ? 's' : ''}
                 </p>
                 <IconResults
@@ -962,19 +962,19 @@ export function IconPickerModal({
                     <button
                       key={f.fullPath}
                       onClick={() => setCurrentPath(f.fullPath)}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 border border-transparent hover:border-gold/20 hover:bg-gold/8 rounded transition-all text-left group"
+                      className="w-full flex items-center gap-2.5 px-3 py-2 border border-transparent hover:border-gold/25 hover:bg-gold/5 rounded transition-all text-left group"
                     >
-                      <Folder className="w-4 h-4 text-gold/50 group-hover:text-gold/80 shrink-0" />
-                      <span className="text-sm text-ink/65 group-hover:text-ink/90">
+                      <Folder className="w-4 h-4 text-gold/55 group-hover:text-gold/85 shrink-0" />
+                      <span className="text-sm text-ink/65 group-hover:text-ink/95">
                         {f.name}
                       </span>
                       {f.name.startsWith('_') && (
-                        <span className="text-[9px] uppercase tracking-widest text-ink/30 ml-auto">private</span>
+                        <span className="text-[9px] uppercase tracking-widest text-ink/35 ml-auto">private</span>
                       )}
                     </button>
                   ))}
                   {displayedIcons.length > 0 && (
-                    <div className="border-t border-gold/10 my-2" />
+                    <div className="border-t border-gold/15 my-2" />
                   )}
                 </div>
               )}
@@ -987,8 +987,8 @@ export function IconPickerModal({
                 />
               ) : visibleFolders.length === 0 ? (
                 <div className="empty-state">
-                  <ImageIcon className="w-10 h-10 text-gold/20 mb-3" />
-                  <p className="text-sm text-ink/40 italic">
+                  <ImageIcon className="w-10 h-10 text-gold/25 mb-3" />
+                  <p className="text-sm text-ink/45 italic">
                     No {activeSource === 'tokens' ? 'tokens' : 'icons'} here yet
                     {canManage ? ' — upload one to get started.' : '.'}
                   </p>
@@ -1031,7 +1031,7 @@ function IconGrid({
           key={icon.key}
           onClick={() => onSelect(icon.url)}
           title={icon.name}
-          className="flex flex-col items-center gap-1.5 p-2 border border-transparent rounded hover:border-gold/40 hover:bg-gold/8 transition-all group"
+          className="flex flex-col items-center gap-1.5 p-2 border border-transparent rounded hover:border-gold/45 hover:bg-gold/5 transition-all group"
         >
           <div className="w-full aspect-square flex items-center justify-center">
             <img
@@ -1065,9 +1065,9 @@ function IconList({
           key={icon.key}
           onClick={() => onSelect(icon.url)}
           title={icon.key}
-          className="w-full flex items-center gap-3 px-2 py-1.5 border border-transparent hover:border-gold/30 hover:bg-gold/8 rounded transition-all text-left group"
+          className="w-full flex items-center gap-3 px-2 py-1.5 border border-transparent hover:border-gold/35 hover:bg-gold/5 rounded transition-all text-left group"
         >
-          <div className="w-9 h-9 shrink-0 flex items-center justify-center bg-background/40 rounded border border-gold/10">
+          <div className="w-9 h-9 shrink-0 flex items-center justify-center bg-background/40 rounded border border-gold/15">
             <img
               src={icon.url}
               alt={icon.name}
@@ -1076,13 +1076,13 @@ function IconList({
               onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.15'; }}
             />
           </div>
-          <span className="text-sm text-ink/70 group-hover:text-ink/95 truncate flex-1 min-w-0">
+          <span className="text-sm text-ink/75 group-hover:text-ink/95 truncate flex-1 min-w-0">
             {icon.name}
           </span>
-          <span className="text-[10px] text-ink/30 tabular-nums shrink-0 w-16 text-right">
+          <span className="text-[10px] text-ink/35 tabular-nums shrink-0 w-16 text-right">
             {formatBytes(icon.size)}
           </span>
-          <span className="text-[10px] text-ink/30 tabular-nums shrink-0 w-24 text-right">
+          <span className="text-[10px] text-ink/35 tabular-nums shrink-0 w-24 text-right">
             {formatDate(icon.uploaded)}
           </span>
         </button>

@@ -309,16 +309,16 @@ function MetadataPanel({
   onChange: (updates: Partial<ImageMetadata>) => void;
 }) {
   return (
-    <div className="border border-gold/20 rounded-lg p-4 space-y-3 bg-card/30">
+    <div className="border border-gold/25 rounded-lg p-4 space-y-3 bg-card/30">
       <div className="flex items-center justify-between">
-        <p className="label-text text-gold/80">Metadata</p>
+        <p className="label-text text-gold/85">Metadata</p>
         {!editing ? (
           <Button size="sm" variant="ghost" className="h-6 text-xs btn-gold gap-1" onClick={onEdit}>
             <Edit2 className="w-3 h-3" /> Edit
           </Button>
         ) : (
           <div className="flex gap-1">
-            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-ink/40 hover:text-blood" onClick={onCancel}>
+            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-ink/45 hover:text-blood" onClick={onCancel}>
               <X className="w-3 h-3" />
             </Button>
             <Button size="sm" variant="ghost" className="h-6 text-xs btn-gold gap-1" onClick={onSave} disabled={saving}>
@@ -337,49 +337,49 @@ function MetadataPanel({
             { key: 'source',      label: 'Source / Link' },
           ] as const).map(({ key, label }) => (
             <div key={key}>
-              <label className="text-[10px] uppercase tracking-widest text-ink/40 block mb-0.5">{label}</label>
+              <label className="text-[10px] uppercase tracking-widest text-ink/45 block mb-0.5">{label}</label>
               <Input
                 value={(editedMeta as any)[key] ?? ''}
                 onChange={(e) => onChange({ [key]: e.target.value })}
-                className="h-7 text-xs bg-background/50 border-gold/20"
+                className="h-7 text-xs bg-background/50 border-gold/25"
               />
             </div>
           ))}
           <div>
-            <label className="text-[10px] uppercase tracking-widest text-ink/40 block mb-0.5">Tags (comma-separated)</label>
+            <label className="text-[10px] uppercase tracking-widest text-ink/45 block mb-0.5">Tags (comma-separated)</label>
             <Input
               value={(editedMeta.tags ?? []).join(', ')}
               onChange={(e) =>
                 onChange({ tags: e.target.value.split(',').map((t) => t.trim()).filter(Boolean) })
               }
-              className="h-7 text-xs bg-background/50 border-gold/20"
+              className="h-7 text-xs bg-background/50 border-gold/25"
             />
           </div>
         </div>
       ) : metadata ? (
         <div className="space-y-1.5 text-xs">
-          {metadata.creator && <p><span className="text-ink/40">Creator: </span>{metadata.creator}</p>}
-          {metadata.description && <p><span className="text-ink/40">Description: </span>{metadata.description}</p>}
-          {metadata.license && <p><span className="text-ink/40">License: </span>{metadata.license}</p>}
+          {metadata.creator && <p><span className="text-ink/45">Creator: </span>{metadata.creator}</p>}
+          {metadata.description && <p><span className="text-ink/45">Description: </span>{metadata.description}</p>}
+          {metadata.license && <p><span className="text-ink/45">License: </span>{metadata.license}</p>}
           {metadata.source && (
             <p>
-              <span className="text-ink/40">Source: </span>
+              <span className="text-ink/45">Source: </span>
               <a href={metadata.source} className="text-gold hover:underline" target="_blank" rel="noreferrer">
                 {metadata.source}
               </a>
             </p>
           )}
-          {metadata.uploadedByName && <p><span className="text-ink/40">Uploaded by: </span>{metadata.uploadedByName}</p>}
+          {metadata.uploadedByName && <p><span className="text-ink/45">Uploaded by: </span>{metadata.uploadedByName}</p>}
           {(metadata.tags?.length ?? 0) > 0 && (
             <div className="flex flex-wrap gap-1 pt-1">
               {metadata.tags!.map((t) => (
-                <Badge key={t} variant="outline" className="text-[9px] h-4 px-1.5 border-gold/20 text-ink/60">{t}</Badge>
+                <Badge key={t} variant="outline" className="text-[9px] h-4 px-1.5 border-gold/25 text-ink/65">{t}</Badge>
               ))}
             </div>
           )}
         </div>
       ) : (
-        <p className="text-xs text-ink/40 italic">No metadata yet. Click Edit to add creator details.</p>
+        <p className="text-xs text-ink/45 italic">No metadata yet. Click Edit to add creator details.</p>
       )}
     </div>
   );
@@ -412,44 +412,44 @@ function FolderDetailPanel({
   const renameChanged = renameInput.trim() && renameInput.trim() !== folder.name;
   return (
     <>
-      <div className="rounded-lg border border-gold/20 bg-card/50 p-5 flex items-center justify-center min-h-24">
-        <Folder className="w-12 h-12 text-gold/60" />
+      <div className="rounded-lg border border-gold/25 bg-card/50 p-5 flex items-center justify-center min-h-24">
+        <Folder className="w-12 h-12 text-gold/65" />
       </div>
 
-      <div className="border border-gold/20 rounded-lg p-4 space-y-2 bg-card/30 relative">
+      <div className="border border-gold/25 rounded-lg p-4 space-y-2 bg-card/30 relative">
         <button
           onClick={onClose}
           title="Close folder preview"
-          className="absolute top-2 right-2 text-ink/30 hover:text-ink/70 transition-colors"
+          className="absolute top-2 right-2 text-ink/35 hover:text-ink/75 transition-colors"
         >
           <X className="w-3.5 h-3.5" />
         </button>
-        <p className="label-text text-gold/80">Folder</p>
-        <div className="space-y-1 text-xs text-ink/60">
-          <p className="break-all"><span className="text-ink/40">Name: </span>{folder.name}</p>
-          <p className="break-all"><span className="text-ink/40">Path: </span>{parentPath ? `${parentPath}/` : ''}{folder.name}/</p>
+        <p className="label-text text-gold/85">Folder</p>
+        <div className="space-y-1 text-xs text-ink/65">
+          <p className="break-all"><span className="text-ink/45">Name: </span>{folder.name}</p>
+          <p className="break-all"><span className="text-ink/45">Path: </span>{parentPath ? `${parentPath}/` : ''}{folder.name}/</p>
           <p>
-            <span className="text-ink/40">Contains: </span>
+            <span className="text-ink/45">Contains: </span>
             {stats === null
-              ? <span className="italic text-ink/40">counting…</span>
+              ? <span className="italic text-ink/45">counting…</span>
               : <>{stats.files} file{stats.files !== 1 ? 's' : ''} · {stats.folders} subfolder{stats.folders !== 1 ? 's' : ''}</>}
           </p>
         </div>
       </div>
 
       {canManage && (
-        <div className="border border-gold/20 rounded-lg p-4 space-y-2 bg-card/30">
-          <p className="label-text text-gold/80">Rename</p>
+        <div className="border border-gold/25 rounded-lg p-4 space-y-2 bg-card/30">
+          <p className="label-text text-gold/85">Rename</p>
           <Input
             value={renameInput}
             onChange={(e) => onRenameInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && renameChanged && !busy) onRename(); }}
             placeholder="new-folder-name"
             spellCheck={false}
-            className="h-7 text-xs bg-background/50 border-gold/20 font-mono"
+            className="h-7 text-xs bg-background/50 border-gold/25 font-mono"
             disabled={busy}
           />
-          <p className="text-[9px] text-ink/30 font-mono truncate">
+          <p className="text-[9px] text-ink/35 font-mono truncate">
             → {parentPath ? `${parentPath}/` : ''}{renameInput.trim().replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || '…'}/
           </p>
           <Button
@@ -492,8 +492,8 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
   if (!ALLOWED_ROLES.includes(role)) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
-        <ImageIcon className="w-12 h-12 text-gold/20 mb-4" />
-        <p className="text-ink/40 italic">You don't have permission to access the Image Manager.</p>
+        <ImageIcon className="w-12 h-12 text-gold/25 mb-4" />
+        <p className="text-ink/45 italic">You don't have permission to access the Image Manager.</p>
       </div>
     );
   }
@@ -1497,12 +1497,12 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                   <p className="text-sm font-semibold text-gold">
                     Drop into {currentPath}/
                   </p>
-                  <p className="text-xs text-gold/50">Files and folders supported · auto-converted to WebP</p>
+                  <p className="text-xs text-gold/55">Files and folders supported · auto-converted to WebP</p>
                 </div>
               )}
 
               {/* Breadcrumb */}
-              <div className="flex items-center gap-1 text-xs flex-wrap border border-gold/10 rounded-lg px-3 py-2 bg-card/30">
+              <div className="flex items-center gap-1 text-xs flex-wrap border border-gold/15 rounded-lg px-3 py-2 bg-card/30">
                 <button
                   onClick={() => setCurrentPath('images')}
                   onDragOver={(e) => { if (draggingFolder) { e.preventDefault(); setDropTargetPath('images'); }}}
@@ -1515,7 +1515,7 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                   className={cn(
                     'transition-colors flex items-center gap-1 shrink-0 rounded px-1 -mx-1',
                     dropTargetPath === 'images'
-                      ? 'text-white bg-gold/30 ring-1 ring-gold/60'
+                      ? 'text-white bg-gold/35 ring-1 ring-gold/65'
                       : 'text-gold hover:text-white',
                   )}
                 >
@@ -1525,7 +1525,7 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                   const segPath = ['images', ...breadcrumb.slice(0, i + 1)].join('/');
                   return (
                   <React.Fragment key={i}>
-                    <ChevronRight className="w-3 h-3 text-ink/20 shrink-0" />
+                    <ChevronRight className="w-3 h-3 text-ink/25 shrink-0" />
                     <button
                       onClick={() => navigateToSegment(i)}
                       onDragOver={(e) => { if (draggingFolder) { e.preventDefault(); setDropTargetPath(segPath); }}}
@@ -1538,9 +1538,9 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                       className={cn(
                         'transition-colors rounded px-1 -mx-1',
                         dropTargetPath === segPath
-                          ? 'text-white bg-gold/30 ring-1 ring-gold/60'
+                          ? 'text-white bg-gold/35 ring-1 ring-gold/65'
                           : i === breadcrumb.length - 1
-                          ? 'text-ink/50 cursor-default'
+                          ? 'text-ink/55 cursor-default'
                           : 'text-gold hover:text-white',
                       )}
                     >
@@ -1563,7 +1563,7 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                       'transition-colors rounded px-1 py-0.5',
                       currentPath === 'images'
                         ? 'text-ink/15 cursor-not-allowed'
-                        : 'text-ink/40 hover:text-gold',
+                        : 'text-ink/45 hover:text-gold',
                     )}
                   >
                     <ArrowUp className="w-3.5 h-3.5" />
@@ -1579,7 +1579,7 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                           if (e.key === 'Escape') { setCreatingFolder(false); setNewFolderName(''); }
                         }}
                         placeholder="folder-name"
-                        className="h-6 w-28 text-[10px] bg-background/50 border-gold/20 font-mono"
+                        className="h-6 w-28 text-[10px] bg-background/50 border-gold/25 font-mono"
                         autoFocus
                       />
                       <button
@@ -1594,7 +1594,7 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                       </button>
                       <button
                         onClick={() => { setCreatingFolder(false); setNewFolderName(''); }}
-                        className="text-ink/40 hover:text-blood transition-colors"
+                        className="text-ink/45 hover:text-blood transition-colors"
                       >
                         <X className="w-3 h-3" />
                       </button>
@@ -1602,7 +1602,7 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                   ) : (
                     <button
                       onClick={() => { setCreatingFolder(true); setNewFolderName(''); }}
-                      className="text-ink/40 border border-gold/10 hover:border-gold/30 hover:text-gold/60 transition-colors rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-widest"
+                      className="text-ink/45 border border-gold/15 hover:border-gold/35 hover:text-gold/65 transition-colors rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-widest"
                       title="New folder"
                     >
                       + Folder
@@ -1613,15 +1613,15 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                     className={cn(
                       'flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest border transition-colors',
                       showUpload
-                        ? 'bg-gold/20 text-gold border-gold/40'
-                        : 'text-ink/40 border-gold/10 hover:border-gold/30 hover:text-gold/60',
+                        ? 'bg-gold/25 text-gold border-gold/45'
+                        : 'text-ink/45 border-gold/15 hover:border-gold/35 hover:text-gold/65',
                     )}
                   >
                     <Upload className="w-2.5 h-2.5" /> Upload
                   </button>
                   <button
                     onClick={() => loadFolder(currentPath)}
-                    className="text-ink/40 hover:text-gold transition-colors"
+                    className="text-ink/45 hover:text-gold transition-colors"
                     title="Refresh"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${loadingFolder ? 'animate-spin' : ''}`} />
@@ -1630,33 +1630,33 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
               </div>
 
               {/* Filter / display / private toolbar */}
-              <div className="flex items-center gap-2 text-xs border border-gold/10 rounded-lg px-3 py-1.5 bg-card/30">
+              <div className="flex items-center gap-2 text-xs border border-gold/15 rounded-lg px-3 py-1.5 bg-card/30">
                 <div className="relative flex-1 min-w-0">
                   <SearchInput
                     value={libFilter}
                     onChange={setLibFilter}
                     placeholder={`Filter results in ${currentPath}/…`}
                     size="sm"
-                    className="bg-background/50 border-gold/20 h-7"
+                    className="bg-background/50 border-gold/25 h-7"
                   />
                   {libFilter && (
                     <button
                       onClick={() => setLibFilter('')}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink/30 hover:text-ink/60"
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink/35 hover:text-ink/65"
                     >
                       <X className="w-3 h-3" />
                     </button>
                   )}
                 </div>
-                <div className="flex items-center border border-gold/20 rounded shrink-0 overflow-hidden">
+                <div className="flex items-center border border-gold/25 rounded shrink-0 overflow-hidden">
                   <button
                     onClick={() => setLibDisplayMode('list')}
                     title="List view"
                     className={cn(
                       'p-1.5 transition-colors',
                       libDisplayMode === 'list'
-                        ? 'bg-gold/20 text-gold'
-                        : 'text-ink/40 hover:text-gold hover:bg-gold/10',
+                        ? 'bg-gold/25 text-gold'
+                        : 'text-ink/45 hover:text-gold hover:bg-gold/15',
                     )}
                   >
                     <ListIcon className="w-3.5 h-3.5" />
@@ -1665,10 +1665,10 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                     onClick={() => setLibDisplayMode('tiles')}
                     title="Tile view"
                     className={cn(
-                      'p-1.5 transition-colors border-l border-gold/20',
+                      'p-1.5 transition-colors border-l border-gold/25',
                       libDisplayMode === 'tiles'
-                        ? 'bg-gold/20 text-gold'
-                        : 'text-ink/40 hover:text-gold hover:bg-gold/10',
+                        ? 'bg-gold/25 text-gold'
+                        : 'text-ink/45 hover:text-gold hover:bg-gold/15',
                     )}
                   >
                     <LayoutGrid className="w-3.5 h-3.5" />
@@ -1680,8 +1680,8 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                   className={cn(
                     'p-1.5 rounded border transition-colors shrink-0',
                     libShowPrivate
-                      ? 'bg-gold/20 text-gold border-gold/40'
-                      : 'text-ink/40 hover:text-gold border-gold/20',
+                      ? 'bg-gold/25 text-gold border-gold/45'
+                      : 'text-ink/45 hover:text-gold border-gold/25',
                   )}
                 >
                   {libShowPrivate ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
@@ -1690,7 +1690,7 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
 
               {/* Folder move progress bar */}
               {movingFolder && (
-                <div className="px-3 py-2 bg-gold/10 border border-gold/20 rounded-lg text-xs text-gold/80 space-y-1.5">
+                <div className="px-3 py-2 bg-gold/15 border border-gold/25 rounded-lg text-xs text-gold/85 space-y-1.5">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2 min-w-0">
                       <RefreshCw className="w-3 h-3 animate-spin shrink-0" />
@@ -1704,11 +1704,11 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                           : `${folderMoveProgress} files`}
                     </span>
                   </div>
-                  <div className="h-1 bg-gold/10 rounded-full overflow-hidden">
+                  <div className="h-1 bg-gold/15 rounded-full overflow-hidden">
                     <div
                       className={cn(
                         'h-full rounded-full transition-all duration-200',
-                        folderMovePhase === 'counting' ? 'bg-gold/40 animate-pulse w-1/3' : 'bg-gold',
+                        folderMovePhase === 'counting' ? 'bg-gold/45 animate-pulse w-1/3' : 'bg-gold',
                       )}
                       style={
                         folderMovePhase === 'moving' && folderMoveTotal > 0
@@ -1722,16 +1722,16 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
 
               {/* Upload panel */}
               {showUpload && (
-                <div className="border border-gold/20 rounded-lg p-4 bg-card/30 space-y-3">
+                <div className="border border-gold/25 rounded-lg p-4 bg-card/30 space-y-3">
                   <div>
-                    <label className="text-[10px] uppercase tracking-widest text-ink/40 block mb-1">
+                    <label className="text-[10px] uppercase tracking-widest text-ink/45 block mb-1">
                       Filename (optional — leave blank for auto)
                     </label>
                     <Input
                       value={uploadFilename}
                       onChange={(e) => setUploadFilename(e.target.value)}
                       placeholder="e.g. tavern-interior"
-                      className="h-7 text-xs bg-background/50 border-gold/20"
+                      className="h-7 text-xs bg-background/50 border-gold/25"
                     />
                   </div>
                   <ImageUpload
@@ -1750,15 +1750,15 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
 
               {/* Upload queue — visible while files are uploading */}
               {uploadQueue.length > 0 && (
-                <div className="border border-gold/20 rounded-lg p-3 bg-card/30 space-y-2">
-                  <p className="text-[10px] uppercase tracking-widest text-ink/40">
+                <div className="border border-gold/25 rounded-lg p-3 bg-card/30 space-y-2">
+                  <p className="text-[10px] uppercase tracking-widest text-ink/45">
                     Uploading {uploadQueue.length} file{uploadQueue.length !== 1 ? 's' : ''}
                   </p>
                   <div className="space-y-2">
                     {uploadQueue.map((item) => (
                       <div key={item.id} className="text-xs">
                         <div className="flex items-center justify-between mb-0.5 gap-2">
-                          <span className="text-ink/60 truncate">{item.name}</span>
+                          <span className="text-ink/65 truncate">{item.name}</span>
                           {item.status === 'done' && (
                             <span className="text-green-400 text-[10px] shrink-0 font-bold">Done</span>
                           )}
@@ -1766,11 +1766,11 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                             <span className="text-blood text-[10px] shrink-0 font-bold">Failed</span>
                           )}
                           {item.status === 'uploading' && (
-                            <span className="text-gold/60 text-[10px] shrink-0">{Math.round(item.progress)}%</span>
+                            <span className="text-gold/65 text-[10px] shrink-0">{Math.round(item.progress)}%</span>
                           )}
                         </div>
                         {item.status === 'uploading' && (
-                          <div className="h-1 bg-gold/10 rounded-full overflow-hidden">
+                          <div className="h-1 bg-gold/15 rounded-full overflow-hidden">
                             <div
                               className="h-full bg-gold rounded-full transition-all duration-200"
                               style={{ width: `${item.progress}%` }}
@@ -1793,13 +1793,13 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                 libDisplayMode === 'tiles' ? (
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                     {Array.from({ length: 8 }).map((_, i) => (
-                      <div key={i} className="aspect-square bg-gold/5 animate-pulse rounded-lg border border-gold/10" />
+                      <div key={i} className="aspect-square bg-gold/5 animate-pulse rounded-lg border border-gold/15" />
                     ))}
                   </div>
                 ) : (
                   <div className="space-y-1">
                     {Array.from({ length: 8 }).map((_, i) => (
-                      <div key={i} className="h-10 bg-gold/5 animate-pulse rounded border border-gold/10" />
+                      <div key={i} className="h-10 bg-gold/5 animate-pulse rounded border border-gold/15" />
                     ))}
                   </div>
                 )
@@ -1808,17 +1808,17 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                 <div className="space-y-3">
                   {libLoadingAll && libAllItems === null ? (
                     <div className="flex items-center justify-center py-16">
-                      <RefreshCw className="w-6 h-6 animate-spin text-gold/40" />
+                      <RefreshCw className="w-6 h-6 animate-spin text-gold/45" />
                     </div>
                   ) : (
                     <>
-                      <p className="text-xs text-ink/40">
+                      <p className="text-xs text-ink/45">
                         {filteredItems.length} match{filteredItems.length !== 1 ? 'es' : ''} in {currentPath}/ for "{libFilter}"
                       </p>
                       {filteredItems.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-16 border border-dashed border-gold/20 rounded-lg">
-                          <Search className="w-10 h-10 text-gold/20 mb-3" />
-                          <p className="text-sm text-ink/40 italic">No images match your filter</p>
+                        <div className="flex flex-col items-center justify-center py-16 border border-dashed border-gold/25 rounded-lg">
+                          <Search className="w-10 h-10 text-gold/25 mb-3" />
+                          <p className="text-sm text-ink/45 italic">No images match your filter</p>
                         </div>
                       ) : libDisplayMode === 'list' ? (
                         <div className="space-y-0.5">
@@ -1830,21 +1830,21 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                               className={cn(
                                 'w-full flex items-center gap-3 px-2 py-1.5 border rounded transition-all text-left group',
                                 selectedItem?.fullPath === item.fullPath
-                                  ? 'border-gold bg-gold/10'
-                                  : 'border-transparent hover:border-gold/30 hover:bg-gold/8',
+                                  ? 'border-gold bg-gold/15'
+                                  : 'border-transparent hover:border-gold/35 hover:bg-gold/5',
                               )}
                             >
-                              <div className="w-9 h-9 shrink-0 flex items-center justify-center bg-background/40 rounded border border-gold/10 overflow-hidden">
+                              <div className="w-9 h-9 shrink-0 flex items-center justify-center bg-background/40 rounded border border-gold/15 overflow-hidden">
                                 <img src={item.url} alt={item.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.15'; }} />
                               </div>
-                              <span className="text-sm text-ink/70 group-hover:text-ink/95 truncate flex-1 min-w-0">
+                              <span className="text-sm text-ink/75 group-hover:text-ink/95 truncate flex-1 min-w-0">
                                 {item.name}
                               </span>
                               {item.size != null && (
-                                <span className="text-[10px] text-ink/30 tabular-nums shrink-0 w-16 text-right">{formatBytes(item.size)}</span>
+                                <span className="text-[10px] text-ink/35 tabular-nums shrink-0 w-16 text-right">{formatBytes(item.size)}</span>
                               )}
                               {item.timeCreated && (
-                                <span className="text-[10px] text-ink/30 tabular-nums shrink-0 w-24 text-right">{new Date(item.timeCreated).toLocaleDateString()}</span>
+                                <span className="text-[10px] text-ink/35 tabular-nums shrink-0 w-24 text-right">{new Date(item.timeCreated).toLocaleDateString()}</span>
                               )}
                             </button>
                           ))}
@@ -1858,8 +1858,8 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                               className={cn(
                                 'relative aspect-square rounded-lg overflow-hidden border-2 transition-all group',
                                 selectedItem?.fullPath === item.fullPath
-                                  ? 'border-gold shadow-lg shadow-gold/20'
-                                  : 'border-gold/20 hover:border-gold/50',
+                                  ? 'border-gold shadow-lg shadow-gold/25'
+                                  : 'border-gold/25 hover:border-gold/55',
                               )}
                             >
                               <img src={item.url} alt={item.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
@@ -1909,18 +1909,18 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                             className={cn(
                               'w-full flex items-center gap-2 p-3 border rounded-lg transition-all text-left group',
                               dropTargetPath === folder.fullPath
-                                ? 'border-gold bg-gold/15 shadow-md shadow-gold/20'
+                                ? 'border-gold bg-gold/15 shadow-md shadow-gold/25'
                                 : draggingFolder?.fullPath === folder.fullPath
-                                ? 'opacity-40 border-gold/30 bg-gold/5'
-                                : 'border-gold/20 bg-gold/5 hover:bg-gold/10 hover:border-gold/40',
+                                ? 'opacity-40 border-gold/35 bg-gold/5'
+                                : 'border-gold/25 bg-gold/5 hover:bg-gold/15 hover:border-gold/45',
                             )}
                           >
-                            <Folder className={cn('w-4 h-4 shrink-0', dropTargetPath === folder.fullPath ? 'text-gold' : 'text-gold/60 group-hover:text-gold')} />
-                            <span className="text-xs font-medium text-ink/70 group-hover:text-ink truncate">
+                            <Folder className={cn('w-4 h-4 shrink-0', dropTargetPath === folder.fullPath ? 'text-gold' : 'text-gold/65 group-hover:text-gold')} />
+                            <span className="text-xs font-medium text-ink/75 group-hover:text-ink truncate">
                               {folder.name}
                             </span>
                             {folder.name.startsWith('_') && (
-                              <span className="text-[8px] uppercase tracking-widest text-ink/30 ml-auto shrink-0">private</span>
+                              <span className="text-[8px] uppercase tracking-widest text-ink/35 ml-auto shrink-0">private</span>
                             )}
                           </button>
                           <button
@@ -1933,7 +1933,7 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                               'absolute top-1 right-1 p-1 rounded transition-opacity',
                               selectedFolder?.fullPath === folder.fullPath
                                 ? 'opacity-100 text-gold bg-gold/15'
-                                : 'opacity-0 group-hover/folder:opacity-100 text-ink/30 hover:text-gold hover:bg-gold/10',
+                                : 'opacity-0 group-hover/folder:opacity-100 text-ink/35 hover:text-gold hover:bg-gold/15',
                             )}
                           >
                             <Info className="w-3 h-3" />
@@ -1954,21 +1954,21 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                             className={cn(
                               'w-full flex items-center gap-3 px-2 py-1.5 border rounded transition-all text-left group',
                               selectedItem?.fullPath === item.fullPath
-                                ? 'border-gold bg-gold/10'
-                                : 'border-transparent hover:border-gold/30 hover:bg-gold/8',
+                                ? 'border-gold bg-gold/15'
+                                : 'border-transparent hover:border-gold/35 hover:bg-gold/5',
                             )}
                           >
-                            <div className="w-9 h-9 shrink-0 flex items-center justify-center bg-background/40 rounded border border-gold/10 overflow-hidden">
+                            <div className="w-9 h-9 shrink-0 flex items-center justify-center bg-background/40 rounded border border-gold/15 overflow-hidden">
                               <img src={item.url} alt={item.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.15'; }} />
                             </div>
-                            <span className="text-sm text-ink/70 group-hover:text-ink/95 truncate flex-1 min-w-0">
+                            <span className="text-sm text-ink/75 group-hover:text-ink/95 truncate flex-1 min-w-0">
                               {item.name}
                             </span>
                             {item.size != null && (
-                              <span className="text-[10px] text-ink/30 tabular-nums shrink-0 w-16 text-right">{formatBytes(item.size)}</span>
+                              <span className="text-[10px] text-ink/35 tabular-nums shrink-0 w-16 text-right">{formatBytes(item.size)}</span>
                             )}
                             {item.timeCreated && (
-                              <span className="text-[10px] text-ink/30 tabular-nums shrink-0 w-24 text-right">{new Date(item.timeCreated).toLocaleDateString()}</span>
+                              <span className="text-[10px] text-ink/35 tabular-nums shrink-0 w-24 text-right">{new Date(item.timeCreated).toLocaleDateString()}</span>
                             )}
                           </button>
                         ))}
@@ -1982,8 +1982,8 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                             className={cn(
                               'relative aspect-square rounded-lg overflow-hidden border-2 transition-all group',
                               selectedItem?.fullPath === item.fullPath
-                                ? 'border-gold shadow-lg shadow-gold/20'
-                                : 'border-gold/20 hover:border-gold/50',
+                                ? 'border-gold shadow-lg shadow-gold/25'
+                                : 'border-gold/25 hover:border-gold/55',
                             )}
                           >
                             <img src={item.url} alt={item.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
@@ -1997,10 +1997,10 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                       </div>
                     )
                   ) : visibleFolders.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-16 border border-dashed border-gold/20 rounded-lg">
-                      <Upload className="w-10 h-10 text-gold/20 mb-3" />
-                      <p className="text-sm text-ink/40 italic">Drop images here to upload</p>
-                      <p className="text-xs text-ink/30 mt-1">or use the Upload button for advanced options</p>
+                    <div className="flex flex-col items-center justify-center py-16 border border-dashed border-gold/25 rounded-lg">
+                      <Upload className="w-10 h-10 text-gold/25 mb-3" />
+                      <p className="text-sm text-ink/45 italic">Drop images here to upload</p>
+                      <p className="text-xs text-ink/35 mt-1">or use the Upload button for advanced options</p>
                     </div>
                   ) : null}
                 </div>
@@ -2023,17 +2023,17 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                 />
               ) : selectedItem ? (
                 <>
-                  <div className="rounded-lg overflow-hidden border border-gold/20 bg-card">
+                  <div className="rounded-lg overflow-hidden border border-gold/25 bg-card">
                     <img src={selectedItem.url} alt={selectedItem.name} className="w-full object-contain max-h-52" referrerPolicy="no-referrer" />
                   </div>
 
-                  <div className="border border-gold/20 rounded-lg p-4 space-y-2 bg-card/30">
-                    <p className="label-text text-gold/80">File Info</p>
-                    <div className="space-y-1 text-xs text-ink/60">
-                      <p className="break-all"><span className="text-ink/40">Name: </span>{selectedItem.name}</p>
-                      <p className="break-all"><span className="text-ink/40">Path: </span>{selectedItem.fullPath}</p>
-                      {selectedItem.size && <p><span className="text-ink/40">Size: </span>{formatBytes(selectedItem.size)}</p>}
-                      {selectedItem.timeCreated && <p><span className="text-ink/40">Uploaded: </span>{new Date(selectedItem.timeCreated).toLocaleDateString()}</p>}
+                  <div className="border border-gold/25 rounded-lg p-4 space-y-2 bg-card/30">
+                    <p className="label-text text-gold/85">File Info</p>
+                    <div className="space-y-1 text-xs text-ink/65">
+                      <p className="break-all"><span className="text-ink/45">Name: </span>{selectedItem.name}</p>
+                      <p className="break-all"><span className="text-ink/45">Path: </span>{selectedItem.fullPath}</p>
+                      {selectedItem.size && <p><span className="text-ink/45">Size: </span>{formatBytes(selectedItem.size)}</p>}
+                      {selectedItem.timeCreated && <p><span className="text-ink/45">Uploaded: </span>{new Date(selectedItem.timeCreated).toLocaleDateString()}</p>}
                     </div>
                     <div className="flex gap-2 pt-1">
                       <Button size="sm" variant="ghost" className="h-7 text-xs btn-gold flex-1 gap-1"
@@ -2059,22 +2059,22 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                     ) : (
                       <div className="space-y-2 pt-1">
                         <div>
-                          <label className="text-[9px] uppercase tracking-widest text-ink/40 block mb-0.5">Folder</label>
+                          <label className="text-[9px] uppercase tracking-widest text-ink/45 block mb-0.5">Folder</label>
                           <Input value={renameFolder} onChange={(e) => setRenameFolder(e.target.value)}
-                            placeholder="images/content" className="h-7 text-xs bg-background/50 border-gold/20 font-mono" />
+                            placeholder="images/content" className="h-7 text-xs bg-background/50 border-gold/25 font-mono" />
                         </div>
                         <div>
-                          <label className="text-[9px] uppercase tracking-widest text-ink/40 block mb-0.5">Filename</label>
+                          <label className="text-[9px] uppercase tracking-widest text-ink/45 block mb-0.5">Filename</label>
                           <Input value={renameValue} onChange={(e) => setRenameValue(e.target.value)}
-                            placeholder="filename" className="h-7 text-xs bg-background/50 border-gold/20 font-mono"
+                            placeholder="filename" className="h-7 text-xs bg-background/50 border-gold/25 font-mono"
                             onKeyDown={(e) => { if (e.key === 'Enter') handleRename(); if (e.key === 'Escape') setRenaming(false); }}
                             autoFocus />
                         </div>
-                        <p className="text-[9px] text-ink/30 font-mono truncate">
+                        <p className="text-[9px] text-ink/35 font-mono truncate">
                           → {renameFolder ? `${renameFolder.replace(/\/+$/, '')}/` : ''}{renameValue || '…'}.{selectedItem.key.split('.').pop()}
                         </p>
                         <div className="flex gap-2">
-                          <Button size="sm" variant="ghost" className="h-7 text-xs text-ink/40 border border-gold/10 flex-1" onClick={() => setRenaming(false)}>
+                          <Button size="sm" variant="ghost" className="h-7 text-xs text-ink/45 border border-gold/15 flex-1" onClick={() => setRenaming(false)}>
                             Cancel
                           </Button>
                           <Button size="sm" variant="ghost" className="h-7 text-xs btn-gold gap-1 flex-1" onClick={handleRename} disabled={renameSaving}>
@@ -2124,10 +2124,10 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                               </div>
                               <div className="max-h-32 overflow-y-auto space-y-1">
                                 {references.map((r, i) => (
-                                  <div key={i} className="text-[10px] text-ink/60 flex gap-2 border-b border-gold/5 pb-1 last:border-0">
-                                    <span className="text-ink/40 capitalize shrink-0">{r.collection}</span>
-                                    <span className="font-medium text-ink/70 truncate">{r.name}</span>
-                                    <span className="text-ink/30 shrink-0">({r.field})</span>
+                                  <div key={i} className="text-[10px] text-ink/65 flex gap-2 border-b border-gold/5 pb-1 last:border-0">
+                                    <span className="text-ink/45 capitalize shrink-0">{r.collection}</span>
+                                    <span className="font-medium text-ink/75 truncate">{r.name}</span>
+                                    <span className="text-ink/35 shrink-0">({r.field})</span>
                                   </div>
                                 ))}
                               </div>
@@ -2139,7 +2139,7 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                             </div>
                           )}
                           <div className="flex gap-2">
-                            <Button size="sm" variant="ghost" className="flex-1 h-8 text-xs text-ink/40 border border-gold/10 hover:text-ink" onClick={() => setShowDeleteConfirm(false)}>
+                            <Button size="sm" variant="ghost" className="flex-1 h-8 text-xs text-ink/45 border border-gold/15 hover:text-ink" onClick={() => setShowDeleteConfirm(false)}>
                               Cancel
                             </Button>
                             <Button size="sm" className="flex-1 h-8 text-xs bg-blood hover:bg-blood/90 text-white gap-1" onClick={handleConfirmDelete} disabled={deleting}>
@@ -2152,9 +2152,9 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                   )}
                 </>
               ) : (
-                <div className="flex flex-col items-center justify-center py-16 border border-dashed border-gold/20 rounded-lg text-center">
-                  <ImageIcon className="w-10 h-10 text-gold/20 mb-3" />
-                  <p className="text-sm text-ink/40 italic">Select an image to view details</p>
+                <div className="flex flex-col items-center justify-center py-16 border border-dashed border-gold/25 rounded-lg text-center">
+                  <ImageIcon className="w-10 h-10 text-gold/25 mb-3" />
+                  <p className="text-sm text-ink/45 italic">Select an image to view details</p>
                 </div>
               )}
             </div>
@@ -2169,7 +2169,7 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
 
             <div className="space-y-4">
               {/* Breadcrumb */}
-              <div className="flex items-center gap-1 text-xs flex-wrap border border-gold/10 rounded-lg px-3 py-2 bg-card/30">
+              <div className="flex items-center gap-1 text-xs flex-wrap border border-gold/15 rounded-lg px-3 py-2 bg-card/30">
                 <button
                   onClick={() => {
                     setSysSection(null);
@@ -2184,13 +2184,13 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                 </button>
                 {sysSection && (
                   <>
-                    <ChevronRight className="w-3 h-3 text-ink/20 shrink-0" />
+                    <ChevronRight className="w-3 h-3 text-ink/25 shrink-0" />
                     <button
                       onClick={() => enterSysSection(sysSection)}
                       className={cn(
                         'transition-colors',
                         sysLevel === 'section'
-                          ? 'text-ink/50 cursor-default'
+                          ? 'text-ink/55 cursor-default'
                           : 'text-gold hover:text-white',
                       )}
                     >
@@ -2200,44 +2200,44 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                 )}
                 {sysEntityName && (
                   <>
-                    <ChevronRight className="w-3 h-3 text-ink/20 shrink-0" />
-                    <span className="text-ink/50">{sysEntityName}</span>
+                    <ChevronRight className="w-3 h-3 text-ink/25 shrink-0" />
+                    <span className="text-ink/55">{sysEntityName}</span>
                   </>
                 )}
                 {(sysLoading) && (
-                  <RefreshCw className="w-3 h-3 text-gold/50 animate-spin ml-auto" />
+                  <RefreshCw className="w-3 h-3 text-gold/55 animate-spin ml-auto" />
                 )}
               </div>
 
               {/* Filter / display toolbar — only meaningful inside a section */}
               {sysSection && (
-                <div className="flex items-center gap-2 text-xs border border-gold/10 rounded-lg px-3 py-1.5 bg-card/30">
+                <div className="flex items-center gap-2 text-xs border border-gold/15 rounded-lg px-3 py-1.5 bg-card/30">
                   <div className="relative flex-1 min-w-0">
                     <SearchInput
                       value={sysFilter}
                       onChange={setSysFilter}
                       placeholder={`Filter ${sysSection.label.toLowerCase()}…`}
                       size="sm"
-                      className="bg-background/50 border-gold/20 h-7"
+                      className="bg-background/50 border-gold/25 h-7"
                     />
                     {sysFilter && (
                       <button
                         onClick={() => setSysFilter('')}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink/30 hover:text-ink/60"
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink/35 hover:text-ink/65"
                       >
                         <X className="w-3 h-3" />
                       </button>
                     )}
                   </div>
-                  <div className="flex items-center border border-gold/20 rounded shrink-0 overflow-hidden">
+                  <div className="flex items-center border border-gold/25 rounded shrink-0 overflow-hidden">
                     <button
                       onClick={() => setSysDisplayMode('list')}
                       title="List view"
                       className={cn(
                         'p-1.5 transition-colors',
                         sysDisplayMode === 'list'
-                          ? 'bg-gold/20 text-gold'
-                          : 'text-ink/40 hover:text-gold hover:bg-gold/10',
+                          ? 'bg-gold/25 text-gold'
+                          : 'text-ink/45 hover:text-gold hover:bg-gold/15',
                       )}
                     >
                       <ListIcon className="w-3.5 h-3.5" />
@@ -2246,10 +2246,10 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                       onClick={() => setSysDisplayMode('tiles')}
                       title="Tile view"
                       className={cn(
-                        'p-1.5 transition-colors border-l border-gold/20',
+                        'p-1.5 transition-colors border-l border-gold/25',
                         sysDisplayMode === 'tiles'
-                          ? 'bg-gold/20 text-gold'
-                          : 'text-ink/40 hover:text-gold hover:bg-gold/10',
+                          ? 'bg-gold/25 text-gold'
+                          : 'text-ink/45 hover:text-gold hover:bg-gold/15',
                       )}
                     >
                       <LayoutGrid className="w-3.5 h-3.5" />
@@ -2265,15 +2265,15 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                     <button
                       key={section.key}
                       onClick={() => enterSysSection(section)}
-                      className="flex items-start gap-3 p-4 border border-gold/20 rounded-lg bg-gold/5 hover:bg-gold/10 hover:border-gold/40 transition-all text-left group"
+                      className="flex items-start gap-3 p-4 border border-gold/25 rounded-lg bg-gold/5 hover:bg-gold/15 hover:border-gold/45 transition-all text-left group"
                     >
-                      <Folder className="w-5 h-5 text-gold/60 group-hover:text-gold shrink-0 mt-0.5" />
+                      <Folder className="w-5 h-5 text-gold/65 group-hover:text-gold shrink-0 mt-0.5" />
                       <div>
-                        <p className="text-sm font-semibold text-ink/80 group-hover:text-ink">
+                        <p className="text-sm font-semibold text-ink/85 group-hover:text-ink">
                           {section.label}
                         </p>
-                        <p className="text-[10px] text-ink/40 mt-0.5">{section.description}</p>
-                        <p className="text-[9px] font-mono text-ink/20 mt-1">{section.prefix}</p>
+                        <p className="text-[10px] text-ink/45 mt-0.5">{section.description}</p>
+                        <p className="text-[9px] font-mono text-ink/25 mt-1">{section.prefix}</p>
                       </div>
                     </button>
                   ))}
@@ -2285,13 +2285,13 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                 sysLoading ? (
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                     {Array.from({ length: 6 }).map((_, i) => (
-                      <div key={i} className="aspect-square bg-gold/5 animate-pulse rounded-lg border border-gold/10" />
+                      <div key={i} className="aspect-square bg-gold/5 animate-pulse rounded-lg border border-gold/15" />
                     ))}
                   </div>
                 ) : (
                   <div className="space-y-3">
                     {sysFilter && (
-                      <p className="text-xs text-ink/40">
+                      <p className="text-xs text-ink/45">
                         {filteredSysFolders.length} folder{filteredSysFolders.length !== 1 ? 's' : ''}
                         {' · '}{filteredSysItems.length} image{filteredSysItems.length !== 1 ? 's' : ''} matching "{sysFilter}"
                       </p>
@@ -2305,10 +2305,10 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                             <button
                               key={folder.fullPath}
                               onClick={() => enterSysFolder(folder, sysNameMap)}
-                              className="w-full flex items-center gap-3 px-2 py-1.5 border border-transparent hover:border-gold/30 hover:bg-gold/8 rounded transition-all text-left group"
+                              className="w-full flex items-center gap-3 px-2 py-1.5 border border-transparent hover:border-gold/35 hover:bg-gold/5 rounded transition-all text-left group"
                             >
-                              <Folder className="w-4 h-4 text-gold/60 group-hover:text-gold shrink-0" />
-                              <span className="text-sm text-ink/70 group-hover:text-ink/95 truncate flex-1 min-w-0">
+                              <Folder className="w-4 h-4 text-gold/65 group-hover:text-gold shrink-0" />
+                              <span className="text-sm text-ink/75 group-hover:text-ink/95 truncate flex-1 min-w-0">
                                 {folder.displayName ?? folder.name}
                               </span>
                               {folder.displayName && folder.displayName !== folder.name && (
@@ -2323,11 +2323,11 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                             <button
                               key={folder.fullPath}
                               onClick={() => enterSysFolder(folder, sysNameMap)}
-                              className="flex items-start gap-2 p-3 border border-gold/20 rounded-lg bg-gold/5 hover:bg-gold/10 hover:border-gold/40 transition-all text-left group"
+                              className="flex items-start gap-2 p-3 border border-gold/25 rounded-lg bg-gold/5 hover:bg-gold/15 hover:border-gold/45 transition-all text-left group"
                             >
-                              <Folder className="w-4 h-4 text-gold/60 group-hover:text-gold shrink-0 mt-0.5" />
+                              <Folder className="w-4 h-4 text-gold/65 group-hover:text-gold shrink-0 mt-0.5" />
                               <div className="min-w-0">
-                                <p className="text-xs font-medium text-ink/80 group-hover:text-ink truncate">
+                                <p className="text-xs font-medium text-ink/85 group-hover:text-ink truncate">
                                   {folder.displayName ?? folder.name}
                                 </p>
                                 {folder.displayName && folder.displayName !== folder.name && (
@@ -2352,19 +2352,19 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                               className={cn(
                                 'w-full flex items-center gap-3 px-2 py-1.5 border rounded transition-all text-left group',
                                 sysSelectedItem?.fullPath === item.fullPath
-                                  ? 'border-gold bg-gold/10'
-                                  : 'border-transparent hover:border-gold/30 hover:bg-gold/8',
+                                  ? 'border-gold bg-gold/15'
+                                  : 'border-transparent hover:border-gold/35 hover:bg-gold/5',
                               )}
                             >
-                              <div className="w-9 h-9 shrink-0 flex items-center justify-center bg-background/40 rounded border border-gold/10 overflow-hidden">
+                              <div className="w-9 h-9 shrink-0 flex items-center justify-center bg-background/40 rounded border border-gold/15 overflow-hidden">
                                 <img src={item.url} alt={item.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                               </div>
-                              <span className="text-sm text-ink/70 group-hover:text-ink/95 truncate flex-1 min-w-0">{item.name}</span>
+                              <span className="text-sm text-ink/75 group-hover:text-ink/95 truncate flex-1 min-w-0">{item.name}</span>
                               {item.size != null && (
-                                <span className="text-[10px] text-ink/30 tabular-nums shrink-0 w-16 text-right">{formatBytes(item.size)}</span>
+                                <span className="text-[10px] text-ink/35 tabular-nums shrink-0 w-16 text-right">{formatBytes(item.size)}</span>
                               )}
                               {item.timeCreated && (
-                                <span className="text-[10px] text-ink/30 tabular-nums shrink-0 w-24 text-right">{new Date(item.timeCreated).toLocaleDateString()}</span>
+                                <span className="text-[10px] text-ink/35 tabular-nums shrink-0 w-24 text-right">{new Date(item.timeCreated).toLocaleDateString()}</span>
                               )}
                             </button>
                           ))}
@@ -2378,8 +2378,8 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                               className={cn(
                                 'relative aspect-square rounded-lg overflow-hidden border-2 transition-all group',
                                 sysSelectedItem?.fullPath === item.fullPath
-                                  ? 'border-gold shadow-lg shadow-gold/20'
-                                  : 'border-gold/20 hover:border-gold/50',
+                                  ? 'border-gold shadow-lg shadow-gold/25'
+                                  : 'border-gold/25 hover:border-gold/55',
                               )}
                             >
                               <img src={item.url} alt={item.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
@@ -2393,13 +2393,13 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                         </div>
                       )
                     ) : filteredSysFolders.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-16 border border-dashed border-gold/20 rounded-lg">
-                        <ImageIcon className="w-10 h-10 text-gold/20 mb-3" />
-                        <p className="text-sm text-ink/40 italic">
+                      <div className="flex flex-col items-center justify-center py-16 border border-dashed border-gold/25 rounded-lg">
+                        <ImageIcon className="w-10 h-10 text-gold/25 mb-3" />
+                        <p className="text-sm text-ink/45 italic">
                           {sysFilter ? 'No matches for your filter' : 'No images here yet'}
                         </p>
                         {!sysFilter && (
-                          <p className="text-xs text-ink/30 mt-1">Images appear here once uploaded via the editor</p>
+                          <p className="text-xs text-ink/35 mt-1">Images appear here once uploaded via the editor</p>
                         )}
                       </div>
                     ) : null}
@@ -2408,8 +2408,8 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
               )}
 
               {/* Read-only notice — moved to bottom */}
-              <div className="flex items-start gap-2 p-3 bg-gold/5 border border-gold/20 rounded text-xs text-ink/50">
-                <Lock className="w-3.5 h-3.5 text-gold/50 shrink-0 mt-0.5" />
+              <div className="flex items-start gap-2 p-3 bg-gold/5 border border-gold/25 rounded text-xs text-ink/55">
+                <Lock className="w-3.5 h-3.5 text-gold/55 shrink-0 mt-0.5" />
                 <p>
                   These images are managed through their respective editors. You can browse, copy
                   URLs, and edit metadata — but rename and delete are disabled to prevent broken links.
@@ -2421,21 +2421,21 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
             <div className="space-y-4 sticky top-4">
               {sysSelectedItem ? (
                 <>
-                  <div className="rounded-lg overflow-hidden border border-gold/20 bg-card">
+                  <div className="rounded-lg overflow-hidden border border-gold/25 bg-card">
                     <img src={sysSelectedItem.url} alt={sysSelectedItem.name} className="w-full object-contain max-h-52" referrerPolicy="no-referrer" />
                   </div>
 
-                  <div className="border border-gold/20 rounded-lg p-4 space-y-2 bg-card/30">
-                    <p className="label-text text-gold/80">File Info</p>
-                    <div className="space-y-1 text-xs text-ink/60">
-                      <p className="break-all"><span className="text-ink/40">Name: </span>{sysSelectedItem.name}</p>
+                  <div className="border border-gold/25 rounded-lg p-4 space-y-2 bg-card/30">
+                    <p className="label-text text-gold/85">File Info</p>
+                    <div className="space-y-1 text-xs text-ink/65">
+                      <p className="break-all"><span className="text-ink/45">Name: </span>{sysSelectedItem.name}</p>
                       <p className="break-all">
-                        <span className="text-ink/40">Location: </span>
+                        <span className="text-ink/45">Location: </span>
                         {friendlyLocation(sysSelectedItem.fullPath)}
                       </p>
-                      {sysSelectedItem.size && <p><span className="text-ink/40">Size: </span>{formatBytes(sysSelectedItem.size)}</p>}
+                      {sysSelectedItem.size && <p><span className="text-ink/45">Size: </span>{formatBytes(sysSelectedItem.size)}</p>}
                       {sysSelectedItem.timeCreated && (
-                        <p><span className="text-ink/40">Uploaded: </span>{new Date(sysSelectedItem.timeCreated).toLocaleDateString()}</p>
+                        <p><span className="text-ink/45">Uploaded: </span>{new Date(sysSelectedItem.timeCreated).toLocaleDateString()}</p>
                       )}
                     </div>
                     <div className="flex gap-2 pt-1">
@@ -2449,7 +2449,7 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                         </Button>
                       </Link>
                     </div>
-                    <div className="flex items-center gap-1.5 pt-1 text-[9px] text-ink/30">
+                    <div className="flex items-center gap-1.5 pt-1 text-[9px] text-ink/35">
                       <Lock className="w-2.5 h-2.5" />
                       <span>Managed via {sysSection?.label ?? 'entity'} editor — rename and delete disabled</span>
                     </div>
@@ -2467,9 +2467,9 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                   />
                 </>
               ) : (
-                <div className="flex flex-col items-center justify-center py-16 border border-dashed border-gold/20 rounded-lg text-center">
-                  <Shield className="w-10 h-10 text-gold/20 mb-3" />
-                  <p className="text-sm text-ink/40 italic">Select an image to view details</p>
+                <div className="flex flex-col items-center justify-center py-16 border border-dashed border-gold/25 rounded-lg text-center">
+                  <Shield className="w-10 h-10 text-gold/25 mb-3" />
+                  <p className="text-sm text-ink/45 italic">Select an image to view details</p>
                 </div>
               )}
             </div>
@@ -2499,12 +2499,12 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
               <div className="absolute inset-0 z-20 rounded-lg border-2 border-dashed border-gold bg-gold/5 flex flex-col items-center justify-center gap-3 pointer-events-none">
                 <Upload className="w-10 h-10 text-gold" />
                 <p className="text-sm font-semibold text-gold">Drop into {iconBrowsePath}/</p>
-                <p className="text-xs text-gold/50">Files and folders supported · auto-cropped to 126×126</p>
+                <p className="text-xs text-gold/55">Files and folders supported · auto-cropped to 126×126</p>
               </div>
             )}
 
             {/* Breadcrumb toolbar */}
-            <div className="flex items-center gap-1 text-xs flex-wrap border border-gold/10 rounded-lg px-3 py-2 bg-card/30">
+            <div className="flex items-center gap-1 text-xs flex-wrap border border-gold/15 rounded-lg px-3 py-2 bg-card/30">
               <button
                 onClick={() => setIconBrowsePath('icons')}
                 onDragOver={(e) => { if (draggingFolder || draggingItem) { e.preventDefault(); setDropTargetPath('icons'); }}}
@@ -2529,7 +2529,7 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                 className={cn(
                   'transition-colors flex items-center gap-1 shrink-0 rounded px-1 -mx-1',
                   dropTargetPath === 'icons'
-                    ? 'text-white bg-gold/30 ring-1 ring-gold/60'
+                    ? 'text-white bg-gold/35 ring-1 ring-gold/65'
                     : 'text-gold hover:text-white',
                 )}
               >
@@ -2539,7 +2539,7 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                 const segPath = ['icons', ...iconBreadcrumb.slice(0, i + 1)].join('/');
                 return (
                 <React.Fragment key={i}>
-                  <ChevronRight className="w-3 h-3 text-ink/20 shrink-0" />
+                  <ChevronRight className="w-3 h-3 text-ink/25 shrink-0" />
                   <button
                     onClick={() => navigateToIconSegment(i)}
                     onDragOver={(e) => { if (draggingFolder || draggingItem) { e.preventDefault(); setDropTargetPath(segPath); }}}
@@ -2564,9 +2564,9 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                     className={cn(
                       'transition-colors rounded px-1 -mx-1',
                       dropTargetPath === segPath
-                        ? 'text-white bg-gold/30 ring-1 ring-gold/60'
+                        ? 'text-white bg-gold/35 ring-1 ring-gold/65'
                         : i === iconBreadcrumb.length - 1
-                        ? 'text-ink/50 cursor-default'
+                        ? 'text-ink/55 cursor-default'
                         : 'text-gold hover:text-white',
                     )}
                   >
@@ -2589,7 +2589,7 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                     'transition-colors rounded px-1 py-0.5',
                     iconBrowsePath === 'icons'
                       ? 'text-ink/15 cursor-not-allowed'
-                      : 'text-ink/40 hover:text-gold',
+                      : 'text-ink/45 hover:text-gold',
                   )}
                 >
                   <ArrowUp className="w-3.5 h-3.5" />
@@ -2604,7 +2604,7 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                         if (e.key === 'Escape') { setCreatingIconFolder(false); setNewIconFolderName(''); }
                       }}
                       placeholder="folder-name"
-                      className="h-6 w-28 text-[10px] bg-background/50 border-gold/20 font-mono"
+                      className="h-6 w-28 text-[10px] bg-background/50 border-gold/25 font-mono"
                       autoFocus
                     />
                     <button
@@ -2619,7 +2619,7 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                     </button>
                     <button
                       onClick={() => { setCreatingIconFolder(false); setNewIconFolderName(''); }}
-                      className="text-ink/40 hover:text-blood transition-colors"
+                      className="text-ink/45 hover:text-blood transition-colors"
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -2627,7 +2627,7 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                 ) : (
                   <button
                     onClick={() => { setCreatingIconFolder(true); setNewIconFolderName(''); }}
-                    className="text-ink/40 border border-gold/10 hover:border-gold/30 hover:text-gold/60 transition-colors rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-widest"
+                    className="text-ink/45 border border-gold/15 hover:border-gold/35 hover:text-gold/65 transition-colors rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-widest"
                     title="New folder"
                   >
                     + Folder
@@ -2638,15 +2638,15 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                   className={cn(
                     'flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest border transition-colors',
                     showIconUpload
-                      ? 'bg-gold/20 text-gold border-gold/40'
-                      : 'text-ink/40 border-gold/10 hover:border-gold/30 hover:text-gold/60',
+                      ? 'bg-gold/25 text-gold border-gold/45'
+                      : 'text-ink/45 border-gold/15 hover:border-gold/35 hover:text-gold/65',
                   )}
                 >
                   <Upload className="w-2.5 h-2.5" /> Upload
                 </button>
                 <button
                   onClick={() => loadIconFolder(iconBrowsePath)}
-                  className="text-ink/40 hover:text-gold transition-colors"
+                  className="text-ink/45 hover:text-gold transition-colors"
                   title="Refresh"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${iconBrowseLoading ? 'animate-spin' : ''}`} />
@@ -2655,33 +2655,33 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
             </div>
 
             {/* Filter / display / private toolbar */}
-            <div className="flex items-center gap-2 text-xs border border-gold/10 rounded-lg px-3 py-1.5 bg-card/30">
+            <div className="flex items-center gap-2 text-xs border border-gold/15 rounded-lg px-3 py-1.5 bg-card/30">
               <div className="relative flex-1 min-w-0">
                 <SearchInput
                   value={iconFilter}
                   onChange={setIconFilter}
                   placeholder={`Filter results in ${iconBrowsePath}/…`}
                   size="sm"
-                  className="bg-background/50 border-gold/20 h-7"
+                  className="bg-background/50 border-gold/25 h-7"
                 />
                 {iconFilter && (
                   <button
                     onClick={() => setIconFilter('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink/30 hover:text-ink/60"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink/35 hover:text-ink/65"
                   >
                     <X className="w-3 h-3" />
                   </button>
                 )}
               </div>
-              <div className="flex items-center border border-gold/20 rounded shrink-0 overflow-hidden">
+              <div className="flex items-center border border-gold/25 rounded shrink-0 overflow-hidden">
                 <button
                   onClick={() => setIconDisplayMode('list')}
                   title="List view"
                   className={cn(
                     'p-1.5 transition-colors',
                     iconDisplayMode === 'list'
-                      ? 'bg-gold/20 text-gold'
-                      : 'text-ink/40 hover:text-gold hover:bg-gold/10',
+                      ? 'bg-gold/25 text-gold'
+                      : 'text-ink/45 hover:text-gold hover:bg-gold/15',
                   )}
                 >
                   <ListIcon className="w-3.5 h-3.5" />
@@ -2690,10 +2690,10 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                   onClick={() => setIconDisplayMode('tiles')}
                   title="Tile view"
                   className={cn(
-                    'p-1.5 transition-colors border-l border-gold/20',
+                    'p-1.5 transition-colors border-l border-gold/25',
                     iconDisplayMode === 'tiles'
-                      ? 'bg-gold/20 text-gold'
-                      : 'text-ink/40 hover:text-gold hover:bg-gold/10',
+                      ? 'bg-gold/25 text-gold'
+                      : 'text-ink/45 hover:text-gold hover:bg-gold/15',
                   )}
                 >
                   <LayoutGrid className="w-3.5 h-3.5" />
@@ -2705,8 +2705,8 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                 className={cn(
                   'p-1.5 rounded border transition-colors shrink-0',
                   iconShowPrivate
-                    ? 'bg-gold/20 text-gold border-gold/40'
-                    : 'text-ink/40 hover:text-gold border-gold/20',
+                    ? 'bg-gold/25 text-gold border-gold/45'
+                    : 'text-ink/45 hover:text-gold border-gold/25',
                 )}
               >
                 {iconShowPrivate ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
@@ -2715,7 +2715,7 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
 
             {/* Folder move progress bar */}
             {movingFolder && (
-              <div className="flex items-center justify-between px-3 py-2 bg-gold/10 border border-gold/20 rounded-lg text-xs text-gold/80">
+              <div className="flex items-center justify-between px-3 py-2 bg-gold/15 border border-gold/25 rounded-lg text-xs text-gold/85">
                 <div className="flex items-center gap-2">
                   <RefreshCw className="w-3 h-3 animate-spin shrink-0" />
                   <span>Moving folder…</span>
@@ -2732,20 +2732,20 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
 
             {/* Upload panel */}
             {showIconUpload && (
-              <div className="border border-gold/20 rounded-lg p-4 bg-card/30 space-y-3">
-                <p className="text-[10px] uppercase tracking-widest text-ink/40">
-                  Upload to: <span className="font-mono text-gold/60">{iconBrowsePath}/</span>
+              <div className="border border-gold/25 rounded-lg p-4 bg-card/30 space-y-3">
+                <p className="text-[10px] uppercase tracking-widest text-ink/45">
+                  Upload to: <span className="font-mono text-gold/65">{iconBrowsePath}/</span>
                 </p>
                 <div
-                  className="border-2 border-dashed border-gold/20 rounded-lg p-6 flex flex-col items-center gap-3 text-center hover:border-gold/40 hover:bg-gold/5 transition-colors cursor-pointer"
+                  className="border-2 border-dashed border-gold/25 rounded-lg p-6 flex flex-col items-center gap-3 text-center hover:border-gold/45 hover:bg-gold/5 transition-colors cursor-pointer"
                   onClick={() => iconFileInputRef.current?.click()}
                 >
-                  <ImageIcon className="w-8 h-8 text-gold/30" />
+                  <ImageIcon className="w-8 h-8 text-gold/35" />
                   <div>
-                    <p className="text-sm text-ink/60">Click to browse, or drag files / folders anywhere on this page</p>
-                    <p className="text-xs text-ink/30 mt-0.5">PNG, JPG, WebP · cropped to 126×126 · multiple files OK</p>
+                    <p className="text-sm text-ink/65">Click to browse, or drag files / folders anywhere on this page</p>
+                    <p className="text-xs text-ink/35 mt-0.5">PNG, JPG, WebP · cropped to 126×126 · multiple files OK</p>
                   </div>
-                  <Button type="button" variant="outline" size="sm" className="border-gold/20 hover:bg-gold/10 gap-2 h-7 text-xs pointer-events-none">
+                  <Button type="button" variant="outline" size="sm" className="border-gold/25 hover:bg-gold/15 gap-2 h-7 text-xs pointer-events-none">
                     <Upload className="w-3 h-3" /> Choose Files
                   </Button>
                 </div>
@@ -2769,21 +2769,21 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
 
             {/* Upload queue */}
             {iconUploadQueue.length > 0 && (
-              <div className="border border-gold/20 rounded-lg p-3 bg-card/30 space-y-2">
-                <p className="text-[10px] uppercase tracking-widest text-ink/40">
+              <div className="border border-gold/25 rounded-lg p-3 bg-card/30 space-y-2">
+                <p className="text-[10px] uppercase tracking-widest text-ink/45">
                   Uploading {iconUploadQueue.length} icon{iconUploadQueue.length !== 1 ? 's' : ''}
                 </p>
                 <div className="space-y-2">
                   {iconUploadQueue.map((item) => (
                     <div key={item.id} className="text-xs">
                       <div className="flex items-center justify-between mb-0.5 gap-2">
-                        <span className="text-ink/60 truncate">{item.name}</span>
+                        <span className="text-ink/65 truncate">{item.name}</span>
                         {item.status === 'done' && <span className="text-green-400 text-[10px] shrink-0 font-bold">Done</span>}
                         {item.status === 'error' && <span className="text-blood text-[10px] shrink-0 font-bold">Failed</span>}
-                        {item.status === 'uploading' && <span className="text-gold/60 text-[10px] shrink-0">{Math.round(item.progress)}%</span>}
+                        {item.status === 'uploading' && <span className="text-gold/65 text-[10px] shrink-0">{Math.round(item.progress)}%</span>}
                       </div>
                       {item.status === 'uploading' && (
-                        <div className="h-1 bg-gold/10 rounded-full overflow-hidden">
+                        <div className="h-1 bg-gold/15 rounded-full overflow-hidden">
                           <div className="h-full bg-gold rounded-full transition-all duration-200" style={{ width: `${item.progress}%` }} />
                         </div>
                       )}
@@ -2799,7 +2799,7 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
             {iconBrowseLoading ? (
                 <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3">
                   {Array.from({ length: 12 }).map((_, i) => (
-                    <div key={i} className="aspect-square bg-gold/5 animate-pulse rounded-lg border border-gold/10" />
+                    <div key={i} className="aspect-square bg-gold/5 animate-pulse rounded-lg border border-gold/15" />
                   ))}
                 </div>
               ) : iconFilter ? (
@@ -2807,17 +2807,17 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                 <div className="space-y-3">
                   {iconLoadingAll && iconAllItems === null ? (
                     <div className="flex items-center justify-center py-16">
-                      <RefreshCw className="w-6 h-6 animate-spin text-gold/40" />
+                      <RefreshCw className="w-6 h-6 animate-spin text-gold/45" />
                     </div>
                   ) : (
                     <>
-                      <p className="text-xs text-ink/40">
+                      <p className="text-xs text-ink/45">
                         {filteredIconItems.length} match{filteredIconItems.length !== 1 ? 'es' : ''} in {iconBrowsePath}/ for "{iconFilter}"
                       </p>
                       {filteredIconItems.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-16 border border-dashed border-gold/20 rounded-lg">
-                          <Search className="w-10 h-10 text-gold/20 mb-3" />
-                          <p className="text-sm text-ink/40 italic">No icons match your filter</p>
+                        <div className="flex flex-col items-center justify-center py-16 border border-dashed border-gold/25 rounded-lg">
+                          <Search className="w-10 h-10 text-gold/25 mb-3" />
+                          <p className="text-sm text-ink/45 italic">No icons match your filter</p>
                         </div>
                       ) : iconDisplayMode === 'list' ? (
                         <div className="space-y-0.5">
@@ -2832,17 +2832,17 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                               title={item.fullPath}
                               className={cn(
                                 'w-full flex items-center gap-3 px-2 py-1.5 border rounded transition-all text-left group',
-                                selectedIcon?.fullPath === item.fullPath ? 'border-gold bg-gold/10' : 'border-transparent hover:border-gold/30 hover:bg-gold/8',
+                                selectedIcon?.fullPath === item.fullPath ? 'border-gold bg-gold/15' : 'border-transparent hover:border-gold/35 hover:bg-gold/5',
                               )}
                             >
-                              <div className="w-9 h-9 shrink-0 flex items-center justify-center bg-background/40 rounded border border-gold/10 overflow-hidden">
+                              <div className="w-9 h-9 shrink-0 flex items-center justify-center bg-background/40 rounded border border-gold/15 overflow-hidden">
                                 <img src={item.url} alt={item.name} className="w-full h-full object-contain" referrerPolicy="no-referrer" onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.15'; }} />
                               </div>
-                              <span className="text-sm text-ink/70 group-hover:text-ink/95 truncate flex-1 min-w-0">
+                              <span className="text-sm text-ink/75 group-hover:text-ink/95 truncate flex-1 min-w-0">
                                 {item.name.replace(/\.[^.]+$/, '')}
                               </span>
                               {item.size != null && (
-                                <span className="text-[10px] text-ink/30 tabular-nums shrink-0 w-16 text-right">{formatBytes(item.size)}</span>
+                                <span className="text-[10px] text-ink/35 tabular-nums shrink-0 w-16 text-right">{formatBytes(item.size)}</span>
                               )}
                             </button>
                           ))}
@@ -2868,14 +2868,14 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                               className={cn(
                                 'flex flex-col items-center gap-1.5 p-2 border rounded-lg transition-all group',
                                 selectedIcon?.fullPath === item.fullPath
-                                  ? 'border-gold bg-gold/10'
+                                  ? 'border-gold bg-gold/15'
                                   : draggingItem?.fullPath === item.fullPath
-                                  ? 'opacity-40 border-gold/30 bg-gold/5'
-                                  : 'border-gold/10 hover:border-gold/40 hover:bg-gold/5',
+                                  ? 'opacity-40 border-gold/35 bg-gold/5'
+                                  : 'border-gold/15 hover:border-gold/45 hover:bg-gold/5',
                               )}
                             >
                               <img src={item.url} alt={item.name} className="w-8 h-8 object-contain opacity-80 group-hover:opacity-100 transition-opacity" referrerPolicy="no-referrer" onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.15'; }} />
-                              <span className="text-[9px] text-ink/50 group-hover:text-ink/80 truncate w-full text-center leading-tight">
+                              <span className="text-[9px] text-ink/55 group-hover:text-ink/85 truncate w-full text-center leading-tight">
                                 {item.name.replace(/\.[^.]+$/, '')}
                               </span>
                             </button>
@@ -2931,18 +2931,18 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                             className={cn(
                               'w-full flex items-center gap-2 p-3 border rounded-lg transition-all text-left group',
                               dropTargetPath === folder.fullPath
-                                ? 'border-gold bg-gold/15 shadow-md shadow-gold/20'
+                                ? 'border-gold bg-gold/15 shadow-md shadow-gold/25'
                                 : draggingFolder?.fullPath === folder.fullPath
-                                ? 'opacity-40 border-gold/30 bg-gold/5'
-                                : 'border-gold/20 bg-gold/5 hover:bg-gold/10 hover:border-gold/40',
+                                ? 'opacity-40 border-gold/35 bg-gold/5'
+                                : 'border-gold/25 bg-gold/5 hover:bg-gold/15 hover:border-gold/45',
                             )}
                           >
-                            <Folder className={cn('w-4 h-4 shrink-0', dropTargetPath === folder.fullPath ? 'text-gold' : 'text-gold/60 group-hover:text-gold')} />
-                            <span className="text-xs font-medium text-ink/70 group-hover:text-ink truncate">
+                            <Folder className={cn('w-4 h-4 shrink-0', dropTargetPath === folder.fullPath ? 'text-gold' : 'text-gold/65 group-hover:text-gold')} />
+                            <span className="text-xs font-medium text-ink/75 group-hover:text-ink truncate">
                               {folder.name}
                             </span>
                             {folder.name.startsWith('_') && (
-                              <span className="text-[8px] uppercase tracking-widest text-ink/30 ml-auto shrink-0">private</span>
+                              <span className="text-[8px] uppercase tracking-widest text-ink/35 ml-auto shrink-0">private</span>
                             )}
                           </button>
                           <button
@@ -2955,7 +2955,7 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                               'absolute top-1 right-1 p-1 rounded transition-opacity',
                               selectedIconFolder?.fullPath === folder.fullPath
                                 ? 'opacity-100 text-gold bg-gold/15'
-                                : 'opacity-0 group-hover/folder:opacity-100 text-ink/30 hover:text-gold hover:bg-gold/10',
+                                : 'opacity-0 group-hover/folder:opacity-100 text-ink/35 hover:text-gold hover:bg-gold/15',
                             )}
                           >
                             <Info className="w-3 h-3" />
@@ -2986,17 +2986,17 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                             title={item.name}
                             className={cn(
                               'w-full flex items-center gap-3 px-2 py-1.5 border rounded transition-all text-left group',
-                              selectedIcon?.fullPath === item.fullPath ? 'border-gold bg-gold/10' : 'border-transparent hover:border-gold/30 hover:bg-gold/8',
+                              selectedIcon?.fullPath === item.fullPath ? 'border-gold bg-gold/15' : 'border-transparent hover:border-gold/35 hover:bg-gold/5',
                             )}
                           >
-                            <div className="w-9 h-9 shrink-0 flex items-center justify-center bg-background/40 rounded border border-gold/10 overflow-hidden">
+                            <div className="w-9 h-9 shrink-0 flex items-center justify-center bg-background/40 rounded border border-gold/15 overflow-hidden">
                               <img src={item.url} alt={item.name} className="w-full h-full object-contain" referrerPolicy="no-referrer" onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.15'; }} />
                             </div>
-                            <span className="text-sm text-ink/70 group-hover:text-ink/95 truncate flex-1 min-w-0">
+                            <span className="text-sm text-ink/75 group-hover:text-ink/95 truncate flex-1 min-w-0">
                               {item.name.replace(/\.[^.]+$/, '')}
                             </span>
                             {item.size != null && (
-                              <span className="text-[10px] text-ink/30 tabular-nums shrink-0 w-16 text-right">{formatBytes(item.size)}</span>
+                              <span className="text-[10px] text-ink/35 tabular-nums shrink-0 w-16 text-right">{formatBytes(item.size)}</span>
                             )}
                           </button>
                         ))}
@@ -3022,14 +3022,14 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                             className={cn(
                               'flex flex-col items-center gap-1.5 p-2 border rounded-lg transition-all group',
                               selectedIcon?.fullPath === item.fullPath
-                                ? 'border-gold bg-gold/10'
+                                ? 'border-gold bg-gold/15'
                                 : draggingItem?.fullPath === item.fullPath
-                                ? 'opacity-40 border-gold/30 bg-gold/5'
-                                : 'border-gold/10 hover:border-gold/40 hover:bg-gold/5',
+                                ? 'opacity-40 border-gold/35 bg-gold/5'
+                                : 'border-gold/15 hover:border-gold/45 hover:bg-gold/5',
                             )}
                           >
                             <img src={item.url} alt={item.name} className="w-8 h-8 object-contain opacity-80 group-hover:opacity-100 transition-opacity" referrerPolicy="no-referrer" onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.15'; }} />
-                            <span className="text-[9px] text-ink/50 group-hover:text-ink/80 truncate w-full text-center leading-tight">
+                            <span className="text-[9px] text-ink/55 group-hover:text-ink/85 truncate w-full text-center leading-tight">
                               {item.name.replace(/\.[^.]+$/, '')}
                             </span>
                           </button>
@@ -3037,23 +3037,23 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                       </div>
                     )
                   ) : visibleIconFolders.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-16 border border-dashed border-gold/20 rounded-lg">
-                      <Upload className="w-10 h-10 text-gold/20 mb-3" />
-                      <p className="text-sm text-ink/40 italic">Empty folder — drop icons here to upload</p>
-                      <p className="text-xs text-ink/30 mt-1">or use the Upload button above</p>
+                    <div className="flex flex-col items-center justify-center py-16 border border-dashed border-gold/25 rounded-lg">
+                      <Upload className="w-10 h-10 text-gold/25 mb-3" />
+                      <p className="text-sm text-ink/45 italic">Empty folder — drop icons here to upload</p>
+                      <p className="text-xs text-ink/35 mt-1">or use the Upload button above</p>
                     </div>
                   ) : null}
                 </div>
               )}
 
             {/* Info notice — moved to bottom of left column */}
-            <div className="flex items-start gap-2 p-3 bg-gold/5 border border-gold/20 rounded text-xs text-ink/60">
-              <Info className="w-3.5 h-3.5 text-gold/60 shrink-0 mt-0.5" />
+            <div className="flex items-start gap-2 p-3 bg-gold/5 border border-gold/25 rounded text-xs text-ink/65">
+              <Info className="w-3.5 h-3.5 text-gold/65 shrink-0 mt-0.5" />
               <p>
-                Icons are auto-cropped to <strong className="text-ink/70">126×126 px</strong>.
+                Icons are auto-cropped to <strong className="text-ink/75">126×126 px</strong>.
                 Click an icon to select it — then copy its URL, move, or delete it from the right panel.
                 Drag icons onto a folder or breadcrumb to move them directly.
-                Use the <strong className="text-ink/70">filter</strong> at the top to search the current folder and its subfolders.
+                Use the <strong className="text-ink/75">filter</strong> at the top to search the current folder and its subfolders.
               </p>
             </div>
           </div>
@@ -3074,7 +3074,7 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
               />
             ) : selectedIcon ? (
               <>
-                <div className="rounded-lg overflow-hidden border border-gold/20 bg-card/50 p-4 flex items-center justify-center min-h-24">
+                <div className="rounded-lg overflow-hidden border border-gold/25 bg-card/50 p-4 flex items-center justify-center min-h-24">
                   <img
                     src={selectedIcon.url}
                     alt={selectedIcon.name}
@@ -3083,12 +3083,12 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                   />
                 </div>
 
-                <div className="border border-gold/20 rounded-lg p-4 space-y-2 bg-card/30">
-                  <p className="label-text text-gold/80">File Info</p>
-                  <div className="space-y-1 text-xs text-ink/60">
-                    <p className="break-all"><span className="text-ink/40">Name: </span>{selectedIcon.name}</p>
-                    <p className="break-all"><span className="text-ink/40">Path: </span>{selectedIcon.fullPath}</p>
-                    {selectedIcon.size && <p><span className="text-ink/40">Size: </span>{formatBytes(selectedIcon.size)}</p>}
+                <div className="border border-gold/25 rounded-lg p-4 space-y-2 bg-card/30">
+                  <p className="label-text text-gold/85">File Info</p>
+                  <div className="space-y-1 text-xs text-ink/65">
+                    <p className="break-all"><span className="text-ink/45">Name: </span>{selectedIcon.name}</p>
+                    <p className="break-all"><span className="text-ink/45">Path: </span>{selectedIcon.fullPath}</p>
+                    {selectedIcon.size && <p><span className="text-ink/45">Size: </span>{formatBytes(selectedIcon.size)}</p>}
                   </div>
                   <div className="flex gap-2 pt-1">
                     <Button size="sm" variant="ghost" className="h-7 text-xs btn-gold flex-1 gap-1"
@@ -3096,22 +3096,22 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                       <Copy className="w-3 h-3" /> Copy URL
                     </Button>
                     <button onClick={() => setSelectedIcon(null)} title="Clear selection"
-                      className="shrink-0 text-ink/30 hover:text-ink/60 transition-colors">
+                      className="shrink-0 text-ink/35 hover:text-ink/65 transition-colors">
                       <X className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
 
-                <div className="border border-gold/20 rounded-lg p-4 space-y-2 bg-card/30">
-                  <p className="label-text text-gold/80">Move To</p>
+                <div className="border border-gold/25 rounded-lg p-4 space-y-2 bg-card/30">
+                  <p className="label-text text-gold/85">Move To</p>
                   <Input
                     value={iconMoveTarget}
                     onChange={(e) => setIconMoveTarget(e.target.value)}
                     placeholder="icons/category"
-                    className="h-7 text-xs bg-background/50 border-gold/20 font-mono"
+                    className="h-7 text-xs bg-background/50 border-gold/25 font-mono"
                     onKeyDown={(e) => { if (e.key === 'Enter') handleMoveIcon(); }}
                   />
-                  <p className="text-[9px] text-ink/30 font-mono truncate">
+                  <p className="text-[9px] text-ink/35 font-mono truncate">
                     → {iconMoveTarget.trim().replace(/\/+$/, '') || '…'}/{selectedIcon.name}
                   </p>
                   <Button
@@ -3139,10 +3139,10 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                       </Button>
                     ) : (
                       <div className="space-y-2">
-                        <p className="text-xs text-ink/60">Delete "{selectedIcon.name}"? This cannot be undone.</p>
+                        <p className="text-xs text-ink/65">Delete "{selectedIcon.name}"? This cannot be undone.</p>
                         <div className="flex gap-2">
                           <Button size="sm" variant="ghost"
-                            className="flex-1 h-8 text-xs text-ink/40 border border-gold/10 hover:text-ink"
+                            className="flex-1 h-8 text-xs text-ink/45 border border-gold/15 hover:text-ink"
                             onClick={() => setIconDeleteConfirm(false)}>
                             Cancel
                           </Button>
@@ -3158,10 +3158,10 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                 )}
               </>
             ) : (
-              <div className="flex flex-col items-center justify-center py-16 border border-dashed border-gold/20 rounded-lg text-center">
-                <ImageIcon className="w-10 h-10 text-gold/20 mb-3" />
-                <p className="text-sm text-ink/40 italic">Select an icon to manage</p>
-                <p className="text-xs text-ink/30 mt-1">or drag it onto a folder to move</p>
+              <div className="flex flex-col items-center justify-center py-16 border border-dashed border-gold/25 rounded-lg text-center">
+                <ImageIcon className="w-10 h-10 text-gold/25 mb-3" />
+                <p className="text-sm text-ink/45 italic">Select an icon to manage</p>
+                <p className="text-xs text-ink/35 mt-1">or drag it onto a folder to move</p>
               </div>
             )}
           </div>
@@ -3186,8 +3186,8 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
             <DialogTitle className="font-serif text-base">Delete folder?</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 text-sm">
-            <p className="text-ink/70">
-              <span className="font-mono text-gold/80">{deleteFolderTarget?.fullPath}/</span>
+            <p className="text-ink/75">
+              <span className="font-mono text-gold/85">{deleteFolderTarget?.fullPath}/</span>
             </p>
             {deletingFolder ? (
               <div className="space-y-2">
@@ -3219,12 +3219,12 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                 </div>
               </div>
             ) : deleteFolderCount === null ? (
-              <p className="flex items-center gap-2 text-ink/50 text-xs">
+              <p className="flex items-center gap-2 text-ink/55 text-xs">
                 <RefreshCw className="w-3 h-3 animate-spin" /> Counting files…
               </p>
             ) : (
               <>
-                <p className="text-ink/70">
+                <p className="text-ink/75">
                   <strong className="text-blood/80">{deleteFolderCount}</strong> file{deleteFolderCount !== 1 ? 's' : ''} will be permanently deleted along with the folder itself.
                 </p>
                 <div className="flex items-start gap-2 p-2 bg-yellow-500/10 border border-yellow-500/30 rounded text-xs text-yellow-200/80">
@@ -3240,7 +3240,7 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                 <Button
                   size="sm"
                   variant="ghost"
-                  className="flex-1 h-8 text-xs text-ink/40 border border-gold/10 hover:text-ink"
+                  className="flex-1 h-8 text-xs text-ink/45 border border-gold/15 hover:text-ink"
                   onClick={() => setDeleteFolderTarget(null)}
                 >
                   Cancel

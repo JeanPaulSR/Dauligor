@@ -118,7 +118,7 @@ export default function ItemDetailPanel({
 }: ItemDetailPanelProps) {
   if (!row) {
     return (
-      <div className="px-6 py-12 text-center text-ink/50">
+      <div className="px-6 py-12 text-center text-ink/55">
         {emptyMessage}
       </div>
     );
@@ -140,7 +140,7 @@ export default function ItemDetailPanel({
 
   return (
     <div className="space-y-0">
-      <div className="border-b border-gold/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.02),transparent)] px-6 py-5 space-y-2">
+      <div className="border-b border-gold/15 bg-[linear-gradient(180deg,rgba(255,255,255,0.02),transparent)] px-6 py-5 space-y-2">
         <div className="flex items-center gap-3 flex-wrap">
           <h3 className="font-serif text-3xl font-bold text-ink">{row.name || '—'}</h3>
           {onToggleFavorite ? (
@@ -151,7 +151,7 @@ export default function ItemDetailPanel({
                 'inline-flex items-center justify-center w-7 h-7 rounded border transition-colors',
                 starred
                   ? 'border-gold bg-gold/15 text-gold hover:bg-blood/10 hover:border-blood/40 hover:text-blood'
-                  : 'border-gold/20 text-ink/45 hover:border-gold hover:text-gold',
+                  : 'border-gold/25 text-ink/45 hover:border-gold hover:text-gold',
               )}
               title={starred ? 'Remove from favorites' : 'Add to favorites'}
               aria-label={starred ? 'Remove from favorites' : 'Add to favorites'}
@@ -165,21 +165,21 @@ export default function ItemDetailPanel({
             </span>
           ) : null}
         </div>
-        <p className="font-serif italic text-ink/70 text-sm">
+        <p className="font-serif italic text-ink/75 text-sm">
           {typeLabel}
           {row.rarity && row.rarity !== 'none' ? ` · ${rarityLabel}` : ''}
           {needsAttunement ? ' · requires attunement' : ''}
           {isMagical ? ' · magical' : ''}
         </p>
         {row.resolvedBaseItemName ? (
-          <p className="text-xs text-ink/60">
+          <p className="text-xs text-ink/65">
             Base item: <span className="font-bold text-gold/85">{row.resolvedBaseItemName}</span>
-            <span className="text-ink/40"> — defined in /admin/proficiencies</span>
+            <span className="text-ink/45"> — defined in /admin/proficiencies</span>
           </p>
         ) : null}
       </div>
 
-      <div className="border-b border-gold/10 px-6 py-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+      <div className="border-b border-gold/15 px-6 py-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
         <DetailRow label="Identifier" value={row.identifier || '—'} mono />
         <DetailRow label="Weight" value={formatWeight(row.weight)} />
         <DetailRow label="Price" value={formatPrice(row.price)} />
@@ -193,7 +193,7 @@ export default function ItemDetailPanel({
       )}
 
       {row.description ? (
-        <div className="px-6 py-5 prose prose-invert max-w-none prose-p:text-ink/90">
+        <div className="px-6 py-5 prose prose-invert max-w-none prose-p:text-ink/95">
           {typeof row.description === 'string' ? (
             <p className="whitespace-pre-wrap">{row.description}</p>
           ) : null}
@@ -208,8 +208,8 @@ export default function ItemDetailPanel({
 function DetailRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div>
-      <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold/70">{label}</div>
-      <div className={cn('mt-1 text-sm text-ink/90', mono && 'font-mono text-xs')}>{value || '—'}</div>
+      <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold/75">{label}</div>
+      <div className={cn('mt-1 text-sm text-ink/95', mono && 'font-mono text-xs')}>{value || '—'}</div>
     </div>
   );
 }
@@ -232,7 +232,7 @@ function WeaponMechanics({ raw }: { raw: ItemDetailRow }) {
     : '';
   const magicBonus = raw?.magical_bonus ?? raw?.magicalBonus ?? 0;
   return (
-    <div className="border-b border-gold/10 px-6 py-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+    <div className="border-b border-gold/15 px-6 py-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
       <DetailRow label="Damage" value={damageStr ? `${damageStr}${damageTypes ? ' ' + damageTypes : ''}` : '—'} />
       <DetailRow label="Range" value={rangeStr || '—'} />
       <DetailRow label="Mastery" value={raw?.mastery || '—'} />
@@ -250,7 +250,7 @@ function ArmorMechanics({ raw }: { raw: ItemDetailRow }) {
   const magicBonus = raw?.armor_magical_bonus ?? raw?.armorMagicalBonus ?? 0;
   const armorType = raw?.armor_type ?? raw?.armorType;
   return (
-    <div className="border-b border-gold/10 px-6 py-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+    <div className="border-b border-gold/15 px-6 py-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
       <DetailRow label="Armor Class" value={ac != null ? String(ac) : '—'} />
       <DetailRow label="Dex Cap" value={dex != null ? String(dex) : '—'} />
       <DetailRow label="Strength Req" value={raw?.strength ? String(raw.strength) : '—'} />
@@ -264,7 +264,7 @@ function ArmorMechanics({ raw }: { raw: ItemDetailRow }) {
 function ToolMechanics({ raw }: { raw: ItemDetailRow }) {
   const toolType = raw?.tool_type ?? raw?.toolType;
   return (
-    <div className="border-b border-gold/10 px-6 py-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+    <div className="border-b border-gold/15 px-6 py-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
       <DetailRow label="Tool Type" value={toolType || '—'} />
       <DetailRow label="Proficiency Bonus" value={raw?.bonus != null && raw.bonus !== '' ? `+${raw.bonus}` : '—'} />
     </div>
@@ -273,7 +273,7 @@ function ToolMechanics({ raw }: { raw: ItemDetailRow }) {
 
 function OtherMechanics({ raw }: { raw: ItemDetailRow }) {
   return (
-    <div className="border-b border-gold/10 px-6 py-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+    <div className="border-b border-gold/15 px-6 py-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
       <DetailRow label="Quantity" value={raw?.quantity != null ? String(raw.quantity) : '—'} />
     </div>
   );

@@ -154,22 +154,22 @@ export default function SpellcastingScalingEditor({ userProfile }: { userProfile
         </Button>
       </div>
 
-      <div className="p-4 border border-gold/20 bg-card/50 space-y-6">
+      <div className="p-4 border border-gold/25 bg-card/50 space-y-6">
         <div className="space-y-1">
-          <label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Progression Name</label>
+          <label className="text-[10px] font-bold uppercase tracking-widest text-ink/45">Progression Name</label>
           <div className="flex gap-4">
             <Input 
               value={name} 
               onChange={e => setName(e.target.value)} 
               placeholder="e.g. Full Caster, Half Caster, Warlock" 
-              className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold flex-1"
+              className="h-8 text-sm bg-background/50 border-gold/15 focus:border-gold flex-1"
               required
             />
             <div className="flex items-center gap-2">
-              <label className="text-[10px] font-bold uppercase tracking-widest text-ink/40 whitespace-nowrap">Copy From:</label>
+              <label className="text-[10px] font-bold uppercase tracking-widest text-ink/45 whitespace-nowrap">Copy From:</label>
               <select 
                 onChange={e => handleCopy(e.target.value)}
-                className="h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs"
+                className="h-8 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-xs"
                 value=""
               >
                 <option value="" disabled>Select scaling...</option>
@@ -179,18 +179,18 @@ export default function SpellcastingScalingEditor({ userProfile }: { userProfile
               </select>
             </div>
           </div>
-          <p className="text-[9px] text-ink/30 italic">Common names: Full Caster, Half Caster, Third Caster.</p>
+          <p className="text-[9px] text-ink/35 italic">Common names: Full Caster, Half Caster, Third Caster.</p>
         </div>
 
         <div className="space-y-4 overflow-x-auto">
           <div className="section-header">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Level Progression</label>
-            <span className="text-[9px] text-ink/30 italic uppercase">Define cantrips and spell slots for each level</span>
+            <label className="text-[10px] font-bold uppercase tracking-widest text-ink/45">Level Progression</label>
+            <span className="text-[9px] text-ink/35 italic uppercase">Define cantrips and spell slots for each level</span>
           </div>
           
           <table className="w-full text-[10px] border-collapse min-w-[800px]">
             <thead>
-              <tr className="text-gold/60 uppercase tracking-tighter">
+              <tr className="text-gold/65 uppercase tracking-tighter">
                 <th className="p-1 text-left w-10">Lvl</th>
                 {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(lvl => (
                   <th key={lvl} className="p-1 text-center w-10">{lvl}{lvl === 1 ? 'st' : lvl === 2 ? 'nd' : lvl === 3 ? 'rd' : 'th'}</th>
@@ -205,7 +205,7 @@ export default function SpellcastingScalingEditor({ userProfile }: { userProfile
 
                 return (
                   <tr key={level} className="hover:bg-gold/5 transition-colors">
-                    <td className="p-1 font-mono text-gold/40">{level}</td>
+                    <td className="p-1 font-mono text-gold/45">{level}</td>
                     {slots.map((val: number, idx: number) => {
                       const placeholder = getPlaceholder(level, idx);
                       const displayValue = isDefined ? val : '';
@@ -217,7 +217,7 @@ export default function SpellcastingScalingEditor({ userProfile }: { userProfile
                             value={displayValue}
                             onChange={e => updateLevel(level, `slot-${idx}`, e.target.value)}
                             placeholder={placeholder.toString()}
-                            className={`h-6 text-[10px] text-center bg-transparent border-gold/10 focus:border-gold ${isDefined && val > 0 ? 'text-gold font-bold' : 'text-ink/20'}`}
+                            className={`h-6 text-[10px] text-center bg-transparent border-gold/15 focus:border-gold ${isDefined && val > 0 ? 'text-gold font-bold' : 'text-ink/25'}`}
                           />
                         </td>
                       );

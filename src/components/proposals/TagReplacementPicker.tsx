@@ -134,7 +134,7 @@ export function TagReplacementPicker({
 
         <div className="space-y-2">
           <div className="relative">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/40" />
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/45" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -146,7 +146,7 @@ export function TagReplacementPicker({
               <button
                 type="button"
                 onClick={() => setSearch('')}
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-ink/40 hover:text-ink"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-ink/45 hover:text-ink"
                 title="Clear filter"
               >
                 <X className="w-3 h-3" />
@@ -154,7 +154,7 @@ export function TagReplacementPicker({
             )}
           </div>
           {deletedGroupId && (
-            <label className="flex items-center gap-2 text-[11px] text-ink/60 cursor-pointer">
+            <label className="flex items-center gap-2 text-[11px] text-ink/65 cursor-pointer">
               <Checkbox
                 checked={crossGroup}
                 onCheckedChange={(v) => setCrossGroup(!!v)}
@@ -166,9 +166,9 @@ export function TagReplacementPicker({
 
         <div className="max-h-[40vh] overflow-y-auto custom-scrollbar -mx-2 px-2">
           {loading ? (
-            <p className="text-center py-8 text-sm text-ink/40 italic">Loading…</p>
+            <p className="text-center py-8 text-sm text-ink/45 italic">Loading…</p>
           ) : visibleTags.length === 0 ? (
-            <p className="text-center py-8 text-sm text-ink/40 italic">
+            <p className="text-center py-8 text-sm text-ink/45 italic">
               {lowered ? 'No tags match.' : 'No replacement candidates available.'}
             </p>
           ) : (
@@ -184,7 +184,7 @@ export function TagReplacementPicker({
                     className="w-full flex items-center justify-between gap-3 px-3 py-2 text-left hover:bg-gold/5 transition-colors"
                   >
                     <span className="text-sm text-ink truncate">{t.name}</span>
-                    <ChevronRight className="w-4 h-4 text-ink/30 shrink-0" />
+                    <ChevronRight className="w-4 h-4 text-ink/35 shrink-0" />
                   </button>
                 </li>
               ))}

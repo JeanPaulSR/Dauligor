@@ -115,7 +115,7 @@ export function ImageUpload({
       <div className={cn('relative group w-full h-full', className)}>
         {/* Main area — click opens picker */}
         <div
-          className="w-full h-full rounded-lg overflow-hidden border border-gold/20 bg-background cursor-pointer"
+          className="w-full h-full rounded-lg overflow-hidden border border-gold/25 bg-background cursor-pointer"
           onClick={() => canUsePicker ? setPickerOpen(true) : fileInputRef.current?.click()}
         >
           {currentImageUrl ? (
@@ -127,8 +127,8 @@ export function ImageUpload({
             />
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center gap-1">
-              <ImageIcon className="w-6 h-6 text-gold/20" />
-              <span className="text-[9px] text-ink/30 uppercase tracking-widest">
+              <ImageIcon className="w-6 h-6 text-gold/25" />
+              <span className="text-[9px] text-ink/35 uppercase tracking-widest">
                 {imageType === 'token' ? 'Token' : 'Icon'}
               </span>
             </div>
@@ -206,8 +206,8 @@ export function ImageUpload({
               className={cn(
                 'px-2.5 py-1 text-[10px] font-black uppercase tracking-widest rounded border transition-colors',
                 selectedType === t
-                  ? 'bg-gold/20 text-gold border-gold/40'
-                  : 'text-ink/40 border-gold/10 hover:border-gold/30 hover:text-gold/60',
+                  ? 'bg-gold/25 text-gold border-gold/45'
+                  : 'text-ink/45 border-gold/15 hover:border-gold/35 hover:text-gold/65',
               )}
             >
               {TYPE_LABELS[t]}
@@ -217,7 +217,7 @@ export function ImageUpload({
       )}
       {/* Locked type badge */}
       {imageType && imageType !== 'standard' && (
-        <span className="inline-block px-2 py-0.5 text-[9px] font-black uppercase tracking-widest rounded border border-gold/30 text-gold/70 bg-gold/5">
+        <span className="inline-block px-2 py-0.5 text-[9px] font-black uppercase tracking-widest rounded border border-gold/35 text-gold/75 bg-gold/5">
           {TYPE_LABELS[imageType]}
         </span>
       )}
@@ -225,7 +225,7 @@ export function ImageUpload({
       <div
         className={cn(
           'border-2 border-dashed rounded-lg p-6 flex flex-col items-center justify-center transition-colors relative overflow-hidden text-center',
-          currentImageUrl ? 'border-gold/30 bg-card/30' : 'border-border hover:border-gold/50 bg-background/50 hover:bg-card/50',
+          currentImageUrl ? 'border-gold/35 bg-card/30' : 'border-border hover:border-gold/55 bg-background/50 hover:bg-card/50',
           uploading && 'opacity-50 pointer-events-none',
         )}
         onDrop={handleDrop}
@@ -251,12 +251,12 @@ export function ImageUpload({
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="mx-auto w-12 h-12 rounded-full bg-gold/10 flex items-center justify-center">
+            <div className="mx-auto w-12 h-12 rounded-full bg-gold/15 flex items-center justify-center">
               <ImageIcon className="h-6 w-6 text-gold" />
             </div>
             <div>
               <p className="text-sm font-medium text-ink">Drag and drop an image, or click to browse</p>
-              <p className="text-xs text-ink/50 mt-1">
+              <p className="text-xs text-ink/55 mt-1">
                 PNG, JPG, WEBP — auto-converted to WebP
                 {effectiveType !== 'standard' && ` · resized to ${TYPE_SIZES[effectiveType]!.width}×${TYPE_SIZES[effectiveType]!.height}`}
               </p>
@@ -264,7 +264,7 @@ export function ImageUpload({
             <Button
               type="button"
               variant="outline"
-              className="border-gold/20 hover:bg-gold/10 gap-2"
+              className="border-gold/25 hover:bg-gold/15 gap-2"
               onClick={() => fileInputRef.current?.click()}
             >
               <Upload className="h-4 w-4" /> Choose File

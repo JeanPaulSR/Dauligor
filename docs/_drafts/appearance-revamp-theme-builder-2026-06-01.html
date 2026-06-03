@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Appearance Revamp — Guided Theme Builder + Live Page Mock-ups</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1a1a1a; --gold:#c5a059; --blood:#8b0000;
+    --background:#f5f5f0; --card:#ffffff;
+    --serif:"Cormorant Garamond", Georgia, serif;
+    --sans:"Inter", ui-sans-serif, system-ui, sans-serif;
+    --gold-05:rgba(197,160,89,.05); --gold-10:rgba(197,160,89,.10);
+    --gold-20:rgba(197,160,89,.20); --gold-30:rgba(197,160,89,.30); --gold-40:rgba(197,160,89,.40);
+    --ink-40:rgba(26,26,26,.40); --ink-60:rgba(26,26,26,.60); --ink-70:rgba(26,26,26,.70);
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; background:var(--background); color:var(--ink); font-family:var(--sans); font-size:14.5px; line-height:1.62; }
+  svg{width:16px;height:16px;display:block;}
+  .wrap{max-width:1080px; margin:0 auto; padding:30px 22px 90px;}
+  .mono{font-family:ui-monospace,"SFMono-Regular",Menlo,monospace; font-size:.92em;}
+  code{font-family:ui-monospace,Menlo,monospace; font-size:.9em; background:var(--gold-10); padding:1px 6px; border:1px solid var(--gold-20); color:#7a5f23;}
+
+  .h1-title{font-family:var(--serif); font-weight:700; font-size:44px; letter-spacing:-.01em; margin:0;}
+  .h2-title{font-family:var(--serif); font-weight:700; font-size:28px; letter-spacing:-.01em; margin:38px 0 6px;}
+  .h3-title{font-family:var(--serif); font-weight:700; font-size:21px; letter-spacing:-.01em; margin:26px 0 4px;}
+  .description-text{font-family:var(--serif); font-style:italic; color:var(--ink-70); line-height:1.6; font-size:17px;}
+  .label-text{font-size:10px; text-transform:uppercase; font-weight:700; letter-spacing:.16em; color:var(--gold);}
+  p{margin:9px 0;}
+  ul,ol{margin:9px 0 9px 4px; padding-left:22px;} li{margin:5px 0;}
+
+  header.top{text-align:center; border-bottom:3px double var(--gold-30); padding-bottom:18px; margin-bottom:8px;}
+  .eyebrow{font-size:11px; letter-spacing:.4em; text-transform:uppercase; color:#8a6f2f; font-family:ui-monospace,Menlo,monospace;}
+  .top .sub{color:var(--ink-70); font-style:italic; font-family:var(--serif); font-size:17px; margin-top:6px;}
+  .meta{font-size:11px; color:var(--ink-40); margin-top:10px; font-family:ui-monospace,Menlo,monospace;}
+
+  .pill{font-family:ui-monospace,Menlo,monospace; font-size:10px; letter-spacing:.05em; text-transform:uppercase;
+    padding:3px 8px; background:var(--gold-10); color:#8a6f2f; border:1px solid var(--gold-20); display:inline-block;}
+  .pill.rec{background:rgba(60,130,80,.12); color:#2f6f3f; border-color:rgba(60,130,80,.3);}
+  .pill.future{background:rgba(120,90,160,.12); color:#6b4f8a; border-color:rgba(120,90,160,.3);}
+
+  table{border-collapse:collapse; width:100%; margin:14px 0; font-size:13.5px;}
+  th,td{border:1px solid var(--gold-20); padding:8px 11px; text-align:left; vertical-align:top;}
+  th{background:var(--gold-10); font-weight:700; text-transform:uppercase; font-size:10.5px; letter-spacing:.12em; color:#7a5f23;}
+  tr:nth-child(even) td{background:rgba(245,245,240,.55);}
+
+  .card{border:1px solid var(--gold-20); background:var(--card); padding:18px 20px; margin:14px 0;}
+  .callout{border-left:3px solid var(--gold); background:var(--gold-05); padding:12px 16px; margin:16px 0;}
+  .callout.warn{border-left-color:var(--blood); background:rgba(139,0,0,.05);}
+  .callout .label-text{display:block; margin-bottom:3px;}
+  .key{border-left:3px solid #2f6f3f; background:rgba(60,130,80,.06); padding:12px 16px; margin:16px 0;}
+
+  /* ---- schematic of the 2-pane builder ---- */
+  .schem{border:1px solid var(--gold-20); background:rgba(245,245,240,.4); margin:18px 0; overflow:hidden;}
+  .schem .bar{display:flex; align-items:center; gap:10px; padding:10px 14px; border-bottom:1px solid var(--gold-20); background:var(--gold-05);}
+  .schem .bar .ttl{font-family:var(--serif); font-size:17px; font-weight:600; flex:1;}
+  .schem .panes{display:grid; grid-template-columns:300px 1fr;}
+  @media(max-width:820px){ .schem .panes{grid-template-columns:1fr;} }
+  .schem .controls{border-right:1px solid var(--gold-20); background:var(--gold-05); padding:12px;}
+  @media(max-width:820px){ .schem .controls{border-right:none; border-bottom:1px solid var(--gold-20);} }
+  .schem .preview{padding:14px; background:rgba(245,245,240,.2);}
+  .sect{border:1px solid var(--gold-20); background:var(--card); margin-bottom:8px;}
+  .sect > .hd{display:flex; align-items:center; gap:8px; padding:8px 11px; font-size:11px; font-weight:900; text-transform:uppercase; letter-spacing:.12em; color:#7a5f23; background:var(--gold-05);}
+  .sect > .bd{padding:9px 11px; display:flex; flex-wrap:wrap; gap:7px;}
+  .swatch{width:22px; height:22px; border:1px solid var(--ink-40); display:inline-block;}
+  .ctl{font-size:11px; color:var(--ink-70); border:1px solid var(--gold-20); padding:4px 8px; background:var(--background);}
+  .seg{display:inline-flex; border:1px solid var(--gold-20);}
+  .seg span{padding:4px 9px; font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; border-right:1px solid var(--gold-20); color:var(--ink-60);}
+  .seg span:last-child{border-right:none;}
+  .seg span.on{background:var(--gold); color:#fff; font-weight:800;}
+
+  /* mini mock cards in the preview pane */
+  .mock{border:1px solid var(--gold-20); background:var(--card); padding:11px 13px; margin-bottom:9px;}
+  .mock .ttl{font-family:var(--serif); font-weight:700; font-size:17px;}
+  .mock .meta-tag{font-size:9px; text-transform:uppercase; letter-spacing:.14em; font-weight:800; color:var(--gold);}
+  .mock .body{font-size:12px; color:var(--ink-70); margin-top:5px;}
+  .mock .sbtn{display:inline-block; margin-top:8px; background:var(--gold); color:#fff; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.1em; padding:5px 10px;}
+
+  .legend{font-size:11px; color:var(--ink-40); font-style:italic; margin-top:6px; text-align:center;}
+  .phase{display:flex; gap:12px; align-items:flex-start; margin:10px 0;}
+  .phase .n{flex:0 0 auto; width:30px; height:30px; border-radius:50%; background:var(--gold); color:#fff; font-weight:900; display:flex; align-items:center; justify-content:center; font-family:var(--serif); font-size:16px;}
+  .phase .n.opt{background:#6b4f8a;}
+  .phase .x{flex:1;}
+  hr{border:none; border-top:1px solid var(--gold-20); margin:30px 0;}
+  .toc{columns:2; font-size:13px; gap:30px;} .toc a{color:#7a5f23; text-decoration:none;} .toc a:hover{text-decoration:underline;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <div class="eyebrow">Design Proposal · Settings</div>
+  <h1 class="h1-title">Appearance Revamp</h1>
+  <div class="sub">A guided theme builder with live, page-accurate mock-ups</div>
+  <div class="meta">docs/_drafts · 2026-06-01 · branch: settings-pages (base: production main)</div>
+</header>
+
+<div class="callout">
+  <span class="label-text">The one-line goal</span>
+  Let each user <strong>set the core colours of the app to their taste</strong> — background, card surface, accent/highlight, and text — and <strong>see the result instantly on real-looking pages</strong> before they commit, without ever producing an unreadable UI. <em>(Layouts stay fixed by design; this is colour, not structure.)</em>
+</div>
+
+<h2 class="h2-title">Contents</h2>
+<div class="toc">
+  <a href="#insight">1 · The core insight</a><br>
+  <a href="#today">2 · Where we are today</a><br>
+  <a href="#sections">3 · The styling sections</a><br>
+  <a href="#guard">4 · Guard-rails (never-ugly)</a><br>
+  <a href="#preview">5 · Live mock-up architecture</a><br>
+  <a href="#surfaces">6 · The four preview surfaces</a><br>
+  <a href="#data">7 · Data model</a><br>
+  <a href="#apply">8 · How it applies app-wide</a><br>
+  <a href="#layout">9 · The builder UI</a><br>
+  <a href="#plan">10 · Build plan (phased)</a><br>
+  <a href="#open">11 · Open decisions</a><br>
+</div>
+
+<h2 class="h2-title" id="insight">1 · The core insight</h2>
+<p>The theme engine is already exactly the right shape — it just isn't <em>exposed</em>. Today a "theme" is a named set of <strong>semantic CSS variables</strong> on <code>&lt;html&gt;</code> (<code>--ink</code>, <code>--gold</code>, <code>--background</code>, <code>--card</code>, <code>--border</code>, <code>--radius</code>, fonts…), and <code>accent_color</code> already proves the full pattern: a <em>user value</em> is injected live into a CSS variable at the document root.</p>
+<div class="key">
+  <span class="label-text">Therefore</span>
+  "Full customization" is not a rewrite — it is <strong>generalizing <code>accent_color</code> into the whole token set</strong>: let the user author values for the meaningful variables, store that set, and inject it the same way. The live preview is just those same variables rendered onto sample components in a <em>scoped container</em> instead of the whole app.
+</div>
+
+<h2 class="h2-title" id="today">2 · Where we are today</h2>
+<table>
+  <tr><th>Piece</th><th>Today</th><th>Revamp</th></tr>
+  <tr><td>Exposed controls</td><td>3 fixed presets + 1 accent colour <span class="mono">(Settings.tsx 369–447)</span></td><td>~7 grouped styling sections over the presets</td></tr>
+  <tr><td>Preview</td><td>None — changes mutate the real <code>&lt;html&gt;</code> globally and you hope</td><td>Scoped, live preview pane with 4 real-looking pages</td></tr>
+  <tr><td>Stored prefs</td><td><code>users.theme</code> + <code>users.accent_color</code> only</td><td>A persisted custom-theme token set (+ presets still work)</td></tr>
+  <tr><td>Engine</td><td>Class toggle + 3 injected vars <span class="mono">(App.tsx 123–138)</span></td><td>Same engine, injects the full active token set</td></tr>
+</table>
+<p class="legend">The engine and the documented variable vocabulary (<code>docs/ui/theming.md</code>) stay the source of truth — this builds <em>on</em> them, nothing is thrown away.</p>
+
+<h2 class="h2-title" id="sections">3 · The styling sections</h2>
+<p>You've been insistent that the styling sections read clearly — so the builder is organised as <strong>named sections, each mapping to a small group of real tokens</strong>. Every control is a guard-railed editor over CSS variables already in <code>src/index.css</code>. The v1 starter set is deliberately just <strong>four colours over a preset</strong>:</p>
+<table>
+  <tr><th>Section <span class="pill rec">v1</span></th><th>What the user sets</th><th>Underlying tokens</th></tr>
+  <tr><td><strong>Base preset</strong></td><td>Starting point: Parchment · Light · Dark</td><td>the <code>.parchment/.light/.dark</code> class — seeds every value below</td></tr>
+  <tr><td><strong>Background</strong></td><td>Page background colour</td><td><code>--background</code> (→ derived <code>--secondary</code>, <code>--muted</code>)</td></tr>
+  <tr><td><strong>Card surface</strong></td><td>Card / panel background colour</td><td><code>--card</code> (→ derived <code>--popover</code>)</td></tr>
+  <tr><td><strong>Text</strong></td><td>Primary text — and, via opacity, its whole faded hierarchy (`text-ink/NN`, 2000+ uses, auto-tracks this)</td><td><code>--ink</code>/<code>--foreground</code> <em>(contrast-guarded)</em></td></tr>
+  <tr><td><strong>Secondary text</strong></td><td>The distinct muted tier — descriptions, hints, timestamps</td><td><code>--muted-foreground</code></td></tr>
+  <tr><td><strong>Highlight</strong></td><td>The app's accent colour (buttons, labels, active states)</td><td><code>--gold</code>, <code>--primary</code>, <code>--ring</code></td></tr>
+</table>
+<div class="callout">
+  <span class="label-text">On text hierarchy</span>
+  The app builds depth with <strong>opacity on the text colour</strong> (`text-ink/10`…`/95`, ~2000 uses). Those faded tiers are <em>translucent shades of the chosen Text colour</em> — they track it automatically, so "Text" governs the whole hierarchy. "Secondary text" is the separate <em>hue</em> used by the muted tier (`--muted-foreground`); it's the only secondary colour worth a distinct control.
+</div>
+<div class="callout">
+  <span class="label-text">Deliberately out of v1</span>
+  <strong>Density is excluded entirely</strong> — layouts are already predesigned, so spacing is not a user knob. <strong>Borders &amp; shape</strong> (<code>--border</code>, <code>--radius</code>) and <strong>typography</strong> (font pair, size) are held for a possible later pass — colour first.
+</div>
+<div class="callout">
+  <span class="label-text">Stays locked on purpose</span>
+  <code>--blood</code> / <code>--destructive</code> (danger) is <strong>never user-editable</strong> — danger must always read as danger in every theme. This is already a documented invariant ("blood and gold are theme-stable").
+</div>
+
+<h2 class="h2-title" id="guard">4 · Guard-rails — the "never-ugly" promise</h2>
+<p>The difference between "full customization" and "a support nightmare" is guard-rails. The builder enforces readability so a user literally cannot save an unusable theme:</p>
+<ul>
+  <li><strong>Live contrast check (WCAG AA).</strong> Text-vs-surface and accent-vs-surface ratios are computed on every change. Below threshold → an inline warning with a one-click <em>"nudge to readable"</em> that snaps the colour to the nearest passing value.</li>
+  <li><strong>Derived, not hand-set, where it's risky.</strong> Secondary surfaces (<code>--muted</code>, <code>--secondary</code>, hover tints) are <em>derived</em> from the surface + accent rather than exposed raw — fewer ways to break it, less to fiddle with.</li>
+  <li><strong>Per-section reset + "Reset to preset."</strong> Any section reverts to its base-preset value; one button restores the whole theme.</li>
+  <li><strong>Danger colour locked</strong> (see above).</li>
+</ul>
+
+<h2 class="h2-title" id="preview">5 · Live mock-up architecture</h2>
+<p>The critical technical choice. Today's preview mutates the global <code>&lt;html&gt;</code>, so edits leak into the whole app immediately. The revamp <strong>scopes the preview</strong>:</p>
+<div class="key">
+  <span class="label-text">Scoped CSS-variable container</span>
+  The in-progress token values are written as inline custom properties on a single wrapper <code>&lt;div&gt;</code> around the mock-ups. Because every component already styles via <code>var(--token)</code>, the cascade overrides <em>only inside that div</em> — the surrounding real app is untouched. State → preview is instant; the global app changes <strong>only on Save</strong>.
+</div>
+<p>Mock-ups are <strong>lightweight, static-data replicas</strong> of real pages built from the existing semantic classes (<code>.lore-card</code>, <code>.compendium-card</code>, <code>.h1-title</code>, <code>.btn-gold-solid</code>, <code>.data-table</code>…) — no data fetching, so the preview is instant and self-contained. A segmented control swaps which surface is shown.</p>
+<p class="legend">Max-isolation alternative (deferred): render mock-ups in an <code>&lt;iframe&gt;</code> sandbox. Cleaner isolation, but needs the stylesheet injected — overkill for v1 since the app is already fully var-driven.</p>
+
+<h2 class="h2-title" id="surfaces">6 · The four preview surfaces</h2>
+<p>All four you selected, each chosen to stress a different part of the token set:</p>
+<table>
+  <tr><th>Surface</th><th>Stresses</th></tr>
+  <tr><td><strong>Compendium card + browser</strong></td><td>Dense data UI — cards, gold metadata tags, badges, panel borders</td></tr>
+  <tr><td><strong>Wiki / lore article</strong></td><td>Long-form prose — headings, body text, links, italic flavour, prose colours</td></tr>
+  <tr><td><strong>Character sheet</strong></td><td>Tabular contrast — stat blocks, tables, ability cells, density</td></tr>
+  <tr><td><strong>Home + navbar</strong></td><td>The chrome — navbar, buttons, dashboard cards (first & most-seen)</td></tr>
+</table>
+
+<h2 class="h2-title" id="data">7 · Data model <span class="pill rec">recommended: new table</span></h2>
+<p>Per our standing preference (<em>new table for new functionality — extracting later is harder than starting separated</em>), store custom themes in their own table rather than as a blob on <code>users</code>. This also unlocks <em>multiple named themes</em> per user and future sharing.</p>
+<div class="card mono" style="font-size:12.5px;">
+CREATE TABLE user_themes (<br>
+&nbsp;&nbsp;id            TEXT PRIMARY KEY,<br>
+&nbsp;&nbsp;user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,<br>
+&nbsp;&nbsp;name          TEXT NOT NULL,            -- "My Dusk", "High Contrast"<br>
+&nbsp;&nbsp;base_preset   TEXT NOT NULL,            -- parchment | light | dark<br>
+&nbsp;&nbsp;tokens        TEXT NOT NULL,            -- JSON: only the overridden vars<br>
+&nbsp;&nbsp;created_at    TEXT, updated_at TEXT<br>
+);<br>
+-- pointer on users; NULL = use built-in preset (back-compat):<br>
+ALTER TABLE users ADD COLUMN active_theme_id TEXT REFERENCES user_themes(id);
+</div>
+<ul>
+  <li><strong>Backward compatible:</strong> <code>active_theme_id IS NULL</code> → today's behaviour (<code>users.theme</code> + <code>accent_color</code>). Nobody is disrupted.</li>
+  <li><strong>Tokens = overrides only</strong> (sparse JSON), so a custom theme is a small diff against its base preset, and preset improvements flow through.</li>
+  <li>Simpler alternative if you'd rather: a single <code>users.custom_theme TEXT</code> blob (1 theme/user, no table). Less future-proof; flagged for your call in §11.</li>
+</ul>
+
+<h2 class="h2-title" id="apply">8 · How it applies app-wide</h2>
+<p>One generalisation of the existing effect in <code>App.tsx</code> (123–138): instead of toggling a class + 3 vars, resolve the active theme (preset class as the base, then the override tokens) and inject the override set onto the document root. Null active theme → unchanged. The whole rest of the app keeps reading the same <code>var(--token)</code>s it always has.</p>
+
+<h2 class="h2-title" id="layout">9 · The builder UI</h2>
+<p>A two-pane Settings → Appearance screen: <strong>guarded controls on the left, live mock-ups on the right.</strong> (Schematic — parchment preset shown.)</p>
+<div class="schem">
+  <div class="bar"><span class="ttl">Appearance</span><span class="pill">Custom: "My Dusk"</span><span class="ctl">Reset to preset</span><span class="seg"><span class="on">Save</span></span></div>
+  <div class="panes">
+    <div class="controls">
+      <div class="sect"><div class="hd">Base preset</div><div class="bd"><span class="seg"><span class="on">Parchment</span><span>Light</span><span>Dark</span></span></div></div>
+      <div class="sect"><div class="hd">Background</div><div class="bd"><span class="swatch" style="background:#f5f5f0"></span><span class="ctl">#f5f5f0</span></div></div>
+      <div class="sect"><div class="hd">Card surface</div><div class="bd"><span class="swatch" style="background:#ffffff"></span><span class="ctl">#ffffff</span></div></div>
+      <div class="sect"><div class="hd">Text</div><div class="bd"><span class="swatch" style="background:#1a1a1a"></span><span class="ctl">ink</span><span class="pill" style="background:rgba(60,130,80,.12);color:#2f6f3f;border-color:rgba(60,130,80,.3)">AA ✓ 14.2:1</span></div></div>
+      <div class="sect"><div class="hd">Accent / highlight</div><div class="bd"><span class="swatch" style="background:#c5a059"></span><span class="ctl">#c5a059</span></div></div>
+    </div>
+    <div class="preview">
+      <div class="seg" style="margin-bottom:10px"><span class="on">Compendium</span><span>Wiki</span><span>Sheet</span><span>Home</span></div>
+      <div class="mock">
+        <div class="meta-tag">Level 3 · Evocation</div>
+        <div class="ttl">Fireball</div>
+        <div class="body">A bright streak flashes to a point you choose, then blossoms with a low roar into an explosion of flame…</div>
+        <span class="sbtn">Add to spellbook</span>
+      </div>
+      <div class="mock">
+        <div class="meta-tag">Compendium · Item</div>
+        <div class="ttl">Cloak of Elvenkind</div>
+        <div class="body">Wondrous item, uncommon (requires attunement).</div>
+      </div>
+      <div class="legend">Live: every edit on the left re-renders these — scoped to this pane only.</div>
+    </div>
+  </div>
+</div>
+
+<h2 class="h2-title" id="plan">10 · Build plan (phased)</h2>
+<div class="phase"><div class="n">1</div><div class="x"><strong>Engine + data (dark — no visible UI).</strong> Add <code>user_themes</code> + <code>active_theme_id</code>; generalise the <code>App.tsx</code> apply step to inject an override token set; read/write endpoint. Backward compatible — ships invisibly, verify nothing changes for existing users.</div></div>
+<div class="phase"><div class="n">2</div><div class="x"><strong>Scoped preview + mock-ups.</strong> Build the scoped-container preview and the 4 static mock-up surfaces from existing classes. Standalone, testable in isolation.</div></div>
+<div class="phase"><div class="n">3</div><div class="x"><strong>The guided builder.</strong> The four colour controls over a preset, contrast guard-rails, per-section + global reset, Save → persist + apply. This is the headline feature.</div></div>
+<div class="phase"><div class="n opt">4</div><div class="x"><strong>Multiple named themes + share/export.</strong> <span class="pill future">future / optional</span> Switch between saved themes; export/import a theme as JSON; optionally share a theme with the group.</div></div>
+
+<h2 class="h2-title" id="open">11 · Decisions</h2>
+<p><strong>Settled:</strong> v1 is four colours over a preset (background, card, accent, text). Density is excluded (fixed layouts). Borders/shape and typography are deferred to a later pass. Custom-CSS escape hatch stays out of scope.</p>
+<p><strong>Still your call — the one that gates Phase 1:</strong></p>
+<ol>
+  <li><strong>Data model:</strong> the <code>user_themes</code> table (multiple named themes, future sharing) — or the simpler single <code>users.custom_theme</code> blob (one theme per user, no extra table)? <em>Recommend the table</em>, per our "new table for new functionality" rule.</li>
+</ol>
+
+<div class="callout">
+  <span class="label-text">Next step</span>
+  Confirm §11 (especially the data-model call) and I'll turn this into a phased implementation plan + the Phase-1 migration. Per our deploy rules this all rides <code>settings-pages</code> → <code>main</code> when each phase is ready, independently of the parked auth cutover.
+</div>
+
+</div>
+</body>
+</html>

@@ -338,11 +338,11 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-4xl font-serif font-bold text-ink">Campaign Management</h1>
-          <p className="text-ink/60">Organize your players into adventure groups and historical eras.</p>
+          <p className="text-ink/65">Organize your players into adventure groups and historical eras.</p>
         </div>
 
-        <Card className="border-gold/15 bg-[#111118]/80 backdrop-blur-md p-4 max-w-sm w-full">
-          <CardHeader className="p-0 pb-2 border-b border-gold/10">
+        <Card className="border-gold/15 bg-card/80 backdrop-blur-md p-4 max-w-sm w-full">
+          <CardHeader className="p-0 pb-2 border-b border-gold/15">
             <CardTitle className="text-sm font-serif text-gold flex items-center gap-2">
               <Sparkles className="w-4 h-4 shrink-0" /> Default Wiki Fallback Background
             </CardTitle>
@@ -385,7 +385,7 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
         <div className="flex gap-2">
           <Dialog open={isEraOpen} onOpenChange={setIsEraOpen}>
             <DialogTrigger render={
-              <Button variant="outline" className="border-gold/20 text-gold hover:bg-gold/5 gap-2">
+              <Button variant="outline" className="border-gold/25 text-gold hover:bg-gold/5 gap-2">
                 <Calendar className="w-4 h-4" /> Manage Eras
               </Button>
             } />
@@ -395,7 +395,7 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
                 <CardDescription>Define the time periods of your world.</CardDescription>
               </DialogHeader>
               <div className="space-y-6 py-4">
-                <div className="p-4 rounded-lg bg-gold/5 border border-gold/10 space-y-3">
+                <div className="p-4 rounded-lg bg-gold/5 border border-gold/15 space-y-3">
                   <div className="grid grid-cols-2 gap-2">
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold uppercase">Era Name</label>
@@ -420,7 +420,7 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
                             onUpload={(url) => setNewEra({...newEra, backgroundImageUrl: url})}
                           />
                         </div>
-                        <Button onClick={handleCreateEra} className="h-10 bg-gold text-white text-xs px-4">Add Era</Button>
+                        <Button onClick={handleCreateEra} className="h-10 bg-gold text-[var(--primary-foreground)] text-xs px-4">Add Era</Button>
                       </div>
                     </div>
                   )}
@@ -428,10 +428,10 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
 
                 <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2">
                   {eras.map(era => (
-                    <div key={era.id} className="p-3 rounded-md border border-gold/10 bg-card space-y-2">
+                    <div key={era.id} className="p-3 rounded-md border border-gold/15 bg-card space-y-2">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <Badge variant="outline" className="text-gold border-gold/20 font-mono">{era.order}</Badge>
+                          <Badge variant="outline" className="text-gold border-gold/25 font-mono">{era.order}</Badge>
                           <span className="font-serif font-bold">{era.name}</span>
                         </div>
                         {/* Admin-only — server-side d1-proxy gate
@@ -444,7 +444,7 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
                       </div>
                       {isAdmin && (
                         <div className="pt-2 border-t border-gold/5 space-y-1">
-                          <label className="text-[9px] text-ink/40 uppercase tracking-wider block">Background Image</label>
+                          <label className="text-[9px] text-ink/45 uppercase tracking-wider block">Background Image</label>
                           <ImageUpload
                             currentImageUrl={era.backgroundImageUrl || ''}
                             storagePath="images/wiki/eras"
@@ -521,7 +521,7 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
                   ))}
                 </select>
               </div>
-              <Button onClick={handleCreateCampaign} className="w-full bg-gold text-white">Create Campaign</Button>
+              <Button onClick={handleCreateCampaign} className="w-full bg-gold text-[var(--primary-foreground)]">Create Campaign</Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -532,10 +532,10 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
         {campaigns.map(campaign => {
           const campaignPlayers = users.filter(u => u.campaignIds?.includes(campaign.id) || u.campaignId === campaign.id);
           return (
-            <Card key={campaign.id} className="border-gold/10 hover:border-gold/30 transition-colors">
+            <Card key={campaign.id} className="border-gold/15 hover:border-gold/35 transition-colors">
               <CardHeader>
                 <div className="flex justify-between items-start">
-                  <div className="bg-gold/10 p-2 rounded-lg">
+                  <div className="bg-gold/15 p-2 rounded-lg">
                     <LayoutGrid className="w-5 h-5 text-gold" />
                   </div>
                   <Button variant="ghost" size="icon" className="btn-danger h-8 w-8" onClick={() => handleDeleteCampaign(campaign.id)}>
@@ -543,13 +543,13 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
                   </Button>
                 </div>
                 <CardTitle className="text-2xl font-serif mt-4">{campaign.name}</CardTitle>
-                <Badge variant="outline" className="w-fit mt-1 border-gold/20 text-gold/60">
+                <Badge variant="outline" className="w-fit mt-1 border-gold/25 text-gold/65">
                   {eras.find(e => e.id === campaign.eraId)?.name || 'No Era Assigned'}
                 </Badge>
                 <CardDescription className="line-clamp-2 mt-2">{campaign.description || 'No description provided.'}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="flex items-center gap-4 text-sm text-ink/60">
+                <div className="flex items-center gap-4 text-sm text-ink/65">
                   <div className="flex items-center gap-1">
                     <Users className="w-4 h-4" />
                     <span>{campaignPlayers.length} Players</span>
@@ -562,12 +562,12 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-ink/40">
+                    <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-ink/45">
                       <Calendar className="w-3 h-3 text-gold" />
                       <span>Era</span>
                     </div>
                     <select 
-                      className="w-full h-9 px-3 rounded-md border border-gold/10 bg-background text-sm font-serif italic"
+                      className="w-full h-9 px-3 rounded-md border border-gold/15 bg-background text-sm font-serif italic"
                       value={campaign.eraId || ''}
                       onChange={(e) => handleSetCampaignEra(campaign.id, e.target.value)}
                     >
@@ -579,12 +579,12 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
                   </div>
 
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-ink/40">
+                    <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-ink/45">
                       <Sparkles className="w-3 h-3 text-gold" />
                       <span>Recommended Lore</span>
                     </div>
                     <select 
-                      className="w-full h-9 px-3 rounded-md border border-gold/10 bg-background text-sm font-serif italic"
+                      className="w-full h-9 px-3 rounded-md border border-gold/15 bg-background text-sm font-serif italic"
                       value={campaign.recommendedLoreId || ''}
                       onChange={(e) => handleSetRecommendedLore(campaign.id, e.target.value)}
                     >
@@ -597,7 +597,7 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
                 </div>
 
                 <div className="pt-2">
-                  <p className="text-xs font-bold uppercase tracking-wider text-ink/40 mb-2">Active Players</p>
+                  <p className="text-xs font-bold uppercase tracking-wider text-ink/45 mb-2">Active Players</p>
                   <div className="flex flex-wrap gap-1">
                     {campaignPlayers.length > 0 ? (
                       campaignPlayers.map(p => (
@@ -606,7 +606,7 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
                         </Badge>
                       ))
                     ) : (
-                      <span className="text-xs text-ink/20 italic">No players assigned</span>
+                      <span className="text-xs text-ink/25 italic">No players assigned</span>
                     )}
                   </div>
                 </div>
@@ -617,9 +617,9 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
       </div>
 
       {campaigns.length === 0 && (
-        <div className="text-center py-20 bg-card/50 rounded-xl border border-dashed border-gold/20">
-          <LayoutGrid className="w-12 h-12 text-gold/20 mx-auto mb-4" />
-          <p className="text-ink/40 font-serif italic">No campaigns created yet.</p>
+        <div className="text-center py-20 bg-card/50 rounded-xl border border-dashed border-gold/25">
+          <LayoutGrid className="w-12 h-12 text-gold/25 mx-auto mb-4" />
+          <p className="text-ink/45 font-serif italic">No campaigns created yet.</p>
         </div>
       )}
     </div>

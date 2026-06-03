@@ -69,7 +69,7 @@ export default function Profile({ viewerProfile }: { viewerProfile?: any }) {
   if (error || !profile) {
     return (
       <div className="text-center py-20 space-y-4">
-        <Shield className="w-16 h-16 text-gold/20 mx-auto" />
+        <Shield className="w-16 h-16 text-gold/25 mx-auto" />
         <h2 className="text-3xl font-serif font-bold text-ink">{error || 'Profile Not Found'}</h2>
         <Button variant="link" className="text-gold" nativeButton={false} render={<Link to="/">Return to the Archive</Link>} />
       </div>
@@ -87,12 +87,12 @@ export default function Profile({ viewerProfile }: { viewerProfile?: any }) {
         animate={{ opacity: 1, y: 0 }}
         className="max-w-2xl mx-auto space-y-8 pb-20 pt-10"
       >
-        <Button variant="ghost" className="text-ink/40 hover:text-gold -ml-4" nativeButton={false} render={<Link to="/"><ChevronLeft className="w-4 h-4 mr-1" /> Back</Link>} />
-        <Card className="border-gold/20 bg-card/80 backdrop-blur-sm shadow-2xl overflow-hidden text-center py-16">
+        <Button variant="ghost" className="text-ink/45 hover:text-gold -ml-4" nativeButton={false} render={<Link to="/"><ChevronLeft className="w-4 h-4 mr-1" /> Back</Link>} />
+        <Card className="border-gold/25 bg-card/80 backdrop-blur-sm shadow-2xl overflow-hidden text-center py-16">
           <CardContent className="space-y-6">
-            <Lock className="w-16 h-16 text-gold/40 mx-auto" />
+            <Lock className="w-16 h-16 text-gold/45 mx-auto" />
             <h1 className="text-4xl font-serif font-bold text-ink">{profile.display_name || profile.username}</h1>
-            <p className="text-ink/60 font-serif italic text-lg">This archivist has sealed their records.</p>
+            <p className="text-ink/65 font-serif italic text-lg">This archivist has sealed their records.</p>
           </CardContent>
         </Card>
       </motion.div>
@@ -105,12 +105,12 @@ export default function Profile({ viewerProfile }: { viewerProfile?: any }) {
       animate={{ opacity: 1, y: 0 }}
       className="max-w-4xl mx-auto space-y-8 pb-20"
     >
-      <Button variant="ghost" className="text-ink/40 hover:text-gold -ml-4" nativeButton={false} render={<Link to="/"><ChevronLeft className="w-4 h-4 mr-1" /> Back</Link>} />
+      <Button variant="ghost" className="text-ink/45 hover:text-gold -ml-4" nativeButton={false} render={<Link to="/"><ChevronLeft className="w-4 h-4 mr-1" /> Back</Link>} />
 
       <div className="relative">
         {/* Profile Header Card */}
-        <Card className="border-gold/20 bg-card/80 backdrop-blur-sm shadow-2xl overflow-hidden">
-          <div className="h-32 bg-gold/10 relative">
+        <Card className="border-gold/25 bg-card/80 backdrop-blur-sm shadow-2xl overflow-hidden">
+          <div className="h-32 bg-gold/15 relative">
             <div className="absolute inset-0 opacity-[0.05] bg-[url('https://www.transparenttextures.com/patterns/paper-fibers.png')]" />
           </div>
           <CardContent className="relative pt-0 pb-8 px-8">
@@ -118,12 +118,12 @@ export default function Profile({ viewerProfile }: { viewerProfile?: any }) {
               <div className="relative">
                 <Avatar className="w-32 h-32 border-4 border-card shadow-xl">
                   <AvatarImage src={profile.avatar_url} referrerPolicy="no-referrer" />
-                  <AvatarFallback className="bg-gold text-white text-4xl font-serif">
+                  <AvatarFallback className="bg-gold text-[var(--primary-foreground)] text-4xl font-serif">
                     {profile.display_name?.[0] || profile.username?.[0]}
                   </AvatarFallback>
                 </Avatar>
                 {profile.role === 'admin' && (
-                  <div className="absolute -bottom-2 -right-2 bg-gold text-white p-1.5 rounded-full shadow-lg border-2 border-card">
+                  <div className="absolute -bottom-2 -right-2 bg-gold text-[var(--primary-foreground)] p-1.5 rounded-full shadow-lg border-2 border-card">
                     <Shield className="w-4 h-4" />
                   </div>
                 )}
@@ -133,14 +133,14 @@ export default function Profile({ viewerProfile }: { viewerProfile?: any }) {
                 <div className="flex flex-wrap items-center gap-3">
                   <h1 className="text-4xl font-serif font-bold text-ink">{profile.display_name || profile.username}</h1>
                   {profile.pronouns && (
-                    <span className="text-sm text-ink/40 italic mt-2">({profile.pronouns})</span>
+                    <span className="text-sm text-ink/45 italic mt-2">({profile.pronouns})</span>
                   )}
                   <Badge variant="outline" className="border-gold text-gold bg-gold/5 uppercase tracking-widest text-[10px]">
                     {profile.role === 'admin' ? 'Grand Archivist' : 'Seeker'}
                   </Badge>
                 </div>
                 {!profile.hide_username && (
-                  <p className="text-ink/40 font-medium">@{profile.username}</p>
+                  <p className="text-ink/45 font-medium">@{profile.username}</p>
                 )}
               </div>
             </div>
@@ -148,10 +148,10 @@ export default function Profile({ viewerProfile }: { viewerProfile?: any }) {
             <div className="mt-12 grid md:grid-cols-3 gap-8">
               <div className="md:col-span-2 space-y-6">
                 <div className="space-y-2">
-                  <h3 className="text-sm font-bold uppercase tracking-widest text-ink/40 flex items-center gap-2">
+                  <h3 className="text-sm font-bold uppercase tracking-widest text-ink/45 flex items-center gap-2">
                     <Book className="w-4 h-4" /> Biography
                   </h3>
-                  <p className="text-ink/80 font-serif text-lg leading-relaxed italic">
+                  <p className="text-ink/85 font-serif text-lg leading-relaxed italic">
                     {profile.bio || "This archivist has not yet recorded their journey in the annals of history."}
                   </p>
                 </div>
@@ -159,7 +159,7 @@ export default function Profile({ viewerProfile }: { viewerProfile?: any }) {
 
               <div className="space-y-6">
                 <div className="space-y-4">
-                  <h3 className="text-sm font-bold uppercase tracking-widest text-ink/40">Archive Stats</h3>
+                  <h3 className="text-sm font-bold uppercase tracking-widest text-ink/45">Archive Stats</h3>
                   <div className="space-y-3">
                     <StatItem icon={<Calendar className="w-4 h-4" />} label="Joined" value={profile.created_at ? new Date(profile.created_at).toLocaleDateString() : "The Early Ages"} />
                     <StatItem icon={<MapPin className="w-4 h-4" />} label="Location" value="The Great Library" />
@@ -172,20 +172,20 @@ export default function Profile({ viewerProfile }: { viewerProfile?: any }) {
       </div>
 
       <div className="grid md:grid-cols-2 gap-8">
-        <Card className="border-gold/10 bg-card/50">
+        <Card className="border-gold/15 bg-card/50">
           <CardHeader>
             <CardTitle className="font-serif text-xl flex items-center gap-2">
               <Bookmark className="w-5 h-5 text-gold" /> Recent Discoveries
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-ink/40 italic text-center py-8">
+            <p className="text-sm text-ink/45 italic text-center py-8">
               No public bookmarks shared by this archivist.
             </p>
           </CardContent>
         </Card>
 
-        <Card className="border-gold/10 bg-card/50">
+        <Card className="border-gold/15 bg-card/50">
           <CardHeader>
             <CardTitle className="font-serif text-xl flex items-center gap-2">
               <Users className="w-5 h-5 text-gold" /> Active Campaigns
@@ -193,15 +193,15 @@ export default function Profile({ viewerProfile }: { viewerProfile?: any }) {
           </CardHeader>
           <CardContent>
             {campaigns.length === 0 ? (
-              <p className="text-sm text-ink/40 italic text-center py-8">
+              <p className="text-sm text-ink/45 italic text-center py-8">
                 This archivist is not currently assigned to any active campaigns.
               </p>
             ) : (
               <div className="space-y-2">
                 {campaigns.map(c => (
-                  <Link key={c.id} to={`/campaign/${c.id}`} className="flex items-center justify-between p-3 border border-gold/10 rounded hover:bg-gold/5 transition-all group">
+                  <Link key={c.id} to={`/campaign/${c.id}`} className="flex items-center justify-between p-3 border border-gold/15 rounded hover:bg-gold/5 transition-all group">
                     <span className="font-serif font-bold text-ink group-hover:text-gold transition-colors">{c.name}</span>
-                    <Shield className="w-4 h-4 text-gold/40 group-hover:text-gold transition-colors" />
+                    <Shield className="w-4 h-4 text-gold/45 group-hover:text-gold transition-colors" />
                   </Link>
                 ))}
               </div>
@@ -217,11 +217,11 @@ export default function Profile({ viewerProfile }: { viewerProfile?: any }) {
 function StatItem({ icon, label, value }: { icon: React.ReactNode, label: string, value: string }) {
   return (
     <div className="flex items-center justify-between text-sm">
-      <div className="flex items-center gap-2 text-ink/40">
+      <div className="flex items-center gap-2 text-ink/45">
         {icon}
         <span>{label}</span>
       </div>
-      <span className="font-bold text-ink/70">{value}</span>
+      <span className="font-bold text-ink/75">{value}</span>
     </div>
   );
 }

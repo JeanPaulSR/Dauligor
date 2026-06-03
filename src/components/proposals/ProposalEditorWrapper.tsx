@@ -707,7 +707,7 @@ export function ProposalEditorWrapper({
               </p>
               <Button
                 onClick={() => setPickerOpen(true)}
-                className="gap-2 bg-gold text-white"
+                className="gap-2 bg-gold text-[var(--primary-foreground)]"
               >
                 <Package className="w-4 h-4" /> Choose a block
               </Button>
@@ -811,25 +811,25 @@ function ProposalEditorHeader({
             {queueCount > 0 && (
               <Badge
                 variant="outline"
-                className="text-[9px] border-gold/40 text-gold"
+                className="text-[9px] border-gold/45 text-gold"
               >
                 {queueCount} queued
               </Badge>
             )}
           </div>
           {activeBundleName ? (
-            <p className="text-xs text-ink/70 leading-snug">
+            <p className="text-xs text-ink/75 leading-snug">
               <span className="font-semibold">Block:</span>{' '}
               <span>{activeBundleName}</span>
               {activeBundleDescription && (
                 <>
                   {' — '}
-                  <span className="text-ink/60">{activeBundleDescription}</span>
+                  <span className="text-ink/65">{activeBundleDescription}</span>
                 </>
               )}
             </p>
           ) : (
-            <p className="text-xs text-ink/60 italic">
+            <p className="text-xs text-ink/65 italic">
               No active block. Save Progress will prompt to pick or create one.
             </p>
           )}
@@ -865,7 +865,7 @@ function ProposalEditorHeader({
           <Button
             onClick={onSubmit}
             disabled={disabled}
-            className="gap-1.5 bg-gold text-white"
+            className="gap-1.5 bg-gold text-[var(--primary-foreground)]"
           >
             <Send className="w-3.5 h-3.5" />
             {submitLabel}
@@ -912,7 +912,7 @@ function FocusModeToggle({
           'flex items-center gap-1.5 px-2.5 py-1 text-[10px] uppercase tracking-widest rounded transition-colors',
           value === 'drafts'
             ? 'bg-gold/15 text-gold font-bold'
-            : 'text-ink/60 hover:text-ink',
+            : 'text-ink/65 hover:text-ink',
         )}
         aria-pressed={value === 'drafts'}
       >
@@ -927,7 +927,7 @@ function FocusModeToggle({
           'flex items-center gap-1.5 px-2.5 py-1 text-[10px] uppercase tracking-widest rounded transition-colors',
           value === 'browse'
             ? 'bg-gold/15 text-gold font-bold'
-            : 'text-ink/60 hover:text-ink',
+            : 'text-ink/65 hover:text-ink',
         )}
         aria-pressed={value === 'browse'}
       >

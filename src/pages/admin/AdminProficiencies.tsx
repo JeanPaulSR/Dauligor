@@ -251,7 +251,7 @@ export default function AdminProficiencies({ userProfile }: { userProfile: any }
             <h1 className="text-3xl font-serif font-bold text-ink tracking-tight uppercase">
               Proficiencies Manager
             </h1>
-            <p className="text-ink/60 font-serif italic text-sm">
+            <p className="text-ink/65 font-serif italic text-sm">
               Core skills, tools, weapons, armor, languages, damage types, and
               attributes for your game system.
             </p>
@@ -264,13 +264,13 @@ export default function AdminProficiencies({ userProfile }: { userProfile: any }
             when activeView is 'rail'. */}
         <aside
           data-admin-proficiencies-rail
-          className={`border border-gold/10 rounded-lg bg-card/40 shrink-0 lg:w-[260px] flex-col lg:min-h-0 ${
+          className={`border border-gold/15 rounded-lg bg-card/40 shrink-0 lg:w-[260px] flex-col lg:min-h-0 ${
             activeView === 'rail' ? 'flex' : 'hidden'
           } lg:flex`}
         >
           {/* Search */}
-          <div className="p-3 border-b border-gold/10 shrink-0">
-            <label className="text-[9px] uppercase tracking-widest font-bold text-ink/40 block mb-1.5 px-1">
+          <div className="p-3 border-b border-gold/15 shrink-0">
+            <label className="text-[9px] uppercase tracking-widest font-bold text-ink/45 block mb-1.5 px-1">
               Find proficiency
             </label>
             <SearchInput
@@ -288,7 +288,7 @@ export default function AdminProficiencies({ userProfile }: { userProfile: any }
               if (items.length === 0) return null;
               return (
                 <div key={group} className="space-y-1">
-                  <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-gold/60 px-2 py-1 border-b border-gold/5 mb-1">
+                  <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-gold/65 px-2 py-1 border-b border-gold/5 mb-1">
                     {GROUP_LABELS[group]}
                   </div>
                   {items.map((tab) => {
@@ -303,14 +303,14 @@ export default function AdminProficiencies({ userProfile }: { userProfile: any }
                         onClick={() => handleSelectTab(tab.id)}
                         className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded text-left transition-colors text-xs font-bold uppercase tracking-wider ${
                           active
-                            ? 'bg-gold text-white'
-                            : 'text-ink/70 hover:bg-gold/10 hover:text-ink'
+                            ? 'bg-gold text-[var(--primary-foreground)]'
+                            : 'text-ink/75 hover:bg-gold/15 hover:text-ink'
                         } ${tab.parent ? 'pl-6' : ''}`}
                       >
                         <span className="flex items-center gap-2 min-w-0">
                           <Icon
                             className={`w-3 h-3 shrink-0 ${
-                              active ? 'text-white' : 'text-gold/60'
+                              active ? 'text-[var(--primary-foreground)]' : 'text-gold/65'
                             }`}
                           />
                           <span className="truncate">{tab.label}</span>
@@ -318,7 +318,7 @@ export default function AdminProficiencies({ userProfile }: { userProfile: any }
                         {typeof countValue === 'number' && (
                           <span
                             className={`text-[9px] font-mono shrink-0 ${
-                              active ? 'text-white/80' : 'text-ink/35'
+                              active ? 'text-[var(--primary-foreground)]/80' : 'text-ink/35'
                             }`}
                           >
                             {countValue}
@@ -331,7 +331,7 @@ export default function AdminProficiencies({ userProfile }: { userProfile: any }
               );
             })}
             {search.trim() && !TABS.some(matchesSearch) && (
-              <p className="text-xs italic text-ink/40 text-center py-2 px-2">
+              <p className="text-xs italic text-ink/45 text-center py-2 px-2">
                 No taxonomy matches “{search}”.
               </p>
             )}
@@ -366,8 +366,8 @@ export default function AdminProficiencies({ userProfile }: { userProfile: any }
             </Button>
             {activeTabEntry && (
               <>
-                <span className="text-ink/30">/</span>
-                <activeTabEntry.icon className="w-3.5 h-3.5 text-gold/70" />
+                <span className="text-ink/35">/</span>
+                <activeTabEntry.icon className="w-3.5 h-3.5 text-gold/75" />
                 <span className="text-xs uppercase tracking-widest font-bold text-ink truncate">
                   {activeTabEntry.label}
                 </span>

@@ -239,7 +239,7 @@ export default function FeatDetailPanel({
 
   const descriptionHtml = (() => {
     const raw = String(feat.description || '').trim();
-    if (!raw) return '<p class="italic text-ink/40">No description authored yet.</p>';
+    if (!raw) return '<p class="italic text-ink/45">No description authored yet.</p>';
     // bbcode → HTML — feats author in the same BBCode dialect lore
     // articles and class features use. No Foundry HTML round-trip on
     // feats today since the feats import endpoint hasn't shipped, so
@@ -311,7 +311,7 @@ export default function FeatDetailPanel({
           stacked on the right. No bordered card, no info-row strip
           — the user-facing detail panel reads as a single body of
           text, not a stat-block. */}
-      <div className="border-b border-gold/10 px-6 py-5">
+      <div className="border-b border-gold/15 px-6 py-5">
         <div className="flex items-start gap-5">
           <FeatArtPreview src={feat.imageUrl} alt={feat.name || 'Feat'} size={96} />
           <div className="flex-1 min-w-0 space-y-1.5">
@@ -319,7 +319,7 @@ export default function FeatDetailPanel({
               {feat.name}
             </h2>
             {categoryLabel ? (
-              <p className="font-serif italic text-ink/70 text-sm">{categoryLabel}</p>
+              <p className="font-serif italic text-ink/75 text-sm">{categoryLabel}</p>
             ) : null}
             {prereqDisplay ? (
               // Italic prerequisites line. No box / no border / no
@@ -337,14 +337,14 @@ export default function FeatDetailPanel({
             {feat.sourceId ? (
               <Link
                 to={`/sources/view/${feat.sourceId}`}
-                className="text-sm font-bold text-gold/70 hover:text-gold underline-offset-2 hover:underline transition-colors"
+                className="text-sm font-bold text-gold/75 hover:text-gold underline-offset-2 hover:underline transition-colors"
                 title={String(sourceRecord?.name || sourceRecord?.shortName || sourceAbbrev)}
               >
                 {sourceAbbrev}
                 {feat.page ? <span className="text-ink/35 font-normal ml-1">p{feat.page}</span> : null}
               </Link>
             ) : (
-              <span className="text-sm font-bold text-gold/70">
+              <span className="text-sm font-bold text-gold/75">
                 {sourceAbbrev}
                 {feat.page ? <span className="text-ink/35 font-normal ml-1">p{feat.page}</span> : null}
               </span>
@@ -356,13 +356,13 @@ export default function FeatDetailPanel({
                 className={cn(
                   'shrink-0 inline-flex items-center justify-center h-9 w-9 rounded-full border transition-colors',
                   isFavorite
-                    ? 'border-gold/50 bg-gold/15 text-gold hover:bg-gold/25'
-                    : 'border-gold/20 text-ink/40 hover:border-gold/40 hover:text-gold'
+                    ? 'border-gold/55 bg-gold/15 text-gold hover:bg-gold/25'
+                    : 'border-gold/25 text-ink/45 hover:border-gold/45 hover:text-gold'
                 )}
                 title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
                 aria-pressed={!!isFavorite}
               >
-                <Star className={cn('w-4 h-4', isFavorite ? 'fill-gold/80' : '')} />
+                <Star className={cn('w-4 h-4', isFavorite ? 'fill-gold/85' : '')} />
               </button>
             ) : null}
           </div>
@@ -374,7 +374,7 @@ export default function FeatDetailPanel({
           feat description is the whole content. */}
       <div className="px-6 py-5">
         <div
-          className="prose max-w-none prose-p:text-ink/90 prose-strong:text-ink prose-em:text-ink/80 prose-li:text-ink/85 prose-headings:text-ink"
+          className="prose max-w-none prose-p:text-ink/95 prose-strong:text-ink prose-em:text-ink/85 prose-li:text-ink/85 prose-headings:text-ink"
           dangerouslySetInnerHTML={{ __html: descriptionHtml }}
         />
       </div>
@@ -389,7 +389,7 @@ export default function FeatDetailPanel({
             <button
               type="button"
               onClick={() => setShowTags((s) => !s)}
-              className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded border border-gold/10 bg-gold/[0.03] hover:bg-gold/[0.07] text-[10px] font-bold uppercase tracking-[0.18em] text-gold/70 transition-colors"
+              className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded border border-gold/15 bg-gold/[0.03] hover:bg-gold/[0.07] text-[10px] font-bold uppercase tracking-[0.18em] text-gold/75 transition-colors"
               aria-expanded={showTags}
             >
               <span className="flex items-center gap-2">
@@ -481,14 +481,14 @@ function FeatArtPreview({ src, alt, size }: { src?: string; alt: string; size: n
       ) : (
         <div
           className={cn(
-            'flex items-center justify-center rounded bg-background/40 text-ink/30',
+            'flex items-center justify-center rounded bg-background/40 text-ink/35',
           )}
           style={dimensionStyle}
         >
           {status === 'loading' ? (
             <div className="flex flex-col items-center justify-center gap-2">
               <div className="h-8 w-8 rounded-full border-2 border-gold border-t-transparent animate-spin" />
-              <span className="text-[9px] uppercase font-bold tracking-widest text-gold/60">Loading</span>
+              <span className="text-[9px] uppercase font-bold tracking-widest text-gold/65">Loading</span>
             </div>
           ) : (
             <BookOpen className="h-8 w-8" />

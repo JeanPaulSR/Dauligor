@@ -29,10 +29,10 @@ import {
 import { cn } from '../../lib/utils';
 
 const STATUS_COLOR: Record<ProposalReviewStatus, string> = {
-  pending: 'border-gold/30 text-gold bg-gold/5',
+  pending: 'border-gold/35 text-gold bg-gold/5',
   approved: 'border-emerald-700/30 text-emerald-700 bg-emerald-700/5',
   rejected: 'border-blood/30 text-blood bg-blood/5',
-  withdrawn: 'border-ink/20 text-ink/50 bg-ink/5',
+  withdrawn: 'border-ink/25 text-ink/55 bg-ink/5',
 };
 
 export function ReviewBanner() {
@@ -83,7 +83,7 @@ export function ReviewBanner() {
               </Badge>
               <Badge
                 variant="outline"
-                className="text-[9px] font-bold uppercase tracking-widest border-ink/20 text-ink/60"
+                className="text-[9px] font-bold uppercase tracking-widest border-ink/25 text-ink/65"
               >
                 {review.operation}
               </Badge>

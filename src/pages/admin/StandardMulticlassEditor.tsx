@@ -54,7 +54,7 @@ export default function StandardMulticlassEditor() {
   };
 
   if (loading) {
-    return <div className="p-8 text-center animate-pulse text-gold/60 italic font-serif">Consulting the ancient charts...</div>;
+    return <div className="p-8 text-center animate-pulse text-gold/65 italic font-serif">Consulting the ancient charts...</div>;
   }
 
   return (
@@ -62,23 +62,23 @@ export default function StandardMulticlassEditor() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-serif font-bold text-ink">Standard Multiclass Progression</h2>
-          <p className="text-xs text-ink/40 italic">This table determines spell slots when multiple casting levels are combined.</p>
+          <p className="text-xs text-ink/45 italic">This table determines spell slots when multiple casting levels are combined.</p>
         </div>
         <Button 
           onClick={handleSave} 
           disabled={saving}
-          className="bg-gold text-white hover:bg-gold/90 shadow-lg shadow-gold/20 gap-2"
+          className="bg-gold text-[var(--primary-foreground)] hover:bg-gold/95 shadow-lg shadow-gold/25 gap-2"
         >
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
           Save Progression
         </Button>
       </div>
 
-      <div className="border border-gold/10 rounded-xl bg-card/30 overflow-hidden shadow-inner shadow-gold/5">
+      <div className="border border-gold/15 rounded-xl bg-card/30 overflow-hidden shadow-inner shadow-gold/5">
         <div className="overflow-x-auto custom-scrollbar">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-gold/5 border-b border-gold/10">
+              <tr className="bg-gold/5 border-b border-gold/15">
                 <th className="p-3 text-[10px] font-black uppercase tracking-widest text-gold text-center border-r border-gold/5">Lvl</th>
                 {SLOTS.map(s => (
                   <th key={s} className="p-3 text-[10px] font-black uppercase tracking-widest text-gold text-center">
@@ -90,7 +90,7 @@ export default function StandardMulticlassEditor() {
             <tbody className="divide-y divide-gold/5">
               {data.map((row, lIdx) => (
                 <tr key={row.level} className="hover:bg-white/5 transition-colors group">
-                  <td className="p-2 text-xs font-bold text-ink/60 text-center bg-gold/5 border-r border-gold/5 w-12 group-hover:text-gold transition-colors">
+                  <td className="p-2 text-xs font-bold text-ink/65 text-center bg-gold/5 border-r border-gold/5 w-12 group-hover:text-gold transition-colors">
                     {row.level}
                   </td>
                   {SLOTS.map((_, sIdx) => (
@@ -101,7 +101,7 @@ export default function StandardMulticlassEditor() {
                         max="9"
                         value={row.slots[sIdx] || 0}
                         onChange={(e) => handleSlotChange(lIdx, sIdx, e.target.value)}
-                        className={`w-full h-8 text-center text-xs bg-transparent border-none focus:ring-1 focus:ring-gold/30 rounded-none ${row.slots[sIdx] > 0 ? 'text-gold font-bold' : 'text-ink/20'}`}
+                        className={`w-full h-8 text-center text-xs bg-transparent border-none focus:ring-1 focus:ring-gold/35 rounded-none ${row.slots[sIdx] > 0 ? 'text-gold font-bold' : 'text-ink/25'}`}
                       />
                     </td>
                   ))}
@@ -112,11 +112,11 @@ export default function StandardMulticlassEditor() {
         </div>
       </div>
 
-      <div className="p-4 bg-gold/5 border border-gold/10 rounded-lg flex gap-3">
+      <div className="p-4 bg-gold/5 border border-gold/15 rounded-lg flex gap-3">
         <Wand2 className="w-5 h-5 text-gold shrink-0 mt-0.5" />
         <div className="space-y-1">
-          <h4 className="text-xs font-bold text-ink/80">Casting Level Rules</h4>
-          <p className="text-[10px] leading-relaxed text-ink/60">
+          <h4 className="text-xs font-bold text-ink/85">Casting Level Rules</h4>
+          <p className="text-[10px] leading-relaxed text-ink/65">
             Total your levels in the bard, cleric, druid, sorcerer, and wizard classes, 
             half your levels (rounded down) in the paladin and ranger classes, 
             and a third of your levels (rounded down) in the fighter (Eldritch Knight) or rogue (Arcane Trickster) subclasses. 

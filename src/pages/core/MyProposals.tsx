@@ -216,7 +216,7 @@ export default function MyProposals({ userProfile }: { userProfile: any }) {
 
   if (!allowed) {
     return (
-      <div className="max-w-3xl mx-auto py-20 text-center font-serif italic text-ink/60">
+      <div className="max-w-3xl mx-auto py-20 text-center font-serif italic text-ink/65">
         You need the Content Creator permission to view this page.
         An admin can grant it from <a href="/admin/users" className="text-gold underline">/admin/users → Permissions</a>.
       </div>
@@ -240,7 +240,7 @@ export default function MyProposals({ userProfile }: { userProfile: any }) {
       <div className={isBlock ? 'shrink-0' : 'space-y-2'}>
         <h1 className="text-4xl font-serif font-bold text-ink tracking-tight uppercase">My Proposals</h1>
         {!isBlock && (
-          <p className="text-ink/60 font-serif italic">
+          <p className="text-ink/65 font-serif italic">
             Compendium changes you've submitted for admin review. Stack
             multiple edits into a <strong>Block</strong> for one combined
             proposal, use <strong>New</strong> / <strong>Edit</strong> to
@@ -287,7 +287,7 @@ function BlockTabBar({
 }) {
   const { activeBundleId, drafts } = useBlock();
   return (
-    <div className="flex flex-wrap gap-2 border-b border-gold/10 pb-2">
+    <div className="flex flex-wrap gap-2 border-b border-gold/15 pb-2">
       {([
         { id: 'submissions', label: 'Submissions', icon: Inbox },
         { id: 'block', label: 'Block', icon: Package },
@@ -300,8 +300,8 @@ function BlockTabBar({
             onClick={() => setTopTab(tab.id)}
             className={`flex items-center gap-2 px-4 py-2 rounded-t-md transition-colors font-bold uppercase tracking-widest text-[10px] ${
               topTab === tab.id
-                ? 'bg-gold text-white shadow-sm'
-                : 'bg-card text-ink/60 hover:text-ink hover:bg-gold/10'
+                ? 'bg-gold text-[var(--primary-foreground)] shadow-sm'
+                : 'bg-card text-ink/65 hover:text-ink hover:bg-gold/15'
             }`}
           >
             <Icon className="w-3.5 h-3.5" />
@@ -385,8 +385,8 @@ function SubmissionsPanel({
             onClick={() => setFilter(f.id)}
             className={`px-3 py-1.5 rounded-t-md transition-colors font-bold uppercase tracking-widest text-[10px] ${
               filter === f.id
-                ? 'bg-gold/15 text-gold border border-gold/30'
-                : 'bg-transparent text-ink/50 hover:text-ink hover:bg-gold/5'
+                ? 'bg-gold/15 text-gold border border-gold/35'
+                : 'bg-transparent text-ink/55 hover:text-ink hover:bg-gold/5'
             }`}
           >
             {f.label}
@@ -394,7 +394,7 @@ function SubmissionsPanel({
         ))}
       </div>
 
-      <Card className="border-gold/10">
+      <Card className="border-gold/15">
         <CardHeader>
           <CardTitle className="text-base">
             {proposals.length} {filter === 'all' ? 'total' : filter}
@@ -402,9 +402,9 @@ function SubmissionsPanel({
         </CardHeader>
         <CardContent>
           {loading && proposals.length === 0 ? (
-            <p className="text-ink/50 italic text-center py-12">Loading…</p>
+            <p className="text-ink/55 italic text-center py-12">Loading…</p>
           ) : proposals.length === 0 ? (
-            <p className="text-ink/50 italic text-center py-12">No proposals to show.</p>
+            <p className="text-ink/55 italic text-center py-12">No proposals to show.</p>
           ) : (
             <ul className="divide-y divide-gold/5">
               {proposals.map((p) => (
@@ -412,14 +412,14 @@ function SubmissionsPanel({
                   <div className="flex items-center gap-3 flex-wrap">
                     <OperationBadge op={p.operation} />
                     <span className="text-sm font-medium">{previewName(p)}</span>
-                    <Badge variant="outline" className="text-[9px] border-ink/20 text-ink/50">
+                    <Badge variant="outline" className="text-[9px] border-ink/25 text-ink/55">
                       {ENTITY_LABEL[p.entity_type]}
                     </Badge>
                     <StatusBadge status={p.status} />
                     {p.pinned_at && (
                       <Badge
                         variant="outline"
-                        className="text-[9px] border-gold/40 text-gold"
+                        className="text-[9px] border-gold/45 text-gold"
                         title="Admin pinned this proposal — it's exempt from the 30-day retention sweep."
                       >
                         Pinned
@@ -453,18 +453,18 @@ function SubmissionsPanel({
                         variant="outline"
                         onClick={() => onWithdraw(p.id)}
                         disabled={working === p.id}
-                        className="gap-1.5 border-ink/20 text-ink/60 hover:bg-ink/5"
+                        className="gap-1.5 border-ink/25 text-ink/65 hover:bg-ink/5"
                       >
                         <X className="w-3.5 h-3.5" /> Withdraw
                       </Button>
                     )}
                   </div>
-                  <p className="text-[11px] text-ink/50">
+                  <p className="text-[11px] text-ink/55">
                     Submitted {formatSqliteLocal(p.proposed_at)}
                     {p.reviewed_at && <> · Reviewed {formatSqliteLocal(p.reviewed_at)}</>}
                   </p>
                   {p.notes_from_proposer && (
-                    <p className="text-xs text-ink/70 italic border-l-2 border-gold/30 pl-3">
+                    <p className="text-xs text-ink/75 italic border-l-2 border-gold/35 pl-3">
                       {p.notes_from_proposer}
                     </p>
                   )}
@@ -618,8 +618,8 @@ function LauncherGrid({
             <div
               className={`group p-3 border rounded transition-colors h-full ${
                 ready
-                  ? 'border-gold/20 hover:border-gold hover:bg-gold/10 cursor-pointer'
-                  : 'border-ink/10 bg-card/30 cursor-not-allowed opacity-60'
+                  ? 'border-gold/25 hover:border-gold hover:bg-gold/15 cursor-pointer'
+                  : 'border-ink/15 bg-card/30 cursor-not-allowed opacity-60'
               }`}
             >
               <div className="flex items-start gap-3">
@@ -628,15 +628,15 @@ function LauncherGrid({
                   <p className="font-bold text-sm text-ink flex items-center gap-2">
                     {editor.title}
                     {!ready && (
-                      <Badge variant="outline" className="text-[9px] border-ink/20 text-ink/40">
+                      <Badge variant="outline" className="text-[9px] border-ink/25 text-ink/45">
                         coming soon
                       </Badge>
                     )}
                   </p>
-                  <p className="text-xs text-ink/60 mt-1 leading-snug">{editor.description}</p>
+                  <p className="text-xs text-ink/65 mt-1 leading-snug">{editor.description}</p>
                 </div>
                 {ready && (
-                  <ArrowRight className="w-4 h-4 text-gold/40 group-hover:text-gold shrink-0 mt-0.5" />
+                  <ArrowRight className="w-4 h-4 text-gold/45 group-hover:text-gold shrink-0 mt-0.5" />
                 )}
               </div>
             </div>
@@ -975,12 +975,12 @@ function BlockPanel() {
           <Button
             onClick={() => setChangeOpen(true)}
             variant="outline"
-            className="gap-2 border-gold/30 text-gold hover:bg-gold/10"
+            className="gap-2 border-gold/35 text-gold hover:bg-gold/15"
           >
             <Package className="w-4 h-4" /> Change Block
           </Button>
         )}
-        <Button onClick={() => setCreateOpen(true)} className="gap-2 bg-gold text-white">
+        <Button onClick={() => setCreateOpen(true)} className="gap-2 bg-gold text-[var(--primary-foreground)]">
           <Plus className="w-4 h-4" /> Start a new block
         </Button>
       </div>
@@ -1005,12 +1005,12 @@ function BlockPanel() {
         ) : openBlocks.length > 0 ? (
           <div className="h-full flex items-center justify-center text-center">
             <div className="space-y-3">
-              <Package className="w-8 h-8 mx-auto text-gold/60" />
-              <p className="text-sm text-ink/70 font-medium">No block selected.</p>
+              <Package className="w-8 h-8 mx-auto text-gold/65" />
+              <p className="text-sm text-ink/75 font-medium">No block selected.</p>
               <Button
                 onClick={() => setChangeOpen(true)}
                 variant="outline"
-                className="gap-2 border-gold/30 text-gold hover:bg-gold/10"
+                className="gap-2 border-gold/35 text-gold hover:bg-gold/15"
               >
                 <Package className="w-4 h-4" /> Choose a block
               </Button>
@@ -1019,8 +1019,8 @@ function BlockPanel() {
         ) : (
           <div className="h-full flex items-center justify-center text-center">
             <div className="space-y-2 max-w-md">
-              <Package className="w-8 h-8 mx-auto text-gold/60" />
-              <p className="text-sm text-ink/70 font-medium">You haven't started a block yet.</p>
+              <Package className="w-8 h-8 mx-auto text-gold/65" />
+              <p className="text-sm text-ink/75 font-medium">You haven't started a block yet.</p>
               <p className="text-xs text-ink/55">
                 Click <strong>Start a new block</strong> to begin. Each block bundles your
                 edits into one proposal for an admin to review.
@@ -1129,21 +1129,21 @@ function ActiveBlockCard({
             </Badge>
           </CardTitle>
           {block.description && (
-            <p className="text-xs text-ink/70 leading-relaxed">{block.description}</p>
+            <p className="text-xs text-ink/75 leading-relaxed">{block.description}</p>
           )}
         </div>
         <div className="flex gap-2 flex-shrink-0 flex-wrap">
           <Button
             onClick={() => setNewLauncherOpen(true)}
             disabled={working !== null}
-            className="gap-1.5 bg-gold/15 border border-gold/30 text-gold hover:bg-gold/25"
+            className="gap-1.5 bg-gold/15 border border-gold/35 text-gold hover:bg-gold/25"
           >
             <Plus className="w-3.5 h-3.5" /> New
           </Button>
           <Button
             onClick={() => setEditLauncherOpen(true)}
             disabled={working !== null}
-            className="gap-1.5 bg-gold/15 border border-gold/30 text-gold hover:bg-gold/25"
+            className="gap-1.5 bg-gold/15 border border-gold/35 text-gold hover:bg-gold/25"
           >
             <Edit3 className="w-3.5 h-3.5" /> Edit
           </Button>
@@ -1166,7 +1166,7 @@ function ActiveBlockCard({
           <Button
             onClick={onSubmit}
             disabled={working !== null || drafts.length === 0}
-            className="gap-1.5 bg-gold text-white"
+            className="gap-1.5 bg-gold text-[var(--primary-foreground)]"
           >
             <Send className="w-3.5 h-3.5" /> Submit Block
           </Button>
@@ -1184,16 +1184,16 @@ function ActiveBlockCard({
       </CardHeader>
       {loading && drafts.length === 0 ? (
         <CardContent>
-          <p className="text-ink/50 italic text-center py-12">Loading drafts…</p>
+          <p className="text-ink/55 italic text-center py-12">Loading drafts…</p>
         </CardContent>
       ) : drafts.length === 0 ? (
         <CardContent>
-          <div className="text-center py-8 text-ink/60 text-sm">
+          <div className="text-center py-8 text-ink/65 text-sm">
             <p>
               No drafts yet — open one of the editors (Tags, Spell Rules, Spell Lists,
               Spells, Classes, Subclasses, Feats, Items, Option Groups) and make a change.
             </p>
-            <p className="text-[11px] text-ink/40 mt-2">
+            <p className="text-[11px] text-ink/45 mt-2">
               Each Save / Add / Delete you do while this block is active lands here
               instead of going to the admin queue.
             </p>
@@ -1302,23 +1302,23 @@ function InactiveBlockCard({
     <button
       type="button"
       onClick={onActivate}
-      className="w-full text-left rounded-lg border border-gold/15 bg-card/40 hover:border-gold/40 hover:bg-gold/[0.03] transition-colors p-4"
+      className="w-full text-left rounded-lg border border-gold/15 bg-card/40 hover:border-gold/45 hover:bg-gold/[0.03] transition-colors p-4"
     >
       <div className="flex items-start gap-3">
-        <Package className="w-4 h-4 text-ink/40 mt-0.5 flex-shrink-0" />
+        <Package className="w-4 h-4 text-ink/45 mt-0.5 flex-shrink-0" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-sm font-semibold text-ink truncate">{block.name}</p>
-            <span className="text-[10px] uppercase tracking-widest text-ink/40">
+            <span className="text-[10px] uppercase tracking-widest text-ink/45">
               click to make active
             </span>
           </div>
           {block.description && (
-            <p className="text-[11px] text-ink/60 mt-1 leading-relaxed line-clamp-2">
+            <p className="text-[11px] text-ink/65 mt-1 leading-relaxed line-clamp-2">
               {block.description}
             </p>
           )}
-          <p className="text-[10px] text-ink/40 mt-1.5">
+          <p className="text-[10px] text-ink/45 mt-1.5">
             Last updated {formatSqliteLocal(block.updated_at)}
           </p>
         </div>
@@ -1347,10 +1347,10 @@ function OperationBadge({ op }: { op: Operation }) {
 function StatusBadge({ status }: { status: Status }) {
   const classes: Record<Status, string> = {
     draft: 'bg-blood/10 text-blood border-blood/30',
-    pending: 'bg-gold/10 text-gold border-gold/30',
+    pending: 'bg-gold/15 text-gold border-gold/35',
     approved: 'bg-emerald-700/10 text-emerald-700 border-emerald-700/30',
     rejected: 'bg-blood/10 text-blood border-blood/30',
-    withdrawn: 'bg-ink/5 text-ink/50 border-ink/20',
+    withdrawn: 'bg-ink/5 text-ink/55 border-ink/25',
   };
   return (
     <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded border ${classes[status]}`}>

@@ -215,15 +215,15 @@ export default function SingleSelectSearch({
         disabled={disabled}
         onClick={() => !disabled && setOpen(o => !o)}
         onKeyDown={onTriggerKeyDown}
-        className={`h-7 px-2 text-[11px] bg-background/50 border border-gold/10 rounded outline-none focus:border-gold flex items-center gap-1.5 truncate disabled:opacity-40 disabled:cursor-not-allowed ${triggerClassName}`}
+        className={`h-7 px-2 text-[11px] bg-background/50 border border-gold/15 rounded outline-none focus:border-gold flex items-center gap-1.5 truncate disabled:opacity-40 disabled:cursor-not-allowed ${triggerClassName}`}
         aria-haspopup="listbox"
         aria-expanded={open}
       >
-        <span className={`flex-1 text-left truncate ${selected ? 'text-ink' : 'text-ink/40'}`}>
+        <span className={`flex-1 text-left truncate ${selected ? 'text-ink' : 'text-ink/45'}`}>
           {selected ? selected.name : placeholder}
         </span>
         {selected?.hint ? (
-          <span className="text-[9px] text-gold/60 truncate shrink-0">{selected.hint}</span>
+          <span className="text-[9px] text-gold/65 truncate shrink-0">{selected.hint}</span>
         ) : null}
         {allowClear && selected && !disabled ? (
           <span
@@ -237,12 +237,12 @@ export default function SingleSelectSearch({
               e.stopPropagation();
               onChange('');
             }}
-            className="text-ink/30 hover:text-blood transition-colors leading-none shrink-0"
+            className="text-ink/35 hover:text-blood transition-colors leading-none shrink-0"
           >
             <X className="w-3 h-3" />
           </span>
         ) : null}
-        <ChevronDown className="w-3 h-3 text-ink/40 shrink-0" />
+        <ChevronDown className="w-3 h-3 text-ink/45 shrink-0" />
       </button>
 
       {open && coords && createPortal(
@@ -257,13 +257,13 @@ export default function SingleSelectSearch({
             zIndex: 9999,
             maxHeight: `${PREFERRED_DROPDOWN_HEIGHT}px`,
           }}
-          className="rounded-md border border-gold/30 bg-card shadow-lg text-xs flex flex-col overflow-hidden"
+          className="rounded-md border border-gold/35 bg-card shadow-lg text-xs flex flex-col overflow-hidden"
           role="listbox"
         >
           {/* Search input — pinned at the top of the dropdown so the
               filter control stays visible while the list scrolls. */}
-          <div className="flex items-center gap-2 px-2 py-1.5 border-b border-gold/10 bg-background/30 shrink-0">
-            <Search className="w-3 h-3 text-ink/30 shrink-0" />
+          <div className="flex items-center gap-2 px-2 py-1.5 border-b border-gold/15 bg-background/30 shrink-0">
+            <Search className="w-3 h-3 text-ink/35 shrink-0" />
             <input
               ref={searchRef}
               type="text"
@@ -272,13 +272,13 @@ export default function SingleSelectSearch({
               onKeyDown={onKeyDown}
               autoComplete="off"
               placeholder="Search…"
-              className="flex-1 bg-transparent text-xs outline-none placeholder:text-ink/30 text-ink"
+              className="flex-1 bg-transparent text-xs outline-none placeholder:text-ink/35 text-ink"
             />
             {search ? (
               <button
                 type="button"
                 onClick={() => setSearch('')}
-                className="text-ink/30 hover:text-ink/60 text-sm leading-none shrink-0"
+                className="text-ink/35 hover:text-ink/65 text-sm leading-none shrink-0"
                 aria-label="Clear search"
               >
                 ×
@@ -288,9 +288,9 @@ export default function SingleSelectSearch({
 
           <div className="overflow-y-auto custom-scrollbar flex-1 divide-y divide-gold/5">
             {options.length === 0 ? (
-              <p className="px-3 py-3 text-[10px] text-ink/20 italic">{noEntitiesText}</p>
+              <p className="px-3 py-3 text-[10px] text-ink/25 italic">{noEntitiesText}</p>
             ) : filtered.length === 0 ? (
-              <p className="px-3 py-3 text-[10px] text-ink/20 italic">
+              <p className="px-3 py-3 text-[10px] text-ink/25 italic">
                 {emptyText || `No matches for "${search}".`}
               </p>
             ) : (
@@ -307,7 +307,7 @@ export default function SingleSelectSearch({
                     onMouseEnter={() => setHighlightIdx(i)}
                     onClick={() => pick(opt)}
                     className={`block w-full text-left px-3 py-1.5 transition-colors ${
-                      isHighlighted ? 'bg-gold/15' : 'hover:bg-gold/10'
+                      isHighlighted ? 'bg-gold/15' : 'hover:bg-gold/15'
                     }`}
                   >
                     <div className="flex items-center gap-2">
@@ -318,7 +318,7 @@ export default function SingleSelectSearch({
                       )}
                       <span className="flex-1 text-[11px] text-ink truncate">{opt.name}</span>
                       {opt.hint ? (
-                        <span className="text-[10px] text-gold/60 shrink-0">{opt.hint}</span>
+                        <span className="text-[10px] text-gold/65 shrink-0">{opt.hint}</span>
                       ) : null}
                     </div>
                   </button>

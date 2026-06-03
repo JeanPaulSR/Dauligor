@@ -359,7 +359,7 @@ function MarkdownEditor({
   };
 
   return (
-    <div className={`relative border border-gold/10 rounded-md focus-within:border-gold transition-colors bg-card/50 flex flex-col overflow-hidden ${className}`}>
+    <div className={`relative border border-gold/15 rounded-md focus-within:border-gold transition-colors bg-card/50 flex flex-col overflow-hidden ${className}`}>
       {!hideToolbar && (
         <MarkdownToolbar
           textareaRef={textareaRef}

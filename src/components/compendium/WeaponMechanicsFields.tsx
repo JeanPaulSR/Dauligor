@@ -120,29 +120,29 @@ export default function WeaponMechanicsFields({ state, onChange }: Props) {
   };
 
   return (
-    <div className="space-y-4 border border-gold/10 rounded-md p-4 bg-background/20">
+    <div className="space-y-4 border border-gold/15 rounded-md p-4 bg-background/20">
       <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Weapon Mechanics</h3>
 
       {/* ── DAMAGE ─────────────────────────────────────────── */}
       <div className="space-y-2">
-        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold/70">Damage</div>
+        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold/75">Damage</div>
         <div className="grid grid-cols-[80px_60px_1fr] gap-2 items-end">
           <div>
-            <Label className="text-[10px] uppercase text-ink/40">Dice</Label>
+            <Label className="text-[10px] uppercase text-ink/45">Dice</Label>
             <Input
               type="number"
               min={0}
               value={state.damage.base.number}
               onChange={(e) => setDamageBase({ number: parseInt(e.target.value || '0', 10) || 0 })}
-              className="bg-background/50 border-gold/10 focus:border-gold"
+              className="bg-background/50 border-gold/15 focus:border-gold"
             />
           </div>
           <div>
-            <Label className="text-[10px] uppercase text-ink/40">d</Label>
+            <Label className="text-[10px] uppercase text-ink/45">d</Label>
             <select
               value={state.damage.base.denomination}
               onChange={(e) => setDamageBase({ denomination: parseInt(e.target.value, 10) || 6 })}
-              className="w-full h-10 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+              className="w-full h-10 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm"
             >
               {DAMAGE_DIE_DENOMINATIONS.map((d) => (
                 <option key={d} value={d}>{d}</option>
@@ -150,17 +150,17 @@ export default function WeaponMechanicsFields({ state, onChange }: Props) {
             </select>
           </div>
           <div>
-            <Label className="text-[10px] uppercase text-ink/40">Bonus</Label>
+            <Label className="text-[10px] uppercase text-ink/45">Bonus</Label>
             <Input
               value={state.damage.base.bonus}
               onChange={(e) => setDamageBase({ bonus: e.target.value })}
               placeholder="e.g. @mod, 1d4, 2"
-              className="bg-background/50 border-gold/10 focus:border-gold font-mono text-xs"
+              className="bg-background/50 border-gold/15 focus:border-gold font-mono text-xs"
             />
           </div>
         </div>
         <div>
-          <Label className="text-[10px] uppercase text-ink/40">Damage Types</Label>
+          <Label className="text-[10px] uppercase text-ink/45">Damage Types</Label>
           <div className="flex flex-wrap gap-1.5 mt-1">
             {DAMAGE_TYPE_OPTIONS.map((opt) => {
               const active = state.damage.base.types.includes(opt.value);
@@ -172,7 +172,7 @@ export default function WeaponMechanicsFields({ state, onChange }: Props) {
                   className={`rounded-md border px-2 py-0.5 text-[10px] uppercase tracking-tight transition-colors ${
                     active
                       ? 'border-gold bg-gold text-background'
-                      : 'border-gold/15 bg-background/40 text-ink/60 hover:border-gold/35 hover:text-gold'
+                      : 'border-gold/15 bg-background/40 text-ink/65 hover:border-gold/35 hover:text-gold'
                   }`}
                 >
                   {opt.label}
@@ -185,47 +185,47 @@ export default function WeaponMechanicsFields({ state, onChange }: Props) {
 
       {/* ── RANGE ─────────────────────────────────────────── */}
       <div className="space-y-2">
-        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold/70">Range</div>
+        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold/75">Range</div>
         <div className="grid grid-cols-4 gap-2 items-end">
           <div>
-            <Label className="text-[10px] uppercase text-ink/40">Reach</Label>
+            <Label className="text-[10px] uppercase text-ink/45">Reach</Label>
             <Input
               type="number"
               min={0}
               value={state.range.reach ?? ''}
               onChange={(e) => setRange({ reach: e.target.value === '' ? null : parseInt(e.target.value, 10) || 0 })}
-              className="bg-background/50 border-gold/10 focus:border-gold"
+              className="bg-background/50 border-gold/15 focus:border-gold"
               placeholder="5"
             />
           </div>
           <div>
-            <Label className="text-[10px] uppercase text-ink/40">Normal</Label>
+            <Label className="text-[10px] uppercase text-ink/45">Normal</Label>
             <Input
               type="number"
               min={0}
               value={state.range.value ?? ''}
               onChange={(e) => setRange({ value: e.target.value === '' ? null : parseInt(e.target.value, 10) || 0 })}
-              className="bg-background/50 border-gold/10 focus:border-gold"
+              className="bg-background/50 border-gold/15 focus:border-gold"
               placeholder="—"
             />
           </div>
           <div>
-            <Label className="text-[10px] uppercase text-ink/40">Long</Label>
+            <Label className="text-[10px] uppercase text-ink/45">Long</Label>
             <Input
               type="number"
               min={0}
               value={state.range.long ?? ''}
               onChange={(e) => setRange({ long: e.target.value === '' ? null : parseInt(e.target.value, 10) || 0 })}
-              className="bg-background/50 border-gold/10 focus:border-gold"
+              className="bg-background/50 border-gold/15 focus:border-gold"
               placeholder="—"
             />
           </div>
           <div>
-            <Label className="text-[10px] uppercase text-ink/40">Units</Label>
+            <Label className="text-[10px] uppercase text-ink/45">Units</Label>
             <select
               value={state.range.units}
               onChange={(e) => setRange({ units: e.target.value })}
-              className="w-full h-10 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+              className="w-full h-10 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm"
             >
               {RANGE_UNIT_OPTIONS.map((u) => (
                 <option key={u} value={u}>{u}</option>
@@ -233,7 +233,7 @@ export default function WeaponMechanicsFields({ state, onChange }: Props) {
             </select>
           </div>
         </div>
-        <p className="text-[10px] text-ink/40">
+        <p className="text-[10px] text-ink/45">
           Reach is the melee threat radius; Normal / Long are the ranged increments. Leave fields blank for "not applicable".
         </p>
       </div>
@@ -241,11 +241,11 @@ export default function WeaponMechanicsFields({ state, onChange }: Props) {
       {/* ── MASTERY + MAGIC BONUS + BASE ITEM ─────────────── */}
       <div className="grid md:grid-cols-3 gap-3">
         <div>
-          <Label className="text-[10px] uppercase text-ink/40">Mastery</Label>
+          <Label className="text-[10px] uppercase text-ink/45">Mastery</Label>
           <select
             value={state.mastery}
             onChange={(e) => set('mastery', e.target.value)}
-            className="w-full h-10 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+            className="w-full h-10 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm"
           >
             {MASTERY_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>{o.label}</option>
@@ -253,22 +253,22 @@ export default function WeaponMechanicsFields({ state, onChange }: Props) {
           </select>
         </div>
         <div>
-          <Label className="text-[10px] uppercase text-ink/40">Magic Bonus</Label>
+          <Label className="text-[10px] uppercase text-ink/45">Magic Bonus</Label>
           <Input
             type="number"
             value={state.magicalBonus}
             onChange={(e) => set('magicalBonus', parseInt(e.target.value || '0', 10) || 0)}
-            className="bg-background/50 border-gold/10 focus:border-gold"
+            className="bg-background/50 border-gold/15 focus:border-gold"
             placeholder="0"
           />
         </div>
         <div>
-          <Label className="text-[10px] uppercase text-ink/40">Base Item (SRD)</Label>
+          <Label className="text-[10px] uppercase text-ink/45">Base Item (SRD)</Label>
           <Input
             value={state.baseItem}
             onChange={(e) => set('baseItem', e.target.value)}
             placeholder="e.g. longsword"
-            className="bg-background/50 border-gold/10 focus:border-gold font-mono text-xs"
+            className="bg-background/50 border-gold/15 focus:border-gold font-mono text-xs"
           />
         </div>
       </div>
@@ -276,19 +276,19 @@ export default function WeaponMechanicsFields({ state, onChange }: Props) {
       {/* ── WEIGHT + PRICE ─────────────────────────────────── */}
       <div className="grid md:grid-cols-2 gap-3">
         <div>
-          <Label className="text-[10px] uppercase text-ink/40">Weight</Label>
+          <Label className="text-[10px] uppercase text-ink/45">Weight</Label>
           <div className="flex gap-2">
             <Input
               type="number"
               step="0.1"
               value={state.weight.value}
               onChange={(e) => setWeight({ value: parseFloat(e.target.value) || 0 })}
-              className="bg-background/50 border-gold/10 focus:border-gold"
+              className="bg-background/50 border-gold/15 focus:border-gold"
             />
             <select
               value={state.weight.units}
               onChange={(e) => setWeight({ units: e.target.value })}
-              className="h-10 px-3 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm w-20"
+              className="h-10 px-3 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm w-20"
             >
               {WEIGHT_UNIT_OPTIONS.map((u) => (
                 <option key={u} value={u}>{u}</option>
@@ -297,19 +297,19 @@ export default function WeaponMechanicsFields({ state, onChange }: Props) {
           </div>
         </div>
         <div>
-          <Label className="text-[10px] uppercase text-ink/40">Price</Label>
+          <Label className="text-[10px] uppercase text-ink/45">Price</Label>
           <div className="flex gap-2">
             <Input
               type="number"
               step="1"
               value={state.price.value}
               onChange={(e) => setPrice({ value: parseFloat(e.target.value) || 0 })}
-              className="bg-background/50 border-gold/10 focus:border-gold"
+              className="bg-background/50 border-gold/15 focus:border-gold"
             />
             <select
               value={state.price.denomination}
               onChange={(e) => setPrice({ denomination: e.target.value })}
-              className="h-10 px-3 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm w-20"
+              className="h-10 px-3 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm w-20"
             >
               {DENOMINATION_OPTIONS.map((d) => (
                 <option key={d} value={d}>{d}</option>
@@ -322,11 +322,11 @@ export default function WeaponMechanicsFields({ state, onChange }: Props) {
       {/* ── RARITY + ATTUNEMENT ────────────────────────────── */}
       <div className="grid md:grid-cols-2 gap-3">
         <div>
-          <Label className="text-[10px] uppercase text-ink/40">Rarity</Label>
+          <Label className="text-[10px] uppercase text-ink/45">Rarity</Label>
           <select
             value={state.rarity}
             onChange={(e) => set('rarity', e.target.value)}
-            className="w-full h-10 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+            className="w-full h-10 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm"
           >
             {RARITY_OPTIONS.map((r) => (
               <option key={r} value={r}>{r}</option>
@@ -334,11 +334,11 @@ export default function WeaponMechanicsFields({ state, onChange }: Props) {
           </select>
         </div>
         <div>
-          <Label className="text-[10px] uppercase text-ink/40">Attunement</Label>
+          <Label className="text-[10px] uppercase text-ink/45">Attunement</Label>
           <select
             value={state.attunement}
             onChange={(e) => set('attunement', e.target.value)}
-            className="w-full h-10 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+            className="w-full h-10 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm"
           >
             {ATTUNEMENT_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>{o.label}</option>

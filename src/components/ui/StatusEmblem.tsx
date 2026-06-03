@@ -43,13 +43,13 @@ const statusEmblemVariants = cva(
   {
     variants: {
       tone: {
-        manual: 'border-gold/40 bg-gold/10 text-gold',
+        manual: 'border-gold/45 bg-gold/15 text-gold',
         auto: 'border-ink/15 bg-ink/5 text-ink/55',
         stale: 'border-amber-400/40 bg-amber-400/10 text-amber-400',
         warning: 'border-amber-400/40 bg-amber-400/10 text-amber-400',
         error: 'border-blood/40 bg-blood/10 text-blood',
         success: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-500',
-        neutral: 'border-gold/25 bg-gold/5 text-gold/80',
+        neutral: 'border-gold/25 bg-gold/5 text-gold/85',
       },
       size: {
         // `sm` — inline mini-label rhythm (9px). Use when the emblem

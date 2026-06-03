@@ -44,7 +44,7 @@ export default function ClassPreviewCard({
   return (
     <div
       onClick={onClick}
-      className={`group relative bg-card border border-gold/20 hover:border-gold hover:shadow-lg hover:shadow-gold/10 transition-all overflow-hidden flex flex-col rounded-xl ${
+      className={`group relative bg-card border border-gold/25 hover:border-gold hover:shadow-lg hover:shadow-gold/15 transition-all overflow-hidden flex flex-col rounded-xl ${
         onClick ? 'cursor-pointer' : ''
       } ${className}`}
     >
@@ -59,7 +59,7 @@ export default function ClassPreviewCard({
         />
       ) : (
         <div className="absolute inset-0 bg-ink/5 flex items-center justify-center">
-          <Shield className="w-16 h-16 text-gold/10" />
+          <Shield className="w-16 h-16 text-gold/15" />
         </div>
       )}
       <div
@@ -75,12 +75,12 @@ export default function ClassPreviewCard({
         >
           {name}
         </h3>
-        <p className="label-text text-gold/80 block mt-1 text-sm" style={{ textShadow: TEXT_OUTLINE }}>
+        <p className="label-text text-gold/85 block mt-1 text-sm" style={{ textShadow: TEXT_OUTLINE }}>
           {sourceLabel || 'Unknown'}
         </p>
       </div>
 
-      <div className="mt-auto relative z-10 p-4 border-t border-gold/20 bg-black/10 backdrop-blur-md h-[45%] flex flex-col items-center text-center group-hover:bg-black/30 group-hover:-translate-y-2 transition-all duration-300">
+      <div className="mt-auto relative z-10 p-4 border-t border-gold/25 bg-black/10 backdrop-blur-md h-[45%] flex flex-col items-center text-center group-hover:bg-black/30 group-hover:-translate-y-2 transition-all duration-300">
         <div className="text-white/80 text-xs italic line-clamp-6 overflow-hidden w-full font-serif leading-relaxed">
           <Markdown>{preview || 'No preview description available.'}</Markdown>
         </div>

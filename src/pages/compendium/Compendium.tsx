@@ -80,14 +80,14 @@ export default function Compendium({ userProfile }: { userProfile: any }) {
           <div key={category.title} className="space-y-4">
             <div className="flex items-center gap-4">
               <h2 className="label-text text-gold shrink-0">{category.title}</h2>
-              <div className="h-px bg-gold/10 w-full" />
+              <div className="h-px bg-gold/15 w-full" />
             </div>
             
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
               {category.items.map((item) => (
                 <Link key={item.name} to={item.path} className="group">
-                  <div className="p-3 border border-gold/10 bg-card/50 hover:border-gold/40 hover:bg-gold/5 transition-all flex items-center gap-3">
-                    <item.icon className="w-3.5 h-3.5 text-gold/50 group-hover:text-gold transition-colors" />
+                  <div className="p-3 border border-gold/15 bg-card/50 hover:border-gold/45 hover:bg-gold/5 transition-all flex items-center gap-3">
+                    <item.icon className="w-3.5 h-3.5 text-gold/55 group-hover:text-gold transition-colors" />
                     <span className="h3-title text-lg group-hover:text-gold transition-colors">
                       {item.name}
                     </span>

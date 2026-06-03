@@ -101,7 +101,7 @@ export function ConfirmDialog({
             className={
               destructive
                 ? 'bg-blood text-white hover:bg-blood/90'
-                : 'bg-gold text-white'
+                : 'bg-gold text-[var(--primary-foreground)]'
             }
           >
             {working ? 'Working…' : confirmLabel}

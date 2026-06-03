@@ -153,7 +153,7 @@ export default function EntityListSection<T>({
 
   return (
     <section
-      className={`border border-gold/10 rounded-lg bg-card/40 flex flex-col ${
+      className={`border border-gold/15 rounded-lg bg-card/40 flex flex-col ${
         fillContainer ? 'min-h-0 flex-1' : ''
       }`}
     >
@@ -167,7 +167,7 @@ export default function EntityListSection<T>({
           the body's overflow container. Solid bg-card makes the
           toolbar opaque when rows scroll under it. */}
       <div
-        className={`bg-card px-3 py-2 border-b border-gold/10 flex items-center gap-3 shrink-0 ${
+        className={`bg-card px-3 py-2 border-b border-gold/15 flex items-center gap-3 shrink-0 ${
           fillContainer
             ? 'sticky top-[calc(var(--navbar-height)+3rem)] lg:static lg:top-auto z-10'
             : ''
@@ -180,7 +180,7 @@ export default function EntityListSection<T>({
           size="sm"
           wrapperClassName="flex-grow"
         />
-        <span className="hidden sm:inline text-[10px] font-mono text-ink/40 shrink-0">
+        <span className="hidden sm:inline text-[10px] font-mono text-ink/45 shrink-0">
           {visibleCount} / {totalCount}
         </span>
         {toolbarTrailing}
@@ -195,7 +195,7 @@ export default function EntityListSection<T>({
 
       {/* Header row — only emits cells for currently-visible columns */}
       <div
-        className="grid gap-2 px-3 py-1.5 border-b border-gold/10 text-[9px] uppercase tracking-widest text-ink/50 shrink-0"
+        className="grid gap-2 px-3 py-1.5 border-b border-gold/15 text-[9px] uppercase tracking-widest text-ink/55 shrink-0"
         style={{ gridTemplateColumns: gridTemplate }}
       >
         {visibleColumns.map((col) => {
@@ -207,7 +207,7 @@ export default function EntityListSection<T>({
                 type="button"
                 onClick={() => onSortChange(col.key)}
                 className={`flex items-center gap-1 text-left transition-colors hover:text-gold ${
-                  active ? 'text-gold' : 'text-ink/50'
+                  active ? 'text-gold' : 'text-ink/55'
                 }`}
               >
                 {col.label}
@@ -236,12 +236,12 @@ export default function EntityListSection<T>({
           </div>
         ) : totalCount === 0 ? (
           emptyState ?? (
-            <p className="text-center py-10 text-xs italic text-ink/40">
+            <p className="text-center py-10 text-xs italic text-ink/45">
               No items defined yet.
             </p>
           )
         ) : rows.length === 0 ? (
-          <p className="text-center py-10 text-xs italic text-ink/40">
+          <p className="text-center py-10 text-xs italic text-ink/45">
             {noMatchMessage ?? `No items match “${search}”.`}
           </p>
         ) : (

@@ -67,7 +67,7 @@ export function TombstoneRow({
             {name}
           </span>
           {children && (
-            <div className="text-[11px] line-through text-ink/40 truncate">
+            <div className="text-[11px] line-through text-ink/45 truncate">
               {children}
             </div>
           )}
@@ -116,7 +116,7 @@ export function DeletedEntityBanner({
           <p className="text-sm font-bold text-blood">
             {entityLabel} marked for deletion
           </p>
-          <p className="text-xs text-ink/70 leading-relaxed">
+          <p className="text-xs text-ink/75 leading-relaxed">
             <span className="font-semibold">{name}</span> will be removed when
             this block is approved. The form below is read-only until you undo
             the delete or submit the block.

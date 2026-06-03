@@ -89,7 +89,7 @@ export function CascadeDependentBanner({
               {resolved ? 'Dependent · resolved' : 'Cascade dependent · needs review'}
             </Badge>
           </div>
-          <p className="text-xs leading-relaxed text-ink/80">{description}</p>
+          <p className="text-xs leading-relaxed text-ink/85">{description}</p>
           {!resolved && (
             <p className="text-[11px] leading-relaxed text-ink/55">
               This change was auto-enrolled by a parent delete in your block.

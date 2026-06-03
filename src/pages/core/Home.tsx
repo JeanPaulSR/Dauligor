@@ -110,7 +110,7 @@ export default function Home({ userProfile }: { userProfile: any }) {
             </div>
           </div>
           {/* Callout band */}
-          <div className="h-40 bg-gold/5 border border-dashed border-gold/10" />
+          <div className="h-40 bg-gold/5 border border-dashed border-gold/15" />
         </div>
       </div>
     );

@@ -61,7 +61,7 @@ export function SearchInput({
     <div className={cn('relative w-full', wrapperClassName)}>
       <Search
         className={cn(
-          'absolute top-1/2 -translate-y-1/2 text-ink/30 pointer-events-none',
+          'absolute top-1/2 -translate-y-1/2 text-ink/35 pointer-events-none',
           iconPlacement,
         )}
       />

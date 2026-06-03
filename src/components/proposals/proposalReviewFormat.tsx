@@ -323,7 +323,7 @@ export function AdvancementList({ items, refNames }: { items: any[]; refNames?: 
   const sorted = [...items]
     .filter((a) => a && typeof a === 'object')
     .sort((a, b) => (Number(a.level) || 0) - (Number(b.level) || 0));
-  if (!sorted.length) return <span className="text-ink/50">—</span>;
+  if (!sorted.length) return <span className="text-ink/55">—</span>;
   return (
     <ul className="mt-1 space-y-1">
       {sorted.map((adv, i) => {
@@ -331,10 +331,10 @@ export function AdvancementList({ items, refNames }: { items: any[]; refNames?: 
         const detail = advancementDetail(adv, refNames);
         return (
           <li key={adv._id || i} className="flex items-baseline gap-2 text-sm">
-            <span className="shrink-0 text-[10px] font-mono text-gold/70 tabular-nums w-7">
+            <span className="shrink-0 text-[10px] font-mono text-gold/75 tabular-nums w-7">
               L{Number(adv.level) || 1}
             </span>
-            <span className="font-semibold text-ink/80">{label}</span>
+            <span className="font-semibold text-ink/85">{label}</span>
             {detail && <span className="text-ink/65 min-w-0">{detail}</span>}
           </li>
         );
@@ -386,7 +386,7 @@ function proficiencyGroupSummary(group: any, labelMap: Record<string, string>): 
 }
 
 export function ProficiencySummary({ value }: { value: any }) {
-  if (!value || typeof value !== 'object') return <span className="text-ink/40">—</span>;
+  if (!value || typeof value !== 'object') return <span className="text-ink/45">—</span>;
   const lines: Array<[string, string]> = [];
   // armor/weapons/tools: the editor's stored filter-preview display name.
   const grouped: Array<[string, string, string]> = [
@@ -406,7 +406,7 @@ export function ProficiencySummary({ value }: { value: any }) {
   if (sk) lines.push(['Skills', sk]);
   const lang = proficiencyGroupSummary(value.languages, {});
   if (lang) lines.push(['Languages', lang]);
-  if (!lines.length) return <span className="text-ink/40">—</span>;
+  if (!lines.length) return <span className="text-ink/45">—</span>;
   return (
     <dl className="mt-1 space-y-1 pl-3 border-l border-gold/15">
       {lines.map(([label, text]) => (
@@ -450,7 +450,7 @@ export function FriendlyValue({
   }
 
   if (value === null || value === undefined || value === '') {
-    return <span className="text-ink/40">—</span>;
+    return <span className="text-ink/45">—</span>;
   }
 
   // Known boolean / spell-level / price fields → a friendly string.
@@ -461,11 +461,11 @@ export function FriendlyValue({
   const enumMap = enumMapFor(fieldKey);
   if (enumMap) {
     const codes = Array.isArray(value) ? value : [value];
-    if (!codes.length) return <span className="text-ink/40">—</span>;
+    if (!codes.length) return <span className="text-ink/45">—</span>;
     return (
       <span className="flex flex-wrap gap-1 mt-0.5">
         {codes.map((c, i) => (
-          <span key={i} className="text-[11px] px-1.5 py-0.5 rounded bg-gold/10 border border-gold/20 text-ink/75">
+          <span key={i} className="text-[11px] px-1.5 py-0.5 rounded bg-gold/15 border border-gold/25 text-ink/75">
             {labelFromMap(enumMap, c)}
           </span>
         ))}
@@ -485,14 +485,14 @@ export function FriendlyValue({
     const scalars = value.filter((v) => typeof v !== 'object' || v === null);
     // Array of scalars (ability ids, levels, tag ids) → chips.
     if (scalars.length === value.length) {
-      if (!value.length) return <span className="text-ink/40">—</span>;
+      if (!value.length) return <span className="text-ink/45">—</span>;
       // Tag/option id arrays we can resolve to names; otherwise show raw.
       const { names } = resolveNames(value, refNames);
       const display = names.length === value.length ? names : value.map((v) => String(v));
       return (
         <span className="flex flex-wrap gap-1 mt-0.5">
           {display.map((v, i) => (
-            <span key={i} className="text-[11px] px-1.5 py-0.5 rounded bg-gold/10 border border-gold/20 text-ink/75">
+            <span key={i} className="text-[11px] px-1.5 py-0.5 rounded bg-gold/15 border border-gold/25 text-ink/75">
               {v}
             </span>
           ))}
@@ -515,10 +515,10 @@ export function FriendlyValue({
 
   if (typeof value === 'object') {
     const entries = meaningfulEntries(value);
-    if (!entries.length) return <span className="text-ink/40">—</span>;
+    if (!entries.length) return <span className="text-ink/45">—</span>;
     // Cap nesting so a deeply-structured blob doesn't explode the panel.
     if (depth >= 2) {
-      return <span className="text-ink/60">{entries.map(([k]) => humanizeFieldLabel(k)).join(', ')}</span>;
+      return <span className="text-ink/65">{entries.map(([k]) => humanizeFieldLabel(k)).join(', ')}</span>;
     }
     return (
       <dl className="mt-1 space-y-1 pl-3 border-l border-gold/15">

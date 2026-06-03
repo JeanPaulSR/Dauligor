@@ -38,10 +38,10 @@ export default function CampaignHomeEditorPage({ userProfile }: { userProfile: a
   }, [id, isStaff]);
 
   if (!isStaff) {
-    return <div className="text-center py-20 font-serif italic text-ink/60">Access Denied</div>;
+    return <div className="text-center py-20 font-serif italic text-ink/65">Access Denied</div>;
   }
   if (!id) {
-    return <div className="text-center py-20 font-serif italic text-ink/60">No campaign selected.</div>;
+    return <div className="text-center py-20 font-serif italic text-ink/65">No campaign selected.</div>;
   }
 
   return (

@@ -36,6 +36,20 @@ Each user can set a custom `accentColor` (hex). On profile load, `App.tsx` write
 
 `accentColor` is mostly for the Profile/Settings page and a few personalised UI flourishes; do not use it as a load-bearing colour.
 
+## Opacity ramp
+
+Text and accent hierarchy (faded labels, subtle borders, hover tints) is built with **opacity on `ink`/`gold`**, not separate grey colours — `text-ink/65`, `border-gold/35`, `bg-gold/15`. This is deliberate: an opacity is a translucent shade of the *themed* colour, so it adapts automatically when a user customises their Text or Highlight.
+
+**Use only the canonical 10-step ramp** on `ink`/`gold`:
+
+```
+/5   /15   /25   /35   /45   /55   /65   /75   /85   /95
+```
+
+Rough intent: `/5–/25` = dividers, faint fills, subtle borders · `/35–/45` = placeholders, muted metadata, chip borders · `/55–/75` = secondary/help text · `/85–/95` = near-primary text. (Live ladder with real use-sites: Settings → Appearance → **Tiers**, or `src/components/appearance/themeMocks.tsx`.)
+
+Do **not** invent intermediate levels (`/40`, `/60`, `/70`, `/12`…). They drift the system back toward the 19 ad-hoc values we collapsed, and read inconsistently once a user changes colours. Snap to the nearest canonical step. `--blood` (danger) is theme-stable and outside this ramp.
+
 ## Typography
 
 Two font families:
@@ -79,7 +93,8 @@ The app uses the `motion` library (Framer Motion's modern fork) for animation. U
 2. **Prefer named typography classes** over inline Tailwind for headings, labels, and body text.
 3. **Theme-test new components** in all three themes before considering them done. The blood and gold variables are theme-stable; everything else shifts.
 4. **Don't bypass `cn()`.** Pass conditional class strings through it so duplicate utility classes are merged correctly.
-5. **Keep dark-mode contrast in mind.** Gold-on-charcoal is the highest-contrast combination available; secondary text should be gold/60 or ink/70 minimum to remain readable.
+5. **Keep dark-mode contrast in mind.** Gold-on-charcoal is the highest-contrast combination available; secondary text should be `gold/65` or `ink/75` minimum to remain readable.
+6. **Opacity only on the canonical ramp.** On `ink`/`gold`, use `/5 /15 /25 /35 /45 /55 /65 /75 /85 /95` — never intermediate levels. See [Opacity ramp](#opacity-ramp).
 
 ## Related docs
 

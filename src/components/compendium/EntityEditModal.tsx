@@ -52,7 +52,7 @@ export { DialogTitle, DialogDescription, DialogClose };
  */
 export function FormSectionHeading({ children }: { children: ReactNode }) {
   return (
-    <div className="section-label text-gold/70 border-b border-gold/10 pb-1">
+    <div className="section-label text-gold/75 border-b border-gold/15 pb-1">
       {children}
     </div>
   );
@@ -166,7 +166,7 @@ export default function EntityEditModal({
           top: `max(${topPercent}vh, calc(var(--navbar-height) + 1rem))`,
           height: `${heightPercent}vh`,
         }}
-        className="translate-y-0 w-full max-w-3xl sm:max-w-3xl max-h-[calc(100vh-var(--navbar-height)-2rem)] flex flex-col gap-0 p-0 overflow-hidden bg-card text-foreground border-gold/20"
+        className="translate-y-0 w-full max-w-3xl sm:max-w-3xl max-h-[calc(100vh-var(--navbar-height)-2rem)] flex flex-col gap-0 p-0 overflow-hidden bg-card text-foreground border-gold/25"
       >
         <form onSubmit={onSubmit} className="flex flex-col min-h-0 flex-1">
           {/* Header — either the consumer's custom slot or the default
@@ -177,7 +177,7 @@ export default function EntityEditModal({
             <header className="dialog-header shrink-0 relative">{headerSlot}</header>
           ) : (
             <header className="dialog-header shrink-0 relative flex items-center gap-3 pr-10">
-              <div className="label-text text-gold/70 flex-1">
+              <div className="label-text text-gold/75 flex-1">
                 {headerLabel}
               </div>
               <DialogTitle className="sr-only">{srTitle}</DialogTitle>
@@ -185,7 +185,7 @@ export default function EntityEditModal({
                 {srDescription}
               </DialogDescription>
               <DialogClose
-                className="absolute top-3 right-3 text-ink/40 hover:text-ink p-1 rounded hover:bg-ink/5 transition-colors"
+                className="absolute top-3 right-3 text-ink/45 hover:text-ink p-1 rounded hover:bg-ink/5 transition-colors"
                 aria-label="Close"
               >
                 <X className="w-5 h-5" />

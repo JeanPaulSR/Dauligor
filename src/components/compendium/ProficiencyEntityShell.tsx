@@ -593,7 +593,7 @@ export default function ProficiencyEntityShell<
       sortable: true,
       minBreakpoint: 'sm',
       render: (entry) => (
-        <div className="text-[10px] text-ink/50 font-mono truncate">
+        <div className="text-[10px] text-ink/55 font-mono truncate">
           {entry.identifier}
         </div>
       ),
@@ -607,7 +607,7 @@ export default function ProficiencyEntityShell<
       sortable: true,
       minBreakpoint: 'sm',
       render: (entry) => (
-        <div className="text-[10px] text-ink/60 font-mono">
+        <div className="text-[10px] text-ink/65 font-mono">
           {typeof entry.order === 'number' ? entry.order : '—'}
         </div>
       ),
@@ -642,7 +642,7 @@ export default function ProficiencyEntityShell<
         } else if (categoryFreeText) {
           display = entry[categoryFreeText.column] || null;
         }
-        return <div className="text-[10px] text-ink/70 truncate">{display || '—'}</div>;
+        return <div className="text-[10px] text-ink/75 truncate">{display || '—'}</div>;
       },
     });
   }
@@ -653,7 +653,7 @@ export default function ProficiencyEntityShell<
       width: '70px',
       minBreakpoint: 'lg',
       render: (entry) => (
-        <div className="text-[10px] text-ink/50 font-mono">
+        <div className="text-[10px] text-ink/55 font-mono">
           {entry.foundry_alias || '—'}
         </div>
       ),
@@ -666,7 +666,7 @@ export default function ProficiencyEntityShell<
       width: '90px',
       minBreakpoint: 'md',
       render: (entry) => (
-        <div className="text-[10px] text-ink/60">
+        <div className="text-[10px] text-ink/65">
           {entry.source || '—'}
           {entry.page ? ` p.${entry.page}` : ''}
         </div>
@@ -735,7 +735,7 @@ export default function ProficiencyEntityShell<
               <h1 className="text-4xl font-serif font-bold text-ink tracking-tight uppercase">
                 {singular} Manager
               </h1>
-              <p className="text-ink/60 font-serif italic">{description}</p>
+              <p className="text-ink/65 font-serif italic">{description}</p>
             </div>
           </div>
         </>
@@ -764,8 +764,8 @@ export default function ProficiencyEntityShell<
         loading={loading}
         emptyState={
           <div className="empty-state mx-3 my-4">
-            <Icon className="w-8 h-8 text-gold/20 mb-3" />
-            <p className="description-text text-ink/40 mb-3">
+            <Icon className="w-8 h-8 text-gold/25 mb-3" />
+            <p className="description-text text-ink/45 mb-3">
               No {plural.toLowerCase()} defined yet.
             </p>
             <Button
@@ -922,11 +922,11 @@ function ModalForm<T extends Record<string, any>>({
   const heroSlot = (
     <>
       <div className="flex items-start gap-3 sm:gap-4 pr-8">
-        <div className="flex flex-col items-center justify-center w-12 h-12 sm:w-14 sm:h-14 rounded-lg border-2 border-gold/40 bg-gold/10 shrink-0">
+        <div className="flex flex-col items-center justify-center w-12 h-12 sm:w-14 sm:h-14 rounded-lg border-2 border-gold/45 bg-gold/15 shrink-0">
           <Icon className="w-5 h-5 sm:w-6 sm:h-6 text-gold" />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="label-text text-gold/70 mb-0.5">
+          <div className="label-text text-gold/75 mb-0.5">
             {editingId ? `Editing ${singular}` : `New ${singular}`}
           </div>
           <DialogTitle className="dialog-title text-lg sm:text-2xl text-ink leading-tight truncate">
@@ -939,12 +939,12 @@ function ModalForm<T extends Record<string, any>>({
           </DialogDescription>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             {formData.identifier && (
-              <span className="text-[10px] px-2 py-0.5 bg-ink/5 text-ink/50 rounded border border-ink/10 font-mono">
+              <span className="text-[10px] px-2 py-0.5 bg-ink/5 text-ink/55 rounded border border-ink/15 font-mono">
                 {formData.identifier}
               </span>
             )}
             {formData.source && (
-              <span className="text-[10px] text-ink/50">
+              <span className="text-[10px] text-ink/55">
                 {formData.source}
                 {formData.page ? ` p.${formData.page}` : ''}
               </span>
@@ -956,7 +956,7 @@ function ModalForm<T extends Record<string, any>>({
         </div>
       </div>
       <DialogClose
-        className="absolute top-3 right-3 text-ink/40 hover:text-ink p-1 rounded hover:bg-ink/5 transition-colors"
+        className="absolute top-3 right-3 text-ink/45 hover:text-ink p-1 rounded hover:bg-ink/5 transition-colors"
         aria-label="Close"
       >
         <X className="w-5 h-5" />
@@ -1254,9 +1254,9 @@ function ModalForm<T extends Record<string, any>>({
                       onChange={(e) =>
                         setFormData((s) => ({ ...s, basicRules: e.target.checked }))
                       }
-                      className="rounded border-gold/20 text-gold focus:ring-gold"
+                      className="rounded border-gold/25 text-gold focus:ring-gold"
                     />
-                    <span className="text-sm text-ink/70">
+                    <span className="text-sm text-ink/75">
                       Include in Basic Rules export
                     </span>
                   </label>

@@ -1476,7 +1476,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
   };
 
   if (!canManageLists) {
-    return <div className="text-center py-20 text-ink/70">Access Denied.</div>;
+    return <div className="text-center py-20 text-ink/75">Access Denied.</div>;
   }
 
   return (
@@ -1487,14 +1487,14 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
       {/* Consolidated top toolbar: Back link + class picker + summary.
           Replaces the old gradient-header card so the page chrome
           shrinks from ~200px to a single ~48px row. */}
-      <div className="shrink-0 flex items-center gap-3 bg-card p-2 rounded-lg border border-gold/10 shadow-sm flex-wrap">
+      <div className="shrink-0 flex items-center gap-3 bg-card p-2 rounded-lg border border-gold/15 shadow-sm flex-wrap">
         <Link to={backPath}>
           <Button variant="ghost" size="sm" className="h-8 text-gold gap-2 hover:bg-gold/5">
             <ChevronLeft className="w-4 h-4" />
             Back
           </Button>
         </Link>
-        <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-gold/70 shrink-0">Class</span>
+        <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-gold/75 shrink-0">Class</span>
         {/* Entity-search class picker — same SingleSelectSearch
             pattern used by RequirementsEditor, ActivityEditor,
             ConsumptionTabEditor for picking among 40+ items.
@@ -1513,11 +1513,11 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
           triggerClassName="w-[220px]"
         />
         {selectedClass ? (
-          <div className="text-xs text-ink/60 flex items-center gap-2 min-w-0">
+          <div className="text-xs text-ink/65 flex items-center gap-2 min-w-0">
             <span className="text-gold font-bold tabular-nums">{inListCount}</span>
             <span className="shrink-0">spell{inListCount === 1 ? '' : 's'} on {selectedClass.name}'s list</span>
             {inListCount > 0 ? (
-              <span className="text-ink/40 truncate">
+              <span className="text-ink/45 truncate">
                 ({Object.entries(inListByLevel).sort(([a], [b]) => Number(a) - Number(b)).map(([lvl, n]) => `${lvl === '0' ? 'C' : `L${lvl}`}:${n}`).join(' · ')})
               </span>
             ) : null}
@@ -1629,8 +1629,8 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
                     size="sm"
                     onClick={() => setShowOnlyInList(v => !v)}
                     className={cn(
-                      'h-8 border-gold/20 text-[10px] uppercase tracking-[0.18em] shrink-0',
-                      showOnlyInList ? 'bg-gold/15 text-gold hover:bg-gold/20' : 'text-ink/70 hover:bg-gold/5'
+                      'h-8 border-gold/25 text-[10px] uppercase tracking-[0.18em] shrink-0',
+                      showOnlyInList ? 'bg-gold/15 text-gold hover:bg-gold/25' : 'text-ink/75 hover:bg-gold/5'
                     )}
                     disabled={!selectedClassId}
                     title={selectedClassId ? "Toggle list to show only spells already on this class's list" : 'Pick a class first'}
@@ -1643,8 +1643,8 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
                     size="sm"
                     onClick={() => setShowOrphansOnly(v => !v)}
                     className={cn(
-                      'h-8 border-gold/20 text-[10px] uppercase tracking-[0.18em] shrink-0',
-                      showOrphansOnly ? 'bg-blood/15 text-blood hover:bg-blood/20' : 'text-ink/70 hover:bg-gold/5'
+                      'h-8 border-gold/25 text-[10px] uppercase tracking-[0.18em] shrink-0',
+                      showOrphansOnly ? 'bg-blood/15 text-blood hover:bg-blood/20' : 'text-ink/75 hover:bg-gold/5'
                     )}
                     title="Spells not on any class's spell list"
                   >
@@ -1689,11 +1689,11 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
         ) : null}
 
         {selectedSpellIds.size > 0 ? (
-          <div className="border border-gold/30 bg-gold/[0.06] rounded px-3 py-2 flex items-center gap-3 flex-wrap">
+          <div className="border border-gold/35 bg-gold/[0.06] rounded px-3 py-2 flex items-center gap-3 flex-wrap">
             <span className="text-xs text-gold font-bold">
               {selectedSpellIds.size} selected
               {visibleSelectedCount < selectedSpellIds.size ? (
-                <span className="ml-1 text-gold/50 font-normal">({visibleSelectedCount} visible)</span>
+                <span className="ml-1 text-gold/55 font-normal">({visibleSelectedCount} visible)</span>
               ) : null}
             </span>
             <div className="flex-1" />
@@ -1702,7 +1702,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
               size="sm"
               onClick={handleBulkAdd}
               disabled={!selectedClassId || bulkAddableIds.length === 0 || bulkPending}
-              className="h-7 px-3 text-[10px] uppercase tracking-[0.18em] bg-gold/15 text-gold border border-gold/30 hover:bg-gold/25"
+              className="h-7 px-3 text-[10px] uppercase tracking-[0.18em] bg-gold/15 text-gold border border-gold/35 hover:bg-gold/25"
             >
               <Plus className="w-3 h-3 mr-1" />Add Selected ({bulkAddableIds.length})
             </Button>
@@ -1712,7 +1712,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
               variant="outline"
               onClick={handleBulkRemove}
               disabled={!selectedClassId || bulkRemovableIds.length === 0 || bulkPending}
-              className="h-7 px-3 text-[10px] uppercase tracking-[0.18em] border-gold/30 text-ink/70 hover:bg-blood/10 hover:text-blood hover:border-blood/40"
+              className="h-7 px-3 text-[10px] uppercase tracking-[0.18em] border-gold/35 text-ink/75 hover:bg-blood/10 hover:text-blood hover:border-blood/40"
             >
               Remove Selected ({bulkRemovableIds.length})
             </Button>
@@ -1749,7 +1749,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
            one place a curator actually reads continuous prose. */}
       <div ref={gridContainerRef} className="flex-1 min-h-0 grid gap-2 lg:grid-cols-[minmax(0,1fr)] xl:grid-cols-[520px_minmax(360px,1fr)]">
         <Card
-          className="border-gold/20 bg-card/50 overflow-hidden"
+          className="border-gold/25 bg-card/50 overflow-hidden"
           style={{ height: `${paneHeight}px` }}
         >
           <CardContent className="p-0 h-full flex flex-col">
@@ -1766,7 +1766,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
                 {/* Header strip — column labels above the rows. Same
                     grid template the rows use so labels line up with
                     cell content. */}
-                <div className="grid grid-cols-[32px_28px_minmax(0,1fr)_40px_64px_56px_88px] gap-2 border-b border-gold/10 bg-background/35 px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.18em] text-gold/70 shrink-0">
+                <div className="grid grid-cols-[32px_28px_minmax(0,1fr)_40px_64px_56px_88px] gap-2 border-b border-gold/15 bg-background/35 px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.18em] text-gold/75 shrink-0">
                   <div className="flex items-center justify-center">
                     <SelectionBox
                       state={allVisibleSelected ? 'checked' : someVisibleSelected ? 'mixed' : 'unchecked'}
@@ -1838,7 +1838,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
                         className={cn(
                           'grid w-full grid-cols-[32px_28px_minmax(0,1fr)_40px_64px_56px_88px] gap-2 items-center px-3 transition-colors cursor-pointer border-b border-gold/5 border-l-2',
                           onList ? 'bg-gold/[0.04]' : '',
-                          isSelected ? 'ring-1 ring-inset ring-gold/30' : '',
+                          isSelected ? 'ring-1 ring-inset ring-gold/35' : '',
                           isPreviewing
                             ? 'bg-gold/15'
                             : stagedForClass
@@ -1859,7 +1859,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
                           {onList ? (
                             <Check className="w-4 h-4 text-emerald-500" aria-label="On list" />
                           ) : (
-                            <span className="w-3 h-3 rounded-full border border-gold/20" aria-hidden />
+                            <span className="w-3 h-3 rounded-full border border-gold/25" aria-hidden />
                           )}
                         </div>
                         <div className="min-w-0 flex items-center gap-1.5">
@@ -1889,7 +1889,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
                             return full.length > 6 ? full.slice(0, 4) + '.' : full;
                           })()}
                         </div>
-                        <div className="text-[10px] font-bold text-gold/80 text-center truncate">{sourceLabel}</div>
+                        <div className="text-[10px] font-bold text-gold/85 text-center truncate">{sourceLabel}</div>
                         <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
                           <Button
                             type="button"
@@ -1900,8 +1900,8 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
                             className={cn(
                               'h-7 px-2 text-[10px] uppercase tracking-[0.16em]',
                               onList
-                                ? 'border-gold/30 text-ink/70 hover:bg-blood/10 hover:text-blood hover:border-blood/40'
-                                : 'bg-gold/15 text-gold border border-gold/30 hover:bg-gold/25',
+                                ? 'border-gold/35 text-ink/75 hover:bg-blood/10 hover:text-blood hover:border-blood/40'
+                                : 'bg-gold/15 text-gold border border-gold/35 hover:bg-gold/25',
                             )}
                           >
                             {isPending ? '…' : onList ? 'Remove' : <><Plus className="w-3 h-3 mr-0.5" />Add</>}
@@ -1919,7 +1919,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
         {/* Detail card — fixed height so its content area scrolls
             internally regardless of which spell is selected. */}
         <Card
-          className="border-gold/20 bg-card/50 overflow-hidden hidden xl:block"
+          className="border-gold/25 bg-card/50 overflow-hidden hidden xl:block"
           style={{ height: `${paneHeight}px` }}
         >
           <CardContent
@@ -1942,7 +1942,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
                       type="button"
                       onClick={() => setShowRuleMatch((s) => !s)}
                       aria-expanded={showRuleMatch}
-                      className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded border border-gold/10 bg-gold/[0.03] hover:bg-gold/[0.07] text-[10px] font-bold uppercase tracking-[0.18em] text-gold/70 transition-colors"
+                      className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded border border-gold/15 bg-gold/[0.03] hover:bg-gold/[0.07] text-[10px] font-bold uppercase tracking-[0.18em] text-gold/75 transition-colors"
                     >
                       <span className="flex items-center gap-2">
                         <Scale className="w-3 h-3" />
@@ -2003,7 +2003,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
                               {explanation.axes.length > 0 && (
                                 <div className="mt-1 flex flex-wrap gap-1 pl-6">
                                   {explanation.matched ? (
-                                    <span className="text-[10px] text-ink/50">
+                                    <span className="text-[10px] text-ink/55">
                                       Passes all {explanation.axes.length} axis check
                                       {explanation.axes.length === 1 ? '' : 's'}:{' '}
                                       {explanation.axes.map((a) => a.axis).join(', ')}
@@ -2071,7 +2071,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
                 : `This spell is contributed to the list by more than one rule. Pick the rule to clear it from.`}
             </DialogDescription>
           </DialogHeader>
-          <div className="max-h-72 overflow-y-auto custom-scrollbar divide-y divide-gold/10 -mx-4">
+          <div className="max-h-72 overflow-y-auto custom-scrollbar divide-y divide-gold/15 -mx-4">
             {(rulePicker?.candidates ?? []).map(c => {
               const label =
                 c.mechanism === 'manual'
@@ -2084,11 +2084,11 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
                   key={c.rule.id}
                   type="button"
                   onClick={() => handleRulePickerSelect(c.rule.id)}
-                  className="w-full text-left px-4 py-2 text-sm text-ink hover:bg-gold/10 flex items-center justify-between gap-2"
+                  className="w-full text-left px-4 py-2 text-sm text-ink hover:bg-gold/15 flex items-center justify-between gap-2"
                 >
                   <div className="min-w-0">
                     <div className="font-bold truncate">{c.rule.name}</div>
-                    <div className="text-[10px] text-ink/50 truncate">{label}</div>
+                    <div className="text-[10px] text-ink/55 truncate">{label}</div>
                   </div>
                 </button>
               );
@@ -2099,7 +2099,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
               type="button"
               variant="outline"
               onClick={() => setRulePicker(null)}
-              className="border-gold/20 text-ink/70 hover:bg-gold/5"
+              className="border-gold/25 text-ink/75 hover:bg-gold/5"
             >
               Cancel
             </Button>
@@ -2119,7 +2119,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
               step required.
             </DialogDescription>
           </DialogHeader>
-          <div className="max-h-72 overflow-y-auto custom-scrollbar divide-y divide-gold/10 -mx-4">
+          <div className="max-h-72 overflow-y-auto custom-scrollbar divide-y divide-gold/15 -mx-4">
             {allRules.length === 0 ? (
               <p className="px-4 py-3 text-sm text-ink/45 italic">
                 No rules in the catalogue yet. Visit <Link to={`${editorPrefix}/spell-rules`} className="text-gold hover:underline">Spell Rules</Link> to create one.
@@ -2138,14 +2138,14 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
                     }}
                     className={cn(
                       'w-full text-left px-4 py-2 text-sm flex items-center justify-between gap-2',
-                      alreadyLinked ? 'text-ink/30 cursor-not-allowed' : 'text-ink hover:bg-gold/10',
+                      alreadyLinked ? 'text-ink/35 cursor-not-allowed' : 'text-ink hover:bg-gold/15',
                     )}
                   >
                     <div className="min-w-0">
                       <div className="font-bold truncate">{rule.name}</div>
-                      <div className="text-[10px] text-ink/50 truncate">{summarizeRuleManualAndQuery(rule)}</div>
+                      <div className="text-[10px] text-ink/55 truncate">{summarizeRuleManualAndQuery(rule)}</div>
                     </div>
-                    {alreadyLinked ? <span className="text-[10px] uppercase text-gold/50 shrink-0">linked</span> : null}
+                    {alreadyLinked ? <span className="text-[10px] uppercase text-gold/55 shrink-0">linked</span> : null}
                   </button>
                 );
               })
@@ -2156,7 +2156,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
               type="button"
               variant="outline"
               onClick={() => setLinkRuleDialogOpen(false)}
-              className="border-gold/20 text-ink/70 hover:bg-gold/5"
+              className="border-gold/25 text-ink/75 hover:bg-gold/5"
             >
               Done
             </Button>
@@ -2186,12 +2186,12 @@ function SelectionBox({
       className={cn(
         'w-4 h-4 rounded-[3px] border flex items-center justify-center transition-colors',
         state === 'unchecked'
-          ? 'border-gold/30 hover:border-gold/60 bg-transparent'
+          ? 'border-gold/35 hover:border-gold/65 bg-transparent'
           : 'border-gold bg-gold'
       )}
     >
-      {state === 'checked' ? <Check className="w-3 h-3 text-black" /> : null}
-      {state === 'mixed' ? <span className="w-2 h-0.5 bg-black rounded" /> : null}
+      {state === 'checked' ? <Check className="w-3 h-3 text-[var(--primary-foreground)]" /> : null}
+      {state === 'mixed' ? <span className="w-2 h-0.5 bg-[var(--primary-foreground)] rounded" /> : null}
     </button>
   );
 }
@@ -2287,22 +2287,22 @@ function LinkedRulesPanel({
   // Collapsed: one-line summary
   if (!expanded) {
     return (
-      <div className="bg-background border border-gold/20 rounded-md px-4 py-2.5 flex items-center gap-3 flex-wrap">
+      <div className="bg-background border border-gold/25 rounded-md px-4 py-2.5 flex items-center gap-3 flex-wrap">
         <button
           type="button"
           onClick={onToggleExpanded}
-          className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-gold hover:text-gold/80"
+          className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-gold hover:text-gold/85"
         >
           <ChevronIcon className="w-4 h-4" /> Linked Rules
         </button>
-        <span className="text-[11px] text-ink/50">
+        <span className="text-[11px] text-ink/55">
           {linkedRules.length === 0 ? (
             <span className="italic">no rules linked</span>
           ) : (
             <>
-              <span className="text-ink/80 font-bold">{linkedRules.length}</span> rule{linkedRules.length === 1 ? '' : 's'}
-              <span className="mx-2 text-ink/20">·</span>
-              <span className="text-ink/80 font-bold">{totalLinkedRuleMatches}</span> spell{totalLinkedRuleMatches === 1 ? '' : 's'} matched
+              <span className="text-ink/85 font-bold">{linkedRules.length}</span> rule{linkedRules.length === 1 ? '' : 's'}
+              <span className="mx-2 text-ink/25">·</span>
+              <span className="text-ink/85 font-bold">{totalLinkedRuleMatches}</span> spell{totalLinkedRuleMatches === 1 ? '' : 's'} matched
             </>
           )}
         </span>
@@ -2313,7 +2313,7 @@ function LinkedRulesPanel({
             size="sm"
             variant="outline"
             onClick={onOpenLinkPicker}
-            className="h-7 px-3 text-[10px] uppercase tracking-[0.18em] border-gold/30 text-gold hover:bg-gold/10"
+            className="h-7 px-3 text-[10px] uppercase tracking-[0.18em] border-gold/35 text-gold hover:bg-gold/15"
           >
             <Plus className="w-3 h-3 mr-1" /> Link Rule
           </Button>
@@ -2323,17 +2323,17 @@ function LinkedRulesPanel({
   }
 
   return (
-    <div className="bg-background border border-gold/20 rounded-md p-4 space-y-3">
+    <div className="bg-background border border-gold/25 rounded-md p-4 space-y-3">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={onToggleExpanded}
-            className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-gold hover:text-gold/80"
+            className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-gold hover:text-gold/85"
           >
             <ChevronIcon className="w-4 h-4" />
             Linked Rules
-            <span className="text-[10px] text-ink/40 font-normal normal-case tracking-normal">
+            <span className="text-[10px] text-ink/45 font-normal normal-case tracking-normal">
               {linkedRules.length === 0 ? '— none linked' : `(${linkedRules.length})`}
             </span>
           </button>
@@ -2351,7 +2351,7 @@ function LinkedRulesPanel({
             size="sm"
             variant="outline"
             onClick={onOpenLinkPicker}
-            className="h-7 px-3 text-[10px] uppercase tracking-[0.18em] border-gold/30 text-gold hover:bg-gold/10"
+            className="h-7 px-3 text-[10px] uppercase tracking-[0.18em] border-gold/35 text-gold hover:bg-gold/15"
           >
             <Plus className="w-3 h-3 mr-1" /> Link Rule
           </Button>
@@ -2373,7 +2373,7 @@ function LinkedRulesPanel({
               return (
                 <div
                   key={rule.id}
-                  className="flex items-center gap-3 px-3 py-2 rounded border border-gold/15 hover:border-gold/30 transition-colors"
+                  className="flex items-center gap-3 px-3 py-2 rounded border border-gold/15 hover:border-gold/35 transition-colors"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3 flex-wrap">
@@ -2388,10 +2388,10 @@ function LinkedRulesPanel({
                         size="md"
                         title={counts.matches === 0 ? 'No spells match this rule yet' : `${counts.matches} matches · ${counts.onList} on this class's list`}
                       >
-                        {counts.matches === 0 ? '0 matches' : <>Matches <span className="text-gold font-bold mx-1">{counts.matches}</span> · <span className="text-ink/60 mx-1">{counts.onList}</span> on list</>}
+                        {counts.matches === 0 ? '0 matches' : <>Matches <span className="text-gold font-bold mx-1">{counts.matches}</span> · <span className="text-ink/65 mx-1">{counts.onList}</span> on list</>}
                       </StatusEmblem>
                     </div>
-                    <div className="text-[10px] text-ink/50 truncate mt-0.5">{summarizeRuleManualAndQuery(rule)}</div>
+                    <div className="text-[10px] text-ink/55 truncate mt-0.5">{summarizeRuleManualAndQuery(rule)}</div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     <Button
@@ -2399,7 +2399,7 @@ function LinkedRulesPanel({
                       size="sm"
                       variant="outline"
                       onClick={() => onUnlink(rule)}
-                      className="h-7 px-2 text-[10px] uppercase tracking-[0.18em] border-gold/20 text-ink/40 hover:bg-blood/10 hover:text-blood hover:border-blood/40"
+                      className="h-7 px-2 text-[10px] uppercase tracking-[0.18em] border-gold/25 text-ink/45 hover:bg-blood/10 hover:text-blood hover:border-blood/40"
                     >
                       Unlink
                     </Button>
@@ -2522,16 +2522,16 @@ function TagUsagePanel({
   const totalTags = usageByTagId.size;
 
   return (
-    <div className="bg-background border border-gold/20 rounded-md">
+    <div className="bg-background border border-gold/25 rounded-md">
       <button
         type="button"
         onClick={onToggleExpanded}
-        className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase tracking-[0.2em] text-gold hover:text-gold/80"
+        className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase tracking-[0.2em] text-gold hover:text-gold/85"
       >
         <ChevronIcon className="w-4 h-4" />
         <TagIcon className="w-3.5 h-3.5" />
         Tag Usage
-        <span className="text-[10px] text-ink/40 font-normal normal-case tracking-normal">
+        <span className="text-[10px] text-ink/45 font-normal normal-case tracking-normal">
           {totalTags === 0
             ? '— no tag references'
             : `(${totalTags} tag${totalTags === 1 ? '' : 's'} across ${linkedRules.length} rule${linkedRules.length === 1 ? '' : 's'})`}
@@ -2557,12 +2557,12 @@ function TagUsagePanel({
                 {bucket.tags.map(({ tag, usedBy }) => (
                   <span
                     key={tag.id}
-                    className="inline-flex items-center gap-1 rounded-full border border-gold/25 bg-gold/5 px-2 py-0.5 text-[11px] text-gold/90"
+                    className="inline-flex items-center gap-1 rounded-full border border-gold/25 bg-gold/5 px-2 py-0.5 text-[11px] text-gold/95"
                     title={`Referenced by: ${usedBy.map(u => u.ruleName).join(', ')}`}
                   >
                     {tag.name}
                     {usedBy.length > 1 ? (
-                      <span className="text-[9px] text-ink/40 font-bold">×{usedBy.length}</span>
+                      <span className="text-[9px] text-ink/45 font-bold">×{usedBy.length}</span>
                     ) : null}
                   </span>
                 ))}
@@ -2620,7 +2620,7 @@ function ExceptionsPanel({
         'border rounded-md',
         sorted.length > 0
           ? 'bg-amber-400/[0.04] border-amber-400/30'
-          : 'bg-background border-gold/20',
+          : 'bg-background border-gold/25',
       )}
     >
       <button
@@ -2628,7 +2628,7 @@ function ExceptionsPanel({
         onClick={onToggleExpanded}
         className={cn(
           'w-full flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase tracking-[0.2em]',
-          sorted.length > 0 ? 'text-amber-400 hover:text-amber-300' : 'text-gold hover:text-gold/80',
+          sorted.length > 0 ? 'text-amber-400 hover:text-amber-300' : 'text-gold hover:text-gold/85',
         )}
       >
         <ChevronIcon className="w-4 h-4" />
@@ -2636,7 +2636,7 @@ function ExceptionsPanel({
         Exceptions
         <span className={cn(
           'text-[10px] font-normal normal-case tracking-normal',
-          sorted.length > 0 ? 'text-amber-400/70' : 'text-ink/40',
+          sorted.length > 0 ? 'text-amber-400/70' : 'text-ink/45',
         )}>
           {loading
             ? '— loading…'
@@ -2660,13 +2660,13 @@ function ExceptionsPanel({
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm text-ink font-bold truncate">{spellName}</span>
                     {spell ? (
-                      <span className="text-[9px] text-ink/40 shrink-0">
+                      <span className="text-[9px] text-ink/45 shrink-0">
                         {spell.level === 0 ? 'Cantrip' : `Level ${spell.level}`}
                       </span>
                     ) : null}
                   </div>
-                  <div className="text-[10px] text-ink/50 truncate mt-0.5">
-                    Excluded from <span className="text-ink/80 font-bold">{entry.ruleName}</span>
+                  <div className="text-[10px] text-ink/55 truncate mt-0.5">
+                    Excluded from <span className="text-ink/85 font-bold">{entry.ruleName}</span>
                     {' · '}
                     Would have matched via {entry.wouldHaveBeenMatchedBy === 'manual' ? 'manual pin' : 'query'}
                   </div>
@@ -2722,15 +2722,15 @@ function SubclassesPanel({
     ? '/proposals/edit'
     : '/compendium';
   return (
-    <div className="bg-background border border-gold/20 rounded-md">
+    <div className="bg-background border border-gold/25 rounded-md">
       <button
         type="button"
         onClick={onToggleExpanded}
-        className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase tracking-[0.2em] text-gold hover:text-gold/80"
+        className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase tracking-[0.2em] text-gold hover:text-gold/85"
       >
         <ChevronIcon className="w-4 h-4" />
         Subclasses with Own Rules
-        <span className="text-[10px] text-ink/40 font-normal normal-case tracking-normal">
+        <span className="text-[10px] text-ink/45 font-normal normal-case tracking-normal">
           ({subclasses.length} subclass{subclasses.length === 1 ? '' : 'es'} deviate
           {subclasses.length === 1 ? 's' : ''} from inheritance)
         </span>
@@ -2744,17 +2744,17 @@ function SubclassesPanel({
             >
               <div className="flex-1 min-w-0">
                 <div className="text-sm text-ink font-bold truncate">{sub.name}</div>
-                <div className="text-[10px] text-ink/50 truncate mt-0.5">
+                <div className="text-[10px] text-ink/55 truncate mt-0.5">
                   Own rules:{' '}
                   {sub.linkedRules.map((r, i) => (
                     <React.Fragment key={r.id}>
                       <Link
                         to={`${editorPrefix}/spell-rules?rule=${r.id}`}
-                        className="text-gold/80 hover:text-gold hover:underline"
+                        className="text-gold/85 hover:text-gold hover:underline"
                       >
                         {r.name}
                       </Link>
-                      {i < sub.linkedRules.length - 1 ? <span className="text-ink/30">, </span> : null}
+                      {i < sub.linkedRules.length - 1 ? <span className="text-ink/35">, </span> : null}
                     </React.Fragment>
                   ))}
                 </div>
@@ -2818,7 +2818,7 @@ function FilterSection({
         <span className="h3-title uppercase text-ink">{title}</span>
         <div className="flex items-center gap-3">
           <button type="button" onClick={onIncludeAll} className="label-text hover:underline">Include All</button>
-          <span className="text-gold/20">|</span>
+          <span className="text-gold/25">|</span>
           <button type="button" onClick={onClear} className="label-text hover:underline">Clear</button>
         </div>
       </div>
@@ -2833,8 +2833,8 @@ function FilterSection({
               className={cn(
                 'rounded border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-colors',
                 active
-                  ? 'border-gold/60 bg-gold/15 text-gold'
-                  : 'border-gold/15 text-ink/55 hover:border-gold/30 hover:text-gold/80'
+                  ? 'border-gold/65 bg-gold/15 text-gold'
+                  : 'border-gold/15 text-ink/55 hover:border-gold/35 hover:text-gold/85'
               )}
             >
               {label}
@@ -2848,13 +2848,13 @@ function FilterSection({
 
 function FilterChip({ label, onRemove }: { label: React.ReactNode; onRemove: () => void }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-gold/30 bg-gold/10 pl-2 pr-1 py-0.5 text-[10px] uppercase tracking-widest text-gold">
+    <span className="inline-flex items-center gap-1 rounded-full border border-gold/35 bg-gold/15 pl-2 pr-1 py-0.5 text-[10px] uppercase tracking-widest text-gold">
       {label}
       <button
         type="button"
         onClick={onRemove}
         aria-label="Remove filter"
-        className="rounded-full hover:bg-gold/20 p-0.5"
+        className="rounded-full hover:bg-gold/25 p-0.5"
       >
         <X className="w-3 h-3" />
       </button>

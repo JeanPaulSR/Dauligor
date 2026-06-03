@@ -50,7 +50,7 @@ export default function SpellArtPreview({
   return (
     <div
       className={cn(
-        'relative overflow-hidden rounded-lg border border-gold/10 bg-background/35',
+        'relative overflow-hidden rounded-lg border border-gold/15 bg-background/35',
         containerClassName
       )}
       style={dimensionStyle}
@@ -67,7 +67,7 @@ export default function SpellArtPreview({
       ) : (
         <div
           className={cn(
-            'flex items-center justify-center rounded bg-background/40 text-ink/30',
+            'flex items-center justify-center rounded bg-background/40 text-ink/35',
             placeholderClassName
           )}
           style={dimensionStyle}
@@ -75,7 +75,7 @@ export default function SpellArtPreview({
           {status === 'loading' ? (
             <div className="flex flex-col items-center justify-center gap-2">
               <div className="h-8 w-8 rounded-full border-2 border-gold border-t-transparent animate-spin" />
-              <span className="text-[9px] uppercase font-bold tracking-widest text-gold/60">Loading</span>
+              <span className="text-[9px] uppercase font-bold tracking-widest text-gold/65">Loading</span>
             </div>
           ) : (
             <Wand2 className="h-8 w-8" />

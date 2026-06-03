@@ -101,16 +101,16 @@ function refToCard(r: EntityRef, resolved: Record<string, RefResolved>): CardVM 
 function PlaceholderCard({ title, description, card }: { title: string; description: string; card: 'image' | 'compact' | 'list' }) {
   if (card === 'list') {
     return (
-      <span className="flex items-center gap-2 py-2 border-b border-gold/10 text-ink/40">
-        <ChevronRight className="w-3.5 h-3.5 text-gold/30 shrink-0" />
+      <span className="flex items-center gap-2 py-2 border-b border-gold/15 text-ink/45">
+        <ChevronRight className="w-3.5 h-3.5 text-gold/35 shrink-0" />
         <span className="font-serif text-base italic">{title}</span>
-        {description && <span className="label-text ml-auto text-ink/20">{description}</span>}
+        {description && <span className="label-text ml-auto text-ink/25">{description}</span>}
       </span>
     );
   }
   return (
-    <div className="h-full border border-dashed border-gold/20 bg-card/30 flex flex-col items-center justify-center text-center min-h-[150px] p-6">
-      <p className="text-xs font-bold uppercase tracking-widest text-ink/30 font-serif">{title}</p>
+    <div className="h-full border border-dashed border-gold/25 bg-card/30 flex flex-col items-center justify-center text-center min-h-[150px] p-6">
+      <p className="text-xs font-bold uppercase tracking-widest text-ink/35 font-serif">{title}</p>
       {/* The placeholder tile's sub-label is a tiny status string ("Coming Soon"),
           not a prose box — keep it plain (no `.prose` blowout) and use the
           documented `.field-hint` helper (tiny italic, theme-remapped) instead of
@@ -126,7 +126,7 @@ function PlaceholderCard({ title, description, card }: { title: string; descript
 function EntityCard({ data, card, excerpt, title, description }: { data: RefResolved; card: 'image' | 'compact' | 'list'; excerpt: boolean; title: string; description: string }) {
   if (card === 'list') {
     const inner = (
-      <span className="flex items-center gap-2 py-2 border-b border-gold/10 text-ink/80 hover:text-gold transition-colors">
+      <span className="flex items-center gap-2 py-2 border-b border-gold/15 text-ink/85 hover:text-gold transition-colors">
         <ChevronRight className="w-3.5 h-3.5 text-gold shrink-0" />
         <span className="font-serif text-base">{title}</span>
         {data.sourceLabel && <span className="label-text ml-auto">{data.sourceLabel}</span>}
@@ -136,9 +136,9 @@ function EntityCard({ data, card, excerpt, title, description }: { data: RefReso
   }
 
   const body = (
-    <div className="h-full border border-gold/15 hover:border-gold/40 transition-all bg-card/40 backdrop-blur-sm overflow-hidden flex flex-col">
+    <div className="h-full border border-gold/15 hover:border-gold/45 transition-all bg-card/40 backdrop-blur-sm overflow-hidden flex flex-col">
       {card === 'image' && data.imageUrl && (
-        <div className="h-32 overflow-hidden border-b border-gold/10">
+        <div className="h-32 overflow-hidden border-b border-gold/15">
           <img
             src={data.imageUrl}
             alt={title}
@@ -228,7 +228,7 @@ export default function CampaignHomeBlocks({ blocks, recommendedLore, campaignNa
                 // the classic italic look comes from the default's [i]…[/i], not a
                 // hardcoded `italic`. Only the centered variant gets the readable
                 // max-width; left/right stay full-width so text-align positions them.
-                <div className={`text-xl text-ink/70 font-serif ${block.align === 'center' ? 'max-w-3xl mx-auto' : ''}`}>
+                <div className={`text-xl text-ink/75 font-serif ${block.align === 'center' ? 'max-w-3xl mx-auto' : ''}`}>
                   <BBCodeRenderer content={block.subtitle} />
                 </div>
               )}
@@ -261,7 +261,7 @@ export default function CampaignHomeBlocks({ blocks, recommendedLore, campaignNa
       case 'divider':
         if (block.style === 'space') return <div key={block.id} className="h-8" />;
         if (block.style === 'dots') return <div key={block.id} className="text-center text-gold tracking-[0.5em] py-2">• • •</div>;
-        return <hr key={block.id} className="border-gold/20" />;
+        return <hr key={block.id} className="border-gold/25" />;
 
       case 'entity-row': {
         // Each ref → a card view-model: resolved entity OR a placeholder
@@ -292,7 +292,7 @@ export default function CampaignHomeBlocks({ blocks, recommendedLore, campaignNa
         return (
           <section key={block.id} className="space-y-8">
             {block.showHeading && block.title && (
-              <div className="flex items-center gap-3 border-b border-gold/20 pb-4"><h2 className="h2-title">{block.title}</h2></div>
+              <div className="flex items-center gap-3 border-b border-gold/25 pb-4"><h2 className="h2-title">{block.title}</h2></div>
             )}
             {vms.length > 0 ? (
               block.card === 'list'
@@ -309,12 +309,12 @@ export default function CampaignHomeBlocks({ blocks, recommendedLore, campaignNa
         if (!block.title && !block.body) return null;
         const hasButton = block.buttonLabel && block.buttonLink;
         const box = block.style === 'soft'
-          ? 'py-16 px-6 text-center bg-gold/5 border border-dashed border-gold/20'
+          ? 'py-16 px-6 text-center bg-gold/5 border border-dashed border-gold/25'
           : 'py-10 px-6 text-center bg-card/40 border border-gold/15';
         return (
           <section key={block.id} className="space-y-8">
             <div className={box}>
-              {block.title && <h2 className="h3-title text-ink/50">{block.title}</h2>}
+              {block.title && <h2 className="h3-title text-ink/55">{block.title}</h2>}
               {block.body && (
                 // Documented `.description-text` helper on BBCodeRenderer's
                 // `.prose` element (theme-remapped supporting copy), plus layout
@@ -343,9 +343,9 @@ export default function CampaignHomeBlocks({ blocks, recommendedLore, campaignNa
           const name = block.ref.name || block.ref.id || 'Untitled';
           return (
             <section key={block.id} className="space-y-8">
-              {block.title && <div className="flex items-center gap-3 border-b border-gold/20 pb-4"><h2 className="h2-title">{block.title}</h2></div>}
-              <div className="border border-dashed border-gold/20 bg-card/30 flex flex-col items-center justify-center text-center min-h-[120px] p-8">
-                <p className="text-sm font-bold uppercase tracking-widest text-ink/30 font-serif">{name}</p>
+              {block.title && <div className="flex items-center gap-3 border-b border-gold/25 pb-4"><h2 className="h2-title">{block.title}</h2></div>}
+              <div className="border border-dashed border-gold/25 bg-card/30 flex flex-col items-center justify-center text-center min-h-[120px] p-8">
+                <p className="text-sm font-bold uppercase tracking-widest text-ink/35 font-serif">{name}</p>
                 <p className="field-hint mt-1">{ph ? 'Placeholder' : 'Coming soon'}</p>
               </div>
             </section>
@@ -369,13 +369,13 @@ export default function CampaignHomeBlocks({ blocks, recommendedLore, campaignNa
           </div>
         );
         const inner = (
-          <div className="border border-gold/20 bg-gold/5 hover:border-gold/40 transition-all overflow-hidden">
+          <div className="border border-gold/25 bg-gold/5 hover:border-gold/45 transition-all overflow-hidden">
             <div className={`flex flex-col md:flex-row ${block.imageSide === 'right' ? 'md:flex-row-reverse' : ''}`}>{img}{text}</div>
           </div>
         );
         return (
           <section key={block.id} className="space-y-8">
-            {block.title && <div className="flex items-center gap-3 border-b border-gold/20 pb-4"><h2 className="h2-title">{block.title}</h2></div>}
+            {block.title && <div className="flex items-center gap-3 border-b border-gold/25 pb-4"><h2 className="h2-title">{block.title}</h2></div>}
             {d.route ? <Link to={d.route} className="group block">{inner}</Link> : <div className="group">{inner}</div>}
           </section>
         );
@@ -385,7 +385,7 @@ export default function CampaignHomeBlocks({ blocks, recommendedLore, campaignNa
         const d = block.source === 'specific' && block.ref ? resolved[refKey(block.ref)] : recoData;
         return (
           <section key={block.id} className="space-y-8">
-            <div className="flex items-center gap-3 border-b border-gold/20 pb-4">
+            <div className="flex items-center gap-3 border-b border-gold/25 pb-4">
               <h2 className="h2-title">{block.title || `Recommended for ${campaignName}`}</h2>
             </div>
             {d ? (
@@ -397,7 +397,7 @@ export default function CampaignHomeBlocks({ blocks, recommendedLore, campaignNa
                 ) : <div className="group"><RecoCard data={d} /></div>}
               </div>
             ) : (
-              <div className="py-12 text-center bg-card/30 border border-dashed border-gold/10">
+              <div className="py-12 text-center bg-card/30 border border-dashed border-gold/15">
                 <p className="description-text">No recommended article set for this campaign yet.</p>
               </div>
             )}
@@ -407,9 +407,9 @@ export default function CampaignHomeBlocks({ blocks, recommendedLore, campaignNa
 
       case 'group':
         return (
-          <section key={block.id} className={block.style === 'card' || block.style === 'bordered' ? 'border border-gold/20 p-6' : ''}>
+          <section key={block.id} className={block.style === 'card' || block.style === 'bordered' ? 'border border-gold/25 p-6' : ''}>
             {block.showTitle && block.title && (
-              <h2 className="h2-title mb-6 pb-3 border-b border-gold/20">{block.title}</h2>
+              <h2 className="h2-title mb-6 pb-3 border-b border-gold/25">{block.title}</h2>
             )}
             <div className="space-y-12">{block.children.map(renderBlock)}</div>
           </section>
@@ -442,7 +442,7 @@ export default function CampaignHomeBlocks({ blocks, recommendedLore, campaignNa
 /** The recommended / featured wide card body. */
 function RecoCard({ data }: { data: RefResolved }) {
   return (
-    <div className="border border-gold/20 bg-gold/5 hover:border-gold/40 transition-all overflow-hidden">
+    <div className="border border-gold/25 bg-gold/5 hover:border-gold/45 transition-all overflow-hidden">
       <div className="flex flex-col md:flex-row">
         {data.imageUrl && (
           <div className="md:w-1/3 h-48 md:h-auto overflow-hidden">
@@ -450,7 +450,7 @@ function RecoCard({ data }: { data: RefResolved }) {
           </div>
         )}
         <div className="p-8 flex-grow">
-          <span className="inline-block bg-gold text-white text-[10px] font-black uppercase tracking-widest px-2 py-1 mb-4">Essential Reading</span>
+          <span className="inline-block bg-gold text-[var(--primary-foreground)] text-[10px] font-black uppercase tracking-widest px-2 py-1 mb-4">Essential Reading</span>
           <h3 className="h3-title group-hover:text-gold transition-colors mb-4">{data.name}</h3>
           <p className="description-text line-clamp-3 mb-6">{plainExcerpt(data.summary, 150)}</p>
           <div className="flex items-center text-gold font-bold uppercase tracking-widest text-sm">

@@ -203,7 +203,7 @@ export default function RequirementsEditor({
           surface (compact + detail). */}
       {showFreeText && (
         <div className="space-y-1">
-          <label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">
+          <label className="text-[10px] font-bold uppercase tracking-widest text-ink/65">
             Free Text
           </label>
           <input
@@ -211,9 +211,9 @@ export default function RequirementsEditor({
             value={freeText ?? ''}
             onChange={(e) => onFreeTextChange!(e.target.value)}
             placeholder="e.g. The ability to cast at least one spell"
-            className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs"
+            className="w-full h-8 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-xs"
           />
-          <p className="text-[10px] text-ink/40">
+          <p className="text-[10px] text-ink/45">
             A text override for all prerequisites. If possible, use the compound requirements block below.
           </p>
         </div>
@@ -225,7 +225,7 @@ export default function RequirementsEditor({
           still read the layers below. */}
       {showShortText && (
         <div className="space-y-1">
-          <label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">
+          <label className="text-[10px] font-bold uppercase tracking-widest text-ink/65">
             Short Text
           </label>
           <input
@@ -233,9 +233,9 @@ export default function RequirementsEditor({
             value={shortText ?? ''}
             onChange={(e) => onShortTextChange!(e.target.value)}
             placeholder="e.g. Outlander, Lvl 4, Dragonmark"
-            className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs"
+            className="w-full h-8 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-xs"
           />
-          <p className="text-[10px] text-ink/40">
+          <p className="text-[10px] text-ink/45">
             Short text overrides compound requirements and free texts in smaller sections. Useful for columns that don't have much room.
           </p>
         </div>
@@ -247,38 +247,38 @@ export default function RequirementsEditor({
           moved here from the panel top so the heading + its
           description + the tree itself read as one section. */}
       <div className="flex items-center justify-between pt-1">
-        <label className="text-xs font-bold uppercase tracking-widest text-ink/40">{label}</label>
+        <label className="text-xs font-bold uppercase tracking-widest text-ink/45">{label}</label>
         {value && (
           <button
             type="button"
             onClick={() => onChange(null)}
-            className="text-[10px] text-ink/30 hover:text-blood underline"
+            className="text-[10px] text-ink/35 hover:text-blood underline"
           >
             Clear all
           </button>
         )}
       </div>
-      <p className="text-[10px] text-ink/40">
+      <p className="text-[10px] text-ink/45">
         Add Requirement adds a single requirement. Add Group adds a block that you can choose whether all need to match (AND) or only one has to match (OR).
       </p>
 
       {!value ? (
-        <div className="border border-gold/10 border-dashed rounded-md bg-background/20 px-3 py-4 space-y-2">
-          <p className="text-[10px] text-ink/30 italic">
+        <div className="border border-gold/15 border-dashed rounded-md bg-background/20 px-3 py-4 space-y-2">
+          <p className="text-[10px] text-ink/35 italic">
             No compound requirements. Add a single rule, or start with a group to combine multiple rules.
           </p>
           <div className="flex gap-2">
             <button
               type="button"
               onClick={seedWithLeaf}
-              className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-gold border border-gold/30 rounded hover:bg-gold/10 transition-colors"
+              className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-gold border border-gold/35 rounded hover:bg-gold/15 transition-colors"
             >
               <Plus className="w-3 h-3" /> Add Requirement
             </button>
             <button
               type="button"
               onClick={() => seedWithGroup('all')}
-              className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-gold border border-gold/30 rounded hover:bg-gold/10 transition-colors"
+              className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-gold border border-gold/35 rounded hover:bg-gold/15 transition-colors"
             >
               <Layers className="w-3 h-3" /> Add Group
             </button>
@@ -308,16 +308,16 @@ export default function RequirementsEditor({
           to the public-side surfaces. Hidden entirely for tree-
           only consumers like UniqueOptionGroupEditor. */}
       {showOverrides && (
-        <div className="rounded border border-gold/10 bg-background/40 px-3 py-2 space-y-1.5">
+        <div className="rounded border border-gold/15 bg-background/40 px-3 py-2 space-y-1.5">
           {showShortText && (
             <div>
-              <span className="text-[9px] uppercase tracking-widest text-ink/40">Compact column · </span>
-              <span className="text-xs italic text-ink/80">{listPreview}</span>
+              <span className="text-[9px] uppercase tracking-widest text-ink/45">Compact column · </span>
+              <span className="text-xs italic text-ink/85">{listPreview}</span>
             </div>
           )}
           <div>
-            <span className="text-[9px] uppercase tracking-widest text-ink/40">Detail surface · </span>
-            <span className="text-xs italic text-ink/80">{detailPreview}</span>
+            <span className="text-[9px] uppercase tracking-widest text-ink/45">Detail surface · </span>
+            <span className="text-xs italic text-ink/85">{detailPreview}</span>
           </div>
         </div>
       )}
@@ -355,19 +355,19 @@ function GroupNode({ value, onChange, onDelete, lookups, depth }: GroupNodeProps
     <div
       className={`border border-gold/15 rounded-md bg-background/20 ${depth > 0 ? 'mt-2' : ''}`}
     >
-      <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-gold/10 bg-card/30">
+      <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-gold/15 bg-card/30">
         <div className="flex items-center gap-2 flex-1 min-w-0">
-          <Layers className="w-3 h-3 text-gold/60 shrink-0" />
+          <Layers className="w-3 h-3 text-gold/65 shrink-0" />
           <select
             value={value.kind}
             onChange={e => update({ kind: e.target.value as RequirementGroupKind })}
-            className="h-6 px-1.5 text-[11px] font-bold uppercase tracking-wider bg-background/50 border border-gold/10 focus:border-gold rounded outline-none"
+            className="h-6 px-1.5 text-[11px] font-bold uppercase tracking-wider bg-background/50 border border-gold/15 focus:border-gold rounded outline-none"
           >
             {GROUP_KIND_OPTIONS.map(o => (
               <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </select>
-          <span className="text-[10px] italic text-ink/30 truncate">{currentSummary}</span>
+          <span className="text-[10px] italic text-ink/35 truncate">{currentSummary}</span>
         </div>
         <button
           type="button"
@@ -381,7 +381,7 @@ function GroupNode({ value, onChange, onDelete, lookups, depth }: GroupNodeProps
 
       <div className="px-3 py-2 space-y-1.5">
         {value.children.length === 0 && (
-          <p className="text-[10px] text-ink/30 italic">
+          <p className="text-[10px] text-ink/35 italic">
             Empty group — add at least one requirement below.
           </p>
         )}
@@ -409,14 +409,14 @@ function GroupNode({ value, onChange, onDelete, lookups, depth }: GroupNodeProps
           <button
             type="button"
             onClick={() => addChild(emptyLeaf('optionItem'))}
-            className="flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-gold/80 border border-gold/20 rounded hover:bg-gold/10 transition-colors"
+            className="flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-gold/85 border border-gold/25 rounded hover:bg-gold/15 transition-colors"
           >
             <Plus className="w-2.5 h-2.5" /> Add Requirement
           </button>
           <button
             type="button"
             onClick={() => addChild(emptyGroup('all'))}
-            className="flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-gold/80 border border-gold/20 rounded hover:bg-gold/10 transition-colors"
+            className="flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-gold/85 border border-gold/25 rounded hover:bg-gold/15 transition-colors"
           >
             <Layers className="w-2.5 h-2.5" /> Add Group
           </button>
@@ -444,11 +444,11 @@ function LeafNode({ value, onChange, onDelete, lookups }: LeafNodeProps) {
   const changeType = (next: RequirementLeafType) => onChange(emptyLeaf(next));
 
   return (
-    <div className="flex items-center gap-1.5 px-2 py-1.5 border border-gold/10 rounded bg-background/30">
+    <div className="flex items-center gap-1.5 px-2 py-1.5 border border-gold/15 rounded bg-background/30">
       <select
         value={value.type}
         onChange={e => changeType(e.target.value as RequirementLeafType)}
-        className="h-7 px-1.5 text-[11px] bg-background/50 border border-gold/10 focus:border-gold rounded outline-none shrink-0"
+        className="h-7 px-1.5 text-[11px] bg-background/50 border border-gold/15 focus:border-gold rounded outline-none shrink-0"
       >
         {LEAF_TYPE_OPTIONS.map(o => (
           <option key={o.value} value={o.value}>{o.label}</option>
@@ -492,14 +492,14 @@ function LeafPayload({
             min={1}
             value={value.minLevel}
             onChange={e => onChange({ ...value, minLevel: parseInt(e.target.value) || 1 })}
-            className="h-7 w-16 px-2 text-[11px] bg-background/50 border border-gold/10 focus:border-gold rounded outline-none no-number-spin"
+            className="h-7 w-16 px-2 text-[11px] bg-background/50 border border-gold/15 focus:border-gold rounded outline-none no-number-spin"
           />
-          <label className="flex items-center gap-1 text-[10px] text-ink/50 cursor-pointer">
+          <label className="flex items-center gap-1 text-[10px] text-ink/55 cursor-pointer">
             <input
               type="checkbox"
               checked={value.isTotal}
               onChange={e => onChange({ ...value, isTotal: e.target.checked })}
-              className="w-3 h-3 rounded border-gold/20 text-gold focus:ring-gold"
+              className="w-3 h-3 rounded border-gold/25 text-gold focus:ring-gold"
             />
             Total character level
           </label>
@@ -521,9 +521,9 @@ function LeafPayload({
             min={1}
             value={value.minLevel}
             onChange={e => onChange({ ...value, minLevel: parseInt(e.target.value) || 1 })}
-            className="h-7 w-14 px-2 text-[11px] bg-background/50 border border-gold/10 focus:border-gold rounded outline-none no-number-spin"
+            className="h-7 w-14 px-2 text-[11px] bg-background/50 border border-gold/15 focus:border-gold rounded outline-none no-number-spin"
           />
-          <span className="text-[10px] text-ink/40">level+</span>
+          <span className="text-[10px] text-ink/45">level+</span>
         </>
       );
 
@@ -638,7 +638,7 @@ function LeafPayload({
           <select
             value={value.ability}
             onChange={e => onChange({ ...value, ability: e.target.value as AbilityKey })}
-            className="h-7 px-1.5 text-[11px] bg-background/50 border border-gold/10 focus:border-gold rounded outline-none"
+            className="h-7 px-1.5 text-[11px] bg-background/50 border border-gold/15 focus:border-gold rounded outline-none"
           >
             {ABILITY_OPTIONS.map(o => (
               <option key={o.value} value={o.value}>{o.label}</option>
@@ -650,9 +650,9 @@ function LeafPayload({
             max={30}
             value={value.min}
             onChange={e => onChange({ ...value, min: parseInt(e.target.value) || 1 })}
-            className="h-7 w-14 px-2 text-[11px] bg-background/50 border border-gold/10 focus:border-gold rounded outline-none no-number-spin"
+            className="h-7 w-14 px-2 text-[11px] bg-background/50 border border-gold/15 focus:border-gold rounded outline-none no-number-spin"
           />
-          <span className="text-[10px] text-ink/40">or higher</span>
+          <span className="text-[10px] text-ink/45">or higher</span>
         </>
       );
 
@@ -677,7 +677,7 @@ function LeafPayload({
               category: e.target.value as ProficiencyKind,
               identifier: '',
             })}
-            className="h-7 px-1.5 text-[11px] bg-background/50 border border-gold/10 focus:border-gold rounded outline-none"
+            className="h-7 px-1.5 text-[11px] bg-background/50 border border-gold/15 focus:border-gold rounded outline-none"
           >
             {PROFICIENCY_OPTIONS.map(o => (
               <option key={o.value} value={o.value}>{o.label}</option>
@@ -703,7 +703,7 @@ function LeafPayload({
           value={value.value}
           onChange={e => onChange({ ...value, value: e.target.value })}
           placeholder="Free-text requirement (e.g. 'Member of the Crimson Order')"
-          className="h-7 flex-1 min-w-[200px] px-2 text-[11px] bg-background/50 border border-gold/10 focus:border-gold rounded outline-none"
+          className="h-7 flex-1 min-w-[200px] px-2 text-[11px] bg-background/50 border border-gold/15 focus:border-gold rounded outline-none"
         />
       );
   }

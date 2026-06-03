@@ -132,7 +132,7 @@ export default function EntityPicker({
             return (
               <span
                 key={id}
-                className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-gold/10 text-gold border border-gold/20 rounded"
+                className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-gold/15 text-gold border border-gold/25 rounded"
               >
                 {e.name}
                 {/* Mirror the per-row hint badge from the dropdown list onto
@@ -142,12 +142,12 @@ export default function EntityPicker({
                     so call sites that don't supply one (Class Restrictions
                     in the option editor, etc.) are visually unchanged. */}
                 {e.hint ? (
-                  <span className="text-[9px] text-gold/60 normal-case tracking-normal">· {e.hint}</span>
+                  <span className="text-[9px] text-gold/65 normal-case tracking-normal">· {e.hint}</span>
                 ) : null}
                 <button
                   type="button"
                   onClick={() => onChange(selectedIds.filter(x => x !== id))}
-                  className="ml-0.5 text-gold/50 hover:text-gold leading-none"
+                  className="ml-0.5 text-gold/55 hover:text-gold leading-none"
                   aria-label={`Remove ${e.name}`}
                 >
                   ×
@@ -161,7 +161,7 @@ export default function EntityPicker({
       <div ref={containerRef} className="relative">
         <div
           className={cn(
-            'border border-gold/10 rounded-md bg-background/20 overflow-hidden',
+            'border border-gold/15 rounded-md bg-background/20 overflow-hidden',
           )}
         >
           <div
@@ -171,10 +171,10 @@ export default function EntityPicker({
               // an in-flow list, so a divider reads as natural chrome.
               // In collapsible mode the list is an overlay below the
               // container, so the divider would be a stray hairline.
-              !collapsible && 'border-b border-gold/10',
+              !collapsible && 'border-b border-gold/15',
             )}
           >
-            <Search className="w-3 h-3 text-ink/30 shrink-0" />
+            <Search className="w-3 h-3 text-ink/35 shrink-0" />
             {/*
               Suppress browser autofill / history dropdown on the picker
               search. The dropdown below this input is driven by the
@@ -191,7 +191,7 @@ export default function EntityPicker({
               onChange={e => setSearch(e.target.value)}
               onFocus={handleSearchFocus}
               onClick={handleSearchFocus}
-              className="flex-1 bg-transparent text-xs outline-none placeholder:text-ink/30 text-ink"
+              className="flex-1 bg-transparent text-xs outline-none placeholder:text-ink/35 text-ink"
               autoComplete="off"
               data-form-type="other"
             />
@@ -202,7 +202,7 @@ export default function EntityPicker({
                 // Prevent the clear button from stealing focus from the
                 // search input (which would close a collapsible picker).
                 onMouseDown={(e) => e.preventDefault()}
-                className="text-ink/30 hover:text-ink/60 text-sm leading-none"
+                className="text-ink/35 hover:text-ink/65 text-sm leading-none"
                 aria-label="Clear search"
               >
                 ×
@@ -222,7 +222,7 @@ export default function EntityPicker({
             push the host page's layout around. */}
         {collapsible && open ? (
           <div
-            className="absolute top-full left-0 right-0 z-30 mt-1 border border-gold/30 rounded-md bg-card shadow-lg overflow-hidden"
+            className="absolute top-full left-0 right-0 z-30 mt-1 border border-gold/35 rounded-md bg-card shadow-lg overflow-hidden"
           >
             {renderList()}
           </div>
@@ -241,9 +241,9 @@ export default function EntityPicker({
     return (
       <div className={cn('overflow-y-auto custom-scrollbar divide-y divide-gold/5', maxHeightClass)}>
         {entities.length === 0 ? (
-          <p className="px-3 py-3 text-[10px] text-ink/20 italic">{noEntitiesText}</p>
+          <p className="px-3 py-3 text-[10px] text-ink/25 italic">{noEntitiesText}</p>
         ) : filtered.length === 0 ? (
-          <p className="px-3 py-3 text-[10px] text-ink/20 italic">
+          <p className="px-3 py-3 text-[10px] text-ink/25 italic">
             {emptyText || `No matches for "${search}".`}
           </p>
         ) : (
@@ -265,7 +265,7 @@ export default function EntityPicker({
                     'w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center transition-all',
                     isSelected
                       ? 'bg-gold border-gold'
-                      : 'border-gold/30 hover:border-gold/60',
+                      : 'border-gold/35 hover:border-gold/65',
                   )}
                 >
                   {isSelected ? <Check className="w-2.5 h-2.5 text-white" /> : null}
@@ -279,7 +279,7 @@ export default function EntityPicker({
                 />
                 <span className="text-xs text-ink truncate flex-1">{entity.name}</span>
                 {entity.hint ? (
-                  <span className="text-[9px] uppercase tracking-widest text-ink/40 shrink-0">{entity.hint}</span>
+                  <span className="text-[9px] uppercase tracking-widest text-ink/45 shrink-0">{entity.hint}</span>
                 ) : null}
               </label>
             );

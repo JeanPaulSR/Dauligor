@@ -265,7 +265,7 @@ export default function ActiveEffectKeyInput({
         onFocus={() => setOpen(true)}
         onKeyDown={onKeyDown}
         placeholder={placeholder}
-        className="w-full h-7 px-2 text-xs font-mono bg-background/50 border border-gold/10 rounded focus:border-gold outline-none"
+        className="w-full h-7 px-2 text-xs font-mono bg-background/50 border border-gold/15 rounded focus:border-gold outline-none"
         // The dropdown is custom React state; mark this as the
         // listbox controller for screen readers.
         role="combobox"
@@ -293,11 +293,11 @@ export default function ActiveEffectKeyInput({
             zIndex: 9999,
             maxHeight: `${PREFERRED_DROPDOWN_HEIGHT}px`,
           }}
-          className="overflow-y-auto custom-scrollbar rounded-md border border-gold/30 bg-card shadow-lg text-xs"
+          className="overflow-y-auto custom-scrollbar rounded-md border border-gold/35 bg-card shadow-lg text-xs"
           role="listbox"
         >
           {flat.length === 0 ? (
-            <div className="px-3 py-2 text-ink/40 italic">
+            <div className="px-3 py-2 text-ink/45 italic">
               No matches in catalog — type any key you need; the input still saves what you type.
             </div>
           ) : (
@@ -313,8 +313,8 @@ export default function ActiveEffectKeyInput({
                   .filter(({ e }) => e.category === g.category);
                 if (visibleInGroup.length === 0) return null;
                 return (
-                  <div key={g.category} className="border-b border-gold/10 last:border-b-0">
-                    <div className="px-2 py-1 text-[10px] font-black uppercase tracking-wider text-gold/70 bg-gold/5 sticky top-0">
+                  <div key={g.category} className="border-b border-gold/15 last:border-b-0">
+                    <div className="px-2 py-1 text-[10px] font-black uppercase tracking-wider text-gold/75 bg-gold/5 sticky top-0">
                       {g.category}
                     </div>
                     <div>
@@ -330,17 +330,17 @@ export default function ActiveEffectKeyInput({
                             onMouseEnter={() => setHighlightIdx(i)}
                             onClick={() => pick(e)}
                             className={`block w-full text-left px-3 py-1.5 transition-colors ${
-                              isHighlighted ? 'bg-gold/15' : 'hover:bg-gold/10'
+                              isHighlighted ? 'bg-gold/15' : 'hover:bg-gold/15'
                             }`}
                           >
                             <div className="flex items-center gap-2">
                               <span className="font-mono text-[11px] text-ink truncate">{e.key}</span>
                               {e.label && (
-                                <span className="text-[10px] text-gold/70 truncate shrink-0">— {e.label}</span>
+                                <span className="text-[10px] text-gold/75 truncate shrink-0">— {e.label}</span>
                               )}
                             </div>
                             {e.description && (
-                              <div className="text-[10px] text-ink/40 mt-0.5 line-clamp-2">{e.description}</div>
+                              <div className="text-[10px] text-ink/45 mt-0.5 line-clamp-2">{e.description}</div>
                             )}
                           </button>
                         );
@@ -349,7 +349,7 @@ export default function ActiveEffectKeyInput({
                   </div>
                 );
               })}
-              <div className="px-3 py-1.5 text-[10px] text-ink/30 italic border-t border-gold/10 sticky bottom-0 bg-card/95">
+              <div className="px-3 py-1.5 text-[10px] text-ink/35 italic border-t border-gold/15 sticky bottom-0 bg-card/95">
                 {showingCount < totalMatching
                   ? `Showing first ${showingCount} of ${totalMatching} matches. Keep typing to narrow.`
                   : `${showingCount} of ${totalAvailable} catalog keys.`}

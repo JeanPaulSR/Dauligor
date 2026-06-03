@@ -83,14 +83,14 @@ export default function Sources({ userProfile }: { userProfile: any }) {
         <div className="bg-blood/10 p-6 rounded-2xl border border-blood/20">
           <AlertTriangle className="w-12 h-12 text-blood mx-auto mb-4" />
           <h2 className="text-2xl font-serif font-bold text-blood mb-2">Archive Connection Error</h2>
-          <p className="text-ink/60 font-serif italic mb-6">
+          <p className="text-ink/65 font-serif italic mb-6">
             The archive is currently inaccessible. This is often caused by a corrupted local cache after a project update.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Button 
               onClick={() => window.location.reload()}
               variant="outline"
-              className="border-gold/20 text-gold hover:bg-gold/5"
+              className="border-gold/25 text-gold hover:bg-gold/5"
             >
               Try Simple Refresh
             </Button>
@@ -101,7 +101,7 @@ export default function Sources({ userProfile }: { userProfile: any }) {
               <RefreshCw className="w-4 h-4" /> Clear Cache & Hard Reset
             </Button>
           </div>
-          <p className="mt-6 text-[10px] text-ink/40 font-mono uppercase tracking-widest">
+          <p className="mt-6 text-[10px] text-ink/45 font-mono uppercase tracking-widest">
             Error: {error}
           </p>
         </div>
@@ -111,7 +111,7 @@ export default function Sources({ userProfile }: { userProfile: any }) {
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gold/20 pb-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gold/25 pb-6">
         <div className="flex items-center gap-4">
           <h1 className="h1-title">Sources & Documents</h1>
         </div>
@@ -129,7 +129,7 @@ export default function Sources({ userProfile }: { userProfile: any }) {
                 variant="outline"
                 disabled={exporting}
                 onClick={handleLibraryExport}
-                className="border-gold/20 text-gold hover:bg-gold/10 gap-2"
+                className="border-gold/25 text-gold hover:bg-gold/15 gap-2"
               >
                 <Download className="w-4 h-4" /> {exporting ? 'Exporting...' : 'Export for Foundry'}
               </Button>
@@ -139,13 +139,13 @@ export default function Sources({ userProfile }: { userProfile: any }) {
                 size="icon"
                 onClick={reloadPage}
                 title="Clear Cache & Hard Reset"
-                className="text-gold/40 hover:text-gold hover:bg-gold/10"
+                className="text-gold/45 hover:text-gold hover:bg-gold/15"
               >
                 <RefreshCw className="w-4 h-4" />
               </Button>
 
               <Link to="/sources/new">
-                <Button className="btn-gold-solid gap-2 shadow-lg shadow-gold/20">
+                <Button className="btn-gold-solid gap-2 shadow-lg shadow-gold/25">
                   <Plus className="w-4 h-4" /> New Source
                 </Button>
               </Link>
@@ -155,9 +155,9 @@ export default function Sources({ userProfile }: { userProfile: any }) {
       </div>
 
       {filteredSources.length === 0 ? (
-        <div className="py-20 text-center bg-card/30 rounded-2xl border border-dashed border-gold/10">
+        <div className="py-20 text-center bg-card/30 rounded-2xl border border-dashed border-gold/15">
           <Book className="w-12 h-12 text-gold mx-auto mb-4 opacity-20" />
-          <p className="text-ink/40 font-serif italic">No sources found matching your search.</p>
+          <p className="text-ink/45 font-serif italic">No sources found matching your search.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -170,9 +170,9 @@ export default function Sources({ userProfile }: { userProfile: any }) {
                 transition={{ delay: index * 0.05 }}
                 layout
               >
-                <Card className="group h-full border-gold/10 hover:border-gold/30 transition-all bg-card/40 backdrop-blur-sm overflow-hidden flex flex-col">
+                <Card className="group h-full border-gold/15 hover:border-gold/35 transition-all bg-card/40 backdrop-blur-sm overflow-hidden flex flex-col">
                   {source.imageUrl && (
-                    <div className="h-48 overflow-hidden border-b border-gold/10 relative">
+                    <div className="h-48 overflow-hidden border-b border-gold/15 relative">
                       <img 
                         src={source.imageUrl} 
                         alt={source.name} 
@@ -181,7 +181,7 @@ export default function Sources({ userProfile }: { userProfile: any }) {
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-card/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4">
                         <Link to={`/sources/view/${source.id}`} className="w-full">
-                          <Button variant="secondary" className="w-full bg-white/90 hover:bg-white text-ink font-serif italic">
+                          <Button variant="secondary" className="w-full bg-card/90 hover:bg-card text-ink font-serif italic">
                             View Details
                           </Button>
                         </Link>
@@ -195,7 +195,7 @@ export default function Sources({ userProfile }: { userProfile: any }) {
                       </CardTitle>
                       {isStaff && (
                         <Link to={`/sources/edit/${source.id}`}>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-ink/40 hover:text-gold">
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-ink/45 hover:text-gold">
                             <Edit className="w-4 h-4" />
                           </Button>
                         </Link>
@@ -208,7 +208,7 @@ export default function Sources({ userProfile }: { userProfile: any }) {
                     </p>
                     <div className="mt-auto pt-4 flex flex-wrap gap-1.5">
                       {source.tags?.map((tag: string) => (
-                        <Badge key={tag} variant="outline" className="label-text border-gold/20 text-gold/70 bg-gold/5">
+                        <Badge key={tag} variant="outline" className="label-text border-gold/25 text-gold/75 bg-gold/5">
                           {tag}
                         </Badge>
                       ))}

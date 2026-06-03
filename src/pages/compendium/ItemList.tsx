@@ -273,13 +273,13 @@ export default function ItemList({ userProfile }: { userProfile: any }) {
           <div className="min-w-0 flex items-center gap-1.5">
             <span className="truncate font-serif text-sm text-ink">{row.name}</span>
             {starred && (
-              <Star className="w-3 h-3 text-gold/70 fill-gold/40 shrink-0" aria-label="Favorite" />
+              <Star className="w-3 h-3 text-gold/75 fill-gold/45 shrink-0" aria-label="Favorite" />
             )}
             {row.attunementFlag && (
               <Lock className="w-3 h-3 text-blood/70 shrink-0" aria-label="Requires attunement" />
             )}
             {row.magicalFlag && (
-              <Sparkles className="w-3 h-3 text-gold/70 shrink-0" aria-label="Magical" />
+              <Sparkles className="w-3 h-3 text-gold/75 shrink-0" aria-label="Magical" />
             )}
           </div>
         );
@@ -312,7 +312,7 @@ export default function ItemList({ userProfile }: { userProfile: any }) {
       label: 'Source',
       width: '60px',
       render: (row) => (
-        <span className="text-xs font-bold text-gold/80 justify-self-center">
+        <span className="text-xs font-bold text-gold/85 justify-self-center">
           {renderSourceAbbrev(row)}
         </span>
       ),
@@ -327,11 +327,11 @@ export default function ItemList({ userProfile }: { userProfile: any }) {
         onClick={onSelect}
         className={cn(
           'w-full grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 px-3 py-2 text-left transition-colors',
-          selected ? 'bg-gold/10' : 'hover:bg-gold/5',
+          selected ? 'bg-gold/15' : 'hover:bg-gold/5',
         )}
       >
         <span className="truncate text-sm text-ink">{row.name}</span>
-        <span className="text-[10px] font-bold text-gold/70">{sourceLabel}</span>
+        <span className="text-[10px] font-bold text-gold/75">{sourceLabel}</span>
         <span
           role="button"
           tabIndex={0}
@@ -343,7 +343,7 @@ export default function ItemList({ userProfile }: { userProfile: any }) {
               toggleStar();
             }
           }}
-          className="text-gold/80 hover:text-blood shrink-0 cursor-pointer"
+          className="text-gold/85 hover:text-blood shrink-0 cursor-pointer"
           title="Remove from favorites"
           aria-label="Remove from favorites"
         >
@@ -392,7 +392,7 @@ export default function ItemList({ userProfile }: { userProfile: any }) {
       trailingActions={
         userProfile?.role === 'admin' ? (
           <Link to="/compendium/items/manage">
-            <Button type="button" variant="outline" size="sm" className="h-8 border-gold/20 text-gold hover:bg-gold/5">
+            <Button type="button" variant="outline" size="sm" className="h-8 border-gold/25 text-gold hover:bg-gold/5">
               Item Manager
             </Button>
           </Link>

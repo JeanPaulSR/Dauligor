@@ -320,11 +320,11 @@ export default function BBCodeTester(_props: BBCodeTesterProps) {
       <div className="flex items-baseline justify-between flex-wrap gap-2">
         <div>
           <h1 className="text-3xl font-serif text-gold">BBCode Tester</h1>
-          <p className="text-sm text-ink/60 mt-1">
+          <p className="text-sm text-ink/65 mt-1">
             Dev tool. Edit BBCode on the left; preview + round-trip diagnostics update live on the right.
           </p>
         </div>
-        <div className="text-xs text-ink/40 flex items-center gap-2">
+        <div className="text-xs text-ink/45 flex items-center gap-2">
           <FileText className="w-3.5 h-3.5" />
           src/pages/dev/BBCodeTester.tsx
         </div>
@@ -335,13 +335,13 @@ export default function BBCodeTester(_props: BBCodeTesterProps) {
         <Card className="p-4 flex flex-col">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-lg font-serif text-gold">Editor</h2>
-            <div className="flex items-center gap-3 text-xs text-ink/50">
+            <div className="flex items-center gap-3 text-xs text-ink/55">
               <span>{bbcode.length} chars</span>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={resetSample}
-                className="h-7 text-xs text-ink/50 hover:text-gold gap-1"
+                className="h-7 text-xs text-ink/55 hover:text-gold gap-1"
                 title="Reset to initial sample"
               >
                 <RotateCcw className="w-3 h-3" /> Reset
@@ -361,12 +361,12 @@ export default function BBCodeTester(_props: BBCodeTesterProps) {
         <Card className="p-4 flex flex-col gap-4">
           <section>
             <h2 className="text-lg font-serif text-gold mb-2">Live preview</h2>
-            <div className="border border-gold/20 rounded-md p-4 bg-background min-h-[200px]">
+            <div className="border border-gold/25 rounded-md p-4 bg-background min-h-[200px]">
               <BBCodeRenderer content={bbcode} viewContext={viewContext} />
             </div>
           </section>
 
-          <section className="border-t border-gold/10 pt-3">
+          <section className="border-t border-gold/15 pt-3">
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-lg font-serif text-gold">Round-trip check</h2>
               {isRoundTripStable ? (
@@ -379,7 +379,7 @@ export default function BBCodeTester(_props: BBCodeTesterProps) {
                 </span>
               )}
             </div>
-            <p className="text-xs text-ink/60 mb-2">
+            <p className="text-xs text-ink/65 mb-2">
               Round-trip means <code>bbcodeToHtml &rarr; htmlToBbcode</code>. A stable
               round-trip is the contract that lets the editor toggle Visual &harr; Source
               without mutating content.
@@ -388,20 +388,20 @@ export default function BBCodeTester(_props: BBCodeTesterProps) {
             {!isRoundTripStable && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
                 <div>
-                  <div className="text-ink/50 mb-1">
+                  <div className="text-ink/55 mb-1">
                     Input ({bbcode.length} chars, {lineCountInput} lines)
                   </div>
-                  <pre className="bg-muted text-foreground border border-gold/10 p-2 rounded overflow-auto max-h-48 whitespace-pre-wrap break-all font-mono text-xs">
+                  <pre className="bg-muted text-foreground border border-gold/15 p-2 rounded overflow-auto max-h-48 whitespace-pre-wrap break-all font-mono text-xs">
                     {bbcode || '(empty)'}
                   </pre>
                 </div>
                 <div>
-                  <div className="text-ink/50 mb-1">
+                  <div className="text-ink/55 mb-1">
                     Round-trip ({roundTripBbcode.length} chars, {lineCountRT} lines, &Delta;{' '}
                     {charDelta >= 0 ? '+' : ''}
                     {charDelta})
                   </div>
-                  <pre className="bg-muted text-foreground border border-gold/10 p-2 rounded overflow-auto max-h-48 whitespace-pre-wrap break-all font-mono text-xs">
+                  <pre className="bg-muted text-foreground border border-gold/15 p-2 rounded overflow-auto max-h-48 whitespace-pre-wrap break-all font-mono text-xs">
                     {roundTripBbcode || '(empty)'}
                   </pre>
                 </div>
@@ -409,14 +409,14 @@ export default function BBCodeTester(_props: BBCodeTesterProps) {
             )}
           </section>
 
-          <section className="border-t border-gold/10 pt-3">
+          <section className="border-t border-gold/15 pt-3">
             <h2 className="text-lg font-serif text-gold mb-2">Rendered HTML (raw)</h2>
-            <pre className="bg-muted text-foreground border border-gold/10 p-3 rounded text-xs overflow-auto max-h-64 whitespace-pre-wrap break-all font-mono">
+            <pre className="bg-muted text-foreground border border-gold/15 p-3 rounded text-xs overflow-auto max-h-64 whitespace-pre-wrap break-all font-mono">
               {renderedHtml || '(empty)'}
             </pre>
           </section>
 
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-gold/10">
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-gold/15">
             <Button onClick={copyReport} variant="outline" size="sm" className="gap-2">
               <Copy className="w-3.5 h-3.5" /> Copy bug report
             </Button>
@@ -427,14 +427,14 @@ export default function BBCodeTester(_props: BBCodeTesterProps) {
       {/* Test case presets */}
       <Card className="p-4">
         <h2 className="text-lg font-serif text-gold mb-1">Test cases</h2>
-        <p className="text-xs text-ink/60 mb-4">
+        <p className="text-xs text-ink/65 mb-4">
           Click any preset to load it into the editor. Use these to exercise each tag in
           isolation, then catalog the ones that produce unexpected output.
         </p>
         <div className="space-y-4">
           {TEST_CASES.map((group) => (
             <div key={group.group}>
-              <div className="text-xs uppercase tracking-wider text-gold/80 font-semibold mb-1.5">
+              <div className="text-xs uppercase tracking-wider text-gold/85 font-semibold mb-1.5">
                 {group.group}
               </div>
               <div className="flex flex-wrap gap-1.5">

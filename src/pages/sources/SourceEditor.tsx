@@ -146,7 +146,7 @@ export default function SourceEditor({ userProfile }: { userProfile: any }) {
           variant="ghost" 
           size="sm" 
           onClick={() => navigate(id ? `/sources/view/${id}` : '/sources')}
-          className="text-ink/60 hover:text-gold gap-2"
+          className="text-ink/65 hover:text-gold gap-2"
         >
           <ChevronLeft className="w-4 h-4" /> Cancel
         </Button>
@@ -159,7 +159,7 @@ export default function SourceEditor({ userProfile }: { userProfile: any }) {
 
       <form onSubmit={handleSave} className="grid md:grid-cols-3 gap-8">
         <div className="md:col-span-2 space-y-6">
-          <Card className="border-gold/10 bg-card/40 backdrop-blur-sm">
+          <Card className="border-gold/15 bg-card/40 backdrop-blur-sm">
             <CardHeader>
               <CardTitle className="font-serif text-xl">Basic Information</CardTitle>
             </CardHeader>
@@ -173,7 +173,7 @@ export default function SourceEditor({ userProfile }: { userProfile: any }) {
                     value={formData.name}
                     onChange={e => setFormData({...formData, name: e.target.value})}
                     placeholder="e.g. Valda's Spire of Secrets"
-                    className="bg-card/50 border-gold/10"
+                    className="bg-card/50 border-gold/15"
                   />
                 </div>
                 <div className="space-y-2">
@@ -189,7 +189,7 @@ export default function SourceEditor({ userProfile }: { userProfile: any }) {
                     value={formData.abbreviation}
                     onChange={e => setFormData({...formData, abbreviation: e.target.value})}
                     placeholder="e.g. VSS"
-                    className="bg-card/50 border-gold/10"
+                    className="bg-card/50 border-gold/15"
                   />
                 </div>
                 <div className="space-y-2">
@@ -200,9 +200,9 @@ export default function SourceEditor({ userProfile }: { userProfile: any }) {
                     value={formData.slug}
                     onChange={e => setFormData({...formData, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-')})}
                     placeholder="e.g. players-handbook"
-                    className="bg-card/50 border-gold/10"
+                    className="bg-card/50 border-gold/15"
                   />
-                  <p className="text-[10px] text-ink/40 font-serif italic">Permanent URL/Export key. Use lowercase and hyphens.</p>
+                  <p className="text-[10px] text-ink/45 font-serif italic">Permanent URL/Export key. Use lowercase and hyphens.</p>
                 </div>
               </div>
 
@@ -213,7 +213,7 @@ export default function SourceEditor({ userProfile }: { userProfile: any }) {
                     id="rules_version"
                     value={formData.rules_version}
                     onChange={e => setFormData({...formData, rules_version: e.target.value})}
-                    className="w-full h-10 px-3 py-2 bg-card/50 border border-gold/10 rounded-md text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="w-full h-10 px-3 py-2 bg-card/50 border border-gold/15 rounded-md text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <option value="2014">2014 Core</option>
                     <option value="2024">2024 Core</option>
@@ -226,7 +226,7 @@ export default function SourceEditor({ userProfile }: { userProfile: any }) {
                     id="status"
                     value={formData.status}
                     onChange={e => setFormData({...formData, status: e.target.value})}
-                    className="w-full h-10 px-3 py-2 bg-card/50 border border-gold/10 rounded-md text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="w-full h-10 px-3 py-2 bg-card/50 border border-gold/15 rounded-md text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <option value="ready">Ready (Visible in Library)</option>
                     <option value="draft">Draft (Staff Only)</option>
@@ -245,7 +245,7 @@ export default function SourceEditor({ userProfile }: { userProfile: any }) {
             </CardContent>
           </Card>
 
-          <Card className="border-gold/10 bg-card/40 backdrop-blur-sm">
+          <Card className="border-gold/15 bg-card/40 backdrop-blur-sm">
             <CardHeader>
               <CardTitle className="font-serif text-xl">External Links</CardTitle>
             </CardHeader>
@@ -260,7 +260,7 @@ export default function SourceEditor({ userProfile }: { userProfile: any }) {
                   value={formData.external_url}
                   onChange={e => setFormData({...formData, external_url: e.target.value})}
                   placeholder="https://..."
-                  className="bg-card/50 border-gold/10"
+                  className="bg-card/50 border-gold/15"
                 />
               </div>
               <div className="space-y-2">
@@ -278,7 +278,7 @@ export default function SourceEditor({ userProfile }: { userProfile: any }) {
         </div>
 
         <div className="space-y-6">
-          <Card className="border-gold/10 bg-card/40 backdrop-blur-sm">
+          <Card className="border-gold/15 bg-card/40 backdrop-blur-sm">
             <CardHeader>
               <CardTitle className="font-serif text-xl">Content Tags</CardTitle>
             </CardHeader>
@@ -307,7 +307,7 @@ export default function SourceEditor({ userProfile }: { userProfile: any }) {
             <Button 
               type="submit" 
               disabled={saving}
-              className="w-full btn-gold-solid gap-2 py-6 text-lg shadow-xl shadow-gold/20"
+              className="w-full btn-gold-solid gap-2 py-6 text-lg shadow-xl shadow-gold/25"
             >
               <Save className="w-5 h-5" /> {saving ? 'Saving...' : 'Save Source'}
             </Button>
@@ -326,8 +326,8 @@ export default function SourceEditor({ userProfile }: { userProfile: any }) {
 
           {/* Preview Card */}
           <div className="pt-4">
-            <Label className="text-[10px] uppercase tracking-widest font-bold text-gold/60 mb-2 block">Cover Preview</Label>
-            <div className="aspect-[3/4] rounded-lg border border-gold/10 bg-card overflow-hidden flex items-center justify-center text-gold/10">
+            <Label className="text-[10px] uppercase tracking-widest font-bold text-gold/65 mb-2 block">Cover Preview</Label>
+            <div className="aspect-[3/4] rounded-lg border border-gold/15 bg-card overflow-hidden flex items-center justify-center text-gold/15">
               {formData.imageUrl ? (
                 <img src={formData.imageUrl} alt="Preview" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
               ) : (

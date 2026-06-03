@@ -93,7 +93,7 @@ export function PickOrCreateBlockDialog({
           </DialogHeader>
           <div className="py-2 max-h-[40vh] overflow-y-auto">
             {openBlocks.length === 0 ? (
-              <p className="text-xs text-ink/50 italic text-center py-8">
+              <p className="text-xs text-ink/55 italic text-center py-8">
                 You have no open blocks yet.
               </p>
             ) : (
@@ -110,7 +110,7 @@ export function PickOrCreateBlockDialog({
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-semibold truncate">{b.name}</p>
                           {b.description && (
-                            <p className="text-[11px] text-ink/60 mt-0.5 leading-relaxed line-clamp-2">
+                            <p className="text-[11px] text-ink/65 mt-0.5 leading-relaxed line-clamp-2">
                               {b.description}
                             </p>
                           )}
@@ -132,7 +132,7 @@ export function PickOrCreateBlockDialog({
             )}
             <Button
               onClick={handleCreateRequest}
-              className="gap-2 bg-gold text-white"
+              className="gap-2 bg-gold text-[var(--primary-foreground)]"
             >
               <Plus className="w-4 h-4" /> Create new block
             </Button>

@@ -775,7 +775,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
           <span className="text-sm font-bold text-ink truncate">
             {effectiveId ? (name || 'Untitled Subclass') : 'New Subclass'}
             {parentClass && (
-              <span className="ml-2 text-[10px] font-mono uppercase text-ink/40">
+              <span className="ml-2 text-[10px] font-mono uppercase text-ink/45">
                 for {parentClass.name}
               </span>
             )}
@@ -788,7 +788,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
             </h1>
             <div className="flex items-center gap-2">
               {parentClass && (
-                <p className="text-xs text-ink/40 font-mono uppercase">For {parentClass.name}</p>
+                <p className="text-xs text-ink/45 font-mono uppercase">For {parentClass.name}</p>
               )}
             </div>
           </div>
@@ -801,7 +801,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                 Create only on the very first save; once pendingCreateId
                 is set the pre-flush hook covers further updates. */}
             {(!isProposalMode || !effectiveId) && (
-              <Button onClick={() => handleSave()} className="bg-gold hover:bg-gold/90 text-white gap-2 shadow-lg shadow-gold/20">
+              <Button onClick={() => handleSave()} className="bg-gold hover:bg-gold/95 text-[var(--primary-foreground)] gap-2 shadow-lg shadow-gold/25">
                 <Save className="w-4 h-4" /> {effectiveId ? 'Save Subclass' : 'Create Subclass'}
               </Button>
             )}
@@ -829,7 +829,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
         <div className="lg:col-span-3">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="w-full h-auto flex flex-col gap-1 bg-transparent border-none p-0 mb-6">
-              <div className="w-full grid grid-cols-2 xl:grid-cols-6 gap-1 bg-card/50 border border-gold/10 p-1 rounded-md">
+              <div className="w-full grid grid-cols-2 xl:grid-cols-6 gap-1 bg-card/50 border border-gold/15 p-1 rounded-md">
                 <TabsTrigger value="basic">Basic Info</TabsTrigger>
                 <TabsTrigger value="features" disabled={!effectiveId}>Features</TabsTrigger>
                 <TabsTrigger value="spellcasting">Spellcasting</TabsTrigger>
@@ -843,11 +843,11 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
 
             <TabsContent value="basic" className="space-y-6 mt-0">
               {/* Basic Info */}
-              <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
-            <h2 className="label-text text-gold border-b border-gold/10 pb-2">Basic Information</h2>
+              <div className="p-4 border border-gold/25 bg-card/50 space-y-4">
+            <h2 className="label-text text-gold border-b border-gold/15 pb-2">Basic Information</h2>
             <div className="flex flex-col md:flex-row gap-6">
               <div className="w-full md:w-1/3">
-                <label className="label-text mb-2 block text-xs uppercase tracking-widest text-gold/60">Subclass Art / Icon</label>
+                <label className="label-text mb-2 block text-xs uppercase tracking-widest text-gold/65">Subclass Art / Icon</label>
                 <ImageUpload 
                   currentImageUrl={imageUrl}
                   storagePath={`images/classes/${parentClass?.id || classId || 'unknown'}/subclasses/${id || 'new'}/`}
@@ -914,7 +914,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                       value={name}
                       onChange={e => setName(e.target.value)}
                       placeholder="e.g. Battle Master"
-                      className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold"
+                      className="h-8 text-sm bg-background/50 border-gold/15 focus:border-gold"
                     />
                   </ReviewFieldHighlight>
                   <ReviewFieldHighlight columnKey="source_id" className="space-y-1">
@@ -922,7 +922,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                     <select
                       value={sourceId}
                       onChange={e => setSourceId(e.target.value)}
-                      className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm text-ink"
+                      className="w-full h-8 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm text-ink"
                     >
                       <option value="">Select a Source</option>
                       {sources.map(s => (
@@ -967,7 +967,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
 
             <TabsContent value="spellcasting" className="space-y-6 mt-0">
           {/* Spellcasting */}
-          <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
+          <div className="p-4 border border-gold/25 bg-card/50 space-y-4">
             <div className="section-header">
               <h2 className="label-text text-gold">Spellcasting</h2>
               <div className="flex items-center gap-2">
@@ -976,9 +976,9 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                   id="hasSpellcasting"
                   checked={spellcasting.hasSpellcasting}
                   onChange={e => setSpellcasting({...spellcasting, hasSpellcasting: e.target.checked})}
-                  className="w-4 h-4 rounded border-gold/20 text-gold focus:ring-gold"
+                  className="w-4 h-4 rounded border-gold/25 text-gold focus:ring-gold"
                 />
-                <label htmlFor="hasSpellcasting" className="label-text text-ink/60">Enable Spellcasting</label>
+                <label htmlFor="hasSpellcasting" className="label-text text-ink/65">Enable Spellcasting</label>
               </div>
             </div>
 
@@ -991,7 +991,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                       type="number"
                       value={spellcasting.level}
                       onChange={e => setSpellcasting({...spellcasting, level: parseInt(e.target.value)})}
-                      className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold"
+                      className="h-8 text-sm bg-background/50 border-gold/15 focus:border-gold"
                     />
                   </div>
                   <div className="space-y-1">
@@ -999,7 +999,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                     <select 
                       value={spellcasting.ability}
                       onChange={e => setSpellcasting({...spellcasting, ability: e.target.value})}
-                      className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm text-ink"
+                      className="w-full h-8 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm text-ink"
                     >
                       {['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'].map(a => (
                         <option key={a} value={a}>{a}</option>
@@ -1011,7 +1011,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                     <select 
                       value={spellcasting.progression || 'none'} 
                       onChange={e => setSpellcasting({...spellcasting, progression: e.target.value})}
-                      className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink"
+                      className="w-full h-8 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-xs text-ink"
                     >
                       <option value="none">None</option>
                       <option value="full">Full Caster</option>
@@ -1026,7 +1026,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                     <select 
                       value={spellcasting.type}
                       onChange={e => setSpellcasting({...spellcasting, type: e.target.value})}
-                      className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm text-ink"
+                      className="w-full h-8 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm text-ink"
                     >
                       <option value="prepared">Prepared</option>
                       <option value="known">Known</option>
@@ -1034,8 +1034,8 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                   </div>
                   <div className="flex items-center gap-2 pt-6">
                     <div className="flex items-center gap-2 cursor-pointer group hover:bg-gold/5 p-1 -ml-1 rounded transition-colors" onClick={() => setSpellcasting({...spellcasting, isRitualCaster: !spellcasting.isRitualCaster})}>
-                      <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${spellcasting.isRitualCaster ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/50'}`}>
-                        {spellcasting.isRitualCaster && <Check className="w-3 h-3 text-white" />}
+                      <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${spellcasting.isRitualCaster ? 'bg-gold border-gold' : 'border-gold/35 group-hover:border-gold/55'}`}>
+                        {spellcasting.isRitualCaster && <Check className="w-3 h-3 text-[var(--primary-foreground)]" />}
                       </div>
                       <span className="text-[10px] font-bold uppercase tracking-widest text-gold select-none">Ritual Caster</span>
                     </div>
@@ -1096,7 +1096,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                         <select 
                           value={spellcasting.progressionId} 
                           onChange={e => setSpellcasting({...spellcasting, progressionId: e.target.value})}
-                          className="flex-1 h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink"
+                          className="flex-1 h-8 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-xs text-ink"
                         >
                           <option value="">None</option>
                           {progressionScalings.map(s => (
@@ -1104,7 +1104,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                           ))}
                         </select>
                         <Link to="/compendium/spellcasting-scaling/new">
-                          <Button variant="outline" size="sm" className="h-8 w-8 border-gold/10 text-gold hover:bg-gold/5 p-0">
+                          <Button variant="outline" size="sm" className="h-8 w-8 border-gold/15 text-gold hover:bg-gold/5 p-0">
                             <Plus className="w-3 h-3" />
                           </Button>
                         </Link>
@@ -1118,7 +1118,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                       <select 
                         value={spellcasting.spellsKnownId} 
                         onChange={e => setSpellcasting({...spellcasting, spellsKnownId: e.target.value})}
-                        className="flex-1 h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink"
+                        className="flex-1 h-8 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-xs text-ink"
                       >
                         <option value="">None</option>
                         {knownScalings.map(s => (
@@ -1126,7 +1126,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                         ))}
                       </select>
                       <Link to="/compendium/spells-known-scaling/new">
-                        <Button variant="outline" size="sm" className="h-8 w-8 border-gold/10 text-gold hover:bg-gold/5 p-0">
+                        <Button variant="outline" size="sm" className="h-8 w-8 border-gold/15 text-gold hover:bg-gold/5 p-0">
                           <Plus className="w-3 h-3" />
                         </Button>
                       </Link>
@@ -1149,13 +1149,13 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
             </TabsContent>
 
             <TabsContent value="progression" className="space-y-6 mt-0">
-          <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
+          <div className="p-4 border border-gold/25 bg-card/50 space-y-4">
             <div className="section-header">
               <h2 className="label-text text-gold">Subclass Progression & Advancements</h2>
-              <Zap className="w-4 h-4 text-gold/40" />
+              <Zap className="w-4 h-4 text-gold/45" />
             </div>
             <div className="space-y-4">
-              <p className="text-[10px] text-ink/40 italic">Global progression rules for this specialization.</p>
+              <p className="text-[10px] text-ink/45 italic">Global progression rules for this specialization.</p>
               <AdvancementManager
                 advancements={advancements}
                 onChange={setAdvancements}
@@ -1176,7 +1176,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
             <TabsContent value="features" className="space-y-6 mt-0">
           {/* Features */}
           {id && (
-            <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
+            <div className="p-4 border border-gold/25 bg-card/50 space-y-4">
               <div className="section-header">
                 <h2 className="label-text text-gold">Subclass Features</h2>
               </div>
@@ -1205,10 +1205,10 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                         return (
                           <div key={level} className="space-y-2">
                             <div className="flex items-center gap-2">
-                              <span className="text-xs font-mono text-gold/60">Level {level}</span>
-                              <div className="h-px flex-1 bg-gold/10" />
+                              <span className="text-xs font-mono text-gold/65">Level {level}</span>
+                              <div className="h-px flex-1 bg-gold/15" />
                               {levelParentFeatures.map(pf => (
-                                <span key={pf.id} className="text-[10px] font-bold text-gold uppercase tracking-wider bg-gold/5 px-2 py-0.5 rounded border border-gold/10">
+                                <span key={pf.id} className="text-[10px] font-bold text-gold uppercase tracking-wider bg-gold/5 px-2 py-0.5 rounded border border-gold/15">
                                   {pf.name}
                                 </span>
                               ))}
@@ -1241,7 +1241,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                                   }));
                                   setIsFeatureModalOpen(true);
                                 }}
-                                className="h-6 px-2 text-gold hover:bg-gold/10 gap-1 border border-gold/20 bg-gold/5"
+                                className="h-6 px-2 text-gold hover:bg-gold/15 gap-1 border border-gold/25 bg-gold/5"
                               >
                                 <Plus className="w-3 h-3" /> Add Feature
                               </Button>
@@ -1290,7 +1290,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                             <AlertTriangle className="w-4 h-4 text-blood" />
                             <h3 className="label-text text-blood">Deprecated Features</h3>
                           </div>
-                          <p className="text-xs text-ink/60">
+                          <p className="text-xs text-ink/65">
                             The parent class subclass feature progression has changed. Please reassign the levels for these features.
                           </p>
                           <div className="pl-4 divide-y divide-blood/10 border-l border-blood/20">
@@ -1298,7 +1298,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                               <div key={feature.id} className="py-2 flex items-center justify-between group">
                                 <div>
                                   <span className="text-sm font-bold text-ink">{feature.name}</span>
-                                  <span className="ml-2 text-[10px] text-ink/40 font-mono uppercase tracking-wider">(Currently Level {feature.level})</span>
+                                  <span className="ml-2 text-[10px] text-ink/45 font-mono uppercase tracking-wider">(Currently Level {feature.level})</span>
                                 </div>
                                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                   <Button variant="ghost" size="sm" onClick={() => { 
@@ -1343,7 +1343,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
 
             <TabsContent value="tags" className="space-y-6 mt-0">
           {/* Tags */}
-          <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
+          <div className="p-4 border border-gold/25 bg-card/50 space-y-4">
             <div className="section-header">
               <h2 className="label-text text-gold">Tags</h2>
               <Link to="/compendium/tags">
@@ -1358,7 +1358,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                 if (groupTags.length === 0) return null;
                 return (
                   <div key={group.id} className="space-y-2">
-                    <label className="label-text text-ink/30">{group.name}</label>
+                    <label className="label-text text-ink/35">{group.name}</label>
                     <div className="flex flex-wrap gap-2">
                       {groupTags.map(tag => (
                         <button
@@ -1374,8 +1374,8 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                           className={cn(
                             "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider transition-all border",
                             tagIds.includes(tag.id)
-                            ? 'bg-gold/20 border-gold/40 text-gold shadow-sm shadow-gold/10'
-                            : 'bg-card text-ink/60 border-gold/10 hover:border-gold/30 hover:text-gold'
+                            ? 'bg-gold/25 border-gold/45 text-gold shadow-sm shadow-gold/15'
+                            : 'bg-card text-ink/65 border-gold/15 hover:border-gold/35 hover:text-gold'
                           )}
                         >
                           <div className="flex items-center gap-2">
@@ -1454,14 +1454,14 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                 nameExtras={
                   <>
                     <div className="flex justify-center transition-all">
-                      <span className="text-xs text-ink/60 my-auto mr-1 select-none pointer-events-none">Level</span>
+                      <span className="text-xs text-ink/65 my-auto mr-1 select-none pointer-events-none">Level</span>
                       <input
                         type="number"
                         min="1"
                         max="20"
                         value={editingFeature.level || 1}
                         readOnly
-                        className="w-12 h-8 bg-transparent border border-transparent rounded text-left text-xs text-ink/60 px-2 py-0 outline-none pointer-events-none select-none opacity-80"
+                        className="w-12 h-8 bg-transparent border border-transparent rounded text-left text-xs text-ink/65 px-2 py-0 outline-none pointer-events-none select-none opacity-80"
                       />
                     </div>
                     <ReferenceSheetDialog
@@ -1498,54 +1498,54 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                   const patchRecovery = (i: number, patch: any) =>
                     setRecovery(recovery.map((r: any, ri: number) => ri === i ? { ...r, ...patch } : r));
                   return (
-                    <div className="divide-y divide-gold/10 pt-1">
+                    <div className="divide-y divide-gold/15 pt-1">
 
                       {/* ── FEATURE DETAILS ─────────────────────────────── */}
                       <div className="py-3 space-y-0 divide-y divide-gold/5">
-                        <p className="text-[9px] uppercase tracking-[0.2em] font-black text-gold/50 pb-2 select-none">Feature Details</p>
+                        <p className="text-[9px] uppercase tracking-[0.2em] font-black text-gold/55 pb-2 select-none">Feature Details</p>
 
                         <div className="flex items-center justify-between py-2 gap-4">
-                          <label className="text-xs font-semibold text-ink/70 shrink-0 w-36">Type</label>
+                          <label className="text-xs font-semibold text-ink/75 shrink-0 w-36">Type</label>
                           <Select value={editingFeature.type || 'class'} onValueChange={val => setEditingFeature({ ...editingFeature, type: val })}>
-                            <SelectTrigger className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold"><SelectValue /></SelectTrigger>
+                            <SelectTrigger className="h-7 text-xs flex-1 bg-background/50 border-gold/15 focus:border-gold"><SelectValue /></SelectTrigger>
                             <SelectContent>{FEATURE_TYPES.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
                           </Select>
                         </div>
 
                         <div className="flex items-center justify-between py-2 gap-4">
                           <div className="shrink-0 w-36">
-                            <p className="text-xs font-semibold text-ink/70">Required Level</p>
-                            <p className="text-[10px] text-ink/40">Set by the feature level above.</p>
+                            <p className="text-xs font-semibold text-ink/75">Required Level</p>
+                            <p className="text-[10px] text-ink/45">Set by the feature level above.</p>
                           </div>
-                          <Input type="number" value={editingFeature.configuration?.requiredLevel || editingFeature.level || 1} readOnly className="h-7 text-xs w-20 shrink-0 text-center bg-background/20 border-gold/5 pointer-events-none select-none text-ink/50" />
+                          <Input type="number" value={editingFeature.configuration?.requiredLevel || editingFeature.level || 1} readOnly className="h-7 text-xs w-20 shrink-0 text-center bg-background/20 border-gold/5 pointer-events-none select-none text-ink/55" />
                         </div>
 
                         <div className="flex items-center justify-between py-2 gap-4">
                           <div className="shrink-0 w-36">
-                            <p className="text-xs font-semibold text-ink/70">Required Items</p>
-                            <p className="text-[10px] text-ink/40">Identifiers the character must have before selecting this.</p>
+                            <p className="text-xs font-semibold text-ink/75">Required Items</p>
+                            <p className="text-[10px] text-ink/45">Identifiers the character must have before selecting this.</p>
                           </div>
-                          <Input value={editingFeature.configuration?.requiredIds?.join(', ') || ''} onChange={e => setEditingFeature({ ...editingFeature, configuration: { ...editingFeature.configuration, requiredIds: e.target.value.split(',').map((s: string) => s.trim()).filter(Boolean) } })} placeholder="item-identifier-1, item-identifier-2" className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold" />
+                          <Input value={editingFeature.configuration?.requiredIds?.join(', ') || ''} onChange={e => setEditingFeature({ ...editingFeature, configuration: { ...editingFeature.configuration, requiredIds: e.target.value.split(',').map((s: string) => s.trim()).filter(Boolean) } })} placeholder="item-identifier-1, item-identifier-2" className="h-7 text-xs flex-1 bg-background/50 border-gold/15 focus:border-gold" />
                         </div>
 
                         <div className="flex items-center justify-between py-2 gap-4">
                           <div className="shrink-0 w-36">
-                            <p className="text-xs font-semibold text-ink/70">Repeatable</p>
-                            <p className="text-[10px] text-ink/40">This feature can be chosen more than once.</p>
+                            <p className="text-xs font-semibold text-ink/75">Repeatable</p>
+                            <p className="text-[10px] text-ink/45">This feature can be chosen more than once.</p>
                           </div>
-                          <Checkbox id="feat-repeatable" className="border-gold/30 data-[state=checked]:bg-gold data-[state=checked]:text-white" checked={editingFeature.configuration?.repeatable || false} onCheckedChange={checked => setEditingFeature({ ...editingFeature, configuration: { ...editingFeature.configuration, repeatable: !!checked } })} />
+                          <Checkbox id="feat-repeatable" className="border-gold/35 data-[state=checked]:bg-gold data-[state=checked]:text-[var(--primary-foreground)]" checked={editingFeature.configuration?.repeatable || false} onCheckedChange={checked => setEditingFeature({ ...editingFeature, configuration: { ...editingFeature.configuration, repeatable: !!checked } })} />
                         </div>
 
                         <div className="py-2">
-                          <p className="text-xs font-semibold text-ink/70 mb-2">Feature Properties</p>
+                          <p className="text-xs font-semibold text-ink/75 mb-2">Feature Properties</p>
                           <div className="flex items-center gap-6">
                             <div className="flex items-center gap-2">
-                              <Checkbox id="feat-magical" className="border-gold/30 data-[state=checked]:bg-gold data-[state=checked]:text-white" checked={editingFeature.properties?.includes('magical') || false} onCheckedChange={checked => { const props = editingFeature.properties || []; setEditingFeature({ ...editingFeature, properties: checked ? [...props, 'magical'] : props.filter((p: string) => p !== 'magical') }); }} />
-                              <label htmlFor="feat-magical" className="text-xs text-ink/70 cursor-pointer">Magical</label>
+                              <Checkbox id="feat-magical" className="border-gold/35 data-[state=checked]:bg-gold data-[state=checked]:text-[var(--primary-foreground)]" checked={editingFeature.properties?.includes('magical') || false} onCheckedChange={checked => { const props = editingFeature.properties || []; setEditingFeature({ ...editingFeature, properties: checked ? [...props, 'magical'] : props.filter((p: string) => p !== 'magical') }); }} />
+                              <label htmlFor="feat-magical" className="text-xs text-ink/75 cursor-pointer">Magical</label>
                             </div>
                             <div className="flex items-center gap-2">
-                              <Checkbox id="feat-passive" className="border-gold/30 data-[state=checked]:bg-gold data-[state=checked]:text-white" checked={editingFeature.properties?.includes('passive') || false} onCheckedChange={checked => { const props = editingFeature.properties || []; setEditingFeature({ ...editingFeature, properties: checked ? [...props, 'passive'] : props.filter((p: string) => p !== 'passive') }); }} />
-                              <label htmlFor="feat-passive" className="text-xs text-ink/70 cursor-pointer">Passive Trait</label>
+                              <Checkbox id="feat-passive" className="border-gold/35 data-[state=checked]:bg-gold data-[state=checked]:text-[var(--primary-foreground)]" checked={editingFeature.properties?.includes('passive') || false} onCheckedChange={checked => { const props = editingFeature.properties || []; setEditingFeature({ ...editingFeature, properties: checked ? [...props, 'passive'] : props.filter((p: string) => p !== 'passive') }); }} />
+                              <label htmlFor="feat-passive" className="text-xs text-ink/75 cursor-pointer">Passive Trait</label>
                             </div>
                           </div>
                         </div>
@@ -1554,19 +1554,19 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                       {/* ── USAGE ───────────────────────────────────────── */}
                       <div className="py-3 space-y-0 divide-y divide-gold/5">
                         <div className="flex items-center justify-between pb-2">
-                          <p className="text-[9px] uppercase tracking-[0.2em] font-black text-gold/50 select-none">Usage</p>
+                          <p className="text-[9px] uppercase tracking-[0.2em] font-black text-gold/55 select-none">Usage</p>
                           <ReferenceSyntaxHelp title="Usage Formula References" description="Use semantic references for feature uses on the site. The helper previews the Foundry-native target shape." buttonLabel="Usage Help" value={editingFeature.usage?.max || ''} context={subclassReferenceContext} />
                         </div>
                         <div className="flex items-center gap-4 py-2">
-                          <label className="text-xs font-semibold text-ink/70 shrink-0 w-36">Limited Uses</label>
+                          <label className="text-xs font-semibold text-ink/75 shrink-0 w-36">Limited Uses</label>
                           <div className="flex items-center gap-3 flex-1">
                             <div className="flex flex-col items-center gap-0.5">
-                              <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Spent</span>
-                              <Input type="number" value={editingFeature.usage?.spent || 0} onChange={e => setEditingFeature({ ...editingFeature, usage: { ...editingFeature.usage, spent: parseInt(e.target.value) || 0 } })} className="h-7 w-16 text-center text-xs bg-background/50 border-gold/10 focus:border-gold" />
+                              <span className="text-[9px] uppercase text-ink/45 font-black tracking-wider">Spent</span>
+                              <Input type="number" value={editingFeature.usage?.spent || 0} onChange={e => setEditingFeature({ ...editingFeature, usage: { ...editingFeature.usage, spent: parseInt(e.target.value) || 0 } })} className="h-7 w-16 text-center text-xs bg-background/50 border-gold/15 focus:border-gold" />
                             </div>
                             <div className="flex flex-col items-center gap-0.5">
-                              <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Max</span>
-                              <Input value={editingFeature.usage?.max || ''} onChange={e => setEditingFeature({ ...editingFeature, usage: { ...editingFeature.usage, max: e.target.value } })} placeholder="—" className="h-7 w-28 text-center text-xs bg-background/50 border-gold/10 focus:border-gold" />
+                              <span className="text-[9px] uppercase text-ink/45 font-black tracking-wider">Max</span>
+                              <Input value={editingFeature.usage?.max || ''} onChange={e => setEditingFeature({ ...editingFeature, usage: { ...editingFeature.usage, max: e.target.value } })} placeholder="—" className="h-7 w-28 text-center text-xs bg-background/50 border-gold/15 focus:border-gold" />
                             </div>
                           </div>
                         </div>
@@ -1575,18 +1575,18 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                       {/* ── RECOVERY ────────────────────────────────────── */}
                       <div className="py-3">
                         <div className="flex items-center justify-between mb-2">
-                          <p className="text-[9px] uppercase tracking-[0.2em] font-black text-gold/50 select-none">Recovery</p>
-                          <button type="button" onClick={addRecovery} className="text-[10px] font-black text-gold/60 hover:text-gold transition-colors px-1">+ ADD</button>
+                          <p className="text-[9px] uppercase tracking-[0.2em] font-black text-gold/55 select-none">Recovery</p>
+                          <button type="button" onClick={addRecovery} className="text-[10px] font-black text-gold/65 hover:text-gold transition-colors px-1">+ ADD</button>
                         </div>
                         {recovery.length === 0 && (
-                          <p className="text-xs text-ink/30 italic py-1">No recovery rules. Click + ADD to add one.</p>
+                          <p className="text-xs text-ink/35 italic py-1">No recovery rules. Click + ADD to add one.</p>
                         )}
                         <div className="space-y-1.5">
                           {recovery.map((row: any, i: number) => (
                             <div key={i} className="flex items-center gap-2">
                               <div className="flex flex-col gap-0.5 flex-1">
-                                {i === 0 && <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Period</span>}
-                                <select value={row.period || 'lr'} onChange={e => patchRecovery(i, { period: e.target.value, ...(e.target.value === 'recharge' ? { type: 'recoverAll', formula: '6' } : { formula: undefined }) })} className="h-7 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink w-full">
+                                {i === 0 && <span className="text-[9px] uppercase text-ink/45 font-black tracking-wider">Period</span>}
+                                <select value={row.period || 'lr'} onChange={e => patchRecovery(i, { period: e.target.value, ...(e.target.value === 'recharge' ? { type: 'recoverAll', formula: '6' } : { formula: undefined }) })} className="h-7 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-xs text-ink w-full">
                                   <option value="lr">Long Rest</option>
                                   <option value="sr">Short Rest</option>
                                   <option value="day">Daily</option>
@@ -1601,8 +1601,8 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                               </div>
                               {row.period === 'recharge' ? (
                                 <div className="flex flex-col gap-0.5 flex-1">
-                                  {i === 0 && <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Value</span>}
-                                  <select value={row.formula || '6'} onChange={e => patchRecovery(i, { formula: e.target.value })} className="h-7 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink w-full">
+                                  {i === 0 && <span className="text-[9px] uppercase text-ink/45 font-black tracking-wider">Value</span>}
+                                  <select value={row.formula || '6'} onChange={e => patchRecovery(i, { formula: e.target.value })} className="h-7 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-xs text-ink w-full">
                                     <option value="6">Recharge 6</option>
                                     <option value="5">Recharge 5–6</option>
                                     <option value="4">Recharge 4–6</option>
@@ -1613,8 +1613,8 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                               ) : (
                                 <>
                                   <div className="flex flex-col gap-0.5 flex-1">
-                                    {i === 0 && <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Recovery</span>}
-                                    <select value={row.type || 'recoverAll'} onChange={e => patchRecovery(i, { type: e.target.value, ...(e.target.value !== 'formula' ? { formula: undefined } : {}) })} className="h-7 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink w-full">
+                                    {i === 0 && <span className="text-[9px] uppercase text-ink/45 font-black tracking-wider">Recovery</span>}
+                                    <select value={row.type || 'recoverAll'} onChange={e => patchRecovery(i, { type: e.target.value, ...(e.target.value !== 'formula' ? { formula: undefined } : {}) })} className="h-7 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-xs text-ink w-full">
                                       <option value="recoverAll">Recover All Uses</option>
                                       <option value="loseAll">Lose All Uses</option>
                                       <option value="formula">Custom Formula</option>
@@ -1622,14 +1622,14 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                                   </div>
                                   {row.type === 'formula' && (
                                     <div className="flex flex-col gap-0.5 flex-1">
-                                      {i === 0 && <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Formula</span>}
-                                      <Input value={row.formula || ''} onChange={e => patchRecovery(i, { formula: e.target.value })} placeholder="2 + @class.level" className="h-7 text-xs font-mono bg-background/50 border-gold/10 focus:border-gold" />
+                                      {i === 0 && <span className="text-[9px] uppercase text-ink/45 font-black tracking-wider">Formula</span>}
+                                      <Input value={row.formula || ''} onChange={e => patchRecovery(i, { formula: e.target.value })} placeholder="2 + @class.level" className="h-7 text-xs font-mono bg-background/50 border-gold/15 focus:border-gold" />
                                     </div>
                                   )}
                                 </>
                               )}
                               <div className={i === 0 ? 'pt-3.5' : ''}>
-                                <button type="button" onClick={() => removeRecovery(i)} className="h-7 w-7 flex items-center justify-center text-ink/30 hover:text-blood transition-colors rounded border border-transparent hover:border-blood/20">
+                                <button type="button" onClick={() => removeRecovery(i)} className="h-7 w-7 flex items-center justify-center text-ink/35 hover:text-blood transition-colors rounded border border-transparent hover:border-blood/20">
                                   <span className="text-sm leading-none">−</span>
                                 </button>
                               </div>
@@ -1667,7 +1667,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                     <div className="space-y-4">
                        <div className="section-header">
                           <h4 className="text-[10px] text-gold uppercase tracking-widest font-black">Linked Advancements</h4>
-                          <p className="text-[10px] text-ink/40">Link this feature to progression rules defined on the subclass.</p>
+                          <p className="text-[10px] text-ink/45">Link this feature to progression rules defined on the subclass.</p>
                        </div>
                        <AdvancementManager
                          advancements={[]} // Not used for management here
@@ -1693,15 +1693,15 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                        />
                     </div>
 
-                    <div className="space-y-4 pt-4 border-t border-gold/10">
+                    <div className="space-y-4 pt-4 border-t border-gold/15">
                       <h4 className="text-[10px] text-gold uppercase tracking-widest font-black">Table Column Links</h4>
                       <div className="grid gap-4">
                         <div className="space-y-1">
-                          <label className="text-[10px] uppercase text-ink/60 font-bold">Quantity Column</label>
+                          <label className="text-[10px] uppercase text-ink/65 font-bold">Quantity Column</label>
                           <select 
                             value={editingFeature?.quantityColumnId || ''}
                             onChange={e => setEditingFeature({...editingFeature, quantityColumnId: e.target.value})}
-                            className="w-full h-9 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm text-ink"
+                            className="w-full h-9 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm text-ink"
                           >
                             <option value="">None</option>
                             <optgroup label="Subclass Columns">
@@ -1715,14 +1715,14 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                               ))}
                             </optgroup>
                           </select>
-                          <p className="text-[10px] text-ink/40 italic">Link to a column that dictates the quantity of uses — e.g. the number of bardic inspiration or superiority dice the class has. Pre-fills <code className="text-gold/70">system.uses.max</code> on the embedded feature with the column's <code className="text-gold/70">@scale.&lt;class&gt;.&lt;identifier&gt;</code> reference when no manual Max is set. Manual values in the Max field always win.</p>
+                          <p className="text-[10px] text-ink/45 italic">Link to a column that dictates the quantity of uses — e.g. the number of bardic inspiration or superiority dice the class has. Pre-fills <code className="text-gold/75">system.uses.max</code> on the embedded feature with the column's <code className="text-gold/75">@scale.&lt;class&gt;.&lt;identifier&gt;</code> reference when no manual Max is set. Manual values in the Max field always win.</p>
                         </div>
                         <div className="space-y-1">
-                          <label className="text-[10px] uppercase text-ink/60 font-bold">Scaling Column</label>
+                          <label className="text-[10px] uppercase text-ink/65 font-bold">Scaling Column</label>
                           <select 
                             value={editingFeature?.scalingColumnId || ''}
                             onChange={e => setEditingFeature({...editingFeature, scalingColumnId: e.target.value})}
-                            className="w-full h-9 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm text-ink"
+                            className="w-full h-9 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm text-ink"
                           >
                             <option value="">None</option>
                             <optgroup label="Subclass Columns">
@@ -1736,7 +1736,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                               ))}
                             </optgroup>
                           </select>
-                          <p className="text-[10px] text-ink/40 italic">Link to a column that dictates the scaling values — e.g. the roll of a bardic inspiration or a superiority dice. The column's <code className="text-gold/70">@scale.&lt;class&gt;.&lt;identifier&gt;</code> reference is stashed on the embedded feature so activity damage / dice formulas can pick it up automatically (and authors can paste it without typing the path).</p>
+                          <p className="text-[10px] text-ink/45 italic">Link to a column that dictates the scaling values — e.g. the roll of a bardic inspiration or a superiority dice. The column's <code className="text-gold/75">@scale.&lt;class&gt;.&lt;identifier&gt;</code> reference is stashed on the embedded feature so activity damage / dice formulas can pick it up automatically (and authors can paste it without typing the path).</p>
                         </div>
                       </div>
                     </div>
@@ -1764,7 +1764,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
           setManagingGroupSearch('');
         }
       }}>
-        <DialogContentLarge className="bg-card border-gold/30">
+        <DialogContentLarge className="bg-card border-gold/35">
           <DialogHeader>
             <DialogTitle className="text-gold font-serif uppercase tracking-tight">
               Manage {allOptionGroups.find(g => g.id === managingGroupId)?.name} Options
@@ -1772,7 +1772,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
           </DialogHeader>
           
           <div className="space-y-4 py-4">
-            <p className="text-xs text-ink/60 italic">
+            <p className="text-xs text-ink/65 italic">
               Uncheck options that are NOT available to this subclass.
             </p>
             
@@ -1780,7 +1780,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
               placeholder="Search options..."
               value={managingGroupSearch}
               onChange={e => setManagingGroupSearch(e.target.value)}
-              className="h-8 text-xs bg-background/50 border-gold/10"
+              className="h-8 text-xs bg-background/50 border-gold/15"
             />
             
             <div className="grid sm:grid-cols-2 gap-2">
@@ -1796,8 +1796,8 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                       key={item.id} 
                       className={`flex items-start gap-3 p-2 border transition-all cursor-pointer ${
                         isExcluded || isClassRestricted
-                        ? 'bg-background/20 border-gold/5 opacity-50 text-ink/50'
-                        : 'bg-gold/10 border-gold/30 text-ink'
+                        ? 'bg-background/20 border-gold/5 opacity-50 text-ink/55'
+                        : 'bg-gold/15 border-gold/35 text-ink'
                       }`}
                     >
                       <input 
@@ -1817,12 +1817,12 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                             [managingGroupId!]: newExcluded
                           });
                         }}
-                        className="mt-1 w-3 h-3 rounded border-gold/20 text-gold focus:ring-gold"
+                        className="mt-1 w-3 h-3 rounded border-gold/25 text-gold focus:ring-gold"
                       />
                       <div className="space-y-0.5">
                         <span className="text-xs font-bold text-ink block">{item.name}</span>
                         {item.levelPrerequisite > 0 && (
-                          <span className="text-[10px] text-gold/60 font-mono block">Level {item.levelPrerequisite}+</span>
+                          <span className="text-[10px] text-gold/65 font-mono block">Level {item.levelPrerequisite}+</span>
                         )}
                         {isClassRestricted && (
                           <span className="text-[9px] text-blood font-bold uppercase block">Restricted by Item</span>
@@ -1835,7 +1835,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
           </div>
           
           <DialogFooter>
-            <Button onClick={() => setManagingGroupId(null)} className="bg-gold hover:bg-gold/90 text-white">
+            <Button onClick={() => setManagingGroupId(null)} className="bg-gold hover:bg-gold/95 text-[var(--primary-foreground)]">
               Done
             </Button>
           </DialogFooter>

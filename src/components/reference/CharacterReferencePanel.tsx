@@ -48,8 +48,8 @@ export default function CharacterReferencePanel({
   ];
 
   return (
-    <div className="rounded-lg border border-gold/20 bg-card/50 shadow-sm overflow-hidden">
-      <div className="section-header px-4 py-3 border-b border-gold/10 bg-gold/5">
+    <div className="rounded-lg border border-gold/25 bg-card/50 shadow-sm overflow-hidden">
+      <div className="section-header px-4 py-3 border-b border-gold/15 bg-gold/5">
         <div>
           <h3 className="label-text text-gold">Reference Surface</h3>
           <p className="field-hint mt-1 max-w-2xl">
@@ -74,7 +74,7 @@ export default function CharacterReferencePanel({
 
       <div className="grid grid-cols-2 gap-3 p-4 md:grid-cols-4">
         {summaryRows.map((row) => (
-          <div key={row.label} className="rounded-md border border-gold/10 bg-background/40 p-3">
+          <div key={row.label} className="rounded-md border border-gold/15 bg-background/40 p-3">
             <p className="label-text text-ink/45">{row.label}</p>
             <p className="mt-1 text-xl font-serif font-black text-ink">{row.value}</p>
           </div>

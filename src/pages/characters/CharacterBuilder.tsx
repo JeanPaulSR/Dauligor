@@ -948,7 +948,7 @@ function AddSpellsModal(props: AddSpellsModalProps) {
         className={cn(
           "grid items-center cursor-pointer border-b border-gold/5 transition-colors",
           isSelected
-            ? "bg-gold/10 border-l-[3px] border-l-gold"
+            ? "bg-gold/15 border-l-[3px] border-l-gold"
             : "border-l-[3px] border-l-transparent hover:bg-gold/5",
           !isKnown && (prereqBlocked || capBlocked) && "opacity-60 cursor-not-allowed",
         )}
@@ -972,7 +972,7 @@ function AddSpellsModal(props: AddSpellsModalProps) {
             </span>
           ) : isKnown ? (
             <span
-              className="w-3.5 h-3.5 rounded-sm border-2 border-gold bg-gold flex items-center justify-center text-white"
+              className="w-3.5 h-3.5 rounded-sm border-2 border-gold bg-gold flex items-center justify-center text-[var(--primary-foreground)]"
               aria-label="On sheet"
             >
               <Check className="w-2 h-2" />
@@ -983,7 +983,7 @@ function AddSpellsModal(props: AddSpellsModalProps) {
                 "w-3.5 h-3.5 rounded-sm border-2 border-dashed flex items-center justify-center",
                 prereqBlocked || capBlocked
                   ? "border-blood/25"
-                  : "border-gold/30",
+                  : "border-gold/35",
               )}
               aria-label={prereqBlocked || capBlocked ? "Blocked" : "Add to sheet"}
             />
@@ -992,7 +992,7 @@ function AddSpellsModal(props: AddSpellsModalProps) {
         <span
           className={cn(
             "font-serif text-sm truncate flex items-center gap-1.5",
-            isSelected ? "font-bold text-ink" : isKnown ? "font-medium text-ink" : "font-medium text-ink/40",
+            isSelected ? "font-bold text-ink" : isKnown ? "font-medium text-ink" : "font-medium text-ink/45",
           )}
         >
           <span className="truncate">{spell.name}</span>
@@ -1026,7 +1026,7 @@ function AddSpellsModal(props: AddSpellsModalProps) {
             title={isFav ? "Unfavourite" : "Favourite"}
             className={cn(
               "text-sm leading-none transition-colors",
-              isFav ? "text-amber-500" : "text-ink/20 hover:text-amber-500",
+              isFav ? "text-amber-500" : "text-ink/25 hover:text-amber-500",
             )}
           >
             ★
@@ -1048,7 +1048,7 @@ function AddSpellsModal(props: AddSpellsModalProps) {
         {/* Modal header */}
         <div
           className="flex items-center gap-4 px-4 py-3 border-b border-gold shrink-0"
-          style={{ background: "#efe6cf" }}
+          style={{ background: "var(--card)" }}
         >
           <div className="flex flex-col gap-1 min-w-0">
             <div className="flex items-baseline gap-3 flex-wrap">
@@ -1060,10 +1060,10 @@ function AddSpellsModal(props: AddSpellsModalProps) {
               </span>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[9px] font-black uppercase tracking-[0.14em] px-1.5 py-0.5 border border-gold text-gold bg-gold/10">
+              <span className="text-[9px] font-black uppercase tracking-[0.14em] px-1.5 py-0.5 border border-gold text-gold bg-gold/15">
                 {prepTypeLabel}
               </span>
-              <span className="font-mono text-[10px] text-ink/60">
+              <span className="font-mono text-[10px] text-ink/65">
                 DC {spellDC} · Atk {spellAtk}
               </span>
             </div>
@@ -1081,7 +1081,7 @@ function AddSpellsModal(props: AddSpellsModalProps) {
                 </div>
                 <div className="font-mono text-base font-black text-gold leading-none">
                   {cantripsKnownCount}
-                  <span className="text-ink/40 text-xs"> / {cantripsCap}</span>
+                  <span className="text-ink/45 text-xs"> / {cantripsCap}</span>
                 </div>
               </div>
             )}
@@ -1092,7 +1092,7 @@ function AddSpellsModal(props: AddSpellsModalProps) {
               <div className="font-mono text-base font-black text-gold leading-none">
                 {spellsKnownCount}
                 {spellsCap !== null && (
-                  <span className="text-ink/40 text-xs"> / {spellsCap}</span>
+                  <span className="text-ink/45 text-xs"> / {spellsCap}</span>
                 )}
               </div>
             </div>
@@ -1109,7 +1109,7 @@ function AddSpellsModal(props: AddSpellsModalProps) {
             <button
               type="button"
               onClick={onClose}
-              className="text-[10px] font-black uppercase tracking-widest px-3 py-1.5 border border-gold bg-gold text-white hover:bg-gold/90"
+              className="text-[10px] font-black uppercase tracking-widest px-3 py-1.5 border border-gold bg-gold text-[var(--primary-foreground)] hover:bg-gold/95"
             >
               Done
             </button>
@@ -1125,11 +1125,11 @@ function AddSpellsModal(props: AddSpellsModalProps) {
           <div className="flex flex-col border-r border-gold/15 bg-gold/[0.03] overflow-hidden">
             <div className="px-3 py-2 border-b border-gold/15 flex items-center gap-2 shrink-0">
               <Star className="w-3 h-3 text-gold" />
-              <span className="text-[9px] font-black uppercase tracking-[0.18em] text-ink/60">
+              <span className="text-[9px] font-black uppercase tracking-[0.18em] text-ink/65">
                 Favourites
               </span>
               <span className="flex-1" />
-              <span className="font-mono text-[9px] font-bold text-ink/40">
+              <span className="font-mono text-[9px] font-bold text-ink/45">
                 {favList.length}
               </span>
             </div>
@@ -1150,23 +1150,23 @@ function AddSpellsModal(props: AddSpellsModalProps) {
           {/* MIDDLE — class spell pool */}
           <div className="flex flex-col border-r border-gold/15 overflow-hidden">
             <div className="px-3 py-2 border-b border-gold/15 flex items-center gap-2 shrink-0">
-              <span className="text-[9px] font-black uppercase tracking-[0.18em] text-ink/60">
+              <span className="text-[9px] font-black uppercase tracking-[0.18em] text-ink/65">
                 {className} Spell List
               </span>
               <span className="flex-1" />
-              <span className="font-mono text-[9px] font-bold text-ink/40">
+              <span className="font-mono text-[9px] font-bold text-ink/45">
                 {filteredPool.length}
                 {filteredPool.length !== pool.length && (
                   <span className="text-ink/25"> / {pool.length}</span>
                 )}
               </span>
             </div>
-            <div className="px-3 py-2 border-b border-gold/10 flex items-center gap-2 shrink-0">
+            <div className="px-3 py-2 border-b border-gold/15 flex items-center gap-2 shrink-0">
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search spell name…"
-                className="flex-1 min-w-0 text-[12px] px-2 py-1 border border-gold/25 bg-gold/[0.04] outline-none focus:border-gold/60 text-ink rounded-sm"
+                className="flex-1 min-w-0 text-[12px] px-2 py-1 border border-gold/25 bg-gold/[0.04] outline-none focus:border-gold/65 text-ink rounded-sm"
               />
               <button
                 type="button"
@@ -1175,12 +1175,12 @@ function AddSpellsModal(props: AddSpellsModalProps) {
                   "flex items-center gap-1.5 px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] border transition-colors",
                   filterOpen || activeFilters > 0
                     ? "border-gold bg-gold/15 text-gold"
-                    : "border-gold/25 text-ink/55 hover:border-gold/50",
+                    : "border-gold/25 text-ink/55 hover:border-gold/55",
                 )}
               >
                 Filters
                 {activeFilters > 0 && (
-                  <span className="font-mono text-[8px] px-1 py-px bg-gold text-white rounded-sm">
+                  <span className="font-mono text-[8px] px-1 py-px bg-gold text-[var(--primary-foreground)] rounded-sm">
                     {activeFilters}
                   </span>
                 )}
@@ -1196,7 +1196,7 @@ function AddSpellsModal(props: AddSpellsModalProps) {
               )}
             </div>
             {filterOpen && (
-              <div className="px-3 py-3 border-b border-gold/10 bg-gold/[0.03] max-h-52 overflow-y-auto custom-scrollbar shrink-0 space-y-3">
+              <div className="px-3 py-3 border-b border-gold/15 bg-gold/[0.03] max-h-52 overflow-y-auto custom-scrollbar shrink-0 space-y-3">
                 <FilterChipSection
                   title="Level"
                   options={[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((l) => ({
@@ -1258,12 +1258,12 @@ function AddSpellsModal(props: AddSpellsModalProps) {
               ) : (
                 groupedPool.map(([lv, spells]) => (
                   <div key={lv}>
-                    <div className="px-3 py-1.5 border-b border-gold/10 bg-gold/[0.04] flex items-center gap-2">
-                      <span className="text-[9px] font-black uppercase tracking-[0.16em] text-ink/50">
+                    <div className="px-3 py-1.5 border-b border-gold/15 bg-gold/[0.04] flex items-center gap-2">
+                      <span className="text-[9px] font-black uppercase tracking-[0.16em] text-ink/55">
                         {lv === 0 ? "Cantrips" : `Level ${lv}`}
                       </span>
                       <span className="flex-1" />
-                      <span className="font-mono text-[8px] font-bold text-ink/30">
+                      <span className="font-mono text-[8px] font-bold text-ink/35">
                         {spells.length}
                       </span>
                     </div>
@@ -1315,15 +1315,15 @@ function FilterChipSection<T extends string | number>(props: {
           <button
             type="button"
             onClick={onAll}
-            className="text-[8px] font-black uppercase tracking-widest text-ink/45 hover:text-ink/70"
+            className="text-[8px] font-black uppercase tracking-widest text-ink/45 hover:text-ink/75"
           >
             Include All
           </button>
-          <span className="text-gold/30">|</span>
+          <span className="text-gold/35">|</span>
           <button
             type="button"
             onClick={onClear}
-            className="text-[8px] font-black uppercase tracking-widest text-ink/45 hover:text-ink/70"
+            className="text-[8px] font-black uppercase tracking-widest text-ink/45 hover:text-ink/75"
           >
             Clear
           </button>
@@ -1340,8 +1340,8 @@ function FilterChipSection<T extends string | number>(props: {
               className={cn(
                 "px-2 py-1 text-[9px] font-bold border transition-colors rounded-sm",
                 active
-                  ? "border-gold bg-gold text-white"
-                  : "border-gold/25 text-ink/60 hover:border-gold/50",
+                  ? "border-gold bg-gold text-[var(--primary-foreground)]"
+                  : "border-gold/25 text-ink/65 hover:border-gold/55",
               )}
             >
               {l}
@@ -1419,7 +1419,7 @@ function PointBuyModal({
 
   return (
     <div
-      // bg-black/* is theme-stable. The previous bg-ink/80 inverted in
+      // bg-black/* is theme-stable. The previous bg-ink/85 inverted in
       // dark mode (where --ink is light) — that's the "bright white"
       // overlay users were hitting.
       className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4"
@@ -1430,7 +1430,7 @@ function PointBuyModal({
         className="w-full max-w-2xl bg-background border-4 border-gold shadow-2xl rounded-lg overflow-hidden"
       >
         {/* Header */}
-        <div className="px-6 py-4 border-b-2 border-gold/20 flex items-center gap-4">
+        <div className="px-6 py-4 border-b-2 border-gold/25 flex items-center gap-4">
           <div className="flex-1 min-w-0">
             <h2 className="font-serif text-2xl font-black text-ink uppercase tracking-tight">
               Point Buy
@@ -1473,13 +1473,13 @@ function PointBuyModal({
             return (
               <div
                 key={id}
-                className="flex items-center gap-4 p-3 border border-gold/20 bg-card/50 rounded-md"
+                className="flex items-center gap-4 p-3 border border-gold/25 bg-card/50 rounded-md"
               >
                 <div className="w-12 shrink-0">
                   <div className="text-[9px] font-black uppercase tracking-widest text-ink/45">
                     {id}
                   </div>
-                  <div className="text-[10px] font-bold text-ink/60 truncate">
+                  <div className="text-[10px] font-bold text-ink/65 truncate">
                     {attrName(id)}
                   </div>
                 </div>
@@ -1493,8 +1493,8 @@ function PointBuyModal({
                     className={cn(
                       "w-8 h-8 rounded-md border flex items-center justify-center transition-colors",
                       atMin
-                        ? "border-gold/10 text-ink/15 cursor-not-allowed"
-                        : "border-gold/30 text-gold hover:bg-gold/10",
+                        ? "border-gold/15 text-ink/15 cursor-not-allowed"
+                        : "border-gold/35 text-gold hover:bg-gold/15",
                     )}
                   >
                     <Minus className="w-4 h-4" />
@@ -1522,8 +1522,8 @@ function PointBuyModal({
                     className={cn(
                       "w-8 h-8 rounded-md border flex items-center justify-center transition-colors",
                       blockedNext
-                        ? "border-gold/10 text-ink/15 cursor-not-allowed"
-                        : "border-gold/30 text-gold hover:bg-gold/10",
+                        ? "border-gold/15 text-ink/15 cursor-not-allowed"
+                        : "border-gold/35 text-gold hover:bg-gold/15",
                     )}
                   >
                     <Plus className="w-4 h-4" />
@@ -1572,7 +1572,7 @@ function PointBuyModal({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t-2 border-gold/20 bg-card/30 flex items-center justify-between gap-3 flex-wrap">
+        <div className="px-6 py-4 border-t-2 border-gold/25 bg-card/30 flex items-center justify-between gap-3 flex-wrap">
           <button
             type="button"
             onClick={reset}
@@ -1585,7 +1585,7 @@ function PointBuyModal({
               type="button"
               variant="outline"
               onClick={onClose}
-              className="border-gold/30 text-ink/70 hover:bg-gold/5 uppercase tracking-widest text-xs font-black"
+              className="border-gold/35 text-ink/75 hover:bg-gold/5 uppercase tracking-widest text-xs font-black"
             >
               Cancel
             </Button>
@@ -1597,7 +1597,7 @@ function PointBuyModal({
                 "uppercase tracking-widest text-xs font-black",
                 overBudget
                   ? "bg-blood/30 text-blood/60 cursor-not-allowed"
-                  : "bg-gold text-white hover:bg-gold/90",
+                  : "bg-gold text-[var(--primary-foreground)] hover:bg-gold/95",
               )}
             >
               {overBudget ? "Over Budget" : remaining === 0 ? "Apply (All Spent)" : `Apply (${remaining} unspent)`}
@@ -1793,28 +1793,28 @@ const StatBlock = ({
 }) => (
   <div className="flex flex-col items-center group relative pb-4">
     <div className="mb-1">
-      <span className="text-xs uppercase font-black text-ink/60 tracking-widest leading-none">
+      <span className="text-xs uppercase font-black text-ink/65 tracking-widest leading-none">
         {label}
       </span>
     </div>
-    <div className="w-full h-20 bg-card border-2 border-gold/20 rounded-lg flex flex-col items-center justify-center p-2 shadow-sm transition-all group-hover:border-gold group-hover:shadow-[0_0_15px_rgba(197,160,89,0.2)]">
+    <div className="w-full h-20 bg-card border-2 border-gold/25 rounded-lg flex flex-col items-center justify-center p-2 shadow-sm transition-all group-hover:border-gold group-hover:shadow-[0_0_15px_rgba(197,160,89,0.2)]">
       <span className="text-3xl font-black text-ink leading-none">{value}</span>
     </div>
-    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-gold px-3 py-1 rounded-sm z-10 border border-gold/40 shadow-md">
-      <span className="text-xs font-black text-white leading-none">
+    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-gold px-3 py-1 rounded-sm z-10 border border-gold/45 shadow-md">
+      <span className="text-xs font-black text-[var(--primary-foreground)] leading-none">
         {score}
       </span>
     </div>
     <div className="absolute -right-3 top-1/2 -translate-y-1/2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20">
       <button
         onClick={onPlus}
-        className="p-1 px-1.5 bg-ink text-gold rounded border border-gold/30 shadow-lg hover:bg-gold hover:text-white transition-all active:scale-90"
+        className="p-1 px-1.5 bg-ink text-gold rounded border border-gold/35 shadow-lg hover:bg-gold hover:text-[var(--primary-foreground)] transition-all active:scale-90"
       >
         <Plus className="w-3 h-3" />
       </button>
       <button
         onClick={onMinus}
-        className="p-1 px-1.5 bg-ink text-gold rounded border border-gold/30 shadow-lg hover:bg-gold hover:text-white transition-all active:scale-90"
+        className="p-1 px-1.5 bg-ink text-gold rounded border border-gold/35 shadow-lg hover:bg-gold hover:text-[var(--primary-foreground)] transition-all active:scale-90"
       >
         <Minus className="w-3 h-3" />
       </button>
@@ -5528,14 +5528,14 @@ export default function CharacterBuilder({
                   <p className="text-sm font-black uppercase tracking-widest text-blood">
                     Legacy Advancement Selections Found
                   </p>
-                  <p className="text-sm font-serif text-ink/80">
+                  <p className="text-sm font-serif text-ink/85">
                     This character still has older advancement-choice keys
                     that the current builder no longer reads. Go back to the
                     class progression step and reselect the affected class or
                     subclass choices before exporting or trusting the current
                     progression view.
                   </p>
-                  <p className="text-xs font-mono text-ink/60 break-all">
+                  <p className="text-xs font-mono text-ink/65 break-all">
                     {legacyAdvancementSelectionKeys.join(", ")}
                   </p>
                 </div>
@@ -5564,7 +5564,7 @@ export default function CharacterBuilder({
             // over and the WHOLE spread scrolls inside it. On <xl the
             // columns stack and we drop the viewport-fit (xl:h-… only)
             // so the natural stacked height drives page-scroll instead.
-            <div className="bg-gradient-to-b from-gold/[0.04] via-card/30 to-gold/[0.02] rounded-2xl border-2 border-gold/25 ring-1 ring-inset ring-gold/10 relative shadow-2xl xl:h-[calc(100vh-7.5rem)] xl:min-h-[600px] grid grid-cols-1 xl:grid-cols-[minmax(540px,580px)_minmax(0,1fr)] gap-0 xl:divide-x xl:divide-gold/25 overflow-hidden">
+            <div className="bg-gradient-to-b from-gold/[0.04] via-card/30 to-gold/[0.02] rounded-2xl border-2 border-gold/25 ring-1 ring-inset ring-gold/15 relative shadow-2xl xl:h-[calc(100vh-7.5rem)] xl:min-h-[600px] grid grid-cols-1 xl:grid-cols-[minmax(540px,580px)_minmax(0,1fr)] gap-0 xl:divide-x xl:divide-gold/25 overflow-hidden">
               {/* ── Verso (left page) — independent vertical scroll
                   on xl+ so the recto stays visible while the player
                   walks down the character-stats column. Below xl the
@@ -5581,7 +5581,7 @@ export default function CharacterBuilder({
                   identity row reads. Subtitle line ("Medium Humanoid
                   · Chaotic Good") rides below the chips when the
                   info block has size/alignment populated. */}
-              <div className="order-1 border-b-2 border-gold/10 pb-5 md:pb-6">
+              <div className="order-1 border-b-2 border-gold/15 pb-5 md:pb-6">
                 <div className="flex items-center gap-3">
                   <Input
                     value={character.name}
@@ -5589,7 +5589,7 @@ export default function CharacterBuilder({
                       setCharacter({ ...character, name: e.target.value })
                     }
                     placeholder="UNNAMED ADVENTURER"
-                    className="flex-1 text-2xl sm:text-3xl md:text-4xl font-serif font-black text-ink bg-transparent border-none p-0 focus-visible:ring-0 placeholder:text-ink/10 h-auto tracking-tight"
+                    className="flex-1 text-2xl sm:text-3xl md:text-4xl font-serif font-black text-ink bg-transparent border-none p-0 focus-visible:ring-0 placeholder:text-ink/15 h-auto tracking-tight"
                   />
                   {/* ── Inspired + Exhaustion pills ─────────────────
                       Compact icon-pills right-aligned next to the
@@ -5615,15 +5615,15 @@ export default function CharacterBuilder({
                       className={cn(
                         "h-7 px-2 inline-flex items-center gap-1.5 rounded-sm border transition-all",
                         character.hasInspiration
-                          ? "bg-gold border-gold text-white shadow-[0_0_8px_rgba(197,160,89,0.35)]"
-                          : "bg-card border-gold/25 text-ink/55 hover:border-gold/50",
+                          ? "bg-gold border-gold text-[var(--primary-foreground)] shadow-[0_0_8px_rgba(197,160,89,0.35)]"
+                          : "bg-card border-gold/25 text-ink/55 hover:border-gold/55",
                       )}
                     >
                       <Star
                         className={cn(
                           "w-3.5 h-3.5 transition-all",
                           character.hasInspiration
-                            ? "text-white scale-110 rotate-[72deg]"
+                            ? "text-[var(--primary-foreground)] scale-110 rotate-[72deg]"
                             : "text-gold/55",
                         )}
                         fill={character.hasInspiration ? "currentColor" : "none"}
@@ -5657,7 +5657,7 @@ export default function CharacterBuilder({
                             ? "bg-blood/[0.08] border-blood/55 text-blood"
                             : (character.exhaustion ?? 0) > 0
                               ? "bg-blood/[0.04] border-blood/30 text-blood"
-                              : "bg-card border-gold/25 text-ink/40 hover:border-gold/50",
+                              : "bg-card border-gold/25 text-ink/45 hover:border-gold/55",
                       )}
                     >
                       <span className="text-sm font-black leading-none">
@@ -5675,7 +5675,7 @@ export default function CharacterBuilder({
                   </div>
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                  <span className="bg-gold text-white px-1.5 py-0.5 rounded-sm text-[10px] font-black uppercase tracking-widest">
+                  <span className="bg-gold text-[var(--primary-foreground)] px-1.5 py-0.5 rounded-sm text-[10px] font-black uppercase tracking-widest">
                     LVL {character.level}
                   </span>
                   {/* Per-class chips. progressionClassGroups carries
@@ -5700,7 +5700,7 @@ export default function CharacterBuilder({
                       );
                     })
                   ) : (
-                    <span className="px-1.5 py-0.5 border border-gold/25 rounded-sm text-[10px] font-black uppercase tracking-widest text-ink/40">
+                    <span className="px-1.5 py-0.5 border border-gold/25 rounded-sm text-[10px] font-black uppercase tracking-widest text-ink/45">
                       No Class
                     </span>
                   )}
@@ -5740,7 +5740,7 @@ export default function CharacterBuilder({
                   Point Buy link (text-only, opens the modal — used
                   to be an outline Button which read as "another
                   step" instead of "edit this section"). */}
-              <div className="flex items-baseline justify-between gap-3 pb-1.5 border-b border-gold/20">
+              <div className="flex items-baseline justify-between gap-3 pb-1.5 border-b border-gold/25">
                 <div className="flex items-baseline gap-3">
                   <span className="text-[11px] font-black uppercase tracking-[0.18em] text-gold leading-none">
                     Abilities &amp; Saves
@@ -5759,7 +5759,7 @@ export default function CharacterBuilder({
                     const isPB = String(character?.stats?.method || "") === "point-buy";
                     if (!inRange) {
                       return (
-                        <span className="text-[10px] font-bold text-ink/40 font-mono">
+                        <span className="text-[10px] font-bold text-ink/45 font-mono">
                           Custom range
                         </span>
                       );
@@ -5861,7 +5861,7 @@ export default function CharacterBuilder({
                   return (
                     <div
                       key={attr.id || iden}
-                      className="group relative flex flex-col items-center gap-1 px-1 pt-1.5 pb-1.5 bg-card border border-gold/20"
+                      className="group relative flex flex-col items-center gap-1 px-1 pt-1.5 pb-1.5 bg-card border border-gold/25"
                     >
                       {/* `.ab-label` — STR / DEX / CON / INT / WIS / CHA */}
                       <span className="text-[10px] font-black uppercase tracking-[0.1em] text-ink leading-none">
@@ -5896,8 +5896,8 @@ export default function CharacterBuilder({
                         className={cn(
                           "w-full flex items-center justify-center gap-1 px-1 py-0.5 border transition-colors cursor-pointer",
                           saveActive
-                            ? "bg-gold/[0.08] border-gold/30"
-                            : "bg-background/70 border-gold/12 hover:border-gold/25",
+                            ? "bg-gold/[0.08] border-gold/35"
+                            : "bg-background/70 border-gold/15 hover:border-gold/25",
                         )}
                       >
                         {/* prof dot — matches `.prof-dot` 4-state shape */}
@@ -5910,7 +5910,7 @@ export default function CharacterBuilder({
                                 ? "border-gold bg-gold"
                                 : isHalf
                                   ? "border-gold bg-gold"
-                                  : "border-gold/30 group-hover:border-gold/60",
+                                  : "border-gold/35 group-hover:border-gold/65",
                           )}
                         >
                           {isHalf && (
@@ -5936,14 +5936,14 @@ export default function CharacterBuilder({
                       <div className="absolute -right-1.5 top-4 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20">
                         <button
                           onClick={() => handleStatChange(iden, 1)}
-                          className="p-0.5 bg-ink text-gold rounded border border-gold/30 shadow-lg hover:bg-gold hover:text-white transition-all active:scale-90"
+                          className="p-0.5 bg-ink text-gold rounded border border-gold/35 shadow-lg hover:bg-gold hover:text-[var(--primary-foreground)] transition-all active:scale-90"
                           aria-label={`Increase ${iden}`}
                         >
                           <Plus className="w-2.5 h-2.5" />
                         </button>
                         <button
                           onClick={() => handleStatChange(iden, -1)}
-                          className="p-0.5 bg-ink text-gold rounded border border-gold/30 shadow-lg hover:bg-gold hover:text-white transition-all active:scale-90"
+                          className="p-0.5 bg-ink text-gold rounded border border-gold/35 shadow-lg hover:bg-gold hover:text-[var(--primary-foreground)] transition-all active:scale-90"
                           aria-label={`Decrease ${iden}`}
                         >
                           <Minus className="w-2.5 h-2.5" />
@@ -6016,7 +6016,7 @@ export default function CharacterBuilder({
                     // 140px portrait column + fluid right column, so
                     // we drop p-5 to p-4 and gap-6 to gap-4 to match
                     // the compactness of the reference.
-                    <div className="border border-gold/20 p-4 flex flex-col xl:flex-row gap-4 rounded-lg bg-card/50 shadow-sm relative group transition-all hover:bg-card/80 hover:shadow-md">
+                    <div className="border border-gold/25 p-4 flex flex-col xl:flex-row gap-4 rounded-lg bg-card/50 shadow-sm relative group transition-all hover:bg-card/80 hover:shadow-md">
                       {/* RINGED PORTRAIT */}
                       <div
                         className="relative shrink-0 mx-auto xl:mx-0 group/portrait"
@@ -6076,7 +6076,7 @@ export default function CharacterBuilder({
                             center of the rings. Image when present,
                             else a monogram of the character's first
                             letter (matches the handoff's V/D monograms). */}
-                        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 rounded-full overflow-hidden border-2 border-gold/30 bg-card flex items-center justify-center shadow-inner">
+                        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 rounded-full overflow-hidden border-2 border-gold/35 bg-card flex items-center justify-center shadow-inner">
                           {character.imageUrl ? (
                             <img
                               src={character.imageUrl}
@@ -6108,7 +6108,7 @@ export default function CharacterBuilder({
                         {/* AC shield — anchored to the bottom-right of
                             the ring frame, like a wax seal. */}
                         <div
-                          className="absolute -bottom-1 -right-1 w-11 h-12 bg-gold text-white border border-white/20 flex flex-col items-center justify-center shadow-lg pt-0.5"
+                          className="absolute -bottom-1 -right-1 w-11 h-12 bg-gold text-[var(--primary-foreground)] border border-[var(--primary-foreground)]/20 flex flex-col items-center justify-center shadow-lg pt-0.5"
                           style={{
                             clipPath: "polygon(0% 0%, 100% 0%, 100% 80%, 50% 100%, 0% 80%)",
                           }}
@@ -6116,7 +6116,7 @@ export default function CharacterBuilder({
                           <span className="text-lg font-black leading-none">
                             {character.ac}
                           </span>
-                          <span className="text-[7px] uppercase font-black text-white/80 tracking-tighter">
+                          <span className="text-[7px] uppercase font-black text-[var(--primary-foreground)] tracking-tighter">
                             AC
                           </span>
                         </div>
@@ -6137,7 +6137,7 @@ export default function CharacterBuilder({
                                   <span className="font-mono text-2xl sm:text-3xl font-black text-ink leading-none">
                                     {hpCurrent}
                                   </span>
-                                  <span className="text-xs text-ink/30 font-bold">
+                                  <span className="text-xs text-ink/35 font-bold">
                                     / {hpMax}
                                   </span>
                                 </div>
@@ -6171,7 +6171,7 @@ export default function CharacterBuilder({
                                     })
                                   }
                                   aria-label="Increase HP"
-                                  className="w-6 h-6 bg-card text-ink border border-gold/30 hover:bg-emerald-500 hover:text-white rounded flex items-center justify-center shadow-sm transition-colors"
+                                  className="w-6 h-6 bg-card text-ink border border-gold/35 hover:bg-emerald-500 hover:text-white rounded flex items-center justify-center shadow-sm transition-colors"
                                 >
                                   <Plus className="w-3 h-3" />
                                 </button>
@@ -6187,7 +6187,7 @@ export default function CharacterBuilder({
                                     })
                                   }
                                   aria-label="Decrease HP"
-                                  className="w-6 h-6 bg-card text-ink border border-gold/30 hover:bg-rose-500 hover:text-white rounded flex items-center justify-center shadow-sm transition-colors"
+                                  className="w-6 h-6 bg-card text-ink border border-gold/35 hover:bg-rose-500 hover:text-white rounded flex items-center justify-center shadow-sm transition-colors"
                                 >
                                   <Minus className="w-3 h-3" />
                                 </button>
@@ -6273,7 +6273,7 @@ export default function CharacterBuilder({
                                         {/* Class header band — gold text on
                                             5% gold background, 1px border-
                                             bottom. Matches `.vv-hd-card-class`. */}
-                                        <div className="text-[9px] font-black uppercase tracking-[0.18em] text-gold text-center py-1 px-2 bg-gold/[0.05] border-b border-gold/20">
+                                        <div className="text-[9px] font-black uppercase tracking-[0.18em] text-gold text-center py-1 px-2 bg-gold/[0.05] border-b border-gold/25">
                                           {className}
                                         </div>
                                         <div className="flex items-baseline justify-center gap-2.5 px-3 py-2">
@@ -6296,7 +6296,7 @@ export default function CharacterBuilder({
                                   })
                                 ) : (
                                   <div className="flex-1 min-w-[110px] bg-card border border-gold/25 rounded-md overflow-hidden flex flex-col">
-                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-gold text-center py-1 px-2 bg-gold/[0.05] border-b border-gold/20">
+                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-gold text-center py-1 px-2 bg-gold/[0.05] border-b border-gold/25">
                                       Class
                                     </div>
                                     <div className="flex items-baseline justify-center gap-2.5 px-3 py-2">
@@ -6344,7 +6344,7 @@ export default function CharacterBuilder({
                               value: (
                                 <>
                                   {character.speed}
-                                  <span className="text-xs text-ink/40 font-bold"> ft</span>
+                                  <span className="text-xs text-ink/45 font-bold"> ft</span>
                                 </>
                               ),
                             },
@@ -6355,7 +6355,7 @@ export default function CharacterBuilder({
                           ].map((stat) => (
                             <div
                               key={stat.label}
-                              className="p-2 sm:p-3 border border-gold/20 bg-card rounded flex flex-col items-center justify-center text-center shadow-sm transition-all hover:-translate-y-0.5"
+                              className="p-2 sm:p-3 border border-gold/25 bg-card rounded flex flex-col items-center justify-center text-center shadow-sm transition-all hover:-translate-y-0.5"
                             >
                               <span className="font-mono text-xl sm:text-2xl font-black text-ink leading-none">
                                 {stat.value}
@@ -6378,8 +6378,8 @@ export default function CharacterBuilder({
                   cards carry `order-4` so they sit at the bottom of
                   the verso column after Identity / VitalHub /
                   Abilities. */}
-              <div className="order-4 p-4 border border-gold/20 bg-card/50 rounded-md">
-                    <div className="flex items-baseline justify-between mb-3 pb-2 border-b border-gold/10">
+              <div className="order-4 p-4 border border-gold/25 bg-card/50 rounded-md">
+                    <div className="flex items-baseline justify-between mb-3 pb-2 border-b border-gold/15">
                       <span className="label-text flex items-center gap-2">
                         <Package className="w-3 h-3 text-gold" />
                         Skills
@@ -6457,7 +6457,7 @@ export default function CharacterBuilder({
                                 isExpert ? "border-gold bg-card" : "",
                                 isProficient && !isExpert ? "border-gold bg-gold" : "",
                                 isHalf ? "border-gold bg-gold" : "",
-                                !active ? "border-gold/30 group-hover/skill:border-gold/60" : "",
+                                !active ? "border-gold/35 group-hover/skill:border-gold/65" : "",
                               )}
                             >
                               {isExpert && <span className="block w-1 h-1 rounded-full bg-gold m-auto mt-[1px]" />}
@@ -6485,7 +6485,7 @@ export default function CharacterBuilder({
                                   },
                                 });
                               }}
-                              className="bg-transparent text-[9px] font-black text-gold/60 uppercase tracking-tight hover:text-gold transition-colors focus:outline-none cursor-pointer appearance-none w-7"
+                              className="bg-transparent text-[9px] font-black text-gold/65 uppercase tracking-tight hover:text-gold transition-colors focus:outline-none cursor-pointer appearance-none w-7"
                               title="Override ability for this skill"
                             >
                               {["STR", "DEX", "CON", "INT", "WIS", "CHA"].map((a) => (
@@ -6519,7 +6519,7 @@ export default function CharacterBuilder({
                       character with no proficiencies authored yet.
                       `order-4` keeps these glued under Skills. */}
                   <div className="order-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="p-3 border border-gold/20 bg-card/50 rounded-md space-y-2">
+                    <div className="p-3 border border-gold/25 bg-card/50 rounded-md space-y-2">
                       <div className="flex items-baseline justify-between">
                         <span className="label-text flex items-center gap-2">
                           <Hammer className="w-3 h-3 text-gold" />
@@ -6529,23 +6529,23 @@ export default function CharacterBuilder({
                           {character.toolProficiencies?.length || 0}
                         </span>
                       </div>
-                      <ul className="text-[11px] font-bold text-ink/70 uppercase tracking-tight space-y-0.5">
+                      <ul className="text-[11px] font-bold text-ink/75 uppercase tracking-tight space-y-0.5">
                         {character.toolProficiencies?.length ? (
                           formatTraitValues("tools", character.toolProficiencies).map((item: string) => (
                             <li key={item} className="flex items-center gap-2">
-                              <span className="w-1 h-1 bg-gold/50 rounded-full shrink-0" />
+                              <span className="w-1 h-1 bg-gold/55 rounded-full shrink-0" />
                               <span className="truncate">{item}</span>
                             </li>
                           ))
                         ) : (
-                          <li className="text-[10px] italic text-ink/30 uppercase font-black">
+                          <li className="text-[10px] italic text-ink/35 uppercase font-black">
                             No specialized tools
                           </li>
                         )}
                       </ul>
                     </div>
 
-                    <div className="p-3 border border-gold/20 bg-card/50 rounded-md space-y-2">
+                    <div className="p-3 border border-gold/25 bg-card/50 rounded-md space-y-2">
                       <div className="flex items-baseline justify-between">
                         <span className="label-text flex items-center gap-2">
                           <Scroll className="w-3 h-3 text-gold" />
@@ -6555,16 +6555,16 @@ export default function CharacterBuilder({
                           {character.languages?.length || 0}
                         </span>
                       </div>
-                      <ul className="text-[11px] font-bold text-ink/70 uppercase tracking-tight space-y-0.5">
+                      <ul className="text-[11px] font-bold text-ink/75 uppercase tracking-tight space-y-0.5">
                         {character.languages?.length ? (
                           formatTraitValues("languages", character.languages).map((l: string) => (
                             <li key={l} className="flex items-center gap-2">
-                              <span className="w-1 h-1 bg-gold/50 rounded-full shrink-0" />
+                              <span className="w-1 h-1 bg-gold/55 rounded-full shrink-0" />
                               <span className="truncate">{l}</span>
                             </li>
                           ))
                         ) : (
-                          <li className="text-[10px] italic text-ink/30 uppercase font-black">
+                          <li className="text-[10px] italic text-ink/35 uppercase font-black">
                             Common
                           </li>
                         )}
@@ -6592,7 +6592,7 @@ export default function CharacterBuilder({
                       { id: "bio",       label: "Bio",       count: null },
                     ];
                     return (
-                      <div className="flex flex-wrap items-center gap-2 border-b border-gold/10 pb-3">
+                      <div className="flex flex-wrap items-center gap-2 border-b border-gold/15 pb-3">
                         {tabs.map((t) => {
                           const active = sheetSection === t.id;
                           return (
@@ -6604,7 +6604,7 @@ export default function CharacterBuilder({
                                 "px-3 py-2 border text-xs font-black uppercase tracking-widest transition-colors flex items-center gap-2",
                                 active
                                   ? "bg-gold/15 border-gold text-gold"
-                                  : "bg-card/30 border-gold/20 text-ink/45 hover:border-gold/50 hover:text-gold",
+                                  : "bg-card/30 border-gold/25 text-ink/45 hover:border-gold/55 hover:text-gold",
                               )}
                             >
                               <span>{t.label}</span>
@@ -6612,7 +6612,7 @@ export default function CharacterBuilder({
                                 <span
                                   className={cn(
                                     "font-mono text-[9px] px-1.5 py-0.5 rounded-sm leading-none",
-                                    active ? "bg-gold text-white" : "bg-gold/10 text-gold/70",
+                                    active ? "bg-gold text-[var(--primary-foreground)]" : "bg-gold/15 text-gold/75",
                                   )}
                                 >
                                   {t.count}
@@ -6634,7 +6634,7 @@ export default function CharacterBuilder({
                   <div className="grid md:grid-cols-2 gap-6">
                     {/* SENSES & DEFENSES */}
                     <div className="space-y-6">
-                      <div className="p-4 border border-gold/20 bg-card/50 space-y-3 shadow-sm">
+                      <div className="p-4 border border-gold/25 bg-card/50 space-y-3 shadow-sm">
                         <div className="section-header mb-2">
                           <span className="label-text flex items-center gap-2">
                             <Zap className="w-3 h-3" />
@@ -6660,10 +6660,10 @@ export default function CharacterBuilder({
                               key={sense.label}
                               className="flex flex-col items-center gap-1"
                             >
-                              <div className="w-full aspect-square bg-card border border-gold/10 text-ink flex items-center justify-center font-black rounded-sm shadow-sm text-lg">
+                              <div className="w-full aspect-square bg-card border border-gold/15 text-ink flex items-center justify-center font-black rounded-sm shadow-sm text-lg">
                                 {sense.value}
                               </div>
-                              <span className="text-[9px] font-black text-gold/60 tracking-tight text-center leading-[1.1]">
+                              <span className="text-[9px] font-black text-gold/65 tracking-tight text-center leading-[1.1]">
                                 {sense.label}
                               </span>
                             </div>
@@ -6675,8 +6675,8 @@ export default function CharacterBuilder({
                           Resistances stays here as a Character-Info
                           panel since damage traits are conceptually
                           different from communication languages. */}
-                      <div className="p-4 border border-gold/20 bg-card/50 space-y-3">
-                        <span className="label-text text-ink/30 border-l-2 border-rose-500 pl-2">
+                      <div className="p-4 border border-gold/25 bg-card/50 space-y-3">
+                        <span className="label-text text-ink/35 border-l-2 border-rose-500 pl-2">
                           Resistances
                         </span>
                         <div className="flex flex-wrap gap-1">
@@ -6690,7 +6690,7 @@ export default function CharacterBuilder({
                               </span>
                             ))
                           ) : (
-                            <span className="text-[10px] font-bold text-ink/10 italic uppercase">
+                            <span className="text-[10px] font-bold text-ink/15 italic uppercase">
                               None
                             </span>
                           )}
@@ -6737,9 +6737,9 @@ export default function CharacterBuilder({
                       ].map((item, idx) => (
                         <div
                           key={idx}
-                          className="p-3 border border-gold/20 bg-card/60 rounded-md relative group flex items-center gap-4 transition-all hover:bg-card/80"
+                          className="p-3 border border-gold/25 bg-card/60 rounded-md relative group flex items-center gap-4 transition-all hover:bg-card/80"
                         >
-                          <div className="w-12 h-12 flex-shrink-0 bg-gold/10 rounded flex items-center justify-center border border-gold/20 text-gold shadow-sm group-hover:scale-105 transition-transform">
+                          <div className="w-12 h-12 flex-shrink-0 bg-gold/15 rounded flex items-center justify-center border border-gold/25 text-gold shadow-sm group-hover:scale-105 transition-transform">
                             {item.icon}
                           </div>
                           <div className="flex-1 min-w-0">
@@ -6747,7 +6747,7 @@ export default function CharacterBuilder({
                               className={`text-lg font-serif font-black uppercase tracking-tight leading-none line-clamp-1 transition-colors ${
                                 item.title.startsWith("Select") ||
                                 item.title === "Creature Type"
-                                  ? "text-ink/20 italic"
+                                  ? "text-ink/25 italic"
                                   : "text-ink"
                               }`}
                             >
@@ -6757,8 +6757,8 @@ export default function CharacterBuilder({
                               <p
                                 className={`font-bold uppercase tracking-widest mt-1.5 line-clamp-2 ${
                                   item.sub === "Creature Size"
-                                    ? "text-[9px] text-ink/20 italic"
-                                    : "text-xs text-ink/40"
+                                    ? "text-[9px] text-ink/25 italic"
+                                    : "text-xs text-ink/45"
                                 }`}
                               >
                                 {item.sub}
@@ -6856,7 +6856,7 @@ export default function CharacterBuilder({
                               Feature Uses
                             </h3>
                             {flatFeatures.length > 0 && (
-                              <span className="text-[10px] font-serif italic text-ink/40">
+                              <span className="text-[10px] font-serif italic text-ink/45">
                                 {flatFeatures.length} total
                               </span>
                             )}
@@ -6864,7 +6864,7 @@ export default function CharacterBuilder({
                           <button
                             type="button"
                             onClick={() => setActiveStep("class")}
-                            className="text-[10px] font-black uppercase tracking-widest text-gold/70 hover:text-gold transition-colors"
+                            className="text-[10px] font-black uppercase tracking-widest text-gold/75 hover:text-gold transition-colors"
                           >
                             Open Class Step ›
                           </button>
@@ -6878,7 +6878,7 @@ export default function CharacterBuilder({
                                 className="px-3 py-1.5 border border-gold/25 bg-gold/[0.04] rounded-md flex flex-col items-start gap-0.5 min-w-[100px]"
                                 title={`${scale.className} · ${scale.name}`}
                               >
-                                <span className="text-[9px] font-black uppercase tracking-[0.14em] text-gold/70 leading-none">
+                                <span className="text-[9px] font-black uppercase tracking-[0.14em] text-gold/75 leading-none">
                                   {scale.name}
                                 </span>
                                 <span className="font-mono text-base font-black text-ink leading-none">
@@ -6898,7 +6898,7 @@ export default function CharacterBuilder({
                             present. Description, if any, sits below
                             the row in italic body copy. */}
                         {flatFeatures.length > 0 ? (
-                          <div className="divide-y divide-gold/10 border border-gold/15 rounded-md overflow-hidden">
+                          <div className="divide-y divide-gold/15 border border-gold/15 rounded-md overflow-hidden">
                             {flatFeatures.map((feature: any) => {
                               const isSubclass = feature.parentType === "subclass";
                               const description = feature.description
@@ -6911,7 +6911,7 @@ export default function CharacterBuilder({
                                 >
                                   <div className="flex items-baseline justify-between gap-3">
                                     <div className="flex items-baseline gap-2 min-w-0">
-                                      <span className="text-[9px] font-black uppercase tracking-[0.14em] text-gold/60 px-1.5 py-0.5 border border-gold/25 rounded-sm shrink-0">
+                                      <span className="text-[9px] font-black uppercase tracking-[0.14em] text-gold/65 px-1.5 py-0.5 border border-gold/25 rounded-sm shrink-0">
                                         L{feature.level}
                                       </span>
                                       <span className="font-serif text-sm font-bold text-ink leading-tight truncate">
@@ -6970,14 +6970,14 @@ export default function CharacterBuilder({
                                       "px-2 py-0.5 rounded-sm text-[10px] font-bold inline-flex items-center gap-1.5",
                                       isUnresolved
                                         ? "bg-blood/[0.06] border border-blood/25 text-blood/75 italic"
-                                        : "bg-card border border-gold/20 text-ink/70",
+                                        : "bg-card border border-gold/25 text-ink/75",
                                     )}
                                     title={isUnresolved ? `Couldn't resolve item id ${item.id}` : item.name}
                                   >
                                     <span className="font-serif normal-case">{displayName}</span>
                                     <span className={cn(
                                       "text-[8px] font-black tracking-widest not-italic",
-                                      isUnresolved ? "text-blood/55" : "text-gold/60",
+                                      isUnresolved ? "text-blood/55" : "text-gold/65",
                                     )}>
                                       {item.className} L{item.level}
                                     </span>
@@ -7015,13 +7015,13 @@ export default function CharacterBuilder({
                                       "px-2 py-0.5 rounded-sm text-[10px] font-bold inline-flex items-baseline gap-1.5",
                                       isUnresolved
                                         ? "bg-blood/[0.06] border border-blood/25 text-blood/75 italic normal-case"
-                                        : "bg-card border border-gold/20 text-ink/70 uppercase",
+                                        : "bg-card border border-gold/25 text-ink/75 uppercase",
                                     )}
                                     title={isUnresolved ? `Couldn't resolve option id ${option.id}` : option.name}
                                   >
                                     <span>{displayName}</span>
                                     {option.featureType && (
-                                      <span className="text-[8px] font-black tracking-widest text-gold/60 normal-case not-italic">
+                                      <span className="text-[8px] font-black tracking-widest text-gold/65 normal-case not-italic">
                                         {option.featureType}
                                       </span>
                                     )}
@@ -7036,14 +7036,14 @@ export default function CharacterBuilder({
                   })()}
 
                   {sheetSection === "spells" && (
-                    <div className="border border-gold/20 bg-card/40 rounded-xl p-6 shadow-sm space-y-4">
+                    <div className="border border-gold/25 bg-card/40 rounded-xl p-6 shadow-sm space-y-4">
                       <div className="flex items-center justify-between gap-3">
                         <div>
-                          <h3 className="text-base sm:text-lg font-serif font-black uppercase text-ink/80 tracking-tight flex items-center gap-2">
+                          <h3 className="text-base sm:text-lg font-serif font-black uppercase text-ink/85 tracking-tight flex items-center gap-2">
                             <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-gold" />
                             Spellcasting
                           </h3>
-                          <p className="text-xs text-ink/50 font-serif italic mt-1">
+                          <p className="text-xs text-ink/55 font-serif italic mt-1">
                             Prepared and granted spells from your class progression — manage via the Spell Manager step.
                           </p>
                         </div>
@@ -7051,7 +7051,7 @@ export default function CharacterBuilder({
                           variant="outline"
                           size="sm"
                           onClick={() => setActiveStep("spells")}
-                          className="border-gold/30 text-gold hover:bg-gold/5 uppercase tracking-widest text-[10px] font-black"
+                          className="border-gold/35 text-gold hover:bg-gold/5 uppercase tracking-widest text-[10px] font-black"
                         >
                           Open Spell Manager
                         </Button>
@@ -7065,7 +7065,7 @@ export default function CharacterBuilder({
                            sees. Slot usage tracking (used vs unused) is
                            future work — pips render full for now. */}
                       {spellcastingContributors.length > 0 && (
-                        <div className="border border-gold/25 bg-[#efe6cf]/40 rounded-lg p-4 space-y-4">
+                        <div className="border border-gold/25 bg-card/40 rounded-lg p-4 space-y-4">
                           <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
                             {spellcastingContributors.map((contributor: any) => {
                               const ab = contributor.ability;
@@ -7141,17 +7141,17 @@ export default function CharacterBuilder({
                                 <span>
                                   Cantrips: <span className="text-gold">{totalCantrips}</span>
                                 </span>
-                                <span className="text-ink/20">·</span>
+                                <span className="text-ink/25">·</span>
                                 <span>
                                   Known: <span className="text-gold">{totalKnown}</span>
                                 </span>
-                                <span className="text-ink/20">·</span>
+                                <span className="text-ink/25">·</span>
                                 <span>
                                   Prepared: <span className="text-blood">{totalPrepared}</span>
                                 </span>
                                 {totalRituals > 0 && (
                                   <>
-                                    <span className="text-ink/20">·</span>
+                                    <span className="text-ink/25">·</span>
                                     <span>
                                       Ritual:{" "}
                                       <span className="text-amber-600">{totalRituals}</span>
@@ -7194,7 +7194,7 @@ export default function CharacterBuilder({
                               <p className="text-[10px] font-bold uppercase tracking-widest text-gold/55">
                                 No Spells Prepared
                               </p>
-                              <p className="text-xs text-ink/40 font-serif italic mt-1">
+                              <p className="text-xs text-ink/45 font-serif italic mt-1">
                                 Open the Spell Manager step to prepare spells.
                               </p>
                             </div>
@@ -7210,7 +7210,7 @@ export default function CharacterBuilder({
                         const lvls = Array.from(byLvl.keys()).sort((a, b) => a - b);
 
                         return (
-                          <div className="border border-gold/20 rounded-lg p-4 bg-background/30 space-y-3">
+                          <div className="border border-gold/25 rounded-lg p-4 bg-background/30 space-y-3">
                             <div className="flex items-center justify-between gap-2 border-b border-gold/15 pb-2">
                               <span className="text-[10px] font-black uppercase tracking-[0.2em] text-gold">
                                 Prepared · At a Glance
@@ -7230,7 +7230,7 @@ export default function CharacterBuilder({
                                         : lvl === 0
                                           ? "Cantrips"
                                           : `Level ${lvl}`}
-                                      <span className="text-ink/30 font-bold ml-1">
+                                      <span className="text-ink/35 font-bold ml-1">
                                         · {rows.length}
                                       </span>
                                     </div>
@@ -7244,7 +7244,7 @@ export default function CharacterBuilder({
                                       return (
                                         <div
                                           key={`prep-glance-row-${s.id}`}
-                                          className="flex items-center gap-2 px-3 py-1 bg-card/40 border border-gold/10 rounded-sm"
+                                          className="flex items-center gap-2 px-3 py-1 bg-card/40 border border-gold/15 rounded-sm"
                                         >
                                           <span
                                             className={cn(
@@ -7257,7 +7257,7 @@ export default function CharacterBuilder({
                                             {cached?.name || s.id}
                                           </span>
                                           {cached?.school && (
-                                            <span className="text-[9px] font-black uppercase tracking-widest text-gold/60 shrink-0">
+                                            <span className="text-[9px] font-black uppercase tracking-widest text-gold/65 shrink-0">
                                               {String(cached.school).slice(0, 4)}
                                             </span>
                                           )}
@@ -7292,7 +7292,7 @@ export default function CharacterBuilder({
                         <div className="space-y-4">
                           <div className="grid gap-4 md:grid-cols-3">
                             <div className="border border-gold/15 bg-background/40 rounded-lg p-4">
-                              <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/40 mb-2">
+                              <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/45 mb-2">
                                 Casting Level
                               </div>
                               <div className="text-xl font-black text-ink">
@@ -7300,7 +7300,7 @@ export default function CharacterBuilder({
                               </div>
                             </div>
                             <div className="border border-gold/15 bg-background/40 rounded-lg p-4">
-                              <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/40 mb-2">
+                              <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/45 mb-2">
                                 Active Sources
                               </div>
                               <div className="text-xl font-black text-ink">
@@ -7308,7 +7308,7 @@ export default function CharacterBuilder({
                               </div>
                             </div>
                             <div className="border border-gold/15 bg-background/40 rounded-lg p-4">
-                              <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/40 mb-2">
+                              <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/45 mb-2">
                                 Highest Slot
                               </div>
                               <div className="text-xl font-black text-ink">
@@ -7329,7 +7329,7 @@ export default function CharacterBuilder({
                                 <div className="text-sm font-serif font-black text-ink">
                                   {contributor.label}
                                 </div>
-                                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-gold/60">
+                                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-gold/65">
                                   {contributor.progressionLabel || contributor.progression || "Spellcasting"}
                                 </div>
                                 <div className="text-xs font-serif text-ink/55">
@@ -7341,16 +7341,16 @@ export default function CharacterBuilder({
                           </div>
 
                           <div className="border border-gold/15 bg-background/40 rounded-lg p-4">
-                            <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/40 mb-3">
+                            <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/45 mb-3">
                               Multiclass Spell Slots
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                               {multiclassSpellSlots.map((count: number, index: number) => (
                                 <div
                                   key={`slot-${index}`}
-                                  className="border border-gold/10 bg-card/40 rounded-md p-3 text-center"
+                                  className="border border-gold/15 bg-card/40 rounded-md p-3 text-center"
                                 >
-                                  <div className="text-[10px] font-black uppercase tracking-[0.2em] text-gold/60">
+                                  <div className="text-[10px] font-black uppercase tracking-[0.2em] text-gold/65">
                                     {index + 1}
                                     {index === 0 ? "st" : index === 1 ? "nd" : index === 2 ? "rd" : "th"}
                                   </div>
@@ -7409,7 +7409,7 @@ export default function CharacterBuilder({
                         }
 
                         return (
-                          <div className="space-y-4 pt-2 border-t border-gold/10">
+                          <div className="space-y-4 pt-2 border-t border-gold/15">
                             {sheetLoadouts.length > 0 && (
                               <div className="border border-purple-500/20 bg-purple-500/5 rounded-lg p-4 space-y-2">
                                 <div className="text-[10px] font-black uppercase tracking-[0.2em] text-purple-700">
@@ -7492,7 +7492,7 @@ export default function CharacterBuilder({
                               </div>
                             )}
                             {knownSpells.length > 0 && (
-                              <div className="border border-gold/30 bg-gold/5 rounded-lg p-4">
+                              <div className="border border-gold/35 bg-gold/5 rounded-lg p-4">
                                 <div className="flex items-center justify-between mb-3">
                                   <div className="text-[10px] font-black uppercase tracking-[0.2em] text-gold">
                                     Known Spells ({knownSpells.length})
@@ -7513,7 +7513,7 @@ export default function CharacterBuilder({
                                     <div className="space-y-3">
                                       {levels.map((lvl) => (
                                         <div key={`known-lvl-${lvl}`} className="space-y-1.5">
-                                          <div className="text-[9px] font-black uppercase tracking-[0.2em] text-gold/60 px-1">
+                                          <div className="text-[9px] font-black uppercase tracking-[0.2em] text-gold/65 px-1">
                                             {lvl < 0
                                               ? "Loading…"
                                               : lvl === 0
@@ -7536,7 +7536,7 @@ export default function CharacterBuilder({
                                                   <div className="font-serif font-bold text-ink text-sm truncate">
                                                     {cached?.name || spell.id}
                                                     {cached?.school && (
-                                                      <span className="ml-2 text-[10px] font-bold uppercase tracking-widest text-ink/40">
+                                                      <span className="ml-2 text-[10px] font-bold uppercase tracking-widest text-ink/45">
                                                         {cached.school}
                                                       </span>
                                                     )}
@@ -7721,10 +7721,10 @@ export default function CharacterBuilder({
                        attunement, equipped state) lives in the
                        Equipment step itself. */}
                   {sheetSection === "inventory" && (
-                    <div className="border border-gold/20 bg-card/40 rounded-xl p-4 sm:p-6 shadow-sm space-y-4">
+                    <div className="border border-gold/25 bg-card/40 rounded-xl p-4 sm:p-6 shadow-sm space-y-4">
                       <div className="flex items-center justify-between gap-3">
                         <div>
-                          <h3 className="text-base sm:text-lg font-serif font-black uppercase text-ink/80 tracking-tight flex items-center gap-2">
+                          <h3 className="text-base sm:text-lg font-serif font-black uppercase text-ink/85 tracking-tight flex items-center gap-2">
                             <Package className="w-4 h-4 sm:w-5 sm:h-5 text-gold" />
                             Inventory
                           </h3>
@@ -7736,7 +7736,7 @@ export default function CharacterBuilder({
                           variant="outline"
                           size="sm"
                           onClick={() => setActiveStep("equipment")}
-                          className="border-gold/30 text-gold hover:bg-gold/5 uppercase tracking-widest text-[10px] font-black"
+                          className="border-gold/35 text-gold hover:bg-gold/5 uppercase tracking-widest text-[10px] font-black"
                         >
                           Open Equipment Step
                         </Button>
@@ -7753,13 +7753,13 @@ export default function CharacterBuilder({
                                   {item.name || "Unnamed item"}
                                 </div>
                                 {item.type && (
-                                  <div className="text-[10px] font-bold uppercase tracking-widest text-ink/40 mt-0.5">
+                                  <div className="text-[10px] font-bold uppercase tracking-widest text-ink/45 mt-0.5">
                                     {item.type}
                                   </div>
                                 )}
                               </div>
                               {item.quantity != null && item.quantity > 1 && (
-                                <span className="font-mono text-xs font-black text-gold/70 shrink-0">
+                                <span className="font-mono text-xs font-black text-gold/75 shrink-0">
                                   ×{item.quantity}
                                 </span>
                               )}
@@ -7768,11 +7768,11 @@ export default function CharacterBuilder({
                         </div>
                       ) : (
                         <div className="border border-dashed border-gold/25 rounded-md p-6 text-center space-y-2">
-                          <Package className="w-8 h-8 text-gold/30 mx-auto" />
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-gold/60">
+                          <Package className="w-8 h-8 text-gold/35 mx-auto" />
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-gold/65">
                             No items yet
                           </p>
-                          <p className="text-xs text-ink/40 font-serif italic">
+                          <p className="text-xs text-ink/45 font-serif italic">
                             Add carried items from the Equipment step.
                           </p>
                         </div>
@@ -7785,10 +7785,10 @@ export default function CharacterBuilder({
                        can come from ASI advancements + race/background
                        feat picks. */}
                   {sheetSection === "feats" && (
-                    <div className="border border-gold/20 bg-card/40 rounded-xl p-4 sm:p-6 shadow-sm space-y-4">
+                    <div className="border border-gold/25 bg-card/40 rounded-xl p-4 sm:p-6 shadow-sm space-y-4">
                       <div className="flex items-center justify-between gap-3">
                         <div>
-                          <h3 className="text-base sm:text-lg font-serif font-black uppercase text-ink/80 tracking-tight flex items-center gap-2">
+                          <h3 className="text-base sm:text-lg font-serif font-black uppercase text-ink/85 tracking-tight flex items-center gap-2">
                             <Star className="w-4 h-4 sm:w-5 sm:h-5 text-gold" />
                             Feats
                           </h3>
@@ -7802,7 +7802,7 @@ export default function CharacterBuilder({
                           {character.feats.map((feat: any, idx: number) => (
                             <div
                               key={`feat-${feat.id || idx}`}
-                              className="p-3 border border-gold/20 bg-card/60 rounded-md"
+                              className="p-3 border border-gold/25 bg-card/60 rounded-md"
                             >
                               <div className="flex items-baseline justify-between gap-3">
                                 <span className="font-serif text-sm font-bold text-ink">
@@ -7815,7 +7815,7 @@ export default function CharacterBuilder({
                                 )}
                               </div>
                               {feat.description && (
-                                <p className="text-[11px] text-ink/60 font-serif leading-relaxed mt-1.5 line-clamp-3">
+                                <p className="text-[11px] text-ink/65 font-serif leading-relaxed mt-1.5 line-clamp-3">
                                   {String(feat.description).replace(/\[[^\]]+\]/g, "").trim()}
                                 </p>
                               )}
@@ -7824,11 +7824,11 @@ export default function CharacterBuilder({
                         </div>
                       ) : (
                         <div className="border border-dashed border-gold/25 rounded-md p-6 text-center space-y-2">
-                          <Star className="w-8 h-8 text-gold/30 mx-auto" />
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-gold/60">
+                          <Star className="w-8 h-8 text-gold/35 mx-auto" />
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-gold/65">
                             No feats yet
                           </p>
-                          <p className="text-xs text-ink/40 font-serif italic">
+                          <p className="text-xs text-ink/45 font-serif italic">
                             Feats are granted via the Class step (ASI / feat advancements) or via race &amp; background picks.
                           </p>
                         </div>
@@ -7844,10 +7844,10 @@ export default function CharacterBuilder({
                        carry proficiency information; Bio focuses on the
                        human-readable character info. */}
                   {sheetSection === "bio" && (
-                    <div className="border border-gold/20 bg-card/40 rounded-xl p-4 sm:p-6 shadow-sm space-y-4">
+                    <div className="border border-gold/25 bg-card/40 rounded-xl p-4 sm:p-6 shadow-sm space-y-4">
                       <div className="flex items-center justify-between gap-3">
                         <div>
-                          <h3 className="text-base sm:text-lg font-serif font-black uppercase text-ink/80 tracking-tight flex items-center gap-2">
+                          <h3 className="text-base sm:text-lg font-serif font-black uppercase text-ink/85 tracking-tight flex items-center gap-2">
                             <Scroll className="w-4 h-4 sm:w-5 sm:h-5 text-gold" />
                             Bio
                           </h3>
@@ -7884,7 +7884,7 @@ export default function CharacterBuilder({
                                 })
                               }
                               placeholder={field.placeholder}
-                              className="w-full px-2 py-1.5 text-sm font-serif text-ink bg-card border border-gold/20 rounded focus:outline-none focus:border-gold/60 placeholder:text-ink/20"
+                              className="w-full px-2 py-1.5 text-sm font-serif text-ink bg-card border border-gold/25 rounded focus:outline-none focus:border-gold/65 placeholder:text-ink/25"
                             />
                           </div>
                         ))}
@@ -7917,7 +7917,7 @@ export default function CharacterBuilder({
                               }
                               rows={3}
                               placeholder="—"
-                              className="w-full px-2 py-1.5 text-xs font-serif text-ink bg-card border border-gold/20 rounded focus:outline-none focus:border-gold/60 placeholder:text-ink/20 resize-none leading-relaxed"
+                              className="w-full px-2 py-1.5 text-xs font-serif text-ink bg-card border border-gold/25 rounded focus:outline-none focus:border-gold/65 placeholder:text-ink/25 resize-none leading-relaxed"
                             />
                           </div>
                         ))}
@@ -7933,7 +7933,7 @@ export default function CharacterBuilder({
             // we just render naturally and let the page scroll handle
             // overflow. No internal scroll = no fighting between the
             // page-scroll and a div-scroll.
-            <div className="bg-background/50 rounded-xl border border-gold/10">
+            <div className="bg-background/50 rounded-xl border border-gold/15">
               {isSelectingClass ? (
                 <div className="p-4 sm:p-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                   <ClassList
@@ -7983,13 +7983,13 @@ export default function CharacterBuilder({
                 <div className="p-4 sm:p-8 flex flex-col h-full min-h-[500px]">
                   <div className="flex-1 flex flex-col gap-6 w-full text-left max-w-4xl mx-auto">
                     {/* Top Box: Classes Summary */}
-                    <div className="border border-gold/20 bg-card p-6 rounded-xl shadow-sm mb-4">
+                    <div className="border border-gold/25 bg-card p-6 rounded-xl shadow-sm mb-4">
                       <div className="flex justify-end mb-4">
                         <Button
                           onClick={() => setIsSelectingClass(true)}
                           variant="ghost"
                           title="Add Class"
-                          className="text-gold hover:bg-gold/10 font-bold uppercase tracking-widest text-xs gap-2"
+                          className="text-gold hover:bg-gold/15 font-bold uppercase tracking-widest text-xs gap-2"
                         >
                           <Plus className="w-4 h-4" /> Add Class
                         </Button>
@@ -7998,7 +7998,7 @@ export default function CharacterBuilder({
                         {(() => {
                           if (progressionClassGroups.length === 0) {
                             return (
-                              <div className="text-center py-6 text-ink/40 font-serif italic text-lg">
+                              <div className="text-center py-6 text-ink/45 font-serif italic text-lg">
                                 No classes added yet. Select Add Class to begin.
                               </div>
                             );
@@ -8014,7 +8014,7 @@ export default function CharacterBuilder({
                                   {group.className} {group.classLevel}
                                 </span>
                                 {group.subclassId && subclassCache[group.subclassId]?.name && (
-                                  <span className="text-xs font-black uppercase tracking-[0.2em] text-gold/70">
+                                  <span className="text-xs font-black uppercase tracking-[0.2em] text-gold/75">
                                     {subclassCache[group.subclassId].name}
                                   </span>
                                 )}
@@ -8624,17 +8624,17 @@ export default function CharacterBuilder({
                                 return (
                                   <div
                                     key={idx}
-                                    className="bg-transparent group border-b border-gold/10 pb-4 flex gap-4"
+                                    className="bg-transparent group border-b border-gold/15 pb-4 flex gap-4"
                                   >
                                     <div className="w-24 shrink-0 flex flex-col items-center pt-2 gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
                                       <span className="font-sans font-black text-ink uppercase tracking-widest text-[10px] text-center w-full truncate px-1">
                                         {prog.className}
                                       </span>
-                                      <div className="flex flex-col items-center leading-none border border-gold/30 rounded-md p-2 bg-gold/5 w-14 shadow-sm group-hover:bg-gold/10 group-hover:border-gold/50 transition-colors">
+                                      <div className="flex flex-col items-center leading-none border border-gold/35 rounded-md p-2 bg-gold/5 w-14 shadow-sm group-hover:bg-gold/15 group-hover:border-gold/55 transition-colors">
                                         <span className="font-serif text-2xl font-black text-ink">
                                           {prog.level}
                                         </span>
-                                        <span className="text-[8px] font-bold uppercase tracking-widest text-ink/60 mt-1">
+                                        <span className="text-[8px] font-bold uppercase tracking-widest text-ink/65 mt-1">
                                           Level
                                         </span>
                                       </div>
@@ -8679,19 +8679,19 @@ export default function CharacterBuilder({
                                               className="space-y-1"
                                             >
                                               <div className="flex items-center gap-2">
-                                                <div className="w-1.5 h-1.5 rounded-full bg-gold/50"></div>
+                                                <div className="w-1.5 h-1.5 rounded-full bg-gold/55"></div>
                                                 <span className="font-serif font-bold text-ink text-lg">
                                                   {f.name}
                                                 </span>
                                                 {matchedSubclass &&
                                                   f.parentId === matchedSubclass.id && (
-                                                  <span className="text-[8px] font-black uppercase text-gold/60 tracking-widest ml-2">
+                                                  <span className="text-[8px] font-black uppercase text-gold/65 tracking-widest ml-2">
                                                     Subclass
                                                   </span>
                                                 )}
                                               </div>
                                               {f.description && (
-                                                <div className="text-ink/70 font-serif text-sm leading-relaxed pl-3.5 border-l border-gold/20 ml-[3px]">
+                                                <div className="text-ink/75 font-serif text-sm leading-relaxed pl-3.5 border-l border-gold/25 ml-[3px]">
                                                   <BBCodeRenderer
                                                     content={f.description}
                                                   />
@@ -8701,7 +8701,7 @@ export default function CharacterBuilder({
                                           ))}
                                           {grantedItemsAtThisLevel.length > 0 && (
                                             <div className="space-y-2 pt-1">
-                                              <div className="flex items-center gap-2 text-gold/70">
+                                              <div className="flex items-center gap-2 text-gold/75">
                                                 <Package className="w-4 h-4" />
                                                 <span className="text-[10px] font-black uppercase tracking-[0.24em]">
                                                   Granted Items
@@ -8711,7 +8711,7 @@ export default function CharacterBuilder({
                                                 {grantedItemsAtThisLevel.map((item: any) => (
                                                   <span
                                                     key={`${item.id}-${item.level}-${item.parentType}`}
-                                                    className="px-2 py-1 bg-card border border-gold/20 rounded-sm text-[10px] font-bold text-ink/70 uppercase"
+                                                    className="px-2 py-1 bg-card border border-gold/25 rounded-sm text-[10px] font-bold text-ink/75 uppercase"
                                                   >
                                                     {item.name}
                                                   </span>
@@ -8720,7 +8720,7 @@ export default function CharacterBuilder({
                                             </div>
                                           )}
                                           {choicesAtThisLevel.length > 0 && (
-                                            <div className="flex items-center gap-2 pt-2 text-gold/70">
+                                            <div className="flex items-center gap-2 pt-2 text-gold/75">
                                               <ShieldCheck className="w-4 h-4" />
                                               <span className="text-[10px] font-black uppercase tracking-[0.24em]">
                                                 Level Advancements
@@ -8745,7 +8745,7 @@ export default function CharacterBuilder({
                                                           Select {choice.name}
                                                         </span>
                                                       </div>
-                                                      <p className="text-xs text-ink/60 font-serif mb-4 italic">
+                                                      <p className="text-xs text-ink/65 font-serif mb-4 italic">
                                                         You reached the level to
                                                         specialize. Choose your
                                                         path.
@@ -8828,7 +8828,7 @@ export default function CharacterBuilder({
                                                           Level {choice.level}
                                                         </span>
                                                       </div>
-                                                      <p className="text-xs text-ink/60 font-serif mb-4 italic">
+                                                      <p className="text-xs text-ink/65 font-serif mb-4 italic">
                                                         {asiChoiceType === 'feat'
                                                           ? 'This level grants a feat. Open the picker to choose one.'
                                                           : asiChoiceType === 'either'
@@ -9022,9 +9022,9 @@ export default function CharacterBuilder({
                                                   return (
                                                     <div
                                                       key={`info-${cidx}`}
-                                                      className="bg-ink/5 border border-ink/10 rounded-md p-3 mt-2 mb-4 ml-[3px] text-[10px] font-serif"
+                                                      className="bg-ink/5 border border-ink/15 rounded-md p-3 mt-2 mb-4 ml-[3px] text-[10px] font-serif"
                                                     >
-                                                      <div className="flex items-center gap-2 text-ink/60 mb-1">
+                                                      <div className="flex items-center gap-2 text-ink/65 mb-1">
                                                         <Zap className="w-3 h-3 text-gold" />
                                                         <span className="font-bold uppercase tracking-tight">
                                                           {choice.name}
@@ -9048,7 +9048,7 @@ export default function CharacterBuilder({
                                                               return (
                                                                 <span
                                                                   key={itemId}
-                                                                  className="bg-gold/10 text-gold px-1.5 py-0.5 rounded border border-gold/20"
+                                                                  className="bg-gold/15 text-gold px-1.5 py-0.5 rounded border border-gold/25"
                                                                 >
                                                                   {featName}
                                                                 </span>
@@ -9059,7 +9059,7 @@ export default function CharacterBuilder({
                                                       )}
                                                       {choice.advType ===
                                                         "Trait" && (
-                                                        <p className="text-ink/50 italic">
+                                                        <p className="text-ink/55 italic">
                                                           Gains proficiency in:{" "}
                                                           {traitValues.length > 0
                                                             ? traitValues.join(", ")
@@ -9129,7 +9129,7 @@ export default function CharacterBuilder({
                                                               </p>
                                                             )}
                                                             {spellIds.length === 0 ? (
-                                                              <p className="text-ink/50 italic text-[10px]">
+                                                              <p className="text-ink/55 italic text-[10px]">
                                                                 {isRule && !allSpellSummaries
                                                                   ? "Loading rule matches…"
                                                                   : "No spells in pool."}
@@ -9154,7 +9154,7 @@ export default function CharacterBuilder({
                                                                   );
                                                                 })}
                                                                 {spellIds.length > 12 && (
-                                                                  <span className="text-ink/40 px-1.5 py-0.5 text-[10px]">
+                                                                  <span className="text-ink/45 px-1.5 py-0.5 text-[10px]">
                                                                     +{spellIds.length - 12} more
                                                                   </span>
                                                                 )}
@@ -9210,23 +9210,23 @@ export default function CharacterBuilder({
                                                   <div key={`choice-${cidx}`}>
                                                     <div className="space-y-1 mb-4">
                                                       <div className="flex items-center gap-2">
-                                                        <div className="w-1.5 h-1.5 rounded-full bg-gold/50"></div>
+                                                        <div className="w-1.5 h-1.5 rounded-full bg-gold/55"></div>
                                                         <span className="font-serif font-bold text-ink text-lg">
                                                           {choice.name}
                                                         </span>
                                                       </div>
-                                                      <div className="text-ink/70 font-serif text-sm leading-relaxed pl-3.5 border-l border-gold/20 ml-[3px]">
+                                                      <div className="text-ink/75 font-serif text-sm leading-relaxed pl-3.5 border-l border-gold/25 ml-[3px]">
                                                         Advancement choice available for this level.
                                                       </div>
                                                     </div>
-                                                    <div className="bg-gold/5 border border-gold/20 rounded-md p-4 mt-2 mb-4 ml-[3px]">
+                                                    <div className="bg-gold/5 border border-gold/25 rounded-md p-4 mt-2 mb-4 ml-[3px]">
                                                       <div className="flex items-center justify-between mb-2">
                                                         <span className="font-serif font-bold text-ink text-sm uppercase tracking-wider flex items-center gap-2">
                                                           <ShieldCheck className="w-4 h-4 text-gold" />
                                                           Select {choice.name}{" "}
                                                           Options
                                                         </span>
-                                                        <span className="text-xs font-black text-ink/40 tracking-widest">
+                                                        <span className="text-xs font-black text-ink/45 tracking-widest">
                                                           {choice.count}{" "}
                                                           AVAILABLE
                                                         </span>
@@ -9238,7 +9238,7 @@ export default function CharacterBuilder({
                                                             (label: string, labelIdx: number) => (
                                                               <div
                                                                 key={`${selectionKey}-${labelIdx}-${label}`}
-                                                                className="flex justify-between items-center bg-card border border-gold/20 p-2 text-sm font-serif"
+                                                                className="flex justify-between items-center bg-card border border-gold/25 p-2 text-sm font-serif"
                                                               >
                                                                 <span>{label}</span>
                                                                 <Button
@@ -9292,7 +9292,7 @@ export default function CharacterBuilder({
                                                             choice,
                                                           )
                                                         }
-                                                        className="w-full border-dashed border-gold/40 text-gold hover:bg-gold/10 hover:border-gold mt-2 font-bold tracking-widest uppercase text-[10px]"
+                                                        className="w-full border-dashed border-gold/45 text-gold hover:bg-gold/15 hover:border-gold mt-2 font-bold tracking-widest uppercase text-[10px]"
                                                       >
                                                         <Plus className="w-3 h-3 mr-2" />{" "}
                                                         Choose Options
@@ -9304,7 +9304,7 @@ export default function CharacterBuilder({
                                             )}
                                         </>
                                       ) : (
-                                        <div className="text-ink/40 font-serif italic text-sm py-4">
+                                        <div className="text-ink/45 font-serif italic text-sm py-4">
                                           No new features gained at this level.
                                         </div>
                                       )}
@@ -9776,20 +9776,20 @@ export default function CharacterBuilder({
 
               if (spellcastingClassIds.length === 0) {
                 return (
-                  <div className="bg-background/50 p-8 rounded-xl border border-gold/10 min-h-[400px] flex flex-col items-center justify-center text-center">
-                    <div className="w-24 h-24 bg-gold/5 rounded-full flex items-center justify-center mb-6 border border-gold/20">
+                  <div className="bg-background/50 p-8 rounded-xl border border-gold/15 min-h-[400px] flex flex-col items-center justify-center text-center">
+                    <div className="w-24 h-24 bg-gold/5 rounded-full flex items-center justify-center mb-6 border border-gold/25">
                       <Zap className="w-10 h-10 text-gold" />
                     </div>
                     <h2 className="text-2xl font-serif font-black text-ink mb-2 uppercase tracking-tight">
                       Spell Manager
                     </h2>
-                    <p className="text-ink/60 max-w-sm font-serif italic mb-8">
+                    <p className="text-ink/65 max-w-sm font-serif italic mb-8">
                       No spellcasting class on this character yet.
                     </p>
                     <Button
                       onClick={() => setActiveStep("class")}
                       variant="outline"
-                      className="border-gold/30 text-gold hover:bg-gold/5 uppercase tracking-widest text-xs font-black"
+                      className="border-gold/35 text-gold hover:bg-gold/5 uppercase tracking-widest text-xs font-black"
                     >
                       Add a Class
                     </Button>
@@ -9842,7 +9842,7 @@ export default function CharacterBuilder({
               return (
                 // Spell Manager — long browse list, just renders naturally
                 // inside .cb-page-scroll. No internal scroll wrapper.
-                <div className="space-y-3 p-4 sm:p-6 bg-background/50 rounded-xl border border-gold/10">
+                <div className="space-y-3 p-4 sm:p-6 bg-background/50 rounded-xl border border-gold/15">
                   {/* ── Class header strip — Variant C ─────────────
                        Per-class chips (active highlighted) + Save DC /
                        Atk for the active class + counters. Replaces
@@ -9863,8 +9863,8 @@ export default function CharacterBuilder({
                             className={cn(
                               "px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] border transition-colors",
                               isActive
-                                ? "bg-gold text-white border-gold"
-                                : "bg-transparent text-ink/55 border-gold/25 hover:border-gold/50 hover:text-ink",
+                                ? "bg-gold text-[var(--primary-foreground)] border-gold"
+                                : "bg-transparent text-ink/55 border-gold/25 hover:border-gold/55 hover:text-ink",
                             )}
                           >
                             {c?.name || `Class ${cid.slice(0, 6)}`}
@@ -9873,10 +9873,10 @@ export default function CharacterBuilder({
                       })}
                     </div>
 
-                    <div className="w-px h-7 bg-gold/20" />
+                    <div className="w-px h-7 bg-gold/25" />
 
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[7px] font-black uppercase tracking-[0.16em] text-ink/50">
+                      <span className="text-[7px] font-black uppercase tracking-[0.16em] text-ink/55">
                         {activeClass?.name || "Class"} Spell Save DC
                       </span>
                       <span className="font-mono text-base font-black text-gold leading-none">
@@ -9884,7 +9884,7 @@ export default function CharacterBuilder({
                       </span>
                     </div>
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[7px] font-black uppercase tracking-[0.16em] text-ink/50">
+                      <span className="text-[7px] font-black uppercase tracking-[0.16em] text-ink/55">
                         {activeClass?.name || "Class"} Atk Bonus
                       </span>
                       <span className="font-mono text-base font-black text-gold leading-none">
@@ -9903,7 +9903,7 @@ export default function CharacterBuilder({
                       )}
                       {spellsCap !== null && (
                         <>
-                          {cantripsCap !== null && <span className="text-ink/20">·</span>}
+                          {cantripsCap !== null && <span className="text-ink/25">·</span>}
                           <span>
                             Spells:{" "}
                             <span className={atSpellsCap ? "text-blood" : "text-gold"}>
@@ -9917,15 +9917,15 @@ export default function CharacterBuilder({
                           Known: <span className="text-gold">{knownCount}</span>
                         </span>
                       )}
-                      <span className="text-ink/20">·</span>
+                      <span className="text-ink/25">·</span>
                       <span>
                         Prepared: <span className="text-blood">{effectivePreparedCount}</span>
                       </span>
-                      <span className="text-ink/20">·</span>
+                      <span className="text-ink/25">·</span>
                       <span>
                         ★ <span className="text-amber-500">{favouriteCount}</span>
                       </span>
-                      <span className="text-ink/20">·</span>
+                      <span className="text-ink/25">·</span>
                       <span>
                         ◐ <span className="text-cyan-500">{watchlistCount}</span>
                       </span>
@@ -10096,7 +10096,7 @@ export default function CharacterBuilder({
                         <span>
                           Character tags ({effectiveTagAttributions.size})
                         </span>
-                        <span className="text-[9px] font-bold uppercase tracking-widest text-ink/40 normal-case">
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-ink/45 normal-case">
                           Drives spell prereqs
                         </span>
                       </summary>
@@ -10287,7 +10287,7 @@ export default function CharacterBuilder({
                         }
                         if (allEmpty) {
                           return (
-                            <div className="text-sm text-ink/45 font-serif italic p-4 border border-gold/10 rounded-md bg-card/40">
+                            <div className="text-sm text-ink/45 font-serif italic p-4 border border-gold/15 rounded-md bg-card/40">
                               No spells on any of this character's class spell
                               lists yet. Curate them in /compendium/spell-lists,
                               then use the "Add Spells" button on each class
@@ -10328,13 +10328,13 @@ export default function CharacterBuilder({
                                   ? "No spells on sheet"
                                   : `${grandTotal} spell${grandTotal === 1 ? "" : "s"} on sheet`}
                                 {grandBase > 0 && (
-                                  <span className="text-ink/30">
+                                  <span className="text-ink/35">
                                     {" · "}
                                     {grandBase} available in class lists
                                   </span>
                                 )}
                               </span>
-                              <span className="text-[9px] font-bold uppercase tracking-widest text-ink/30">
+                              <span className="text-[9px] font-bold uppercase tracking-widest text-ink/35">
                                 {spellcastingClassIds.length === 1
                                   ? "Single class"
                                   : `${spellcastingClassIds.length} classes`}
@@ -10400,7 +10400,7 @@ export default function CharacterBuilder({
                                       className={cn(
                                         "px-3 py-2 border-y flex items-center gap-2 sticky top-0 z-10",
                                         isActive
-                                          ? "bg-[color-mix(in_srgb,var(--gold)_22%,var(--card))] border-gold/40"
+                                          ? "bg-[color-mix(in_srgb,var(--gold)_22%,var(--card))] border-gold/45"
                                           : "bg-[color-mix(in_srgb,var(--gold)_12%,var(--card))] border-gold/25",
                                       )}
                                     >
@@ -10431,19 +10431,19 @@ export default function CharacterBuilder({
                                         <span
                                           className={cn(
                                             "font-mono text-[10px] font-bold",
-                                            isActive ? "text-gold/70" : "text-gold/55",
+                                            isActive ? "text-gold/75" : "text-gold/55",
                                           )}
                                         >
                                           {filtered.length}
                                           {filtered.length !== poolTotal && (
-                                            <span className="text-gold/30"> / {poolTotal}</span>
+                                            <span className="text-gold/35"> / {poolTotal}</span>
                                           )}
                                         </span>
                                       </button>
                                       <button
                                         type="button"
                                         onClick={() => setSpellsPrepModalClass(cid)}
-                                        className="text-[9px] font-black uppercase tracking-[0.16em] px-2 py-1 border border-gold bg-gold text-white hover:bg-gold/90 transition-colors whitespace-nowrap"
+                                        className="text-[9px] font-black uppercase tracking-[0.16em] px-2 py-1 border border-gold bg-gold text-[var(--primary-foreground)] hover:bg-gold/95 transition-colors whitespace-nowrap"
                                         title={`Add ${cls?.name || "class"} spells to your sheet`}
                                       >
                                         Add Spells
@@ -10473,7 +10473,7 @@ export default function CharacterBuilder({
                                         // this the prep-toggle column
                                         // shifts 3px left of the header
                                         // and labels appear misaligned.
-                                        className="grid items-center gap-2 pl-6 pr-3 py-1.5 bg-background/35 border-b border-l-[3px] border-l-transparent border-gold/10 text-[9px] font-bold uppercase tracking-[0.16em] text-gold/65"
+                                        className="grid items-center gap-2 pl-6 pr-3 py-1.5 bg-background/35 border-b border-l-[3px] border-l-transparent border-gold/15 text-[9px] font-bold uppercase tracking-[0.16em] text-gold/65"
                                         style={{ gridTemplateColumns: SPELL_ROW_TEMPLATE }}
                                       >
                                         <span />
@@ -10526,11 +10526,11 @@ export default function CharacterBuilder({
                                           <button
                                             type="button"
                                             onClick={() => toggleLevelCollapsed(lvlKey)}
-                                            className="w-full flex items-center gap-2 pl-6 pr-3 py-1 bg-gold/[0.03] border-b border-gold/10 text-left"
+                                            className="w-full flex items-center gap-2 pl-6 pr-3 py-1 bg-gold/[0.03] border-b border-gold/15 text-left"
                                           >
                                             <ChevronDown
                                               className={cn(
-                                                "w-3 h-3 text-ink/30 transition-transform shrink-0",
+                                                "w-3 h-3 text-ink/35 transition-transform shrink-0",
                                                 lvlCollapsed && "-rotate-90",
                                               )}
                                             />
@@ -10538,7 +10538,7 @@ export default function CharacterBuilder({
                                               {lvl === 0 ? "Cantrips" : `Level ${lvl}`}
                                             </span>
                                             <span className="flex-1" />
-                                            <span className="font-mono text-[9px] font-bold text-ink/30">
+                                            <span className="font-mono text-[9px] font-bold text-ink/35">
                                               {spellsAtLvl.length}
                                             </span>
                                           </button>
@@ -10614,7 +10614,7 @@ export default function CharacterBuilder({
                                         // header (same indent).
                                         "grid items-center gap-2 pl-6 pr-3 py-1.5 transition-colors cursor-pointer border-l-[3px]",
                                         isSelected
-                                          ? "bg-gold/10 border-l-gold"
+                                          ? "bg-gold/15 border-l-gold"
                                           : "border-l-transparent hover:bg-gold/5",
                                         isGranted && !isSelected && "bg-emerald-500/[0.04]",
                                       )}
@@ -10647,7 +10647,7 @@ export default function CharacterBuilder({
                                             ? "bg-emerald-600 border-emerald-600 text-white cursor-not-allowed"
                                             : isPrepared
                                               ? "bg-blood border-blood text-white"
-                                              : "border-gold/40 hover:border-blood/60",
+                                              : "border-gold/45 hover:border-blood/60",
                                         )}
                                       >
                                         {owned?.isAlwaysPrepared ? (
@@ -10694,7 +10694,7 @@ export default function CharacterBuilder({
                                       </div>
 
                                       {/* ── Level (C / 1 / 2 …) ──── */}
-                                      <span className="text-xs font-bold text-ink/70 text-center">
+                                      <span className="text-xs font-bold text-ink/75 text-center">
                                         {lvlGlyph}
                                       </span>
 
@@ -10794,7 +10794,7 @@ export default function CharacterBuilder({
                                                     "text-[9px] font-bold uppercase tracking-widest w-4 h-4 rounded border flex items-center justify-center",
                                                     inLoadout
                                                       ? "border-purple-500/60 bg-purple-500/20 text-purple-700"
-                                                      : "border-gold/15 text-ink/30 hover:border-purple-500/30",
+                                                      : "border-gold/15 text-ink/35 hover:border-purple-500/30",
                                                   )}
                                                 >
                                                   {l.name.charAt(0).toUpperCase()}
@@ -10853,7 +10853,7 @@ export default function CharacterBuilder({
                       pane so long descriptions don't trap the user
                       below an unscrollable wall of text. */}
                   {selectedSpellId && (
-                    <div className="lg:hidden border-t-2 border-gold/20 pt-4">
+                    <div className="lg:hidden border-t-2 border-gold/25 pt-4">
                       <div className="flex justify-end mb-2">
                         <button
                           type="button"
@@ -11135,7 +11135,7 @@ export default function CharacterBuilder({
                   icon: "⚒",
                   color: "#8a6f37",
                   bgClass: "bg-gold/5",
-                  borderClass: "border-gold/30",
+                  borderClass: "border-gold/35",
                   textClass: "text-gold",
                   items: toolNames,
                   emptyText: "No tool proficiencies.",
@@ -11178,7 +11178,7 @@ export default function CharacterBuilder({
                         opts.borderClass,
                         opts.bgClass,
                         opts.textClass,
-                        opts.emphasize ? "font-black ring-1 ring-inset ring-gold/30" : "",
+                        opts.emphasize ? "font-black ring-1 ring-inset ring-gold/35" : "",
                       )}
                     >
                       {item}
@@ -11190,7 +11190,7 @@ export default function CharacterBuilder({
               return (
                 // Proficiencies — grid of kind-colored cards, renders
                 // naturally inside .cb-page-scroll.
-                <div className="bg-background/50 p-4 sm:p-6 rounded-xl border border-gold/10 space-y-5">
+                <div className="bg-background/50 p-4 sm:p-6 rounded-xl border border-gold/15 space-y-5">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <div>
                       <h2 className="text-xl sm:text-2xl font-serif font-black text-ink uppercase tracking-tight flex items-center gap-2">
@@ -11205,7 +11205,7 @@ export default function CharacterBuilder({
                       variant="outline"
                       size="sm"
                       onClick={() => setActiveStep("class")}
-                      className="border-gold/30 text-gold hover:bg-gold/5 uppercase tracking-widest text-[10px] font-black"
+                      className="border-gold/35 text-gold hover:bg-gold/5 uppercase tracking-widest text-[10px] font-black"
                     >
                       Open Class Step
                     </Button>
@@ -11226,7 +11226,7 @@ export default function CharacterBuilder({
                           )}
                           style={{ borderLeftColor: card.color }}
                         >
-                          <div className="flex items-baseline justify-between gap-2 pb-2 mb-2 border-b border-gold/10">
+                          <div className="flex items-baseline justify-between gap-2 pb-2 mb-2 border-b border-gold/15">
                             <div className="flex items-baseline gap-2 min-w-0">
                               <span
                                 className="text-base font-black leading-none"
@@ -11238,7 +11238,7 @@ export default function CharacterBuilder({
                                 {card.title}
                               </span>
                             </div>
-                            <span className="text-[9px] font-bold uppercase tracking-widest text-ink/40 shrink-0">
+                            <span className="text-[9px] font-bold uppercase tracking-widest text-ink/45 shrink-0">
                               {card.items.length + expertiseList.length + halfList.length}
                             </span>
                           </div>
@@ -11257,7 +11257,7 @@ export default function CharacterBuilder({
                           )}
 
                           {expertiseList.length > 0 && (
-                            <div className="mt-2 pt-2 border-t border-gold/10 space-y-1">
+                            <div className="mt-2 pt-2 border-t border-gold/15 space-y-1">
                               <span className="text-[9px] font-black uppercase tracking-[0.18em] text-gold/65">
                                 Expertise
                               </span>
@@ -11272,15 +11272,15 @@ export default function CharacterBuilder({
                           )}
 
                           {halfList.length > 0 && (
-                            <div className="mt-2 pt-2 border-t border-gold/10 space-y-1">
+                            <div className="mt-2 pt-2 border-t border-gold/15 space-y-1">
                               <span className="text-[9px] font-black uppercase tracking-[0.18em] text-ink/45">
                                 Half-Proficient
                               </span>
                               {renderChips(halfList, {
                                 color: card.color,
                                 bgClass: "bg-card/30",
-                                borderClass: "border-gold/20",
-                                textClass: "text-ink/60",
+                                borderClass: "border-gold/25",
+                                textClass: "text-ink/65",
                               })}
                             </div>
                           )}
@@ -11300,14 +11300,14 @@ export default function CharacterBuilder({
                           className="p-3 sm:p-4 rounded-md border bg-card/50 border-l-[3px] border-emerald-700/25"
                           style={{ borderLeftColor: "#1f6f5c" }}
                         >
-                          <div className="flex items-baseline justify-between gap-2 pb-2 mb-2 border-b border-gold/10">
+                          <div className="flex items-baseline justify-between gap-2 pb-2 mb-2 border-b border-gold/15">
                             <div className="flex items-baseline gap-2">
                               <span className="text-base font-black text-emerald-700 leading-none">⛨</span>
                               <span className="font-serif text-sm font-bold text-ink">
                                 Damage Traits
                               </span>
                             </div>
-                            <span className="text-[9px] font-bold uppercase tracking-widest text-ink/40">
+                            <span className="text-[9px] font-bold uppercase tracking-widest text-ink/45">
                               {resistanceNames.length + immunityNames.length + vulnerabilityNames.length + conditionImmunityNames.length}
                             </span>
                           </div>
@@ -11374,7 +11374,7 @@ export default function CharacterBuilder({
                           className="p-3 sm:p-4 rounded-md border bg-card/50 border-l-[3px]"
                           style={{ borderLeftColor: "#5a4a8a" }}
                         >
-                          <div className="flex items-baseline justify-between gap-2 pb-2 mb-2 border-b border-gold/10">
+                          <div className="flex items-baseline justify-between gap-2 pb-2 mb-2 border-b border-gold/15">
                             <div className="flex items-baseline gap-2">
                               <span className="text-base font-black text-purple-700 leading-none">◉</span>
                               <span className="font-serif text-sm font-bold text-ink">
@@ -11402,7 +11402,7 @@ export default function CharacterBuilder({
                             ))}
                           </div>
                           {sensesAdditional && (
-                            <p className="text-[11px] font-serif text-ink/65 mt-3 pt-2 border-t border-gold/10 leading-relaxed">
+                            <p className="text-[11px] font-serif text-ink/65 mt-3 pt-2 border-t border-gold/15 leading-relaxed">
                               {sensesAdditional}
                             </p>
                           )}
@@ -11414,21 +11414,21 @@ export default function CharacterBuilder({
               );
             })()
           ) : (
-            <div className="bg-background/50 p-8 rounded-xl border border-gold/10 min-h-[400px] flex flex-col items-center justify-center text-center">
-              <div className="w-24 h-24 bg-gold/5 rounded-full flex items-center justify-center mb-6 border border-gold/20">
+            <div className="bg-background/50 p-8 rounded-xl border border-gold/15 min-h-[400px] flex flex-col items-center justify-center text-center">
+              <div className="w-24 h-24 bg-gold/5 rounded-full flex items-center justify-center mb-6 border border-gold/25">
                 {STEPS.find((s) => s.id === activeStep)?.icon}
               </div>
               <h2 className="text-2xl font-serif font-black text-ink mb-2 uppercase tracking-tight">
                 {STEPS.find((s) => s.id === activeStep)?.label}
               </h2>
-              <p className="text-ink/60 max-w-sm font-serif italic mb-8">
+              <p className="text-ink/65 max-w-sm font-serif italic mb-8">
                 This workspace section is currently under construction. Please
                 use the Character Sheet tab to manage core vitals and stats.
               </p>
               <Button
                 onClick={() => setActiveStep("sheet")}
                 variant="outline"
-                className="border-gold/30 text-gold hover:bg-gold/5 uppercase tracking-widest text-xs font-black"
+                className="border-gold/35 text-gold hover:bg-gold/5 uppercase tracking-widest text-xs font-black"
               >
                 Return to Sheet
               </Button>
@@ -11546,12 +11546,12 @@ export default function CharacterBuilder({
                           </button>
                         }
                       />
-                      <DialogContent className="sm:max-w-2xl bg-parchment border-gold/30 p-0 overflow-hidden">
-                        <DialogHeader className="p-6 bg-ink text-gold border-b border-gold/20">
+                      <DialogContent className="sm:max-w-2xl bg-parchment border-gold/35 p-0 overflow-hidden">
+                        <DialogHeader className="p-6 bg-ink text-gold border-b border-gold/25">
                           <DialogTitle className="text-xl font-serif font-black uppercase tracking-tight">
                             Foundry Pairing Output
                           </DialogTitle>
-                          <DialogDescription className="text-gold/60 font-serif italic">
+                          <DialogDescription className="text-gold/65 font-serif italic">
                             Formatted for the dauligor-pairing module bridge
                           </DialogDescription>
                         </DialogHeader>
@@ -11563,15 +11563,15 @@ export default function CharacterBuilder({
                               from the class progression step.
                             </div>
                           ) : (
-                            <pre className="bg-ink p-4 rounded-lg overflow-auto max-h-[400px] text-xs font-mono text-gold/80 border border-gold/10 custom-scrollbar">
+                            <pre className="bg-ink p-4 rounded-lg overflow-auto max-h-[400px] text-xs font-mono text-gold/85 border border-gold/15 custom-scrollbar">
                               {JSON.stringify(generatePairingJson(), null, 2)}
                             </pre>
                           )}
                         </div>
-                        <DialogFooter className="p-4 bg-ink/5 border-t border-gold/10">
+                        <DialogFooter className="p-4 bg-ink/5 border-t border-gold/15">
                           <Button
                             disabled={hasLegacyAdvancementSelections}
-                            className="bg-gold text-white hover:bg-gold/80 gap-2 uppercase tracking-widest text-[10px] font-black"
+                            className="bg-gold text-[var(--primary-foreground)] hover:bg-gold/85 gap-2 uppercase tracking-widest text-[10px] font-black"
                             onClick={() => {
                               navigator.clipboard.writeText(
                                 JSON.stringify(generatePairingJson(), null, 2),
@@ -11584,7 +11584,7 @@ export default function CharacterBuilder({
                             render={
                               <Button
                                 variant="ghost"
-                                className="text-ink/40 hover:text-ink/60 uppercase tracking-widest text-[10px] font-black"
+                                className="text-ink/45 hover:text-ink/65 uppercase tracking-widest text-[10px] font-black"
                               >
                                 Close
                               </Button>
@@ -11644,14 +11644,14 @@ export default function CharacterBuilder({
       {/* /cb-page-scroll */}
 
       {optionDialogOpen && (
-        <div className="fixed inset-0 bg-ink/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-ink/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <Card className="max-w-4xl w-full max-h-[90vh] flex flex-col border-4 border-gold bg-background shadow-2xl overflow-hidden">
-            <CardHeader className="border-b border-gold/20 flex flex-row items-center justify-between shrink-0">
+            <CardHeader className="border-b border-gold/25 flex flex-row items-center justify-between shrink-0">
               <div>
                 <CardTitle className="font-serif text-2xl font-black text-ink">
                   {optionDialogOpen.name}
                 </CardTitle>
-                <CardDescription className="text-ink/60 font-bold uppercase text-[10px] tracking-widest mt-1">
+                <CardDescription className="text-ink/65 font-bold uppercase text-[10px] tracking-widest mt-1">
                   AVAILABLE TO SELECT: {optionDialogOpen.count}
                 </CardDescription>
               </div>
@@ -11661,15 +11661,15 @@ export default function CharacterBuilder({
             </CardHeader>
             <CardContent className="flex-1 overflow-y-auto p-0">
               {loadingOptions ? (
-                <div className="p-8 text-center text-ink/50 font-serif italic">
+                <div className="p-8 text-center text-ink/55 font-serif italic">
                   Loading options...
                 </div>
               ) : availableOptions.length === 0 ? (
-                <div className="p-8 text-center text-ink/50 font-serif italic">
+                <div className="p-8 text-center text-ink/55 font-serif italic">
                   No options found for this feature.
                 </div>
               ) : (
-                <div className="divide-y divide-gold/10">
+                <div className="divide-y divide-gold/15">
                   {availableOptions.map((opt) => {
                     if (!optionDialogOpen) return null;
                     const selectedForDialog =
@@ -11765,7 +11765,7 @@ export default function CharacterBuilder({
                                 }
                               });
                             }}
-                            className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors ${isSelected ? "bg-gold border-gold text-white" : "border-gold/40 hover:border-gold"} ${isDisabled ? "cursor-not-allowed" : ""}`}
+                            className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors ${isSelected ? "bg-gold border-gold text-[var(--primary-foreground)]" : "border-gold/45 hover:border-gold"} ${isDisabled ? "cursor-not-allowed" : ""}`}
                           >
                             {isSelected && <Check className="w-4 h-4" />}
                           </button>
@@ -11775,14 +11775,14 @@ export default function CharacterBuilder({
                             <h4 className="font-serif font-bold text-ink text-lg text-balance">
                               {opt.name}
                               {isAlreadyChosenElsewhere && !opt.isRepeatable && (
-                                <span className="ml-2 text-[10px] uppercase tracking-widest text-gold bg-gold/10 px-2 py-0.5 rounded">
+                                <span className="ml-2 text-[10px] uppercase tracking-widest text-gold bg-gold/15 px-2 py-0.5 rounded">
                                   Already Selected
                                 </span>
                               )}
                             </h4>
                           </div>
                           {opt.description && (
-                            <div className="text-sm font-serif text-ink/70 mt-1 leading-relaxed">
+                            <div className="text-sm font-serif text-ink/75 mt-1 leading-relaxed">
                               <BBCodeRenderer content={opt.description} />
                             </div>
                           )}
@@ -11825,7 +11825,7 @@ export default function CharacterBuilder({
           );
         };
         return (
-          <div className="fixed inset-0 bg-ink/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-ink/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <Card className="max-w-3xl w-full max-h-[90vh] flex flex-col border-4 border-emerald-500 bg-background shadow-2xl overflow-hidden">
               <CardHeader className="border-b border-emerald-500/20 flex flex-row items-center justify-between shrink-0">
                 <div>
@@ -11833,10 +11833,10 @@ export default function CharacterBuilder({
                     <Zap className="w-5 h-5 text-emerald-600" />
                     {dlg.name}
                   </CardTitle>
-                  <CardDescription className="text-ink/60 font-bold uppercase text-[10px] tracking-widest mt-1">
+                  <CardDescription className="text-ink/65 font-bold uppercase text-[10px] tracking-widest mt-1">
                     Choose {dlg.count} from {livePool.length} · {sel.length} chosen
                     {dlg.resolverKind === "rule" && livePool.length === 0 && (
-                      <span className="ml-2 italic text-ink/40">
+                      <span className="ml-2 italic text-ink/45">
                         (loading rule matches…)
                       </span>
                     )}
@@ -11848,7 +11848,7 @@ export default function CharacterBuilder({
               </CardHeader>
               <CardContent className="flex-1 overflow-y-auto p-0">
                 {livePool.length === 0 ? (
-                  <div className="p-8 text-center text-ink/50 font-serif italic">
+                  <div className="p-8 text-center text-ink/55 font-serif italic">
                     {dlg.resolverKind === "rule"
                       ? "Loading rule matches… or this rule matches nothing."
                       : "No spells in the picker pool."}
@@ -11889,18 +11889,18 @@ export default function CharacterBuilder({
                             <div className="font-serif font-bold text-ink text-base">
                               {cached?.name || sid}
                               {cached?.level !== undefined && (
-                                <span className="ml-2 text-[10px] font-bold uppercase tracking-widest text-ink/40">
+                                <span className="ml-2 text-[10px] font-bold uppercase tracking-widest text-ink/45">
                                   {cached.level === 0 ? "Cantrip" : `Lv ${cached.level}`}
                                 </span>
                               )}
                               {cached?.school && (
-                                <span className="ml-2 text-[10px] font-bold uppercase tracking-widest text-ink/40">
+                                <span className="ml-2 text-[10px] font-bold uppercase tracking-widest text-ink/45">
                                   {cached.school}
                                 </span>
                               )}
                             </div>
                             {cached?.description && (
-                              <div className="text-xs font-serif text-ink/70 mt-1 leading-relaxed line-clamp-3">
+                              <div className="text-xs font-serif text-ink/75 mt-1 leading-relaxed line-clamp-3">
                                 <BBCodeRenderer content={cached.description} />
                               </div>
                             )}
@@ -11949,14 +11949,14 @@ export default function CharacterBuilder({
       />
 
       {isSelectingSubclass.open && (
-        <div className="fixed inset-0 bg-ink/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-ink/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <Card className="max-w-4xl w-full max-h-[90vh] flex flex-col border-4 border-gold bg-background shadow-2xl overflow-hidden">
-            <CardHeader className="border-b border-gold/20 flex flex-row items-center justify-between shrink-0">
+            <CardHeader className="border-b border-gold/25 flex flex-row items-center justify-between shrink-0">
               <div>
                 <CardTitle className="font-serif text-2xl font-black text-ink">
                   Select Subclass
                 </CardTitle>
-                <CardDescription className="text-ink/60 font-bold uppercase text-[10px] tracking-widest mt-1">
+                <CardDescription className="text-ink/65 font-bold uppercase text-[10px] tracking-widest mt-1">
                   CHOOSE YOUR SPECIALIZATION
                 </CardDescription>
               </div>
@@ -11966,11 +11966,11 @@ export default function CharacterBuilder({
             </CardHeader>
             <CardContent className="flex-1 overflow-y-auto p-0">
               {availableSubclasses.length === 0 ? (
-                <div className="p-8 text-center text-ink/50 font-serif italic">
+                <div className="p-8 text-center text-ink/55 font-serif italic">
                   No subclasses found for this class.
                 </div>
               ) : (
-                <div className="divide-y divide-gold/10">
+                <div className="divide-y divide-gold/15">
                   {availableSubclasses.map((subclass) => (
                     <div key={subclass.id} className="p-4 flex flex-col sm:flex-row gap-4 hover:bg-gold/5 transition-colors">
                       <div className="flex-1">
@@ -11978,7 +11978,7 @@ export default function CharacterBuilder({
                           {subclass.name}
                         </h4>
                         {subclass.description && (
-                          <div className="text-sm font-serif text-ink/70 mt-1 leading-relaxed">
+                          <div className="text-sm font-serif text-ink/75 mt-1 leading-relaxed">
                             <BBCodeRenderer content={subclass.description} />
                           </div>
                         )}

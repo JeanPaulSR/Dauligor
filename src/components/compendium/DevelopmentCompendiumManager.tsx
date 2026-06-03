@@ -502,8 +502,8 @@ export default function DevelopmentCompendiumManager({
             <div className="flex items-center gap-4">
               <h1 className="text-4xl font-serif font-bold text-ink tracking-tight uppercase">{title}</h1>
             </div>
-            <p className="text-ink/60 font-serif italic max-w-3xl">{description}</p>
-            <p className="text-xs text-gold/80 border border-gold/10 bg-gold/5 rounded px-3 py-2 max-w-3xl">
+            <p className="text-ink/65 font-serif italic max-w-3xl">{description}</p>
+            <p className="text-xs text-gold/85 border border-gold/15 bg-gold/5 rounded px-3 py-2 max-w-3xl">
               Admin development surface. These entries are for schema shaping and Foundry alignment while the workflow is still in progress.
             </p>
           </div>
@@ -514,7 +514,7 @@ export default function DevelopmentCompendiumManager({
 
       <div className="grid lg:grid-cols-3 gap-8">
         <div className="space-y-6 lg:col-span-2">
-          <Card className="border-gold/20 bg-card/50">
+          <Card className="border-gold/25 bg-card/50">
             <CardContent className="p-6">
               {cascadeDep && (
                 <CascadeDependentBanner
@@ -526,37 +526,37 @@ export default function DevelopmentCompendiumManager({
                   className="mb-4"
                 />
               )}
-              <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-gold border-b border-gold/10 pb-2">
+              <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-gold border-b border-gold/15 pb-2">
                 {editingId ? `Edit ${singularLabel}` : `New ${singularLabel}`}
               </h2>
 
               <form onSubmit={handleSave} className="space-y-6 mt-4">
                 <div className="grid md:grid-cols-2 gap-4">
                   <ReviewFieldHighlight columnKey="name" className="space-y-1">
-                    <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Name</Label>
+                    <Label className="text-xs font-bold uppercase tracking-widest text-ink/45">Name</Label>
                     <Input
                       value={formData.name}
                       onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                      className="bg-background/50 border-gold/10 focus:border-gold"
+                      className="bg-background/50 border-gold/15 focus:border-gold"
                       placeholder={`e.g. ${singularLabel}`}
                       required
                     />
                   </ReviewFieldHighlight>
                   <ReviewFieldHighlight columnKey="identifier" className="space-y-1">
-                    <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Identifier</Label>
+                    <Label className="text-xs font-bold uppercase tracking-widest text-ink/45">Identifier</Label>
                     <Input
                       value={formData.identifier}
                       onChange={e => setFormData(prev => ({ ...prev, identifier: e.target.value }))}
-                      className="bg-background/50 border-gold/10 focus:border-gold font-mono"
+                      className="bg-background/50 border-gold/15 focus:border-gold font-mono"
                       placeholder={slugify(formData.name || singularLabel)}
                     />
                   </ReviewFieldHighlight>
                   <ReviewFieldHighlight columnKey="source_id" className="space-y-1">
-                    <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Source</Label>
+                    <Label className="text-xs font-bold uppercase tracking-widest text-ink/45">Source</Label>
                     <select
                       value={formData.sourceId}
                       onChange={e => setFormData(prev => ({ ...prev, sourceId: e.target.value }))}
-                      className="w-full h-10 px-3 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                      className="w-full h-10 px-3 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm"
                     >
                       <option value="">Select a source</option>
                       {sources.map(source => (
@@ -567,7 +567,7 @@ export default function DevelopmentCompendiumManager({
                 </div>
 
                 <ReviewFieldHighlight columnKey="image_url" className="space-y-2">
-                  <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Image</Label>
+                  <Label className="text-xs font-bold uppercase tracking-widest text-ink/45">Image</Label>
                   <ImageUpload
                     currentImageUrl={formData.imageUrl}
                     storagePath={`images/${collectionName}/${editingId || 'draft'}/`}
@@ -588,7 +588,7 @@ export default function DevelopmentCompendiumManager({
                 {renderSpecificFields(formData, setFormData)}
 
                 <div className="space-y-3">
-                  <div className="border-t border-gold/10 pt-4">
+                  <div className="border-t border-gold/15 pt-4">
                     <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold mb-2">Activities</h3>
                     <ActivityEditor
                       activities={formData.activities}
@@ -597,14 +597,14 @@ export default function DevelopmentCompendiumManager({
                   </div>
 
                   <div className="space-y-1">
-                    <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Effects (JSON)</Label>
+                    <Label className="text-xs font-bold uppercase tracking-widest text-ink/45">Effects (JSON)</Label>
                     <textarea
                       value={formData.effectsStr}
                       onChange={e => setFormData(prev => ({ ...prev, effectsStr: e.target.value }))}
-                      className="w-full min-h-[160px] rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs font-mono p-3"
+                      className="w-full min-h-[160px] rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-xs font-mono p-3"
                       placeholder="[]"
                     />
-                    <p className="text-[10px] text-ink/40">
+                    <p className="text-[10px] text-ink/45">
                       Raw effect scaffolding for now. Activities should be the primary runtime surface, with effects for persistent states and automation support.
                     </p>
                   </div>
@@ -614,7 +614,7 @@ export default function DevelopmentCompendiumManager({
                   {isReadOnly ? (
                     <Button
                       type="button"
-                      className="bg-gold text-white gap-2"
+                      className="bg-gold text-[var(--primary-foreground)] gap-2"
                       onClick={() => editingId && unlockBaseEntry(editingId)}
                     >
                       <Edit className="w-4 h-4" />
@@ -633,7 +633,7 @@ export default function DevelopmentCompendiumManager({
                           <Save className="w-4 h-4" /> {saving ? 'Saving...' : `Save ${singularLabel}`}
                         </Button>
                       )}
-                      <Button type="button" variant="ghost" className="text-ink/60 hover:text-gold" onClick={resetForm}>
+                      <Button type="button" variant="ghost" className="text-ink/65 hover:text-gold" onClick={resetForm}>
                         Reset
                       </Button>
                     </>
@@ -645,20 +645,20 @@ export default function DevelopmentCompendiumManager({
         </div>
 
         <div className="space-y-6">
-          <Card className="border-gold/20 bg-card/50">
+          <Card className="border-gold/25 bg-card/50">
             <CardContent className="p-6">
-              <div className="flex items-center justify-between border-b border-gold/10 pb-2 mb-4">
+              <div className="flex items-center justify-between border-b border-gold/15 pb-2 mb-4">
                 <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">{title} Drafts</h2>
-                <div className="flex items-center gap-2 text-ink/40 text-xs">
+                <div className="flex items-center gap-2 text-ink/45 text-xs">
                   <Wrench className="w-3 h-3" />
                   {entries.length}
                 </div>
               </div>
 
               {loading ? (
-                <div className="text-sm text-ink/40 italic">Loading…</div>
+                <div className="text-sm text-ink/45 italic">Loading…</div>
               ) : filteredEntries.length === 0 ? (
-                <div className="text-sm text-ink/40 italic">
+                <div className="text-sm text-ink/45 italic">
                   {focusModeEnabled && focusMode === 'drafts' && entries.length > 0
                     ? `No staged ${title.toLowerCase()} yet — switch to Browse Base to find one to edit.`
                     : `No ${title.toLowerCase()} drafted yet.`}
@@ -697,10 +697,10 @@ export default function DevelopmentCompendiumManager({
                         className={cn(
                           'border rounded-md p-3 space-y-2 transition-colors',
                           selected
-                            ? 'border-gold/50 bg-gold/10'
+                            ? 'border-gold/55 bg-gold/15'
                             : drafted
                               ? 'border-archive-blue/40 bg-archive-blue/5'
-                              : 'border-gold/10 bg-background/30',
+                              : 'border-gold/15 bg-background/30',
                         )}
                         title={
                           drafted
@@ -716,7 +716,7 @@ export default function DevelopmentCompendiumManager({
                             )}>
                               {entry.name}
                             </h3>
-                            <p className="text-[10px] uppercase tracking-widest text-gold/70">{sourceLabel}</p>
+                            <p className="text-[10px] uppercase tracking-widest text-gold/75">{sourceLabel}</p>
                           </div>
                           <div className="flex gap-1">
                             <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0 text-gold" onClick={() => startEditing(entry)}>
@@ -729,8 +729,8 @@ export default function DevelopmentCompendiumManager({
                             )}
                           </div>
                         </div>
-                        <p className="text-[10px] text-ink/50 font-mono">{entry.identifier || '(no identifier)'}</p>
-                        <div className="text-xs text-ink/70">
+                        <p className="text-[10px] text-ink/55 font-mono">{entry.identifier || '(no identifier)'}</p>
+                        <div className="text-xs text-ink/75">
                           {summarizeEntry ? summarizeEntry(entry, sourceLabel) : `${(entry.automation?.activities || []).length || 0} activities`}
                         </div>
                       </div>

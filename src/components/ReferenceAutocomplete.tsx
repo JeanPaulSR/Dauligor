@@ -272,20 +272,20 @@ export default function ReferenceAutocomplete({ editor, enabled }: Props) {
 
   return createPortal(
     <div
-      className="fixed z-[100] w-72 max-h-64 overflow-y-auto custom-scrollbar rounded-md border border-gold/30 bg-card shadow-xl shadow-black/30 py-1"
+      className="fixed z-[100] w-72 max-h-64 overflow-y-auto custom-scrollbar rounded-md border border-gold/35 bg-card shadow-xl shadow-black/30 py-1"
       style={{ left: menu.left, top: menu.top + 4 }}
       onMouseDown={(e) => e.preventDefault() /* keep editor focus */}
     >
-      <div className="px-2.5 py-1 text-[10px] uppercase tracking-wider text-gold/60 border-b border-gold/10 flex items-center justify-between gap-2">
+      <div className="px-2.5 py-1 text-[10px] uppercase tracking-wider text-gold/65 border-b border-gold/15 flex items-center justify-between gap-2">
         <span className="truncate">{headerLabel}</span>
         {drill ? (
-          <span className="text-ink/40 normal-case shrink-0">Esc: back</span>
+          <span className="text-ink/45 normal-case shrink-0">Esc: back</span>
         ) : loading ? (
-          <span className="text-ink/40 shrink-0">…</span>
+          <span className="text-ink/45 shrink-0">…</span>
         ) : null}
       </div>
       {results.length === 0 ? (
-        <div className="px-2.5 py-2 text-xs text-ink/50">{emptyText}</div>
+        <div className="px-2.5 py-2 text-xs text-ink/55">{emptyText}</div>
       ) : (
         results.map((r, i) => {
           const isOptionItem = r.id.includes(':');
@@ -298,15 +298,15 @@ export default function ReferenceAutocomplete({ editor, enabled }: Props) {
               onMouseEnter={() => setActive(i)}
               onClick={() => select(r)}
               className={`w-full text-left px-2.5 py-1.5 flex items-center gap-2 text-sm ${
-                i === active ? 'bg-gold/15 text-gold' : 'text-ink/80 hover:bg-gold/5'
-              } ${isGroupEntry ? 'border-t border-gold/10' : ''}`}
+                i === active ? 'bg-gold/15 text-gold' : 'text-ink/85 hover:bg-gold/5'
+              } ${isGroupEntry ? 'border-t border-gold/15' : ''}`}
             >
-              <span className="text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-gold/15 text-gold/80 shrink-0">
+              <span className="text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-gold/15 text-gold/85 shrink-0">
                 {badge}
               </span>
               <span className="flex-1 min-w-0 truncate">{r.label ?? r.name}</span>
               {!drill && r.kind === 'option-group' && !isOptionItem && (
-                <span className="text-ink/30 shrink-0">›</span>
+                <span className="text-ink/35 shrink-0">›</span>
               )}
             </button>
           );

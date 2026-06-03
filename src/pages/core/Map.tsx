@@ -313,7 +313,7 @@ export default function Map({ userProfile }: { userProfile: any }) {
     return (
       <div className="space-y-4 max-w-xl">
         <h1 className="text-4xl font-serif font-bold text-ink">Interactive Map</h1>
-        <p className="text-ink/60 italic">Select a campaign in the navbar to view its world maps.</p>
+        <p className="text-ink/65 italic">Select a campaign in the navbar to view its world maps.</p>
       </div>
     );
   }
@@ -322,7 +322,7 @@ export default function Map({ userProfile }: { userProfile: any }) {
     return (
       <div className="space-y-4 max-w-xl">
         <h1 className="text-4xl font-serif font-bold text-ink">Interactive Map</h1>
-        <p className="text-ink/60 italic">The active campaign has no era assigned, so no maps are available.</p>
+        <p className="text-ink/65 italic">The active campaign has no era assigned, so no maps are available.</p>
       </div>
     );
   }
@@ -332,7 +332,7 @@ export default function Map({ userProfile }: { userProfile: any }) {
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-4xl font-serif font-bold text-ink">Interactive Map</h1>
-          <p className="text-ink/60">
+          <p className="text-ink/65">
             Explore the world of your campaign.
             {isAdmin && selectedMap && ' Click anywhere on the map to drop a pin.'}
           </p>
@@ -340,7 +340,7 @@ export default function Map({ userProfile }: { userProfile: any }) {
 
         {maps.length > 0 && (
           <div className="space-y-1">
-            <label className="text-xs font-medium uppercase tracking-widest text-ink/50">Map</label>
+            <label className="text-xs font-medium uppercase tracking-widest text-ink/55">Map</label>
             <select
               className="h-10 px-3 rounded-md border border-input bg-background text-sm min-w-[14rem]"
               value={selectedMapId || ''}
@@ -355,9 +355,9 @@ export default function Map({ userProfile }: { userProfile: any }) {
       </div>
 
       {maps.length === 0 ? (
-        <p className="text-ink/40 italic">No maps available for this era yet.</p>
+        <p className="text-ink/45 italic">No maps available for this era yet.</p>
       ) : !selectedMap ? (
-        <p className="text-ink/40 italic">Pick a map to begin.</p>
+        <p className="text-ink/45 italic">Pick a map to begin.</p>
       ) : (
         <div className="grid lg:grid-cols-4 gap-8">
           <div className="lg:col-span-3">
@@ -374,7 +374,7 @@ export default function Map({ userProfile }: { userProfile: any }) {
                 />
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-ink/30 text-sm italic">No map image uploaded yet</span>
+                  <span className="text-ink/35 text-sm italic">No map image uploaded yet</span>
                 </div>
               )}
               <div className="absolute inset-0 bg-gold/5 mix-blend-multiply" />
@@ -384,7 +384,7 @@ export default function Map({ userProfile }: { userProfile: any }) {
               {highlights.map(h => (
                 <div
                   key={h.id}
-                  className="group absolute border-2 border-gold/40 bg-gold/10 hover:bg-gold/20 transition pointer-events-auto cursor-pointer"
+                  className="group absolute border-2 border-gold/45 bg-gold/15 hover:bg-gold/25 transition pointer-events-auto cursor-pointer"
                   style={{
                     left: `${h.x}%`,
                     top: `${h.y}%`,
@@ -398,7 +398,7 @@ export default function Map({ userProfile }: { userProfile: any }) {
                   }}
                 >
                   {h.label && (
-                    <div className="absolute -top-6 left-0 hidden group-hover:block bg-ink text-white text-[10px] px-2 py-0.5 rounded whitespace-nowrap">
+                    <div className="absolute -top-6 left-0 hidden group-hover:block bg-ink text-[var(--background)] text-[10px] px-2 py-0.5 rounded whitespace-nowrap">
                       {h.label}
                     </div>
                   )}
@@ -417,7 +417,7 @@ export default function Map({ userProfile }: { userProfile: any }) {
                     setSelectedHighlight(null);
                   }}
                 >
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-ink text-white text-[10px] px-2 py-1 rounded whitespace-nowrap z-10">
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-ink text-[var(--background)] text-[10px] px-2 py-1 rounded whitespace-nowrap z-10">
                     {marker.label || marker.article_title || 'Unnamed pin'}
                   </div>
                 </div>
@@ -426,7 +426,7 @@ export default function Map({ userProfile }: { userProfile: any }) {
           </div>
 
           <aside className="space-y-6">
-            <Card className="border-gold/20">
+            <Card className="border-gold/25">
               <CardHeader>
                 <CardTitle className="font-serif flex items-center gap-2">
                   <Info className="w-5 h-5 text-gold" /> Details
@@ -440,7 +440,7 @@ export default function Map({ userProfile }: { userProfile: any }) {
                     </h3>
                     {selectedMarker.article_title ? (
                       <>
-                        <Badge className="bg-gold/10 text-gold hover:bg-gold/10">Article</Badge>
+                        <Badge className="bg-gold/15 text-gold hover:bg-gold/15">Article</Badge>
                         <Button
                           variant="outline"
                           className="w-full border-gold text-gold hover:bg-gold/5"
@@ -450,7 +450,7 @@ export default function Map({ userProfile }: { userProfile: any }) {
                         </Button>
                       </>
                     ) : (
-                      <p className="text-sm text-ink/40 italic">This pin has no article linked yet.</p>
+                      <p className="text-sm text-ink/45 italic">This pin has no article linked yet.</p>
                     )}
                     {isAdmin && (
                       <Button
@@ -489,11 +489,11 @@ export default function Map({ userProfile }: { userProfile: any }) {
                       </Button>
                     )}
                     {!selectedHighlight.article_title && !selectedHighlight.child_map_id && (
-                      <p className="text-sm text-ink/40 italic">This region has no link yet.</p>
+                      <p className="text-sm text-ink/45 italic">This region has no link yet.</p>
                     )}
                   </div>
                 ) : (
-                  <p className="text-sm text-ink/40 italic text-center py-10">
+                  <p className="text-sm text-ink/45 italic text-center py-10">
                     Select a pin or highlight to view details.
                   </p>
                 )}
@@ -530,12 +530,12 @@ export default function Map({ userProfile }: { userProfile: any }) {
                   <option key={a.id} value={a.id}>{a.title}</option>
                 ))}
               </select>
-              <p className="text-[10px] text-ink/40 italic">
+              <p className="text-[10px] text-ink/45 italic">
                 Leave blank to drop a placeholder pin you can link later.
               </p>
             </div>
-            <p className="text-xs text-ink/40">Coordinates: {newPin.x.toFixed(1)}%, {newPin.y.toFixed(1)}%</p>
-            <Button className="w-full bg-gold text-white" onClick={handleCreatePin}>
+            <p className="text-xs text-ink/45">Coordinates: {newPin.x.toFixed(1)}%, {newPin.y.toFixed(1)}%</p>
+            <Button className="w-full bg-gold text-[var(--primary-foreground)]" onClick={handleCreatePin}>
               Create Pin
             </Button>
           </div>

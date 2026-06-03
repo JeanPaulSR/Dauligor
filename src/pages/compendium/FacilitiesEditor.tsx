@@ -106,7 +106,7 @@ export default function FacilitiesEditor({ userProfile }: { userProfile: any }) 
 
   return (
     <Tabs defaultValue="manual-editor" className="h-[calc(100vh-4rem)] flex flex-col gap-2 p-2">
-      <div className="shrink-0 flex items-center gap-2 bg-card p-2 rounded-lg border border-gold/10 shadow-sm flex-wrap">
+      <div className="shrink-0 flex items-center gap-2 bg-card p-2 rounded-lg border border-gold/15 shadow-sm flex-wrap">
         <Link to={backPath}>
           <Button variant="ghost" size="sm" className="h-8 text-gold gap-2 hover:bg-gold/5">
             <ChevronLeft className="w-4 h-4" />
@@ -116,7 +116,7 @@ export default function FacilitiesEditor({ userProfile }: { userProfile: any }) 
         <TabsList variant="line" className="gap-1 bg-transparent p-0">
           <TabsTrigger
             value="manual-editor"
-            className="h-8 rounded-md border border-gold/15 bg-background/30 px-3 py-1 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold"
+            className="h-8 rounded-md border border-gold/15 bg-background/30 px-3 py-1 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/45 data-active:bg-gold/15 data-active:text-gold"
           >
             Manual Editor
           </TabsTrigger>
@@ -182,7 +182,7 @@ function FacilityManualEditor({ userProfile }: { userProfile: any }) {
             {entry.facilityType || 'basic'} facility
             {entry.size ? ` · ${entry.size}` : ''}
           </div>
-          <div className="text-[10px] text-ink/50">
+          <div className="text-[10px] text-ink/55">
             level {entry.level ?? 5}
             {entry.facilityOrder ? ` • order: ${entry.facilityOrder}` : ''}
             {entry.built ? ' • built' : ' • not built'}
@@ -303,7 +303,7 @@ function SizingSection({
             ...prev,
             level: parseInt(e.target.value || '5', 10) || 5,
           }))}
-          className="bg-background/50 border-gold/10"
+          className="bg-background/50 border-gold/15"
         />
       </FieldRow>
     </ActivitySection>
@@ -386,7 +386,7 @@ function OrderSection({
               min={0}
               value={progress.value ?? 0}
               onChange={(e) => updateProgress({ value: parseInt(e.target.value || '0', 10) || 0 })}
-              className="bg-background/50 border-gold/10"
+              className="bg-background/50 border-gold/15"
             />
           </FieldRow>
           <FieldRow label="Progress Max" hint="Total days required to complete this order.">
@@ -395,7 +395,7 @@ function OrderSection({
               min={0}
               value={progress.max ?? 0}
               onChange={(e) => updateProgress({ max: parseInt(e.target.value || '0', 10) || 0 })}
-              className="bg-background/50 border-gold/10"
+              className="bg-background/50 border-gold/15"
             />
           </FieldRow>
         </>
@@ -428,7 +428,7 @@ function CraftSection({
         <Input
           value={craft.item || ''}
           onChange={(e) => update({ item: e.target.value })}
-          className="bg-background/50 border-gold/10 text-xs font-mono"
+          className="bg-background/50 border-gold/15 text-xs font-mono"
           placeholder="Compendium.dnd5e.items.Item.xxxx"
         />
       </FieldRow>
@@ -438,7 +438,7 @@ function CraftSection({
           min={1}
           value={craft.quantity ?? 1}
           onChange={(e) => update({ quantity: parseInt(e.target.value || '1', 10) || 1 })}
-          className="bg-background/50 border-gold/10"
+          className="bg-background/50 border-gold/15"
         />
       </FieldRow>
     </ActivitySection>
@@ -476,7 +476,7 @@ function TradeSection({
           type="number"
           value={trade.profit ?? 0}
           onChange={(e) => updateTrade({ profit: parseInt(e.target.value || '0', 10) || 0 })}
-          className="bg-background/50 border-gold/10"
+          className="bg-background/50 border-gold/15"
         />
       </FieldRow>
       <FieldRow label="Stock Stocked" hint="Is there currently a stock to sell?" inline>
@@ -491,7 +491,7 @@ function TradeSection({
           min={0}
           value={stock.value ?? 0}
           onChange={(e) => updateStock({ value: parseInt(e.target.value || '0', 10) || 0 })}
-          className="bg-background/50 border-gold/10"
+          className="bg-background/50 border-gold/15"
         />
       </FieldRow>
       <FieldRow label="Stock Max" hint="Maximum stock value this facility can hold.">
@@ -500,10 +500,10 @@ function TradeSection({
           min={0}
           value={stock.max ?? 0}
           onChange={(e) => updateStock({ max: parseInt(e.target.value || '0', 10) || 0 })}
-          className="bg-background/50 border-gold/10"
+          className="bg-background/50 border-gold/15"
         />
       </FieldRow>
-      <p className="text-[10px] text-ink/40 py-2">
+      <p className="text-[10px] text-ink/45 py-2">
         Creature rosters (trade.creatures / trade.pending.creatures) are
         actor UUIDs — they'll be editable through the character sheet's
         bastion panel once that lands. For now, hand-edit the JSON if
@@ -556,7 +556,7 @@ function RosterSection({
           min={0}
           value={roster.max ?? 0}
           onChange={(e) => updateMax(parseInt(e.target.value || '0', 10) || 0)}
-          className="bg-background/50 border-gold/10"
+          className="bg-background/50 border-gold/15"
         />
       </FieldRow>
       <FieldRow
@@ -566,7 +566,7 @@ function RosterSection({
         <textarea
           value={value.join('\n')}
           onChange={(e) => updateValueText(e.target.value)}
-          className="w-full min-h-[80px] px-3 py-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs font-mono"
+          className="w-full min-h-[80px] px-3 py-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-xs font-mono"
           placeholder="Compendium.dnd5e.actors.Actor.xxxx"
         />
       </FieldRow>

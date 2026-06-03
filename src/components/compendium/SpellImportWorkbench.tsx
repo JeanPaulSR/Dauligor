@@ -543,12 +543,12 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
   // — the detail pane runs off the bottom edge of the viewport.
   return (
     <div className="h-full flex flex-col">
-      <Card className="border-gold/20 bg-card/50 overflow-hidden h-full flex flex-col">
+      <Card className="border-gold/25 bg-card/50 overflow-hidden h-full flex flex-col">
         <CardContent className="p-0 flex-1 flex flex-col min-h-0">
           {/* Compact header — title + actions on one row, inline stat
               pills below. Replaces the previous ~280px hero block to
               give the candidate browser most of the viewport. */}
-          <div className="border-b border-gold/10 bg-card px-6 py-3 relative overflow-hidden shrink-0">
+          <div className="border-b border-gold/15 bg-card px-6 py-3 relative overflow-hidden shrink-0">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(192,160,96,0.14),transparent_52%)] pointer-events-none" aria-hidden />
             <div className="relative flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3 text-gold">
@@ -572,7 +572,7 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="gap-2 h-8 border-gold/20 bg-background/40 text-ink hover:bg-gold/5"
+                  className="gap-2 h-8 border-gold/25 bg-background/40 text-ink hover:bg-gold/5"
                   onClick={() => fileInputRef.current?.click()}
                 >
                   <Upload className="h-3.5 w-3.5" />
@@ -591,7 +591,7 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
               </div>
             </div>
 
-            <div className="relative mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-ink/70">
+            <div className="relative mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-ink/75">
               <InlineStat icon={Layers3} label="loaded" value={batchSummary.totalSpells} />
               <InlineStat icon={AlertTriangle} label="unresolved" value={batchSummary.unresolvedSources} tone="warn" />
               <InlineStat icon={BookOpen} label="existing" value={batchSummary.existingMatches} />
@@ -608,10 +608,10 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
               remaining height so the detail pane can scroll inside. */}
           <div className="p-6 flex-1 min-h-0 flex flex-col gap-4">
             {!uploadedBatches.length ? (
-              <div className="rounded-xl border border-dashed border-gold/20 bg-background/30 px-6 py-12 text-center">
-                <FileJson className="mx-auto mb-4 h-10 w-10 text-gold/60" />
-                <p className="text-lg font-serif italic text-ink/70">No Foundry spell exports loaded yet.</p>
-                <p className="mx-auto mt-2 max-w-2xl text-sm text-ink/50">
+              <div className="rounded-xl border border-dashed border-gold/25 bg-background/30 px-6 py-12 text-center">
+                <FileJson className="mx-auto mb-4 h-10 w-10 text-gold/65" />
+                <p className="text-lg font-serif italic text-ink/75">No Foundry spell exports loaded yet.</p>
+                <p className="mx-auto mt-2 max-w-2xl text-sm text-ink/55">
                   Use the Load Foundry Exports button to begin reviewing available imports.
                 </p>
               </div>
@@ -657,22 +657,22 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
               <div className="flex gap-6 flex-1 min-h-0">
                 <div className="w-[360px] shrink-0 flex flex-col gap-4 min-h-0">
                   {tagGroups.length ? (
-                    <Card className="border-gold/10 bg-background/20 shrink-0 max-h-[40%] py-0 gap-0">
+                    <Card className="border-gold/15 bg-background/20 shrink-0 max-h-[40%] py-0 gap-0">
                       <CardContent className="space-y-4 p-4 overflow-y-auto custom-scrollbar">
                         <div className="space-y-1">
-                          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-gold/70">
+                          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-gold/75">
                             <Tag className="h-3.5 w-3.5" />
                             Spell Tags
                           </div>
                           <p className="text-[11px] text-ink/45">Filter the spell list by your Dauligor spell tags.</p>
                         </div>
                         <div className="relative">
-                          <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink/30" />
+                          <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink/35" />
                           <Input
                             value={tagSearch}
                             onChange={(event) => setTagSearch(event.target.value)}
                             placeholder="Search tags"
-                            className="bg-background/50 border-gold/10 pl-9 focus:border-gold"
+                            className="bg-background/50 border-gold/15 pl-9 focus:border-gold"
                             autoComplete="off"
                             spellCheck={false}
                           />
@@ -696,7 +696,7 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
                                           'rounded-md border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] transition-colors',
                                           active
                                             ? 'border-gold bg-gold text-background'
-                                            : 'border-gold/15 bg-background/40 text-ink/60 hover:border-gold/35 hover:text-gold'
+                                            : 'border-gold/15 bg-background/40 text-ink/65 hover:border-gold/35 hover:text-gold'
                                         )}
                                       >
                                         {tag.name}
@@ -717,7 +717,7 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
                       the rail height after the optional tag picker.
                       Card + CardContent + ScrollArea was an extra
                       layer of opinions that fought the height chain. */}
-                  <div className="flex-1 min-h-0 rounded-xl border border-gold/10 bg-background/20 overflow-y-auto custom-scrollbar">
+                  <div className="flex-1 min-h-0 rounded-xl border border-gold/15 bg-background/20 overflow-y-auto custom-scrollbar">
                         <div className="space-y-2 p-3">
                           {visibleCandidates.map((candidate) => {
                             const unresolved = !candidate.sourceResolved;
@@ -731,14 +731,14 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
                                 className={cn(
                                   'w-full rounded-xl border p-3 text-left transition-colors',
                                   selected
-                                    ? 'border-gold/50 bg-gold/10 shadow-[0_0_0_1px_rgba(192,160,96,0.2)]'
-                                    : 'border-gold/10 bg-background/30 hover:border-gold/30 hover:bg-background/50'
+                                    ? 'border-gold/55 bg-gold/15 shadow-[0_0_0_1px_rgba(192,160,96,0.2)]'
+                                    : 'border-gold/15 bg-background/30 hover:border-gold/35 hover:bg-background/50'
                                 )}
                               >
                                 <div className="flex items-start justify-between gap-3">
                                   <div>
                                     <div className="font-serif text-lg text-ink">{candidate.name}</div>
-                                    <div className="text-[10px] uppercase tracking-[0.2em] text-gold/70">
+                                    <div className="text-[10px] uppercase tracking-[0.2em] text-gold/75">
                                       {candidate.level === 0 ? 'Cantrip' : `Level ${candidate.level}`} {candidate.schoolLabel}
                                     </div>
                                   </div>
@@ -749,7 +749,7 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
                                   {candidate.existingEntryId ? <Badge className="bg-sky-500/15 text-sky-200 border-sky-400/20">Saved</Badge> : null}
                                   {unresolved ? <Badge className="bg-blood/20 text-blood border-blood/30">Unresolved Source</Badge> : null}
                                   {candidate.descriptionHtml.toLowerCase().includes('higher level') ? (
-                                    <Badge className="bg-gold/15 text-gold border-gold/20">Scaling</Badge>
+                                    <Badge className="bg-gold/15 text-gold border-gold/25">Scaling</Badge>
                                   ) : null}
                                   {candidate.effects.length ? (
                                     <Badge className="bg-violet-500/15 text-violet-200 border-violet-400/20">{candidate.effects.length} Effects</Badge>
@@ -779,21 +779,21 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
                 <div className="flex-1 min-w-0 min-h-0 overflow-y-auto custom-scrollbar space-y-4 pr-1">
                   {selectedCandidate ? (
                     <>
-                      <Card className="border-gold/10 bg-background/25 overflow-hidden">
+                      <Card className="border-gold/15 bg-background/25 overflow-hidden">
                         <CardContent className="p-0">
-                          <div className="border-b border-gold/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.02),transparent)] px-6 py-5">
+                          <div className="border-b border-gold/15 bg-[linear-gradient(180deg,rgba(255,255,255,0.02),transparent)] px-6 py-5">
                             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                               <div className="space-y-2">
                                 <div className="flex items-center gap-3">
                                   <h3 className="font-serif text-4xl font-bold text-ink">{selectedCandidate.name}</h3>
                                   {selectedCandidate.matchedSourceLabel ? (
-                                    <Badge className="border-gold/20 bg-gold/10 text-gold">{selectedCandidate.matchedSourceLabel}</Badge>
+                                    <Badge className="border-gold/25 bg-gold/15 text-gold">{selectedCandidate.matchedSourceLabel}</Badge>
                                   ) : null}
                                   {selectedCandidate.sourcePage ? (
-                                    <span className="text-xs uppercase tracking-widest text-ink/40">p{selectedCandidate.sourcePage}</span>
+                                    <span className="text-xs uppercase tracking-widest text-ink/45">p{selectedCandidate.sourcePage}</span>
                                   ) : null}
                                 </div>
-                                <p className="font-serif italic text-ink/70">
+                                <p className="font-serif italic text-ink/75">
                                   {selectedCandidate.level === 0 ? 'Cantrip' : `Level ${selectedCandidate.level}`} {selectedCandidate.schoolLabel}
                                 </p>
                               </div>
@@ -812,7 +812,7 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
                             </div>
                           </div>
 
-                            <div className="border-b border-gold/10 px-6 py-5">
+                            <div className="border-b border-gold/15 px-6 py-5">
                             <div className="grid gap-6 lg:grid-cols-[126px_minmax(0,1fr)]">
                               <SpellArtPreview
                                 src={selectedCandidate.imageUrl}
@@ -848,15 +848,15 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
                             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
                               <div className="space-y-3">
                                 <div
-                                  className="prose prose-invert max-w-none prose-p:text-ink/90 prose-strong:text-ink prose-em:text-ink/80 prose-li:text-ink/85 prose-headings:text-ink"
+                                  className="prose prose-invert max-w-none prose-p:text-ink/95 prose-strong:text-ink prose-em:text-ink/85 prose-li:text-ink/85 prose-headings:text-ink"
                                   dangerouslySetInnerHTML={{ __html: buildDisplayHtml(selectedCandidate.descriptionHtml) || '<p>No description.</p>' }}
                                 />
                               </div>
 
                               <div className="space-y-3">
                                 {tagGroups.length ? (
-                                  <div className="rounded-lg border border-gold/10 bg-background/25 p-4">
-                                    <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-gold/70">
+                                  <div className="rounded-lg border border-gold/15 bg-background/25 p-4">
+                                    <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-gold/75">
                                       <Tag className="h-3.5 w-3.5" />
                                       Spell Tags
                                     </div>
@@ -879,7 +879,7 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
                                                       'rounded-md border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] transition-colors',
                                                       active
                                                         ? 'border-gold bg-gold text-background'
-                                                        : 'border-gold/15 bg-background/40 text-ink/60 hover:border-gold/35 hover:text-gold'
+                                                        : 'border-gold/15 bg-background/40 text-ink/65 hover:border-gold/35 hover:text-gold'
                                                     )}
                                                   >
                                                     {tag.name}
@@ -913,8 +913,8 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
                       </Card>
                     </>
                   ) : (
-                    <Card className="border-gold/10 bg-background/25">
-                      <CardContent className="px-6 py-12 text-center text-ink/50">
+                    <Card className="border-gold/15 bg-background/25">
+                      <CardContent className="px-6 py-12 text-center text-ink/55">
                         Select a spell from the left to inspect and import it.
                       </CardContent>
                     </Card>
@@ -951,14 +951,14 @@ function InlineStat({
 }) {
   return (
     <span className="inline-flex items-center gap-1">
-      <Icon className="h-3 w-3 text-gold/60 shrink-0" />
+      <Icon className="h-3 w-3 text-gold/65 shrink-0" />
       <span className={cn(
         'font-bold tabular-nums',
         tone === 'warn' && value > 0 ? 'text-blood' : 'text-ink',
       )}>
         {value}
       </span>
-      <span className="text-ink/50 uppercase tracking-widest text-[10px]">{label}</span>
+      <span className="text-ink/55 uppercase tracking-widest text-[10px]">{label}</span>
     </span>
   );
 }
@@ -966,17 +966,17 @@ function InlineStat({
 function SpellRow({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-gold/70">{label}</div>
-      <div className="mt-1 text-sm text-ink/90">{value || '—'}</div>
+      <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-gold/75">{label}</div>
+      <div className="mt-1 text-sm text-ink/95">{value || '—'}</div>
     </div>
   );
 }
 
 function InfoBlock({ title, value }: { title: string; value: string }) {
   return (
-    <div className="rounded-lg border border-gold/10 bg-background/30 px-4 py-3">
-      <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold/70">{title}</div>
-      <div className="mt-2 break-words text-sm text-ink/90">{value}</div>
+    <div className="rounded-lg border border-gold/15 bg-background/30 px-4 py-3">
+      <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold/75">{title}</div>
+      <div className="mt-2 break-words text-sm text-ink/95">{value}</div>
     </div>
   );
 }

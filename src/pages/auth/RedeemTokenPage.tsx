@@ -85,13 +85,13 @@ export default function RedeemTokenPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           {status === 'pending' && (
-            <p className="text-sm text-ink/70">Preparing…</p>
+            <p className="text-sm text-ink/75">Preparing…</p>
           )}
           {status === 'signing-in' && (
-            <p className="text-sm text-ink/70 animate-pulse">Signing you in…</p>
+            <p className="text-sm text-ink/75 animate-pulse">Signing you in…</p>
           )}
           {status === 'success' && (
-            <p className="text-sm text-ink/70">
+            <p className="text-sm text-ink/75">
               You're in. Redirecting…
             </p>
           )}
@@ -100,7 +100,7 @@ export default function RedeemTokenPage() {
               <p className="text-sm text-destructive">{errorMessage}</p>
               <Button
                 onClick={() => navigate('/', { replace: true })}
-                className="bg-gold text-white"
+                className="bg-gold text-[var(--primary-foreground)]"
               >
                 Go to home
               </Button>

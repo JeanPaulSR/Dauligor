@@ -65,9 +65,9 @@ export default function BackButton({
     || (to ? 'Back' : stateFromLabel ? `Back to ${stateFromLabel}` : 'Back');
 
   const baseClasses =
-    'inline-flex items-center gap-1 h-8 px-2 rounded-md border border-gold/20 ' +
+    'inline-flex items-center gap-1 h-8 px-2 rounded-md border border-gold/25 ' +
     'text-[11px] font-bold uppercase tracking-widest text-gold ' +
-    'hover:bg-gold/10 hover:border-gold/40 transition-colors whitespace-nowrap';
+    'hover:bg-gold/15 hover:border-gold/45 transition-colors whitespace-nowrap';
 
   // Case 1: explicit route or routed-via-state — use <Link>.
   if (resolvedTo) {

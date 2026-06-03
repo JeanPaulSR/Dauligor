@@ -157,15 +157,15 @@ export default function FeatPickerDialog({
       {/* Outer picker dialog. Mirrors the SpellChoiceDialog z-index +
           backdrop tokens so it composes correctly with the rest of
           CharacterBuilder's overlay stack. */}
-      <div className="fixed inset-0 bg-ink/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <Card className="max-w-4xl w-full max-h-[90vh] flex flex-col border-4 border-indigo-500 bg-background shadow-2xl overflow-hidden">
-          <CardHeader className="border-b border-indigo-500/20 flex flex-row items-center justify-between shrink-0 gap-3">
+      <div className="fixed inset-0 bg-ink/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <Card className="max-w-4xl w-full max-h-[90vh] flex flex-col border-4 border-gold bg-background shadow-2xl overflow-hidden">
+          <CardHeader className="border-b border-gold/25 flex flex-row items-center justify-between shrink-0 gap-3">
             <div className="min-w-0">
               <CardTitle className="font-serif text-2xl font-black text-ink flex items-center gap-2">
-                <Wand2 className="w-5 h-5 text-indigo-600" />
+                <Wand2 className="w-5 h-5 text-gold" />
                 {title}
               </CardTitle>
-              <CardDescription className="text-ink/60 font-bold uppercase text-[10px] tracking-widest mt-1">
+              <CardDescription className="text-ink/65 font-bold uppercase text-[10px] tracking-widest mt-1">
                 {subtitle
                   ? subtitle
                   : `Choose ${count} from ${visiblePool.length}${selectedIds.length > 0 ? ` · ${selectedIds.length} chosen` : ''}`}
@@ -177,7 +177,7 @@ export default function FeatPickerDialog({
                   variant="outline"
                   size="sm"
                   onClick={() => setImportOpen(true)}
-                  className="h-8 border-indigo-500/40 text-indigo-700 hover:bg-indigo-500/10 hover:border-indigo-500 font-bold tracking-widest uppercase text-[10px]"
+                  className="h-8 border-gold/45 text-gold hover:bg-gold/15 hover:border-gold font-bold tracking-widest uppercase text-[10px]"
                   title="Import a feat from a Foundry export"
                 >
                   <BookOpen className="w-3 h-3 mr-2" />
@@ -190,8 +190,8 @@ export default function FeatPickerDialog({
             </div>
           </CardHeader>
 
-          <div className="border-b border-indigo-500/10 px-4 py-2 flex items-center gap-2 shrink-0 bg-card/60">
-            <Search className="w-4 h-4 text-ink/40 shrink-0" />
+          <div className="border-b border-gold/15 px-4 py-2 flex items-center gap-2 shrink-0 bg-card/60">
+            <Search className="w-4 h-4 text-ink/45 shrink-0" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -202,7 +202,7 @@ export default function FeatPickerDialog({
               <button
                 type="button"
                 onClick={() => setSearch('')}
-                className="text-ink/40 hover:text-ink/70 text-xs leading-none"
+                className="text-ink/45 hover:text-ink/75 text-xs leading-none"
               >
                 Clear
               </button>
@@ -211,13 +211,13 @@ export default function FeatPickerDialog({
 
           <CardContent className="flex-1 overflow-y-auto p-0">
             {visiblePool.length === 0 ? (
-              <div className="p-8 text-center text-ink/50 font-serif italic">
+              <div className="p-8 text-center text-ink/55 font-serif italic">
                 {search
                   ? 'No feats match the current search.'
                   : 'No feats in the picker pool.'}
               </div>
             ) : (
-              <div className="divide-y divide-indigo-500/10">
+              <div className="divide-y divide-gold/15">
                 {visiblePool.map((feat: any) => {
                   const featId = String(feat?.id || '');
                   const isOwned = ownedSet.has(featId);
@@ -240,15 +240,15 @@ export default function FeatPickerDialog({
                       className={`w-full text-left p-4 flex gap-4 transition-colors ${
                         disabled
                           ? 'opacity-40 cursor-not-allowed'
-                          : 'hover:bg-indigo-500/5'
-                      } ${isSelected ? 'bg-indigo-500/10' : ''}`}
+                          : 'hover:bg-gold/5'
+                      } ${isSelected ? 'bg-gold/15' : ''}`}
                     >
                       <div className="pt-1">
                         <div
                           className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors ${
                             isSelected
-                              ? 'bg-indigo-600 border-indigo-600 text-white'
-                              : 'border-indigo-500/40'
+                              ? 'bg-gold border-gold text-[var(--primary-foreground)]'
+                              : 'border-gold/45'
                           }`}
                         >
                           {isSelected && <Check className="w-4 h-4" />}
@@ -258,7 +258,7 @@ export default function FeatPickerDialog({
                         <div className="font-serif font-bold text-ink text-base flex items-center gap-2 flex-wrap">
                           <span>{feat?.name || featId}</span>
                           {subtype && (
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-ink/50">
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-ink/55">
                               {subtype}
                             </span>
                           )}
@@ -269,7 +269,7 @@ export default function FeatPickerDialog({
                           )}
                         </div>
                         {description && (
-                          <div className="text-xs font-serif text-ink/70 mt-1 leading-relaxed line-clamp-3">
+                          <div className="text-xs font-serif text-ink/75 mt-1 leading-relaxed line-clamp-3">
                             <BBCodeRenderer content={description} />
                           </div>
                         )}
@@ -281,8 +281,8 @@ export default function FeatPickerDialog({
             )}
           </CardContent>
 
-          <div className="border-t border-indigo-500/20 p-3 flex items-center justify-between gap-3 shrink-0 bg-card/70">
-            <span className="text-[10px] uppercase font-bold tracking-widest text-ink/50">
+          <div className="border-t border-gold/25 p-3 flex items-center justify-between gap-3 shrink-0 bg-card/70">
+            <span className="text-[10px] uppercase font-bold tracking-widest text-ink/55">
               {selectedIds.length} / {count} selected
             </span>
             <div className="flex items-center gap-2">
@@ -290,7 +290,7 @@ export default function FeatPickerDialog({
                 variant="ghost"
                 size="sm"
                 onClick={() => onOpenChange(false)}
-                className="text-ink/60"
+                className="text-ink/65"
               >
                 Cancel
               </Button>
@@ -298,7 +298,7 @@ export default function FeatPickerDialog({
                 size="sm"
                 onClick={handleConfirm}
                 disabled={selectedIds.length === 0}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold tracking-widest uppercase text-[10px]"
+                className="bg-gold hover:bg-gold/95 text-[var(--primary-foreground)] font-bold tracking-widest uppercase text-[10px]"
               >
                 <Plus className="w-3 h-3 mr-2" />
                 Confirm
@@ -317,9 +317,9 @@ export default function FeatPickerDialog({
           the just-imported feat shows up live. */}
       {importOpen && canManage && (
         <div className="fixed inset-0 bg-ink/85 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-          <div className="max-w-7xl w-full h-[92vh] bg-background border-4 border-indigo-500 rounded-lg shadow-2xl overflow-hidden flex flex-col">
-            <div className="border-b border-indigo-500/20 px-5 py-3 flex items-center justify-between shrink-0 bg-card/60">
-              <div className="flex items-center gap-2 text-indigo-700">
+          <div className="max-w-7xl w-full h-[92vh] bg-background border-4 border-gold rounded-lg shadow-2xl overflow-hidden flex flex-col">
+            <div className="border-b border-gold/25 px-5 py-3 flex items-center justify-between shrink-0 bg-card/60">
+              <div className="flex items-center gap-2 text-gold">
                 <BookOpen className="w-4 h-4" />
                 <h3 className="text-sm font-bold uppercase tracking-[0.22em] text-ink">
                   Import Feat From Foundry
@@ -329,7 +329,7 @@ export default function FeatPickerDialog({
                 variant="outline"
                 size="sm"
                 onClick={() => void handleRefreshAfterImport()}
-                className="h-8 border-indigo-500/40 text-indigo-700 hover:bg-indigo-500/10 text-[10px] uppercase tracking-widest font-bold"
+                className="h-8 border-gold/45 text-gold hover:bg-gold/15 text-[10px] uppercase tracking-widest font-bold"
               >
                 <X className="w-3 h-3 mr-2" />
                 Close &amp; Refresh

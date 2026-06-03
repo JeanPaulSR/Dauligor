@@ -19,11 +19,11 @@ export default function ProposalEditorComingSoon() {
   const path = location.pathname.replace(/^\/proposals\/edit\/?/, '');
   return (
     <div className="max-w-md mx-auto text-center py-20 space-y-4">
-      <Construction className="w-10 h-10 mx-auto text-gold/60" />
+      <Construction className="w-10 h-10 mx-auto text-gold/65" />
       <h1 className="text-xl font-bold uppercase tracking-widest text-ink">
         Editor in progress
       </h1>
-      <p className="text-sm text-ink/60 leading-relaxed">
+      <p className="text-sm text-ink/65 leading-relaxed">
         The proposal editor for{' '}
         <code className="text-xs bg-foreground/5 px-1.5 py-0.5 rounded">{path || '(this entity)'}</code>{' '}
         isn't wired through the new flow yet. Phase 4.5 lands each

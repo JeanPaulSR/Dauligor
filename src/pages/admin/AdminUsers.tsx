@@ -540,11 +540,11 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
     <div className="space-y-6">
       <div className="space-y-2">
         <h1 className="text-4xl font-serif font-bold text-ink">User Management</h1>
-        <p className="text-ink/60">Manage your players, their access to the archive, and any additive capabilities.</p>
+        <p className="text-ink/65">Manage your players, their access to the archive, and any additive capabilities.</p>
       </div>
 
       {/* Tab strip — Users (legacy CRUD) vs. Permissions (additive grants). */}
-      <div className="flex gap-2 border-b border-gold/10 pb-2">
+      <div className="flex gap-2 border-b border-gold/15 pb-2">
         {([
           { id: 'users', label: 'Users', icon: User, adminOnly: false },
           { id: 'permissions', label: 'Permissions', icon: ShieldPlus, adminOnly: true },
@@ -557,8 +557,8 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 px-4 py-2 rounded-t-lg transition-colors font-bold uppercase tracking-widest text-[10px] ${
                 activeTab === tab.id
-                  ? 'bg-gold text-white shadow-sm'
-                  : 'bg-card text-ink/60 hover:text-ink hover:bg-gold/10'
+                  ? 'bg-gold text-[var(--primary-foreground)] shadow-sm'
+                  : 'bg-card text-ink/65 hover:text-ink hover:bg-gold/15'
               }`}
             >
               <Icon className="w-3.5 h-3.5" />
@@ -634,8 +634,8 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
                       onClick={() => toggleCampaign(c.id)}
                       className={`flex items-center justify-between px-3 py-2 rounded-md text-xs transition-colors ${
                         newUser.campaignIds.includes(c.id) 
-                        ? 'bg-gold/20 text-gold border border-gold/30' 
-                        : 'bg-ink/5 text-ink/60 border border-transparent hover:bg-ink/10'
+                        ? 'bg-gold/25 text-gold border border-gold/35' 
+                        : 'bg-ink/5 text-ink/65 border border-transparent hover:bg-ink/15'
                       }`}
                     >
                       <span className="truncate mr-2">{c.name}</span>
@@ -643,13 +643,13 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
                     </button>
                   ))}
                   {filteredCampaigns.length === 0 && (
-                    <p className="col-span-2 text-center py-4 text-xs text-ink/40 italic">No campaigns found</p>
+                    <p className="col-span-2 text-center py-4 text-xs text-ink/45 italic">No campaigns found</p>
                   )}
                 </div>
               </div>
 
               {error && <p className="text-xs text-blood bg-blood/5 p-2 rounded">{error}</p>}
-              <Button onClick={handleCreateUser} disabled={loading} className="w-full bg-gold text-white">
+              <Button onClick={handleCreateUser} disabled={loading} className="w-full bg-gold text-[var(--primary-foreground)]">
                 {loading ? 'Creating...' : 'Create Account'}
               </Button>
             </div>
@@ -658,7 +658,7 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
       </div>
     </div>
 
-    <Card className="border-gold/10">
+    <Card className="border-gold/15">
         <CardContent className="p-0">
           <Table>
             <TableHeader>
@@ -677,16 +677,16 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
                   <TableCell className="font-medium">
                     <div className="flex flex-col">
                       <span>{u.displayName}</span>
-                      <span className="text-[10px] text-ink/40 font-serif italic">Active: {campaigns.find(c => c.id === u.active_campaign_id)?.name || 'None'}</span>
+                      <span className="text-[10px] text-ink/45 font-serif italic">Active: {campaigns.find(c => c.id === u.active_campaign_id)?.name || 'None'}</span>
                     </div>
                   </TableCell>
-                  <TableCell className="text-ink/60">@{u.username}</TableCell>
+                  <TableCell className="text-ink/65">@{u.username}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Badge 
                         variant="outline" 
                         className={`
-                          ${(u.role === 'admin' || u.role === 'co-dm') ? 'border-gold text-gold bg-gold/5' : 'border-ink/20 text-ink/40'}
+                          ${(u.role === 'admin' || u.role === 'co-dm') ? 'border-gold text-gold bg-gold/5' : 'border-ink/25 text-ink/45'}
                           capitalize
                         `}
                       >
@@ -698,7 +698,7 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
                           variant="ghost"
                           size="xs"
                           onClick={() => setRoleDialogOpen({ isOpen: true, userId: u.id, currentRole: u.role })}
-                          className="h-6 px-2 text-[10px] text-gold hover:bg-gold/10 border border-gold/10"
+                          className="h-6 px-2 text-[10px] text-gold hover:bg-gold/15 border border-gold/15"
                         >
                           Change
                         </Button>
@@ -712,14 +712,14 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
                     {Array.isArray(u.permission_keys) && u.permission_keys.length > 0 ? (
                       <div className="flex flex-wrap gap-1">
                         {u.permission_keys.map((key: string) => (
-                          <Badge key={key} variant="outline" className="text-[10px] border-gold/30 text-gold capitalize">
+                          <Badge key={key} variant="outline" className="text-[10px] border-gold/35 text-gold capitalize">
                             <ShieldPlus className="w-3 h-3 mr-1" />
                             {key.replace('-', ' ')}
                           </Badge>
                         ))}
                       </div>
                     ) : (
-                      <span className="text-[10px] text-ink/30 italic">None</span>
+                      <span className="text-[10px] text-ink/35 italic">None</span>
                     )}
                   </TableCell>
                   <TableCell>
@@ -730,15 +730,15 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
                           return (
                             <>
                               {campaigns.filter(c => userCampaignIds.includes(c.id)).slice(0, 2).map(c => (
-                                <Badge key={c.id} variant="outline" className="text-[10px] border-gold/20 text-gold/60">
+                                <Badge key={c.id} variant="outline" className="text-[10px] border-gold/25 text-gold/65">
                                   {c.name}
                                 </Badge>
                               ))}
                               {userCampaignIds.length > 2 && (
-                                <span className="text-[10px] text-ink/40">+{userCampaignIds.length - 2} more</span>
+                                <span className="text-[10px] text-ink/45">+{userCampaignIds.length - 2} more</span>
                               )}
                               {userCampaignIds.length === 0 && (
-                                <span className="text-[10px] text-ink/20 italic">None</span>
+                                <span className="text-[10px] text-ink/25 italic">None</span>
                               )}
                             </>
                           );
@@ -752,7 +752,7 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
                           setCampaignDialogOpen({ isOpen: true, userId: u.id, currentIds: userCampaignIds });
                           setCampaignSearch('');
                         }}
-                        className="h-6 px-2 text-[10px] text-gold hover:bg-gold/10 border border-gold/10 ml-auto"
+                        className="h-6 px-2 text-[10px] text-gold hover:bg-gold/15 border border-gold/15 ml-auto"
                       >
                         Manage
                       </Button>
@@ -779,7 +779,7 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
                           size="xs"
                           onClick={() => handleGenerateTemporaryPassword(u)}
                           disabled={passwordResetUserId === u.id}
-                          className="h-6 px-2 text-[10px] text-gold hover:bg-gold/10 border border-gold/10"
+                          className="h-6 px-2 text-[10px] text-gold hover:bg-gold/15 border border-gold/15"
                           title="Overwrite the user's password with a new random one. Destructive — their existing password stops working."
                         >
                           <KeyRound className="w-3 h-3 mr-1" />
@@ -809,7 +809,7 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
       </Card>
 
       {userProfile?.role === 'admin' && (
-        <Card className="border-gold/10 bg-gold/5 mt-8">
+        <Card className="border-gold/15 bg-gold/5 mt-8">
           <CardHeader>
             <CardTitle className="text-sm font-serif font-bold text-gold uppercase tracking-widest">System Actions</CardTitle>
           </CardHeader>
@@ -817,18 +817,18 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
             <div className="flex items-center justify-between">
               <div className="space-y-1">
                 <p className="text-sm font-bold text-ink">Seed Test Accounts</p>
-                <p className="text-xs text-ink/40 italic">Create the Co-DM, Lore Writer, and Trusted Player accounts for testing.</p>
+                <p className="text-xs text-ink/45 italic">Create the Co-DM, Lore Writer, and Trusted Player accounts for testing.</p>
               </div>
-              <Button variant="outline" onClick={handleSeedUsers} disabled={loading} className="border-gold/20 text-gold hover:bg-gold/10">
+              <Button variant="outline" onClick={handleSeedUsers} disabled={loading} className="border-gold/25 text-gold hover:bg-gold/15">
                 {loading ? 'Seeding...' : 'Seed Accounts'}
               </Button>
             </div>
-            <div className="flex items-center justify-between pt-4 border-t border-gold/10">
+            <div className="flex items-center justify-between pt-4 border-t border-gold/15">
               <div className="space-y-1">
                 <p className="text-sm font-bold text-ink">Seed Lore Articles</p>
-                <p className="text-xs text-ink/40 italic">Populate the wiki with structured World Anvil-style articles.</p>
+                <p className="text-xs text-ink/45 italic">Populate the wiki with structured World Anvil-style articles.</p>
               </div>
-              <Button variant="outline" onClick={handleSeedLore} disabled={loading} className="border-gold/20 text-gold hover:bg-gold/10">
+              <Button variant="outline" onClick={handleSeedLore} disabled={loading} className="border-gold/25 text-gold hover:bg-gold/15">
                 {loading ? 'Seeding...' : 'Seed Lore'}
               </Button>
             </div>
@@ -847,7 +847,7 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
               <Button
                 key={role}
                 variant={roleDialogOpen.currentRole === role ? 'default' : 'outline'}
-                className={`justify-start gap-3 h-12 capitalize ${roleDialogOpen.currentRole === role ? 'bg-gold text-white' : 'border-gold/20 text-ink/60 hover:bg-gold/5'}`}
+                className={`justify-start gap-3 h-12 capitalize ${roleDialogOpen.currentRole === role ? 'bg-gold text-[var(--primary-foreground)]' : 'border-gold/25 text-ink/65 hover:bg-gold/5'}`}
                 onClick={() => handleUpdateRole(roleDialogOpen.userId, role)}
               >
                 {role === 'admin' || role === 'co-dm' ? <Shield className="w-4 h-4" /> : <User className="w-4 h-4" />}
@@ -873,7 +873,7 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
                 onChange={e => setCampaignSearch(e.target.value)}
                 className="pl-9"
               />
-              <LayoutGrid className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink/30" />
+              <LayoutGrid className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink/35" />
             </div>
             
             <div className="grid grid-cols-1 gap-2 max-h-[300px] overflow-y-auto p-2 border rounded-md bg-background/50">
@@ -885,8 +885,8 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
                     onClick={() => handleToggleUserCampaign(campaignDialogOpen.userId, c.id, campaignDialogOpen.currentIds)}
                     className={`flex items-center justify-between px-4 py-3 rounded-md text-sm transition-all ${
                       isAssigned 
-                      ? 'bg-gold/10 text-gold border border-gold/30 shadow-sm' 
-                      : 'bg-ink/5 text-ink/60 border border-transparent hover:bg-ink/10'
+                      ? 'bg-gold/15 text-gold border border-gold/35 shadow-sm' 
+                      : 'bg-ink/5 text-ink/65 border border-transparent hover:bg-ink/15'
                     }`}
                   >
                     <div className="flex flex-col items-start">
@@ -899,12 +899,12 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
               })}
               {filteredCampaigns.length === 0 && (
                 <div className="text-center py-10 space-y-2">
-                  <p className="text-sm text-ink/40 italic">No campaigns found matching "{campaignSearch}"</p>
+                  <p className="text-sm text-ink/45 italic">No campaigns found matching "{campaignSearch}"</p>
                 </div>
               )}
             </div>
             <div className="flex justify-end pt-2">
-              <Button onClick={() => setCampaignDialogOpen(prev => ({ ...prev, isOpen: false }))} className="bg-gold text-white">
+              <Button onClick={() => setCampaignDialogOpen(prev => ({ ...prev, isOpen: false }))} className="bg-gold text-[var(--primary-foreground)]">
                 Done
               </Button>
             </div>
@@ -924,11 +924,11 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <div className="rounded-lg border border-gold/20 bg-gold/5 p-4">
-              <p className="text-[10px] uppercase tracking-[0.2em] text-gold/70">Generated Password</p>
+            <div className="rounded-lg border border-gold/25 bg-gold/5 p-4">
+              <p className="text-[10px] uppercase tracking-[0.2em] text-gold/75">Generated Password</p>
               <p className="mt-2 break-all font-mono text-lg font-bold text-ink">{temporaryPasswordDialog.password}</p>
             </div>
-            <p className="text-xs text-ink/50">
+            <p className="text-xs text-ink/55">
               Generated at {temporaryPasswordDialog.generatedAt ? new Date(temporaryPasswordDialog.generatedAt).toLocaleString() : 'just now'}.
             </p>
           </div>
@@ -936,7 +936,7 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
             <Button variant="outline" onClick={handleCopyTemporaryPassword} className="gap-2">
               <Copy className="w-4 h-4" /> Copy Password
             </Button>
-            <Button onClick={() => setTemporaryPasswordDialog(prev => ({ ...prev, isOpen: false }))} className="bg-gold text-white">
+            <Button onClick={() => setTemporaryPasswordDialog(prev => ({ ...prev, isOpen: false }))} className="bg-gold text-[var(--primary-foreground)]">
               Done
             </Button>
           </DialogFooter>
@@ -959,7 +959,7 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
               <p className="text-[10px] uppercase tracking-[0.2em] text-archive-blue/70">Redemption Link</p>
               <p className="mt-2 break-all font-mono text-xs text-ink">{signInLinkDialog.link}</p>
             </div>
-            <p className="text-xs text-ink/50">
+            <p className="text-xs text-ink/55">
               {signInLinkDialog.expiresAt
                 ? `Expires at ${new Date(signInLinkDialog.expiresAt).toLocaleString()}.`
                 : 'Expires in approximately one hour.'}

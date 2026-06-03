@@ -65,7 +65,7 @@ export function ImageMetadataModal({ isOpen, onClose, imageUrl }: ImageMetadataM
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-md bg-card border-gold/20 p-0 overflow-hidden flex flex-col h-[80vh] sm:h-[600px]">
+      <DialogContent className="max-w-md bg-card border-gold/25 p-0 overflow-hidden flex flex-col h-[80vh] sm:h-[600px]">
         {/* Metadata Panel */}
         <div className="w-full bg-background/95 p-6 flex flex-col overflow-y-auto h-full">
           <DialogHeader className="mb-6">
@@ -75,7 +75,7 @@ export function ImageMetadataModal({ isOpen, onClose, imageUrl }: ImageMetadataM
           </DialogHeader>
 
           {loading ? (
-            <p className="text-sm text-ink/40">Loading metadata...</p>
+            <p className="text-sm text-ink/45">Loading metadata...</p>
           ) : (
             <div className="space-y-4 flex-1 flex flex-col">
               <div className="space-y-4 flex-1">
@@ -86,28 +86,28 @@ export function ImageMetadataModal({ isOpen, onClose, imageUrl }: ImageMetadataM
                   { key: 'source', label: 'Source / Link' },
                 ] as const).map(({ key, label }) => (
                   <div key={key}>
-                    <label className="text-[10px] uppercase tracking-widest text-ink/40 block mb-1">{label}</label>
+                    <label className="text-[10px] uppercase tracking-widest text-ink/45 block mb-1">{label}</label>
                     <Input
                       value={(editedMeta as any)[key] ?? ''}
                       onChange={(e) => setEditedMeta({ ...editedMeta, [key]: e.target.value })}
-                      className="h-8 text-xs bg-background/50 border-gold/20"
+                      className="h-8 text-xs bg-background/50 border-gold/25"
                     />
                   </div>
                 ))}
                 <div>
-                  <label className="text-[10px] uppercase tracking-widest text-ink/40 block mb-1">Tags (comma-separated)</label>
+                  <label className="text-[10px] uppercase tracking-widest text-ink/45 block mb-1">Tags (comma-separated)</label>
                   <Input
                     value={(editedMeta.tags ?? []).join(', ')}
                     onChange={(e) =>
                       setEditedMeta({ ...editedMeta, tags: e.target.value.split(',').map((t) => t.trim()).filter(Boolean) })
                     }
-                    className="h-8 text-xs bg-background/50 border-gold/20"
+                    className="h-8 text-xs bg-background/50 border-gold/25"
                   />
                 </div>
               </div>
 
-              <div className="flex gap-2 pt-4 mt-auto border-t border-gold/10">
-                <Button size="sm" variant="ghost" className="flex-1 h-8 text-xs text-ink/40 hover:text-blood" onClick={onClose}>
+              <div className="flex gap-2 pt-4 mt-auto border-t border-gold/15">
+                <Button size="sm" variant="ghost" className="flex-1 h-8 text-xs text-ink/45 hover:text-blood" onClick={onClose}>
                   <X className="w-3 h-3 mr-1" /> Close
                 </Button>
                 <Button size="sm" className="flex-1 h-8 text-xs btn-gold gap-1" onClick={handleSave} disabled={saving}>

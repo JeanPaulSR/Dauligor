@@ -34,7 +34,7 @@ export function AdminOnly({
         <h1 className="text-xl font-bold uppercase tracking-widest text-ink">
           Access Denied
         </h1>
-        <p className="text-sm text-ink/60 leading-relaxed">
+        <p className="text-sm text-ink/65 leading-relaxed">
           This editor is admin-only. If you hold the{' '}
           <code className="text-xs bg-foreground/5 px-1.5 py-0.5 rounded">content-creator</code>{' '}
           permission, you can propose edits through{' '}

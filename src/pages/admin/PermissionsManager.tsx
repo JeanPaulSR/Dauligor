@@ -257,7 +257,7 @@ export default function PermissionsManager() {
 
   return (
     <div className="grid grid-cols-12 gap-6">
-      <Card className="col-span-12 lg:col-span-4 border-gold/10">
+      <Card className="col-span-12 lg:col-span-4 border-gold/15">
         <CardHeader>
           <CardTitle className="text-base font-bold uppercase tracking-widest flex items-center gap-2">
             <KeyRound className="w-4 h-4" />
@@ -281,7 +281,7 @@ export default function PermissionsManager() {
                   onClick={() => setSelectedUserId(u.id)}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-left transition-colors text-sm ${
                     isSelected
-                      ? 'bg-gold/15 text-gold border border-gold/30'
+                      ? 'bg-gold/15 text-gold border border-gold/35'
                       : 'hover:bg-ink/5 border border-transparent'
                   }`}
                 >
@@ -289,12 +289,12 @@ export default function PermissionsManager() {
                     <span className="truncate font-medium">
                       {u.display_name || u.username || 'Unknown'}
                     </span>
-                    <span className="truncate text-xs text-ink/50 font-mono">
+                    <span className="truncate text-xs text-ink/55 font-mono">
                       @{u.username} · {u.role}
                     </span>
                   </div>
                   {permCount > 0 && (
-                    <Badge variant="outline" className="ml-2 shrink-0 border-gold/30 text-gold">
+                    <Badge variant="outline" className="ml-2 shrink-0 border-gold/35 text-gold">
                       +{permCount}
                     </Badge>
                   )}
@@ -302,7 +302,7 @@ export default function PermissionsManager() {
               );
             })}
             {filteredUsers.length === 0 && (
-              <p className="text-sm text-ink/50 italic text-center py-8">
+              <p className="text-sm text-ink/55 italic text-center py-8">
                 No users match the search.
               </p>
             )}
@@ -312,24 +312,24 @@ export default function PermissionsManager() {
 
       <div className="col-span-12 lg:col-span-8 space-y-4">
         {!selectedUser ? (
-          <Card className="border-gold/10">
-            <CardContent className="py-20 text-center text-ink/50 italic">
+          <Card className="border-gold/15">
+            <CardContent className="py-20 text-center text-ink/55 italic">
               Pick a user from the list to manage their additive permissions.
             </CardContent>
           </Card>
         ) : (
           <>
-            <Card className="border-gold/10">
+            <Card className="border-gold/15">
               <CardHeader>
                 <CardTitle className="text-base font-bold uppercase tracking-widest">
                   {selectedUser.display_name || selectedUser.username}
                 </CardTitle>
-                <p className="text-xs text-ink/50 font-mono">
-                  Base role: <span className="text-ink/70">{selectedUser.role}</span> ·
-                  ID <span className="text-ink/70">{selectedUser.id}</span>
+                <p className="text-xs text-ink/55 font-mono">
+                  Base role: <span className="text-ink/75">{selectedUser.role}</span> ·
+                  ID <span className="text-ink/75">{selectedUser.id}</span>
                 </p>
               </CardHeader>
-              <CardContent className="text-xs text-ink/60 leading-relaxed">
+              <CardContent className="text-xs text-ink/65 leading-relaxed">
                 Permissions listed below stack on top of the base role.
                 A user keeps every capability their role already grants;
                 rows here only <em>add</em> capabilities (with optional
@@ -338,8 +338,8 @@ export default function PermissionsManager() {
             </Card>
 
             {loading ? (
-              <Card className="border-gold/10">
-                <CardContent className="py-12 text-center text-ink/50 italic">Loading…</CardContent>
+              <Card className="border-gold/15">
+                <CardContent className="py-12 text-center text-ink/55 italic">Loading…</CardContent>
               </Card>
             ) : (
               PERMISSION_KEYS.map((key) => (
@@ -422,15 +422,15 @@ function PermissionGrantCard({
   };
 
   return (
-    <Card className="border-gold/10">
+    <Card className="border-gold/15">
       <CardHeader className="flex flex-row items-start justify-between gap-4">
         <div>
           <CardTitle className="text-base flex items-center gap-2">
             <ShieldPlus className="w-4 h-4 text-gold" />
             {meta.label}
-            {granted && <Badge className="bg-gold/15 text-gold border-gold/30">Granted</Badge>}
+            {granted && <Badge className="bg-gold/15 text-gold border-gold/35">Granted</Badge>}
           </CardTitle>
-          <p className="text-xs text-ink/60 mt-2 leading-relaxed">{meta.description}</p>
+          <p className="text-xs text-ink/65 mt-2 leading-relaxed">{meta.description}</p>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -469,8 +469,8 @@ function PermissionGrantCard({
           onToggleValue={(id) => toggleAxisValue('eras', id)}
         />
 
-        <div className="flex justify-between items-center pt-2 border-t border-gold/10">
-          <p className="text-xs text-ink/50 italic">
+        <div className="flex justify-between items-center pt-2 border-t border-gold/15">
+          <p className="text-xs text-ink/55 italic">
             {scope === null
               ? 'Unrestricted on every axis — the holder can act anywhere.'
               : `Narrowed: ${(['worlds', 'campaigns', 'eras'] as AxisKey[])
@@ -485,7 +485,7 @@ function PermissionGrantCard({
                 Revoke
               </Button>
             )}
-            <Button onClick={onGrant} disabled={saving} className="bg-gold text-white">
+            <Button onClick={onGrant} disabled={saving} className="bg-gold text-[var(--primary-foreground)]">
               {saving ? 'Saving…' : granted ? 'Save Scope' : 'Grant'}
             </Button>
           </div>
@@ -522,10 +522,10 @@ function ScopeAxisRow({
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm font-medium">
-          <Icon className="w-4 h-4 text-ink/60" />
+          <Icon className="w-4 h-4 text-ink/65" />
           {axisLabel}
           {!restricted && (
-            <span className="text-xs text-ink/40 italic ml-2">unrestricted</span>
+            <span className="text-xs text-ink/45 italic ml-2">unrestricted</span>
           )}
         </div>
         <button
@@ -533,8 +533,8 @@ function ScopeAxisRow({
           onClick={() => onToggleRestriction(!restricted)}
           className={`text-xs font-medium px-3 py-1 rounded-md transition-colors ${
             restricted
-              ? 'bg-gold/15 text-gold border border-gold/30'
-              : 'bg-ink/5 text-ink/60 border border-transparent hover:bg-ink/10'
+              ? 'bg-gold/15 text-gold border border-gold/35'
+              : 'bg-ink/5 text-ink/65 border border-transparent hover:bg-ink/15'
           }`}
         >
           {restricted ? 'Narrow to set ▾' : 'Unrestricted'}
@@ -543,7 +543,7 @@ function ScopeAxisRow({
       {restricted && (
         <div className="flex flex-wrap gap-1.5 p-2 border rounded-md bg-background/50 min-h-[40px]">
           {options.length === 0 ? (
-            <p className="text-xs text-ink/40 italic">No {axisLabel.toLowerCase()} defined.</p>
+            <p className="text-xs text-ink/45 italic">No {axisLabel.toLowerCase()} defined.</p>
           ) : (
             options.map((opt) => {
               const isOn = (selected || []).includes(opt.id);
@@ -554,8 +554,8 @@ function ScopeAxisRow({
                   onClick={() => onToggleValue(opt.id)}
                   className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs transition-colors ${
                     isOn
-                      ? 'bg-gold/20 text-gold border border-gold/30'
-                      : 'bg-ink/5 text-ink/60 border border-transparent hover:bg-ink/10'
+                      ? 'bg-gold/25 text-gold border border-gold/35'
+                      : 'bg-ink/5 text-ink/65 border border-transparent hover:bg-ink/15'
                   }`}
                 >
                   {isOn ? <Check className="w-3 h-3" /> : <X className="w-3 h-3 opacity-30" />}

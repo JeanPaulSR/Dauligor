@@ -217,10 +217,10 @@ export default function RuleMembershipPanel({
     if (membership.appliedTo.length === 0) {
       return (
         <div
-          className="flex items-center gap-1 text-[10px] text-ink/30 italic"
+          className="flex items-center gap-1 text-[10px] text-ink/35 italic"
           title="Applied to no consumers yet"
         >
-          <Layers className="w-3 h-3 text-ink/30 shrink-0" aria-hidden />
+          <Layers className="w-3 h-3 text-ink/35 shrink-0" aria-hidden />
           <span className="not-italic">—</span>
         </div>
       );
@@ -293,7 +293,7 @@ export default function RuleMembershipPanel({
 
   if (!spellId) {
     return (
-      <div className={cn('text-xs text-ink/40 italic p-3', className)}>
+      <div className={cn('text-xs text-ink/45 italic p-3', className)}>
         Select a spell to see its rule membership.
       </div>
     );
@@ -341,7 +341,7 @@ export default function RuleMembershipPanel({
       {/* Status header — separates the picker from the membership
           listing. Single line so the section reads as a tight
           summary even when the membership list is empty. */}
-      <div className="border-t border-gold/10 pt-3 text-[10px] font-bold uppercase tracking-[0.18em] text-ink/55">
+      <div className="border-t border-gold/15 pt-3 text-[10px] font-bold uppercase tracking-[0.18em] text-ink/55">
         {loading
           ? 'Loading rule membership…'
           : memberships.length === 0
@@ -359,7 +359,7 @@ export default function RuleMembershipPanel({
             return (
               <div
                 key={m.ruleId}
-                className="flex items-stretch gap-3 px-3 py-2 rounded border border-gold/15 bg-background/30 hover:border-gold/30 transition-colors"
+                className="flex items-stretch gap-3 px-3 py-2 rounded border border-gold/15 bg-background/30 hover:border-gold/35 transition-colors"
               >
                 {/* Left column — rule identity on top, applied-to
                     chips pinned to the bottom of the row via
@@ -376,7 +376,7 @@ export default function RuleMembershipPanel({
                     title="Open in Spell Rules editor"
                   >
                     {m.ruleName}
-                    <ExternalLink className="w-3 h-3 text-ink/30" aria-hidden />
+                    <ExternalLink className="w-3 h-3 text-ink/35" aria-hidden />
                   </Link>
                   <div className="mt-auto pt-1">
                     {renderAppliedTo(m)}
@@ -395,7 +395,7 @@ export default function RuleMembershipPanel({
                       variant="outline"
                       onClick={() => handleRemove(m)}
                       disabled={isPending}
-                      className="w-full h-7 px-2 text-[10px] uppercase tracking-[0.18em] border-gold/20 text-ink/45 hover:bg-blood/10 hover:text-blood hover:border-blood/40"
+                      className="w-full h-7 px-2 text-[10px] uppercase tracking-[0.18em] border-gold/25 text-ink/45 hover:bg-blood/10 hover:text-blood hover:border-blood/40"
                       title={
                         m.via === 'manual'
                           ? "Removes the spell from this rule's manual list."

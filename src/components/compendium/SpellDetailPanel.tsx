@@ -289,7 +289,7 @@ export default function SpellDetailPanel({
           horizontal-stacked block below) rather than under the title
           band, freeing vertical room. */}
       <div className={cn(
-        "border-b border-gold/10",
+        "border-b border-gold/15",
         // Compact tightens the band padding so the smaller title +
         // info rows don't float in a chunky padded surface. Used by
         // the CharacterBuilder spell manager.
@@ -312,7 +312,7 @@ export default function SpellDetailPanel({
               {spell.name}
             </h2>
             <p className={cn(
-              "font-serif italic text-ink/70",
+              "font-serif italic text-ink/75",
               size === "compact" && "text-sm",
             )}>
               {Number(spell.level ?? 0) === 0 ? 'Cantrip' : `Level ${spell.level}`}{' '}
@@ -327,7 +327,7 @@ export default function SpellDetailPanel({
               <Link
                 to={`/sources/view/${spell.sourceId}`}
                 className={cn(
-                  "font-bold text-gold/70 hover:text-gold underline-offset-2 hover:underline transition-colors",
+                  "font-bold text-gold/75 hover:text-gold underline-offset-2 hover:underline transition-colors",
                   size === "compact" ? "text-xs" : "text-sm",
                 )}
                 title={String(sourceById[String(spell.sourceId ?? '')]?.name || sourceById[String(spell.sourceId ?? '')]?.shortName || renderSourceAbbreviation(spell))}
@@ -339,7 +339,7 @@ export default function SpellDetailPanel({
               </Link>
             ) : (
               <span className={cn(
-                "font-bold text-gold/70",
+                "font-bold text-gold/75",
                 size === "compact" ? "text-xs" : "text-sm",
               )}>
                 {renderSourceAbbreviation(spell)}
@@ -355,13 +355,13 @@ export default function SpellDetailPanel({
                 className={cn(
                   'shrink-0 inline-flex items-center justify-center h-9 w-9 rounded-full border transition-colors',
                   isFavorite
-                    ? 'border-gold/50 bg-gold/15 text-gold hover:bg-gold/25'
-                    : 'border-gold/20 text-ink/40 hover:border-gold/40 hover:text-gold'
+                    ? 'border-gold/55 bg-gold/15 text-gold hover:bg-gold/25'
+                    : 'border-gold/25 text-ink/45 hover:border-gold/45 hover:text-gold'
                 )}
                 title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
                 aria-pressed={isFavorite}
               >
-                <Star className={cn('w-4 h-4', isFavorite ? 'fill-gold/80' : '')} />
+                <Star className={cn('w-4 h-4', isFavorite ? 'fill-gold/85' : '')} />
               </button>
             )}
           </div>
@@ -374,7 +374,7 @@ export default function SpellDetailPanel({
           inconsistent across imported spells and the AoE info is already
           encoded in Range bucket / shape filter. */}
       <div className={cn(
-        "border-b border-gold/10",
+        "border-b border-gold/15",
         // Compact tightens the band padding so the smaller title +
         // info rows don't float in a chunky padded surface. Used by
         // the CharacterBuilder spell manager.
@@ -405,7 +405,7 @@ export default function SpellDetailPanel({
       )}>
         <div className={size === "compact" ? "space-y-4" : "space-y-6"}>
           <div
-            className="prose max-w-none prose-p:text-ink/90 prose-strong:text-ink prose-em:text-ink/80 prose-li:text-ink/85 prose-headings:text-ink"
+            className="prose max-w-none prose-p:text-ink/95 prose-strong:text-ink prose-em:text-ink/85 prose-li:text-ink/85 prose-headings:text-ink"
             onClick={handleDescriptionClick}
             dangerouslySetInnerHTML={{ __html: getDescriptionHtml(spell) || '<p>No description available.</p>' }}
           />
@@ -418,7 +418,7 @@ export default function SpellDetailPanel({
               </div>
               {spell.requiredTags?.length ? (
                 <div className="text-sm text-ink/85">
-                  <span className="text-ink/60">Requires tags:</span>{' '}
+                  <span className="text-ink/65">Requires tags:</span>{' '}
                   {spell.requiredTags.map(id => tagsById[id]?.name || id).join(', ')}
                 </div>
               ) : null}
@@ -433,7 +433,7 @@ export default function SpellDetailPanel({
             keeps a sensible minimum gap from the description when
             content is just long enough to crowd it. */}
         <div className="mt-auto pt-6 space-y-3">
-        <div className="border-t border-gold/10 pt-4 text-sm text-ink/70 space-y-2">
+        <div className="border-t border-gold/15 pt-4 text-sm text-ink/75 space-y-2">
           <div>
             <span className="font-bold text-ink">Source:</span>{' '}
             {renderSourceAbbreviation(spell)}
@@ -446,7 +446,7 @@ export default function SpellDetailPanel({
           </div>
           {memberships ? (
             memberships.length === 0 ? (
-              <div className="text-xs text-ink/40 italic">Not on any class spell list.</div>
+              <div className="text-xs text-ink/45 italic">Not on any class spell list.</div>
             ) : (
               <div>
                 <span className="font-bold text-ink">On the spell list for:</span>{' '}
@@ -474,7 +474,7 @@ export default function SpellDetailPanel({
             <button
               type="button"
               onClick={() => setShowTags(s => !s)}
-              className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded border border-gold/10 bg-gold/[0.03] hover:bg-gold/[0.07] text-[10px] font-bold uppercase tracking-[0.18em] text-gold/70 transition-colors"
+              className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded border border-gold/15 bg-gold/[0.03] hover:bg-gold/[0.07] text-[10px] font-bold uppercase tracking-[0.18em] text-gold/75 transition-colors"
               aria-expanded={showTags}
             >
               <span className="flex items-center gap-2">
@@ -522,8 +522,8 @@ export default function SpellDetailPanel({
 function SpellInfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-gold/70">{label}</div>
-      <div className="mt-1 text-sm text-ink/90">{value || '—'}</div>
+      <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-gold/75">{label}</div>
+      <div className="mt-1 text-sm text-ink/95">{value || '—'}</div>
     </div>
   );
 }

@@ -37,7 +37,7 @@ export default function ImageViewer({ userProfile }: { userProfile: any }) {
   if (!imageUrl) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90">
-        <p className="text-ink/40 italic">No image URL provided.</p>
+        <p className="text-ink/45 italic">No image URL provided.</p>
       </div>
     );
   }
@@ -63,7 +63,7 @@ export default function ImageViewer({ userProfile }: { userProfile: any }) {
 
       {/* Foundry-style window */}
       <div
-        className="relative z-10 flex flex-col rounded-sm border border-gold/20 shadow-2xl shadow-black/80"
+        className="relative z-10 flex flex-col rounded-sm border border-gold/25 shadow-2xl shadow-black/80"
         style={{
           background: 'rgba(8, 8, 12, 0.78)',
           backdropFilter: 'blur(8px)',
@@ -78,12 +78,12 @@ export default function ImageViewer({ userProfile }: { userProfile: any }) {
           className="flex items-center gap-3 px-4 py-2"
           style={{ borderBottom: '2px groove rgba(255,255,255,0.08)' }}
         >
-          <h4 className="flex-1 text-sm font-semibold text-ink/70 truncate capitalize">
+          <h4 className="flex-1 text-sm font-semibold text-ink/75 truncate capitalize">
             {metadata?.description || filename}
           </h4>
           <button
             onClick={() => navigate(-1)}
-            className="shrink-0 text-ink/30 hover:text-ink transition-colors"
+            className="shrink-0 text-ink/35 hover:text-ink transition-colors"
             title="Close (Esc)"
           >
             <X className="w-4 h-4" />
@@ -121,7 +121,7 @@ export default function ImageViewer({ userProfile }: { userProfile: any }) {
                     href={metadata!.source}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-gold/50 hover:text-gold transition-colors"
+                    className="text-gold/55 hover:text-gold transition-colors"
                     onClick={(e) => e.stopPropagation()}
                   >
                     Source ↗

@@ -791,30 +791,30 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
             pane shows (group → options → editor). */}
         <div
           className={cn(
-            'border border-gold/20 bg-card/50 flex-col lg:overflow-hidden lg:flex',
+            'border border-gold/25 bg-card/50 flex-col lg:overflow-hidden lg:flex',
             narrowView === 'group' ? 'flex' : 'hidden',
           )}
           style={paneStyle}
         >
           {/* Group Info */}
           <div className="p-4 space-y-4 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
-            <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-gold border-b border-gold/10 pb-2">Group Details</h2>
+            <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-gold border-b border-gold/15 pb-2">Group Details</h2>
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="space-y-1">
-                <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Group Name</label>
+                <label className="text-xs font-bold uppercase tracking-widest text-ink/45">Group Name</label>
                 <Input
                   value={name}
                   onChange={e => setName(e.target.value)}
                   placeholder="e.g. Eldritch Invocations"
-                  className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold"
+                  className="h-8 text-sm bg-background/50 border-gold/15 focus:border-gold"
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Source</label>
+                <label className="text-xs font-bold uppercase tracking-widest text-ink/45">Source</label>
                 <select
                   value={sourceId}
                   onChange={e => setSourceId(e.target.value)}
-                  className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                  className="w-full h-8 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm"
                 >
                   <option value="">Select a Source</option>
                   {sources.map(s => (
@@ -840,8 +840,8 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                 EntityPicker. Empty list = visible to all classes
                 downstream in the advancement editor. */}
             <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Class Restrictions</label>
-              <p className="text-[9px] text-ink/30 italic -mt-1">If none selected, this group is visible to all classes in the advancement editor.</p>
+              <label className="text-xs font-bold uppercase tracking-widest text-ink/45">Class Restrictions</label>
+              <p className="text-[9px] text-ink/35 italic -mt-1">If none selected, this group is visible to all classes in the advancement editor.</p>
               <EntityPicker
                 entities={[...classes.map((c: any) => ({ id: c.id, name: c.name })), ...classDraftOptions]}
                 selectedIds={groupClassIds}
@@ -868,7 +868,7 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
         {effectiveId && (
           <div
             className={cn(
-              'border border-gold/20 bg-card/50 flex-col lg:overflow-hidden lg:flex lg:max-h-none',
+              'border border-gold/25 bg-card/50 flex-col lg:overflow-hidden lg:flex lg:max-h-none',
               narrowView === 'options' ? 'flex' : 'hidden',
             )}
             style={paneStyle}
@@ -881,7 +881,7 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
             >
               <ChevronLeft className="w-4 h-4" /> Group Details
             </button>
-            <div className="section-header p-4 pb-3 shrink-0 border-b border-gold/10">
+            <div className="section-header p-4 pb-3 shrink-0 border-b border-gold/15">
               <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Options</h2>
               <Button
                 size="sm"
@@ -892,7 +892,7 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
               </Button>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 pt-2 divide-y divide-gold/10">
+            <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 pt-2 divide-y divide-gold/15">
                 {sortedItems.map((item) => {
                   // List-row summary. Renders the three prereq surfaces
                   // (flat level, flat string, tree) into one " · "-joined
@@ -916,7 +916,7 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                   <div
                     key={item.id}
                     onClick={() => openEditItem(item)}
-                    className={`py-2 px-2 -mx-2 flex items-center justify-between group cursor-pointer rounded transition-colors ${isEditing ? 'bg-gold/10' : 'hover:bg-gold/5'}`}
+                    className={`py-2 px-2 -mx-2 flex items-center justify-between group cursor-pointer rounded transition-colors ${isEditing ? 'bg-gold/15' : 'hover:bg-gold/5'}`}
                   >
                     <div className="flex items-center gap-3">
                       {item.iconUrl && (
@@ -929,11 +929,11 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                               and `0 && X` short-circuits to 0, which JSX renders as
                               the literal text "0" next to the name. */}
                           {Boolean(item.is_repeatable) && (
-                            <Repeat className="w-3 h-3 text-gold/40" />
+                            <Repeat className="w-3 h-3 text-gold/45" />
                           )}
                         </div>
                         {(hasLevelReq || treeText || hasStringReq) && (
-                          <div className="text-[10px] text-ink/40">
+                          <div className="text-[10px] text-ink/45">
                             <span className="font-bold uppercase tracking-wider">Prerequisites:</span>{' '}
                             {[
                               hasLevelReq
@@ -963,7 +963,7 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                   );
                 })}
                 {sortedItems.length === 0 && (
-                  <p className="py-4 text-center text-xs text-ink/30 italic">No options added yet.</p>
+                  <p className="py-4 text-center text-xs text-ink/35 italic">No options added yet.</p>
                 )}
             </div>
           </div>
@@ -975,7 +975,7 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
         {effectiveId && (
           <div
             className={cn(
-              'border border-gold/20 bg-card/50 flex-col h-[78vh] min-h-[480px] lg:h-auto overflow-hidden lg:flex',
+              'border border-gold/25 bg-card/50 flex-col h-[78vh] min-h-[480px] lg:h-auto overflow-hidden lg:flex',
               narrowView === 'editor' ? 'flex' : 'hidden',
             )}
             style={paneStyle}
@@ -991,8 +991,8 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
           {!editingItem ? (
             <div className="flex-1 flex items-center justify-center px-6 py-16 text-center">
               <div className="space-y-2 max-w-xs">
-                <Edit className="w-7 h-7 text-gold/20 mx-auto" />
-                <p className="text-sm text-ink/50 font-serif italic">
+                <Edit className="w-7 h-7 text-gold/25 mx-auto" />
+                <p className="text-sm text-ink/55 font-serif italic">
                   Select an option to edit, or click <span className="text-gold not-italic font-semibold">Add Option</span> to create one.
                 </p>
               </div>
@@ -1037,11 +1037,11 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
               <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Source</label>
+                    <label className="text-xs font-bold uppercase tracking-widest text-ink/45">Source</label>
                     <select
                       value={editingItem?.source_id || editingItem?.sourceId || ''}
                       onChange={e => setEditingItem((prev: any) => ({ ...(prev || { level_prerequisite: 0, is_repeatable: false }), source_id: e.target.value }))}
-                      className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                      className="w-full h-8 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm"
                     >
                       <option value="">Same as Group</option>
                       {sources.map(s => (
@@ -1050,12 +1050,12 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                     </select>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Page Reference</label>
+                    <label className="text-xs font-bold uppercase tracking-widest text-ink/45">Page Reference</label>
                     <Input
                       value={editingItem?.page || ''}
                       onChange={e => setEditingItem((prev: any) => ({ ...(prev || { levelPrerequisite: 0, isRepeatable: false }), page: e.target.value }))}
                       placeholder="e.g. 155"
-                      className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold"
+                      className="h-8 text-sm bg-background/50 border-gold/15 focus:border-gold"
                     />
                   </div>
                   <div className="space-y-1">
@@ -1063,18 +1063,18 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                         Group's name — drives dnd5e's `system.type.subtype`
                         on the embedded item. Read-only; renames on the
                         group level flow through here on save. */}
-                    <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Modular Option Group</label>
-                    <div className="h-8 px-3 flex items-center text-sm text-ink/70 bg-background/30 border border-gold/10 rounded-md select-none">
-                      {name || <span className="italic text-ink/30">Save the group first</span>}
+                    <label className="text-xs font-bold uppercase tracking-widest text-ink/45">Modular Option Group</label>
+                    <div className="h-8 px-3 flex items-center text-sm text-ink/75 bg-background/30 border border-gold/15 rounded-md select-none">
+                      {name || <span className="italic text-ink/35">Save the group first</span>}
                     </div>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Subtype</label>
+                    <label className="text-xs font-bold uppercase tracking-widest text-ink/45">Subtype</label>
                     <Input
                       value={editingItem?.subtype || ''}
                       onChange={e => setEditingItem((prev: any) => ({ ...(prev || {}), subtype: e.target.value }))}
                       placeholder="optional secondary tag"
-                      className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold"
+                      className="h-8 text-sm bg-background/50 border-gold/15 focus:border-gold"
                     />
                   </div>
                 </div>
@@ -1088,7 +1088,7 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                     exporter / importer flat-gate keeps working; existing items'
                     flat levels migrate into the tree when opened
                     (migrateFlatLevelIntoTree). */}
-                <div className="space-y-3 pt-2 border-t border-gold/10">
+                <div className="space-y-3 pt-2 border-t border-gold/15">
                   <h4 className="text-[10px] text-gold uppercase tracking-widest font-black">Prerequisites</h4>
 
                   <RequirementsEditor
@@ -1135,47 +1135,47 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                   const patchRecovery = (i: number, patch: any) =>
                     setRecovery(recovery.map((r: any, ri: number) => ri === i ? { ...r, ...patch } : r));
                   return (
-                    <div className="space-y-0 pt-2 border-t border-gold/10 divide-y divide-gold/5">
+                    <div className="space-y-0 pt-2 border-t border-gold/15 divide-y divide-gold/5">
                       <div className="flex items-center justify-between pb-2">
-                        <p className="text-[9px] uppercase tracking-[0.2em] font-black text-gold/50 select-none">Usage</p>
+                        <p className="text-[9px] uppercase tracking-[0.2em] font-black text-gold/55 select-none">Usage</p>
                       </div>
                       <div className="flex items-center gap-4 py-2">
-                        <label className="text-xs font-semibold text-ink/70 shrink-0 w-36">Limited Uses</label>
+                        <label className="text-xs font-semibold text-ink/75 shrink-0 w-36">Limited Uses</label>
                         <div className="flex items-center gap-3 flex-1">
                           <div className="flex flex-col items-center gap-0.5">
-                            <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Spent</span>
+                            <span className="text-[9px] uppercase text-ink/45 font-black tracking-wider">Spent</span>
                             <Input
                               type="number"
                               value={editingItem?.usesSpent ?? editingItem?.uses_spent ?? 0}
                               onChange={e => setEditingItem((prev: any) => ({ ...(prev || {}), usesSpent: parseInt(e.target.value) || 0 }))}
-                              className="h-7 w-16 text-center text-xs bg-background/50 border-gold/10 focus:border-gold"
+                              className="h-7 w-16 text-center text-xs bg-background/50 border-gold/15 focus:border-gold"
                             />
                           </div>
                           <div className="flex flex-col items-center gap-0.5">
-                            <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Max</span>
+                            <span className="text-[9px] uppercase text-ink/45 font-black tracking-wider">Max</span>
                             <Input
                               value={editingItem?.usesMax || editingItem?.uses_max || ''}
                               onChange={e => setEditingItem((prev: any) => ({ ...(prev || {}), usesMax: e.target.value }))}
                               placeholder="—"
-                              className="h-7 w-28 text-center text-xs bg-background/50 border-gold/10 focus:border-gold"
+                              className="h-7 w-28 text-center text-xs bg-background/50 border-gold/15 focus:border-gold"
                             />
                           </div>
                         </div>
                       </div>
                       <div className="py-3">
                         <div className="flex items-center justify-between mb-2">
-                          <p className="text-[9px] uppercase tracking-[0.2em] font-black text-gold/50 select-none">Recovery</p>
-                          <button type="button" onClick={addRecovery} className="text-[10px] font-black text-gold/60 hover:text-gold transition-colors px-1">+ ADD</button>
+                          <p className="text-[9px] uppercase tracking-[0.2em] font-black text-gold/55 select-none">Recovery</p>
+                          <button type="button" onClick={addRecovery} className="text-[10px] font-black text-gold/65 hover:text-gold transition-colors px-1">+ ADD</button>
                         </div>
                         {recovery.length === 0 && (
-                          <p className="text-xs text-ink/30 italic py-1">No recovery rules. Click + ADD to add one.</p>
+                          <p className="text-xs text-ink/35 italic py-1">No recovery rules. Click + ADD to add one.</p>
                         )}
                         <div className="space-y-1.5">
                           {recovery.map((row: any, i: number) => (
                             <div key={i} className="flex items-center gap-2">
                               <div className="flex flex-col gap-0.5 flex-1">
-                                {i === 0 && <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Period</span>}
-                                <select value={row.period || 'lr'} onChange={e => patchRecovery(i, { period: e.target.value, ...(e.target.value === 'recharge' ? { type: 'recoverAll', formula: '6' } : { formula: undefined }) })} className="h-7 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink w-full">
+                                {i === 0 && <span className="text-[9px] uppercase text-ink/45 font-black tracking-wider">Period</span>}
+                                <select value={row.period || 'lr'} onChange={e => patchRecovery(i, { period: e.target.value, ...(e.target.value === 'recharge' ? { type: 'recoverAll', formula: '6' } : { formula: undefined }) })} className="h-7 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-xs text-ink w-full">
                                   <option value="lr">Long Rest</option>
                                   <option value="sr">Short Rest</option>
                                   <option value="day">Daily</option>
@@ -1190,8 +1190,8 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                               </div>
                               {row.period === 'recharge' ? (
                                 <div className="flex flex-col gap-0.5 flex-1">
-                                  {i === 0 && <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Value</span>}
-                                  <select value={row.formula || '6'} onChange={e => patchRecovery(i, { formula: e.target.value })} className="h-7 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink w-full">
+                                  {i === 0 && <span className="text-[9px] uppercase text-ink/45 font-black tracking-wider">Value</span>}
+                                  <select value={row.formula || '6'} onChange={e => patchRecovery(i, { formula: e.target.value })} className="h-7 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-xs text-ink w-full">
                                     <option value="6">Recharge 6</option>
                                     <option value="5">Recharge 5–6</option>
                                     <option value="4">Recharge 4–6</option>
@@ -1202,8 +1202,8 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                               ) : (
                                 <>
                                   <div className="flex flex-col gap-0.5 flex-1">
-                                    {i === 0 && <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Recovery</span>}
-                                    <select value={row.type || 'recoverAll'} onChange={e => patchRecovery(i, { type: e.target.value, ...(e.target.value !== 'formula' ? { formula: undefined } : {}) })} className="h-7 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink w-full">
+                                    {i === 0 && <span className="text-[9px] uppercase text-ink/45 font-black tracking-wider">Recovery</span>}
+                                    <select value={row.type || 'recoverAll'} onChange={e => patchRecovery(i, { type: e.target.value, ...(e.target.value !== 'formula' ? { formula: undefined } : {}) })} className="h-7 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-xs text-ink w-full">
                                       <option value="recoverAll">Recover All Uses</option>
                                       <option value="loseAll">Lose All Uses</option>
                                       <option value="formula">Custom Formula</option>
@@ -1211,14 +1211,14 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                                   </div>
                                   {row.type === 'formula' && (
                                     <div className="flex flex-col gap-0.5 flex-1">
-                                      {i === 0 && <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Formula</span>}
-                                      <Input value={row.formula || ''} onChange={e => patchRecovery(i, { formula: e.target.value })} placeholder="2 + @class.level" className="h-7 text-xs font-mono bg-background/50 border-gold/10 focus:border-gold" />
+                                      {i === 0 && <span className="text-[9px] uppercase text-ink/45 font-black tracking-wider">Formula</span>}
+                                      <Input value={row.formula || ''} onChange={e => patchRecovery(i, { formula: e.target.value })} placeholder="2 + @class.level" className="h-7 text-xs font-mono bg-background/50 border-gold/15 focus:border-gold" />
                                     </div>
                                   )}
                                 </>
                               )}
                               <div className={i === 0 ? 'pt-3.5' : ''}>
-                                <button type="button" onClick={() => removeRecovery(i)} className="h-7 w-7 flex items-center justify-center text-ink/30 hover:text-blood transition-colors rounded border border-transparent hover:border-blood/20">
+                                <button type="button" onClick={() => removeRecovery(i)} className="h-7 w-7 flex items-center justify-center text-ink/35 hover:text-blood transition-colors rounded border border-transparent hover:border-blood/20">
                                   <span className="text-sm leading-none">−</span>
                                 </button>
                               </div>
@@ -1230,15 +1230,15 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                   );
                 })()}
 
-                <div className="flex items-center gap-2 pt-2 border-t border-gold/10">
+                <div className="flex items-center gap-2 pt-2 border-t border-gold/15">
                   <input
                     type="checkbox"
                     id="isRepeatable"
                     checked={!!(editingItem?.is_repeatable || editingItem?.isRepeatable)}
                     onChange={e => setEditingItem((prev: any) => ({ ...(prev || { level_prerequisite: 0, is_repeatable: 0, class_ids: [] }), is_repeatable: e.target.checked ? 1 : 0 }))}
-                    className="w-3 h-3 rounded border-gold/20 text-gold focus:ring-gold"
+                    className="w-3 h-3 rounded border-gold/25 text-gold focus:ring-gold"
                   />
-                  <label htmlFor="isRepeatable" className="text-xs text-ink/40 uppercase font-bold cursor-pointer">
+                  <label htmlFor="isRepeatable" className="text-xs text-ink/45 uppercase font-bold cursor-pointer">
                     Repeatable
                   </label>
                 </div>
@@ -1298,7 +1298,7 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
 
               </div>
 
-              <div className="p-4 border-t border-gold/10 bg-background flex justify-end shrink-0 gap-3">
+              <div className="p-4 border-t border-gold/15 bg-background flex justify-end shrink-0 gap-3">
                 <Button
                   type="button"
                   variant="ghost"

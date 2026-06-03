@@ -249,7 +249,7 @@ export default function FacilitiesList({ userProfile }: { userProfile: any }) {
       label: 'Source',
       width: '60px',
       render: (row) => (
-        <span className="text-xs font-bold text-gold/80 justify-self-center">
+        <span className="text-xs font-bold text-gold/85 justify-self-center">
           {renderSourceAbbreviation(row)}
         </span>
       ),
@@ -292,7 +292,7 @@ export default function FacilitiesList({ userProfile }: { userProfile: any }) {
       trailingActions={
         userProfile?.role === 'admin' ? (
           <Link to="/compendium/facilities/manage">
-            <Button type="button" variant="outline" size="sm" className="h-8 border-gold/20 text-gold hover:bg-gold/5">
+            <Button type="button" variant="outline" size="sm" className="h-8 border-gold/25 text-gold hover:bg-gold/5">
               Facility Manager
             </Button>
           </Link>
@@ -313,7 +313,7 @@ function FacilityDetailPanel({
 }) {
   if (!row) {
     return (
-      <div className="px-6 py-12 text-center text-ink/50">
+      <div className="px-6 py-12 text-center text-ink/55">
         Select a facility from the list to view its details.
       </div>
     );
@@ -327,7 +327,7 @@ function FacilityDetailPanel({
 
   return (
     <div className="space-y-0">
-      <div className="border-b border-gold/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.02),transparent)] px-6 py-5 space-y-2">
+      <div className="border-b border-gold/15 bg-[linear-gradient(180deg,rgba(255,255,255,0.02),transparent)] px-6 py-5 space-y-2">
         <div className="flex items-center gap-3 flex-wrap">
           <h3 className="font-serif text-3xl font-bold text-ink">{row.name || '—'}</h3>
           {source ? (
@@ -336,7 +336,7 @@ function FacilityDetailPanel({
             </span>
           ) : null}
         </div>
-        <p className="font-serif italic text-ink/70 text-sm">
+        <p className="font-serif italic text-ink/75 text-sm">
           {typeLabel} facility
           {sizeLabel ? ` · ${sizeLabel}` : ''}
           {row.level ? ` · level ${row.level}` : ''}
@@ -344,14 +344,14 @@ function FacilityDetailPanel({
           {row.disabled ? ' · disabled' : ''}
         </p>
         {subtype && (
-          <p className="text-xs text-ink/60">
+          <p className="text-xs text-ink/65">
             Subtype: <span className="font-bold text-gold/85">{humanizeSlug(subtype)}</span>
           </p>
         )}
       </div>
 
       {order && (
-        <div className="border-b border-gold/10 px-6 py-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+        <div className="border-b border-gold/15 px-6 py-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
           <DetailRow label="Active Order" value={ORDER_LABEL[order] || order} />
           {row.progress ? (
             <>
@@ -368,14 +368,14 @@ function FacilityDetailPanel({
       )}
 
       {order === 'craft' && row.craft && (
-        <div className="border-b border-gold/10 px-6 py-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+        <div className="border-b border-gold/15 px-6 py-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
           <DetailRow label="Crafting" value={row.craft.item || '—'} mono />
           <DetailRow label="Quantity" value={row.craft.quantity != null ? String(row.craft.quantity) : '—'} />
         </div>
       )}
 
       {order === 'trade' && row.trade && (
-        <div className="border-b border-gold/10 px-6 py-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+        <div className="border-b border-gold/15 px-6 py-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
           <DetailRow label="Daily Profit" value={`${row.trade.profit ?? 0} gp`} />
           <DetailRow
             label="Stock"
@@ -386,7 +386,7 @@ function FacilityDetailPanel({
       )}
 
       {(row.defenders?.value?.length || row.hirelings?.value?.length) ? (
-        <div className="border-b border-gold/10 px-6 py-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+        <div className="border-b border-gold/15 px-6 py-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
           {row.defenders?.value?.length ? (
             <DetailRow
               label="Defenders"
@@ -403,7 +403,7 @@ function FacilityDetailPanel({
       ) : null}
 
       {row.description ? (
-        <div className="px-6 py-5 prose prose-invert max-w-none prose-p:text-ink/90">
+        <div className="px-6 py-5 prose prose-invert max-w-none prose-p:text-ink/95">
           {typeof row.description === 'string' ? (
             <p className="whitespace-pre-wrap">{row.description}</p>
           ) : null}
@@ -416,8 +416,8 @@ function FacilityDetailPanel({
 function DetailRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div>
-      <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold/70">{label}</div>
-      <div className={cn('mt-1 text-sm text-ink/90', mono && 'font-mono text-xs')}>{value || '—'}</div>
+      <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold/75">{label}</div>
+      <div className={cn('mt-1 text-sm text-ink/95', mono && 'font-mono text-xs')}>{value || '—'}</div>
     </div>
   );
 }

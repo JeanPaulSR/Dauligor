@@ -227,10 +227,10 @@ export function bbcodeToHtml(text: string, context?: BbcodeViewContext): string 
   html = html.replace(/\[url\]([\s\S]*?)\[\/url\]/gi, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
   
   // Tables
-  html = html.replace(/\[table\]([\s\S]*?)\[\/table\]/gi, '<div class="overflow-x-auto"><table class="w-full border-collapse border border-gold/20 my-4 table-auto">$1</table></div>');
-  html = html.replace(/\[tr\]([\s\S]*?)\[\/tr\]/gi, '<tr class="border-b border-gold/10 hover:bg-gold/5">$1</tr>');
+  html = html.replace(/\[table\]([\s\S]*?)\[\/table\]/gi, '<div class="overflow-x-auto"><table class="w-full border-collapse border border-gold/25 my-4 table-auto">$1</table></div>');
+  html = html.replace(/\[tr\]([\s\S]*?)\[\/tr\]/gi, '<tr class="border-b border-gold/15 hover:bg-gold/5">$1</tr>');
   html = html.replace(/\[th(?:\s+([^\]]+))?\]([\s\S]*?)\[\/th\]/gi, (match, attrs, content) => {
-    let htmlAttrs = 'class="p-2 text-left font-bold text-gold border border-gold/20 bg-gold/5"';
+    let htmlAttrs = 'class="p-2 text-left font-bold text-gold border border-gold/25 bg-gold/5"';
     if (attrs) {
       const colspan = attrs.match(/colspan=?["']?(\d+)["']?/i);
       if (colspan) htmlAttrs += ` colspan="${colspan[1]}"`;
@@ -240,7 +240,7 @@ export function bbcodeToHtml(text: string, context?: BbcodeViewContext): string 
     return `<th ${htmlAttrs}>${content}</th>`;
   });
   html = html.replace(/\[td(?:\s+([^\]]+))?\]([\s\S]*?)\[\/td\]/gi, (match, attrs, content) => {
-    let htmlAttrs = 'class="p-2 border border-gold/10"';
+    let htmlAttrs = 'class="p-2 border border-gold/15"';
     if (attrs) {
       const colspan = attrs.match(/colspan=?["']?(\d+)["']?/i);
       if (colspan) htmlAttrs += ` colspan="${colspan[1]}"`;
