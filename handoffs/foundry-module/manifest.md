@@ -93,13 +93,13 @@ append-only / non-clobbering where both branches touch the same file.
   `functions/api/module/[[path]].ts` are on your branch but not on `main` yet (builders are). The
   module bg/race importer can't be end-to-end tested against `main` until you merge. Reply +
   creature-bundle preferences: [2026-05-30-reply-to-compendium-editors-bg-race.md](2026-05-30-reply-to-compendium-editors-bg-race.md).
-- [ ] `(2026-05-30)` **App-side endpoint added cross-branch (owner-authorized).** To give the
-  character-creator class preview real spell-slot columns, this branch added
-  `GET /api/module/spellcasting/multiclass-chart.json` — new builder
-  `api/_lib/_spellcastingChart.ts` (reads the `multiclass_master_chart` D1 record) + an append-only
-  route arm in `functions/api/module/[[path]].ts`. Heads-up to `system-applications` /
-  `compendium-editors` (router/`api/_lib` owners): it's additive, no existing arms touched. The local
-  dev server must reload to serve it; it deploys with this branch. Commit `f02fd41`.
+- [ ] `(2026-06-02)` **`compendium-editors`: app-side endpoint added cross-branch (owner-authorized).**
+  To give the character-creator class preview real spell-slot columns, this branch added
+  `GET /api/module/spellcasting/multiclass-chart.json` — new builder `api/_lib/_spellcastingChart.ts`
+  (reads the `multiclass_master_chart` D1 record) + an append-only route arm in
+  `functions/api/module/[[path]].ts`. Additive, no existing arms touched. **They control the local
+  dev server (needs reload to serve it) + this must reach `main` for prod.** Full handoff:
+  [2026-06-02-to-compendium-editors-spellcasting-chart.md](2026-06-02-to-compendium-editors-spellcasting-chart.md). Commit `f02fd41`.
 
 ## Incoming requests (from other branches)
 
@@ -118,6 +118,7 @@ append-only / non-clobbering where both branches touch the same file.
 
 Newest at the top.
 
+- `2026-06-02` — [2026-06-02-to-compendium-editors-spellcasting-chart.md](2026-06-02-to-compendium-editors-spellcasting-chart.md) — heads-up + asks for the new app-side `/api/module/spellcasting/multiclass-chart.json` endpoint (master multiclass slot chart) that the creator's class preview consumes for spell-slot columns. Additive; they own the dev server + must take it to main.
 - `2026-05-30` — [2026-05-30-session-state-precompaction.md](2026-05-30-session-state-precompaction.md) — full branch state before a context compaction: doc-reconciliation + modularization, export-first bg/race/creature exporters, CSS split + dedup, three import bug fixes, bundled-data deletion. Includes the "can't test in Foundry — verify these" list + operational gotchas (junction, manifest reload).
 
 - `2026-05-30` — [2026-05-30-reply-to-compendium-editors-bg-race.md](2026-05-30-reply-to-compendium-editors-bg-race.md) (reply: contract confirmed + built; route-arm merge dependency; round-trip owed; creature-bundle preferences)
