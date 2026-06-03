@@ -535,6 +535,9 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
 
   const [initialDataHash, setInitialDataHash] = useState<string>('');
   const [lastSavedTick, setLastSavedTick] = useState<number>(0);
+  // True once the user has actually interacted with the page (pointer/key).
+  // A ref, not state: flipping it must never trigger a render.
+  const userHasEditedRef = useRef(false);
 
   const isDirty = useMemo(() => {
     if (!initialDataHash) return false;
@@ -544,14 +547,47 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   useUnsavedChangesWarning(isDirty);
   useKeyboardSave(() => { handleSave(); });
 
+  // Reset the "user touched it" flag whenever a different class is loaded, so a
+  // freshly-loaded class re-folds its own load-time normalizations (below).
+  useEffect(() => { userHasEditedRef.current = false; }, [id]);
+
+  // The first genuine user interaction freezes the saved-state baseline below.
   useEffect(() => {
-    if (!initialLoading && !initialDataHash) {
-      setInitialDataHash(getCurrentStateHash());
-    } else if (lastSavedTick > 0) {
+    const markEdited = () => { userHasEditedRef.current = true; };
+    document.addEventListener('pointerdown', markEdited, { capture: true });
+    document.addEventListener('keydown', markEdited, { capture: true });
+    return () => {
+      document.removeEventListener('pointerdown', markEdited, { capture: true });
+      document.removeEventListener('keydown', markEdited, { capture: true });
+    };
+  }, []);
+
+  // Saved-state baseline for the unsaved-changes guard.
+  //
+  // Loading a class settles ~two dozen fields across several async ticks: the
+  // rich-text editors re-parse/normalize their stored BBCode, the legacy
+  // armor/weapons string->object conversion runs once the catalogs arrive,
+  // foundation-dependent values fill in. Those are PROGRAMMATIC changes, not
+  // user edits. Snapshotting the baseline at any single moment during that
+  // settle froze a transient shape and made isDirty read true on a class nobody
+  // touched, so the leave-page guard fired spuriously.
+  //
+  // So while the form is UNTOUCHED we keep the baseline synced to the current
+  // state on every change — folding all post-load normalization into the
+  // pristine baseline no matter when (or why) it lands. The first real
+  // interaction (handled above) freezes it; from then on a genuine edit (typed
+  // OR clicked) flips isDirty. After a save we re-baseline to the saved state.
+  useEffect(() => {
+    if (initialLoading) return;
+    if (lastSavedTick > 0) {
       setInitialDataHash(getCurrentStateHash());
       setLastSavedTick(0);
+      return;
     }
-  }, [initialLoading, initialDataHash, getCurrentStateHash, lastSavedTick]);
+    if (!userHasEditedRef.current) {
+      setInitialDataHash(getCurrentStateHash());
+    }
+  }, [initialLoading, getCurrentStateHash, lastSavedTick]);
 
   useEffect(() => {
     const loadFoundation = async () => {
