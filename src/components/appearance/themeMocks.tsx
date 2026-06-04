@@ -17,34 +17,28 @@ import { Badge } from "../ui/badge";
 // Mirrors LoreArticle: card panel, centred gold title + italic subtitle, then a
 // prose body (real renderer) with an "on this page" sidebar.
 
-const ARTICLE_BODY = `[h2]The Drowning[/h2]
-Beneath the tideless sea lies [b]Vol[/b], once the jewel of the Amber Coast. Its towers stand intact in the green dark, lit by lanterns that no living hand has tended in three hundred years.
+// Real content — the "Magic" lore article from the compendium (the Maliath +
+// the six traditions), so the preview reflects actual prose the app renders.
+const ARTICLE_BODY = `Magic is the fundamental energy found in every reality and in all things — from the spark of thought, to a spell once cast, to the fuel of distant stars. It is neither good nor evil. It simply is, and it infuses everything. The force that drives a spell, a healing prayer, or a feat of impossible endurance all draw from the same well; the only difference is how a practitioner accesses it.
 
-[i]"We do not bring the cold. We merely walk ahead of it."[/i]
+[i]"None of the traditions are wrong. Each is simply shaped by the philosophy, discipline, or relationship that grants its followers access."[/i]
 
-[h2]The Lantern Wardens[/h2]
-What the Magisters promised in exchange for a single warm season is recorded nowhere that survives — the archives end mid-sentence.
+[h2]The Maliath[/h2]
+The scholars of the present age call this well the Inheritance — a last gift from a primordial entity. In common speech it is named simply the [b]Maliath[/b], the source from which every working of magic, in every tradition, is ultimately drawn.
 
-[quote]Better one winter under their terms than ten under none.[/quote]
-
-[h2]What Remains[/h2]
-The towers of Vol are not empty. Lights move behind their windows on the nights when the tide pulls farthest out, and those who have rowed close enough to listen say the city still keeps its calendars — bells tolling hours that belong to no clock above the waves.
-
-Salvagers who take from Vol are not punished so much as [b]remembered[/b]. A name spoken in the deep is a debt, and the Pale Court has never once forgiven one.
-
-[h2]The Amber Coast Today[/h2]
-Three towns still light harbour-lanterns against the old promise. Whether the gesture wards anything — or merely flatters something that was never listening — the Magisters will not say.`;
+[h2]Traditions[/h2]
+The sheer breadth of the Maliath has given rise to countless ideas about what magic is and how it ought to be used. Over time these settled into six broad traditions of practice. A tradition is not a kind of magic, only a path toward using it — two casters reaching the same effect through different traditions will look, feel, and cost something entirely different, yet at their core they are touching the same well.`;
 
 const ArticlePage: FC = () => (
   <div className="w-full">
     <div className="bg-card border border-gold/15 rounded-xl overflow-hidden">
       <div className="h-28 bg-gradient-to-b from-gold/15 to-transparent border-b border-gold/15 flex items-end justify-center pb-3">
-        <span className="label-text text-gold text-[10px] uppercase tracking-widest">Lore · Geography</span>
+        <span className="label-text text-gold text-[10px] uppercase tracking-widest">Lore · Cosmology</span>
       </div>
       <div className="text-center py-6 px-6 border-b border-gold/15">
-        <h1 className="text-4xl md:text-5xl font-serif font-bold tracking-wide text-gold/95">The Sunken City of Vol</h1>
+        <h1 className="text-4xl md:text-5xl font-serif font-bold tracking-wide text-gold/95">Magic</h1>
         <p className="text-lg font-serif italic text-ink/75 max-w-2xl mx-auto leading-relaxed border-t border-b border-gold/15 py-3 mt-4">
-          Where the tide forgot to return, and the lamps still burn.
+          The Maliath, and the six traditions that draw from it.
         </p>
       </div>
       <div className="grid lg:grid-cols-3 gap-8 p-6">
@@ -55,14 +49,13 @@ const ArticlePage: FC = () => (
           <div className="border border-gold/15 bg-gold/5 p-4">
             <div className="label-text text-gold mb-2">On this page</div>
             <ul className="space-y-1.5 text-sm text-ink/65">
-              <li className="hover:text-gold cursor-pointer">The Drowning</li>
-              <li className="hover:text-gold cursor-pointer">The Lantern Wardens</li>
-              <li className="hover:text-gold cursor-pointer">What Remains</li>
+              <li className="hover:text-gold cursor-pointer">The Maliath</li>
+              <li className="hover:text-gold cursor-pointer">Traditions</li>
             </ul>
           </div>
           <div className="border border-gold/15 bg-card p-4">
             <div className="label-text text-gold mb-2">Linked</div>
-            <p className="text-xs text-ink/55">The Amber Coast · The Pale Court · Magister Vael</p>
+            <p className="text-xs text-ink/55">The Inheritance · Spellcasting · Spell Lists</p>
           </div>
         </aside>
       </div>
@@ -203,12 +196,23 @@ const CompendiumPage: FC = () => (
 );
 
 /* ----------------------------- Class view page --------------------------- */
-// Mirrors ClassView: image-banner hero with gold title, tab strip, feature list.
+// Mirrors the revamped ClassView: hero banner, Core Traits row, full-width tab
+// strip, a feature list with level badges, and an in-page jump rail. Populated
+// with the REAL Artificer class + its actual features from the compendium.
+
+const CLASS_TRAITS = [
+  { k: "Hit Die", v: "d8" },
+  { k: "Primary", v: "Intelligence" },
+  { k: "Saves", v: "CON · INT" },
+  { k: "Armor", v: "Light · Medium · Shields" },
+  { k: "Tools", v: "Thieves' · Tinker's · Artisan" },
+];
 
 const CLASS_FEATURES = [
-  { level: 1, name: "Frozen Resolve", desc: "You ignore the first level of exhaustion from cold, and gain resistance to the bite of the marches." },
-  { level: 2, name: "Wardenʼs Mark", desc: "Mark a foe as your charge; your strikes against it deal additional cold damage equal to your proficiency bonus." },
-  { level: 3, name: "Rime Subclass", desc: "Choose a Warden Oath that shapes the frost you carry — the Still Lake, the Breaking Floe, or the Long Dark." },
+  { level: 1, name: "Magical Tinkering", desc: "With thieves' or artisan's tools in hand, invest a spark of magic into a Tiny nonmagical object, giving it a minor, useful property." },
+  { level: 2, name: "Infuse Item", desc: "Imbue mundane items with magical infusions, turning ordinary objects into customizable magic items you can swap as you advance." },
+  { level: 3, name: "The Right Tool for the Job", desc: "Magically conjure exactly the set of artisan's tools you need, ready in an unoccupied space within reach." },
+  { level: 7, name: "Flash of Genius", desc: "When you or an ally you can see within 30 feet makes an ability check or save, add your Intelligence modifier to the roll." },
 ];
 
 const ClassViewPage: FC = () => (
@@ -217,15 +221,19 @@ const ClassViewPage: FC = () => (
       <div className="h-44 relative flex items-end p-6"
         style={{ background: "linear-gradient(to top, color-mix(in oklab, var(--card) 92%, black), color-mix(in oklab, var(--gold) 12%, transparent))" }}>
         <div>
-          <span className="label-text text-gold text-xs">Long Winter</span>
-          <h1 className="font-serif text-5xl font-bold text-gold/95 drop-shadow-sm leading-none mt-1">Frostwarden</h1>
+          <span className="label-text text-gold text-xs">Arcane Invention</span>
+          <h1 className="font-serif text-5xl font-bold text-gold/95 drop-shadow-sm leading-none mt-1">Artificer</h1>
         </div>
       </div>
       <div className="p-6 border-t border-gold/15">
-        <p className="description-text text-ink/75 max-w-2xl">Sentinels sworn to the frozen marches, who trade warmth for unbreakable resolve and stand where the cold itself would falter.</p>
-        <div className="flex flex-wrap gap-2 mt-4">
-          {["d10 Hit Die", "Str / Con", "Martial weapons", "Heavy armor"].map((t) => (
-            <span key={t} className="text-[11px] px-2 py-0.5 bg-gold/15 text-gold border border-gold/35 uppercase tracking-wide font-bold">{t}</span>
+        <p className="description-text text-ink/75 max-w-3xl">Arcane casters who channel magic through a chosen tool, infusing mundane equipment into customizable, semi-permanent magic gear — and bending unique problems to clever solutions.</p>
+        {/* Core Traits */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-px mt-5 border border-gold/15 bg-gold/15">
+          {CLASS_TRAITS.map((t) => (
+            <div key={t.k} className="bg-card px-3 py-2">
+              <div className="text-[9px] uppercase tracking-widest text-gold/70 font-bold">{t.k}</div>
+              <div className="text-sm text-ink mt-0.5">{t.v}</div>
+            </div>
           ))}
         </div>
       </div>
@@ -237,16 +245,32 @@ const ClassViewPage: FC = () => (
       ))}
     </div>
 
-    <div className="space-y-3">
-      {CLASS_FEATURES.map((f) => (
-        <div key={f.name} className="border border-gold/15 bg-card/40 p-4">
-          <div className="flex items-baseline gap-3">
-            <span className="label-text text-gold shrink-0">Level {f.level}</span>
-            <h3 className="h3-title text-ink">{f.name}</h3>
+    <div className="grid lg:grid-cols-[1fr_180px] gap-6">
+      <div className="space-y-3 min-w-0">
+        {CLASS_FEATURES.map((f) => (
+          <div key={f.name} className="border border-gold/15 bg-card/40 p-4">
+            <div className="flex items-baseline gap-3">
+              <span className="label-text text-gold shrink-0">Level {f.level}</span>
+              <h3 className="h3-title text-ink">{f.name}</h3>
+            </div>
+            <p className="text-sm text-ink/65 mt-1.5 leading-relaxed">{f.desc}</p>
           </div>
-          <p className="text-sm text-ink/65 mt-1.5 leading-relaxed">{f.desc}</p>
+        ))}
+      </div>
+      {/* In-page jump rail (mirrors the revamped class view) */}
+      <aside className="hidden lg:block">
+        <div className="sticky top-2 border border-gold/15 bg-gold/5 p-3">
+          <div className="label-text text-gold mb-2">Jump to</div>
+          <ul className="space-y-1 text-xs text-ink/65">
+            {CLASS_FEATURES.map((f) => (
+              <li key={f.name} className="flex items-baseline gap-2 hover:text-gold cursor-pointer">
+                <span className="font-mono text-[10px] text-gold/70 w-4 shrink-0">{f.level}</span>
+                <span className="truncate">{f.name}</span>
+              </li>
+            ))}
+          </ul>
         </div>
-      ))}
+      </aside>
     </div>
   </div>
 );
