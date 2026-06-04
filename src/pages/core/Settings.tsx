@@ -529,6 +529,24 @@ export default function Settings({ user, userProfile }: { user: any, userProfile
                   disabled={safetyLock !== 'PURGE' || isPurging}
                 />
                 <MaintenanceCard
+                  title="Feats"
+                  description="Deletes all feat records (favorites cascade). Use before a full re-import."
+                  onPurge={() => handlePurge('feats', ['feats'])}
+                  disabled={safetyLock !== 'PURGE' || isPurging}
+                />
+                <MaintenanceCard
+                  title="Species (Races)"
+                  description="Deletes all species records (favorites cascade). Use before a full re-import."
+                  onPurge={() => handlePurge('species', ['species'])}
+                  disabled={safetyLock !== 'PURGE' || isPurging}
+                />
+                <MaintenanceCard
+                  title="Backgrounds"
+                  description="Deletes all background records (favorites cascade). Use before a full re-import."
+                  onPurge={() => handlePurge('backgrounds', ['backgrounds'])}
+                  disabled={safetyLock !== 'PURGE' || isPurging}
+                />
+                <MaintenanceCard
                   title="Tags & Taxonomy"
                   description="Deletes all tags and tag groups. Disconnects tags from every item."
                   onPurge={() => handlePurge('tags', ['tags', 'tagGroups'])}

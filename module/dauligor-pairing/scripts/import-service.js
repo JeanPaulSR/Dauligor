@@ -1,5 +1,6 @@
 import { MODULE_ID, SAMPLE_FILE, SETTINGS } from "./constants.js";
 import { applyReferenceNormalization } from "./reference-service.js";
+import { initRollPoolSocket } from "./ability-roll-pool.js";
 import { log, notifyInfo, notifyWarn, promptForText, warn } from "./utils.js";
 
 let moduleSocket = null;
@@ -12,6 +13,10 @@ export function initializeSocket() {
 
   moduleSocket = globalThis.socketlib.registerModule(MODULE_ID);
   moduleSocket.register("importPayloadToActorByUuid", importPayloadToActorByUuid);
+  // The Character Creator's shared ability-score roll pool relays non-GM
+  // submissions to the GM over this same channel (socketlib allows only
+  // one registered module per id, so handlers share `moduleSocket`).
+  initRollPoolSocket(moduleSocket);
   log("Registered socket handlers");
 }
 

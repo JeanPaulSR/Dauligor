@@ -6,6 +6,7 @@ import { useClassRouteId, buildClassSlug } from '../../lib/useClassRouteId';
 import { useKeyboardSave } from '../../hooks/useKeyboardSave';
 import ActivityEditor from '../../components/compendium/ActivityEditor';
 import FeatureModalHero from '../../components/compendium/FeatureModalHero';
+import ProficienciesEditor from '../../components/compendium/ProficienciesEditor';
 import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
 import { reportClientError, OperationType } from '../../lib/firebase';
 import { Button } from '../../components/ui/button';
@@ -29,6 +30,11 @@ import ReferenceSheetDialog from '../../components/reference/ReferenceSheetDialo
 import { buildSpellFormulaShortcutRows, normalizeSpellFormulaShortcuts } from '../../lib/referenceSyntax';
 import { normalizeAdvancementListForEditor, resolveAdvancementDefaultHitDie } from '../../lib/advancementState';
 import { buildCanonicalBaseClassAdvancements } from '../../lib/classProgression';
+import {
+  sanitizeProficiencySelection,
+  buildNextGroupedProficiencyCollection,
+  buildGroupedProficiencyDisplayName,
+} from '../../lib/proficiencySelection';
 import { fetchCollection, fetchDocument, queryD1, upsertDocument, deleteDocument } from '../../lib/d1';
 import { normalizeFeatureData, denormalizeCompendiumData } from '../../lib/compendium';
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
@@ -129,67 +135,6 @@ function resolveLegacyProficiencyIds(legacyValue: string, entries: any[] = []) {
     .map(entry => entry.id);
 }
 
-function normalizeChoiceCount(value: any) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) return 0;
-  return Math.floor(parsed);
-}
-
-function uniqueNormalizedIds(values: any[] = [], { uppercase = false }: { uppercase?: boolean } = {}) {
-  return Array.from(new Set(
-    (Array.isArray(values) ? values : [])
-      .map((value) => {
-        const normalized = String(value ?? '').trim();
-        if (!normalized) return '';
-        return uppercase ? normalized.toUpperCase() : normalized;
-      })
-      .filter(Boolean)
-  ));
-}
-
-function sanitizeProficiencySelection(
-  selection: any,
-  {
-    uppercase = false,
-    includeCategories = true,
-    includeWeaponTypeFilters = false
-  }: {
-    uppercase?: boolean;
-    includeCategories?: boolean;
-    /** Weapons-only: also normalize categoryMeleeIds / categoryRangedIds.
-     *  Added 2026-05-26 to support 2014-PHB-style restricted grants like
-     *  "Simple Melee Weapons". Other proficiency types (armor / tools)
-     *  have no melee/ranged dimension so this stays off there. */
-    includeWeaponTypeFilters?: boolean;
-  } = {}
-) {
-  const fixedIds = uniqueNormalizedIds(selection?.fixedIds || [], { uppercase });
-  const fixedSet = new Set(fixedIds);
-  const optionIds = uniqueNormalizedIds(selection?.optionIds || [], { uppercase }).filter((id) => !fixedSet.has(id));
-  const normalized: any = {
-    choiceCount: normalizeChoiceCount(selection?.choiceCount),
-    optionIds,
-    fixedIds
-  };
-
-  if (includeCategories) {
-    normalized.categoryIds = uniqueNormalizedIds(selection?.categoryIds || []);
-  }
-
-  if (includeWeaponTypeFilters) {
-    // Parallel arrays alongside categoryIds. A category id appearing in
-    // categoryIds grants both melee + ranged in that bucket; appearing
-    // in categoryMeleeIds restricts the grant to melee weapons only;
-    // categoryRangedIds restricts to ranged. The class export expands
-    // each entry into the appropriate Foundry trait keys (weapon:simpleM
-    // for melee-only, weapon:simpleR for ranged-only, both for full).
-    normalized.categoryMeleeIds = uniqueNormalizedIds(selection?.categoryMeleeIds || []);
-    normalized.categoryRangedIds = uniqueNormalizedIds(selection?.categoryRangedIds || []);
-  }
-
-  return normalized;
-}
-
 function sanitizeProficiencyCollection(raw: any = {}) {
   return {
     armor: sanitizeProficiencySelection(raw.armor, { includeCategories: true }),
@@ -207,145 +152,6 @@ function sanitizeProficiencyCollection(raw: any = {}) {
     toolsDisplayName: typeof raw.toolsDisplayName === 'string' ? raw.toolsDisplayName : '',
     skillsDisplayName: typeof raw.skillsDisplayName === 'string' ? raw.skillsDisplayName : ''
   };
-}
-
-function buildNextGroupedProficiencyCollection(
-  collection: any,
-  items: any[],
-  type: 'armor' | 'weapons' | 'tools' | 'languages',
-  target: 'fixedIds' | 'optionIds',
-  categoryId?: string
-) {
-  const section = collection?.[type] || {};
-  const currentIds = new Set<string>((section[target] || []) as string[]);
-  const itemIds = (items || []).map((item) => item.id).filter(Boolean) as string[];
-  const allExist = itemIds.every((itemId) => currentIds.has(itemId));
-
-  let nextIds: string[];
-  if (allExist) {
-    nextIds = Array.from(currentIds).filter((id) => !itemIds.includes(id));
-  } else {
-    nextIds = Array.from(new Set([...Array.from(currentIds), ...itemIds]));
-  }
-
-  const allowOverlap = true;
-  const otherTarget = target === 'fixedIds' ? 'optionIds' : 'fixedIds';
-  let nextOtherIds = (section[otherTarget] || []) as string[];
-  if (!allowOverlap && !allExist) {
-    nextOtherIds = nextOtherIds.filter((id: string) => !itemIds.includes(id));
-  }
-
-  const currentCatIds = (section.categoryIds || []) as string[];
-  let nextCatIds = currentCatIds;
-  if (categoryId) {
-    nextCatIds = allExist
-      ? currentCatIds.filter((id: string) => id !== categoryId)
-      : Array.from(new Set([...currentCatIds, categoryId]));
-  }
-
-  const nextSection: any = {
-    ...section,
-    [target]: nextIds,
-    [otherTarget]: nextOtherIds,
-    categoryIds: nextCatIds
-  };
-
-  // 20260526: "All" overrides melee/ranged restrictions for the same category.
-  // When toggling a weapons category ON (becoming the canonical whole-category
-  // grant), clear that category from both restricted arrays. Symmetric is true
-  // by omission — toggling OFF doesn't touch the restricted arrays (the user
-  // may want to deselect the whole-category grant and then re-tick just Melee).
-  if (type === 'weapons' && categoryId && !allExist) {
-    nextSection.categoryMeleeIds = (section.categoryMeleeIds || [])
-      .filter((id: string) => id !== categoryId);
-    nextSection.categoryRangedIds = (section.categoryRangedIds || [])
-      .filter((id: string) => id !== categoryId);
-  }
-
-  return {
-    ...collection,
-    [type]: nextSection
-  };
-}
-
-function joinDisplaySegments(fixedSegments: string[], choiceSegments: string[]) {
-  const normalizedFixed = fixedSegments.filter(Boolean);
-  const normalizedChoices = choiceSegments.filter(Boolean);
-  const fixedText = normalizedFixed.join(', ');
-  const choiceText = normalizedChoices.join('; and ');
-
-  if (fixedText && choiceText) return `${fixedText}; and ${choiceText}`;
-  return fixedText || choiceText;
-}
-
-function buildGroupedProficiencyDisplayName(
-  selection: any,
-  items: any[] = [],
-  categories: any[] = []
-) {
-  const fixedIds = new Set(selection?.fixedIds || []);
-  const optionIds = new Set(selection?.optionIds || []);
-  const choiceCount = Math.max(normalizeChoiceCount(selection?.choiceCount), 1);
-  const categoryList = Array.isArray(categories) ? categories : [];
-  const itemList = Array.isArray(items) ? items : [];
-  const itemsByCategory = new Map<string, any[]>();
-
-  for (const item of itemList) {
-    const categoryId = String(item?.categoryId || '').trim();
-    if (!categoryId) continue;
-    if (!itemsByCategory.has(categoryId)) itemsByCategory.set(categoryId, []);
-    itemsByCategory.get(categoryId)?.push(item);
-  }
-
-  const fixedCategoryIds = new Set<string>();
-  const optionCategoryIds = new Set<string>();
-
-  for (const category of categoryList) {
-    const categoryId = String(category?.id || '').trim();
-    if (!categoryId) continue;
-    const categoryItems = itemsByCategory.get(categoryId) || [];
-    if (categoryItems.length === 0) continue;
-
-    const isFixedCategory = categoryItems.every((item) => fixedIds.has(item.id));
-    if (isFixedCategory) {
-      fixedCategoryIds.add(categoryId);
-      continue;
-    }
-
-    const isOptionCategory = categoryItems.every((item) => optionIds.has(item.id));
-    if (isOptionCategory) {
-      optionCategoryIds.add(categoryId);
-    }
-  }
-
-  const fixedSegments = categoryList
-    .filter((category) => fixedCategoryIds.has(String(category?.id || '')))
-    .map((category) => String(category?.name || '').trim())
-    .filter(Boolean);
-
-  const fixedItemSegments = itemList
-    .filter((item) => fixedIds.has(item.id) && !fixedCategoryIds.has(String(item?.categoryId || '')))
-    .map((item) => String(item?.name || '').trim())
-    .filter(Boolean);
-
-  const optionEntries = [
-    ...categoryList
-      .filter((category) => optionCategoryIds.has(String(category?.id || '')))
-      .map((category) => String(category?.name || '').trim())
-      .filter(Boolean),
-    ...itemList
-      .filter((item) => optionIds.has(item.id) && !fixedIds.has(item.id) && !optionCategoryIds.has(String(item?.categoryId || '')))
-      .map((item) => String(item?.name || '').trim())
-      .filter(Boolean)
-  ];
-
-  const choiceSegments = optionEntries.length === 0
-    ? []
-    : optionEntries.length === 1
-      ? [`${choiceCount} ${optionEntries[0]} of your choice`]
-      : [`${choiceCount} of your choice from ${optionEntries.join(', ')}`];
-
-  return joinDisplaySegments([...fixedSegments, ...fixedItemSegments], choiceSegments);
 }
 
 function sortAdvancementsByLevelThenType(a: Advancement, b: Advancement) {
@@ -729,6 +535,9 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
 
   const [initialDataHash, setInitialDataHash] = useState<string>('');
   const [lastSavedTick, setLastSavedTick] = useState<number>(0);
+  // True once the user has actually interacted with the page (pointer/key).
+  // A ref, not state: flipping it must never trigger a render.
+  const userHasEditedRef = useRef(false);
 
   const isDirty = useMemo(() => {
     if (!initialDataHash) return false;
@@ -738,14 +547,47 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   useUnsavedChangesWarning(isDirty);
   useKeyboardSave(() => { handleSave(); });
 
+  // Reset the "user touched it" flag whenever a different class is loaded, so a
+  // freshly-loaded class re-folds its own load-time normalizations (below).
+  useEffect(() => { userHasEditedRef.current = false; }, [id]);
+
+  // The first genuine user interaction freezes the saved-state baseline below.
   useEffect(() => {
-    if (!initialLoading && !initialDataHash) {
-      setInitialDataHash(getCurrentStateHash());
-    } else if (lastSavedTick > 0) {
+    const markEdited = () => { userHasEditedRef.current = true; };
+    document.addEventListener('pointerdown', markEdited, { capture: true });
+    document.addEventListener('keydown', markEdited, { capture: true });
+    return () => {
+      document.removeEventListener('pointerdown', markEdited, { capture: true });
+      document.removeEventListener('keydown', markEdited, { capture: true });
+    };
+  }, []);
+
+  // Saved-state baseline for the unsaved-changes guard.
+  //
+  // Loading a class settles ~two dozen fields across several async ticks: the
+  // rich-text editors re-parse/normalize their stored BBCode, the legacy
+  // armor/weapons string->object conversion runs once the catalogs arrive,
+  // foundation-dependent values fill in. Those are PROGRAMMATIC changes, not
+  // user edits. Snapshotting the baseline at any single moment during that
+  // settle froze a transient shape and made isDirty read true on a class nobody
+  // touched, so the leave-page guard fired spuriously.
+  //
+  // So while the form is UNTOUCHED we keep the baseline synced to the current
+  // state on every change — folding all post-load normalization into the
+  // pristine baseline no matter when (or why) it lands. The first real
+  // interaction (handled above) freezes it; from then on a genuine edit (typed
+  // OR clicked) flips isDirty. After a save we re-baseline to the saved state.
+  useEffect(() => {
+    if (initialLoading) return;
+    if (lastSavedTick > 0) {
       setInitialDataHash(getCurrentStateHash());
       setLastSavedTick(0);
+      return;
     }
-  }, [initialLoading, initialDataHash, getCurrentStateHash, lastSavedTick]);
+    if (!userHasEditedRef.current) {
+      setInitialDataHash(getCurrentStateHash());
+    }
+  }, [initialLoading, getCurrentStateHash, lastSavedTick]);
 
   useEffect(() => {
     const loadFoundation = async () => {
@@ -1099,23 +941,33 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   useEffect(() => {
     if (allArmor.length === 0 && allWeapons.length === 0) return;
 
-    setProficiencies((prev: any) => {
-      const isArmorLegacyStr = typeof prev.armor === 'string';
-      const isWeaponLegacyStr = typeof prev.weapons === 'string';
+    // Only legacy-format rows (armor/weapons stored as a raw string) need the
+    // string -> structured-selection conversion. Modern rows are already
+    // objects, so this is a no-op for them (no setState, no re-baseline).
+    const isArmorLegacyStr = typeof proficiencies.armor === 'string';
+    const isWeaponLegacyStr = typeof proficiencies.weapons === 'string';
+    if (!isArmorLegacyStr && !isWeaponLegacyStr) return;
 
-      if (!isArmorLegacyStr && !isWeaponLegacyStr) return prev;
+    setProficiencies((prev: any) => ({
+      ...prev,
+      armor: typeof prev.armor === 'string'
+        ? { choiceCount: 0, optionIds: [], fixedIds: resolveLegacyProficiencyIds(prev.armor as string, allArmor) }
+        : prev.armor,
+      weapons: typeof prev.weapons === 'string'
+        ? { choiceCount: 0, optionIds: [], fixedIds: resolveLegacyProficiencyIds(prev.weapons as string, allWeapons) }
+        : prev.weapons
+    }));
 
-      return {
-        ...prev,
-        armor: isArmorLegacyStr
-          ? { choiceCount: 0, optionIds: [], fixedIds: resolveLegacyProficiencyIds(prev.armor as string, allArmor) }
-          : prev.armor,
-        weapons: isWeaponLegacyStr
-          ? { choiceCount: 0, optionIds: [], fixedIds: resolveLegacyProficiencyIds(prev.weapons as string, allWeapons) }
-          : prev.weapons
-      };
-    });
-  }, [allArmor, allWeapons]);
+    // This conversion is a programmatic normalization, NOT a user edit. The
+    // saved-state baseline (initialDataHash) is captured the moment the class
+    // finishes loading — BEFORE this effect runs (it waits on allArmor/allWeapons,
+    // which load on a separate track) — so it froze the legacy *string* shape.
+    // Comparing that against the converted *object* shape made isDirty report
+    // phantom "unsaved changes" on an untouched class, firing the leave-page
+    // guard. Invalidate the baseline so it re-captures the converted shape on the
+    // next commit; a genuine edit afterwards still flips isDirty.
+    setInitialDataHash('');
+  }, [allArmor, allWeapons, proficiencies]);
 
   const handleSaveFeature = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1515,176 +1367,11 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   }), [sourceId, name, spellcasting.ability, scalingColumns]);
   const spellFormulaShortcuts = useMemo(() => buildSpellFormulaShortcutRows(classReferenceContext), [classReferenceContext]);
 
-  const toggleGroup = (items: any[], type: 'armor' | 'weapons' | 'tools' | 'languages', target: 'fixedIds' | 'optionIds', categoryId?: string) => {
-    setProficiencies(buildNextGroupedProficiencyCollection(proficiencies, items, type, target, categoryId));
-  };
-
-  const toggleMulticlassGroup = (items: any[], type: 'armor' | 'weapons' | 'tools' | 'languages', target: 'fixedIds' | 'optionIds', categoryId?: string) => {
-    setMulticlassProficiencies(buildNextGroupedProficiencyCollection(multiclassProficiencies, items, type, target, categoryId));
-  };
-
-  // ── Weapon-type-filtered category toggle (inline column buttons) ──
-  // Added 2026-05-26 to support split grants like "Simple Melee Weapons".
-  // Used by the small Melee/Ranged pills next to each category header
-  // checkbox in BOTH the Weapon Options and Fixed Weapons columns.
-  //
-  // Behavior per column:
-  //   target='optionIds' (Weapon Options column):
-  //     Bulk-toggles the matching melee/ranged weapons in the choice pool.
-  //     No section-level category state — choice pools are inherently
-  //     per-weapon and a melee-restricted choice ("choose 3 from simple
-  //     melee weapons") is just a curated optionIds list, not a separate
-  //     category-level concept.
-  //
-  //   target='fixedIds' (Fixed Weapons column):
-  //     Bulk-toggles the matching melee/ranged weapons in the automatic
-  //     grant list AND maintains the section-level categoryMeleeIds /
-  //     categoryRangedIds arrays so the class export carries the
-  //     "restricted-to-melee" semantic. Mutually-aware with the existing
-  //     "All" toggle (which writes to categoryIds): clicking Melee when
-  //     Ranged is already set promotes to "All" (clears both restricted
-  //     arrays and adds to categoryIds via the existing toggleGroup path).
-  //
-  // The weapon's category membership comes from the categoryItems param
-  // (typically `groupedWeapons[category]`). Each weapon's `.weaponType`
-  // or `.weapon_type` field decides which bucket it falls into — both
-  // shapes are tolerated since fetchCollection doesn't always camelCase.
-  const toggleCategoryByWeaponType = (
-    collection: any,
-    setter: (next: any) => void,
-    categoryItems: any[],
-    categoryId: string | undefined,
-    weaponType: 'Melee' | 'Ranged',
-    target: 'fixedIds' | 'optionIds',
-  ) => {
-    const matchType = (w: any) => String(w?.weaponType ?? w?.weapon_type ?? '').trim() === weaponType;
-    const matching = (categoryItems || []).filter(matchType);
-    if (matching.length === 0) return;
-    const matchingIds = matching.map((w) => w.id).filter(Boolean) as string[];
-    const matchingSet = new Set(matchingIds);
-
-    const section = collection?.weapons || {};
-    const currentIds = new Set<string>((section[target] || []) as string[]);
-    const allMatchingTicked = matchingIds.every((id) => currentIds.has(id));
-
-    let nextIds: string[];
-    if (allMatchingTicked) {
-      nextIds = Array.from(currentIds).filter((id) => !matchingSet.has(id));
-    } else {
-      nextIds = Array.from(new Set([...Array.from(currentIds), ...matchingIds]));
-    }
-
-    const nextSection: any = { ...section, [target]: nextIds };
-
-    // Section-level category state is maintained ONLY for the Fixed column.
-    if (target === 'fixedIds' && categoryId) {
-      const inAll = new Set<string>(section.categoryIds || []);
-      const inMelee = new Set<string>(section.categoryMeleeIds || []);
-      const inRanged = new Set<string>(section.categoryRangedIds || []);
-      const targetSet = weaponType === 'Melee' ? inMelee : inRanged;
-      const oppositeSet = weaponType === 'Melee' ? inRanged : inMelee;
-
-      if (allMatchingTicked) {
-        // Untick: remove this category from the restricted array. Also
-        // remove from categoryIds because "All" implies both halves were
-        // present — turning off one half breaks that invariant.
-        targetSet.delete(categoryId);
-        inAll.delete(categoryId);
-      } else {
-        // Tick: if the opposite half was already restricted, promote to
-        // "All" (clears both halves, adds to categoryIds). Otherwise just
-        // add to the matching restricted array.
-        if (oppositeSet.has(categoryId)) {
-          oppositeSet.delete(categoryId);
-          inAll.add(categoryId);
-        } else {
-          targetSet.add(categoryId);
-          inAll.delete(categoryId);
-        }
-      }
-      nextSection.categoryIds = Array.from(inAll);
-      nextSection.categoryMeleeIds = Array.from(inMelee);
-      nextSection.categoryRangedIds = Array.from(inRanged);
-    }
-
-    setter({ ...collection, weapons: nextSection });
-  };
-
-  // Renders the inline Melee/Ranged pills that appear next to each weapon
-  // category-header checkbox. Bails (returns null) for non-weapons so it can
-  // be called from any proficiency section without harm — the helper checks
-  // that the items in the category carry a weaponType/weapon_type field.
-  const renderWeaponTypePills = (
-    collection: any,
-    setter: (next: any) => void,
-    items: any[],
-    category: string,
-    target: 'optionIds' | 'fixedIds',
-  ): React.ReactNode => {
-    if (!items || items.length === 0) return null;
-    const matchType = (w: any) => String(w?.weaponType ?? w?.weapon_type ?? '').trim();
-    const meleeItems = items.filter((w) => matchType(w) === 'Melee');
-    const rangedItems = items.filter((w) => matchType(w) === 'Ranged');
-    if (meleeItems.length === 0 && rangedItems.length === 0) return null;
-
-    // Resolve the category id from the rendered category name. groupedWeapons
-    // keys are either the base category name ("Simple Weapon") or, when the
-    // weapons have weaponType set per their data, the suffixed form
-    // ("Simple Melee"). The find tolerates both — the unsuffixed match wins.
-    const baseCategory = category.replace(/ (Melee|Ranged)$/i, '').trim();
-    const catId = allWeaponCategories.find((c: any) => c.name === category)?.id
-      ?? allWeaponCategories.find((c: any) => c.name === baseCategory)?.id;
-
-    const section = collection?.weapons || {};
-    const targetIds = new Set<string>(section[target] || []);
-    const meleeActive = meleeItems.length > 0 && meleeItems.every((w) => targetIds.has(w.id));
-    const rangedActive = rangedItems.length > 0 && rangedItems.every((w) => targetIds.has(w.id));
-
-    const pillBase = 'ml-1 px-1.5 py-0.5 rounded text-[8px] uppercase tracking-widest font-black transition-all border';
-    const pillOn = 'bg-gold/85 text-[var(--primary-foreground)] border-gold/85';
-    const pillOff = 'bg-card/50 text-gold/45 border-gold/15 hover:border-gold/45';
-
-    return (
-      <>
-        {meleeItems.length > 0 && (
-          <button
-            type="button"
-            onClick={() => toggleCategoryByWeaponType(collection, setter, items, catId, 'Melee', target)}
-            className={`${pillBase} ${meleeActive ? pillOn : pillOff}`}
-            title="Toggle all melee weapons in this category"
-          >Melee</button>
-        )}
-        {rangedItems.length > 0 && (
-          <button
-            type="button"
-            onClick={() => toggleCategoryByWeaponType(collection, setter, items, catId, 'Ranged', target)}
-            className={`${pillBase} ${rangedActive ? pillOn : pillOff}`}
-            title="Toggle all ranged weapons in this category"
-          >Ranged</button>
-        )}
-      </>
-    );
-  };
-
-  const syncGroupedDisplayName = (
-    collection: any,
-    setCollection: (value: any) => void,
-    type: 'armor' | 'weapons' | 'tools' | 'skills',
-    displayKey: 'armorDisplayName' | 'weaponsDisplayName' | 'toolsDisplayName' | 'skillsDisplayName',
-    items: any[],
-    categories: any[]
-  ) => {
-    setCollection({
-      ...collection,
-      [displayKey]: buildGroupedProficiencyDisplayName(collection[type], items, categories)
-    });
-  };
-
   if (slugLoading || initialLoading) {
     return (
       <div className="max-w-6xl mx-auto py-20 text-center space-y-4">
         <div className="font-serif italic text-gold animate-pulse">Consulting the archives...</div>
-        <Button variant="ghost" size="sm" onClick={() => navigate(isProposalRoute ? '/my-proposals' : '/compendium/classes')} className="text-ink/45">
+        <Button variant="ghost" size="sm" onClick={() => navigate(isProposalRoute ? '/my-proposals' : '/compendium/classes')} className="text-ink/40">
           <ChevronLeft className="w-4 h-4 mr-2" /> {isProposalRoute ? 'Back to My Proposals' : 'Return to Compendium'}
         </Button>
       </div>
@@ -1693,8 +1380,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   if (slugNotFound) {
     return (
       <div className="max-w-6xl mx-auto py-20 text-center space-y-4">
-        <div className="font-serif italic text-ink/65">No class matches the slug "{slug}".</div>
-        <Button variant="ghost" size="sm" onClick={() => navigate(isProposalRoute ? '/my-proposals' : '/compendium/classes')} className="text-ink/45">
+        <div className="font-serif italic text-ink/60">No class matches the slug "{slug}".</div>
+        <Button variant="ghost" size="sm" onClick={() => navigate(isProposalRoute ? '/my-proposals' : '/compendium/classes')} className="text-ink/40">
           <ChevronLeft className="w-4 h-4 mr-2" /> {isProposalRoute ? 'Back to My Proposals' : 'Return to Compendium'}
         </Button>
       </div>
@@ -1795,7 +1482,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
         <div className="lg:col-span-3">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="w-full h-auto flex flex-col gap-1 bg-transparent border-none p-0 mb-6">
-              <div className="w-full grid grid-cols-2 lg:grid-cols-5 gap-1 bg-card/50 border border-gold/15 p-1 rounded-md">
+              <div className="w-full grid grid-cols-2 lg:grid-cols-5 gap-1 bg-card/50 border border-gold/10 p-1 rounded-md">
                 <TabsTrigger value="basic">Basic Info</TabsTrigger>
                 <TabsTrigger value="proficiencies">Proficiencies</TabsTrigger>
                 {/* Gate on effectiveId, not id, so the tab unlocks after
@@ -1809,7 +1496,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                 <TabsTrigger value="spellcasting">Spellcasting</TabsTrigger>
                 <TabsTrigger value="subclasses" disabled={!effectiveId}>Subclasses</TabsTrigger>
               </div>
-              <div className="w-full grid grid-cols-2 lg:grid-cols-6 gap-1 bg-card/50 border border-gold/15 p-1 rounded-md">
+              <div className="w-full grid grid-cols-2 lg:grid-cols-6 gap-1 bg-card/50 border border-gold/10 p-1 rounded-md">
                 <TabsTrigger value="equipment">Equipment</TabsTrigger>
                 <TabsTrigger value="multiclassing">Multiclassing</TabsTrigger>
                 <TabsTrigger value="multiclass-proficiencies">Multiclass Profs</TabsTrigger>
@@ -1823,12 +1510,12 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
 
             <TabsContent value="basic" className="space-y-6 mt-0">
               {/* Basic Info */}
-              <div className="p-4 border border-gold/25 bg-card/50 space-y-4">
-                <h2 className="label-text text-gold border-b border-gold/15 pb-2">Basic Information</h2>
+              <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
+                <h2 className="label-text text-gold border-b border-gold/10 pb-2">Basic Information</h2>
                 <div className="flex flex-col md:flex-row gap-6">
                   {/* Left: image upload + Edit Display button */}
                   <div className="w-full md:w-1/3 space-y-2">
-                    <label className="label-text text-gold/65">Class Icon / Artwork</label>
+                    <label className="label-text text-gold/60">Class Icon / Artwork</label>
                     <ImageUpload
                       currentImageUrl={imageUrl}
                       storagePath={`images/classes/${id || 'new'}/`}
@@ -1894,7 +1581,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                         value={name}
                         onChange={e => setName(e.target.value)}
                         placeholder="e.g. Fighter"
-                        className="h-8 text-sm bg-background/50 border-gold/15 focus:border-gold"
+                        className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold"
                       />
                     </ReviewFieldHighlight>
                     <ReviewFieldHighlight columnKey="source_id" className="space-y-1">
@@ -1902,7 +1589,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                       <select
                         value={sourceId}
                         onChange={e => setSourceId(e.target.value)}
-                        className="w-full h-8 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm text-ink"
+                        className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm text-ink"
                       >
                         <option value="">Select a Source</option>
                         {sources.map(s => (
@@ -1917,7 +1604,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                         <select
                           value={hitDie}
                           onChange={e => setHitDie(parseInt(e.target.value))}
-                          className="flex-1 h-8 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm text-ink"
+                          className="flex-1 h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm text-ink"
                         >
                           {[4, 6, 8, 10, 12].map(d => (
                             <option key={d} value={d}>{d}</option>
@@ -1930,7 +1617,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                       <select
                         value={category}
                         onChange={e => setCategory(e.target.value as any)}
-                        className="w-full h-8 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm text-ink"
+                        className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm text-ink"
                       >
                         <option value="core">Core Class</option>
                         <option value="alternate">Alternate Class</option>
@@ -1947,9 +1634,9 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                           setAsiLevels(parsed);
                         }}
                         placeholder="4, 8, 12, 16, 19"
-                        className="h-8 text-sm bg-background/50 border-gold/15 focus:border-gold font-mono"
+                        className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold font-mono"
                       />
-                      <p className="text-[10px] text-ink/45">Used in Populating Base Advancements</p>
+                      <p className="text-[10px] text-ink/40">Used in Populating Base Advancements</p>
                     </div>
                   </div>
                 </div>
@@ -1966,7 +1653,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                     </div>
                     <div className="w-full md:w-[320px] shrink-0 space-y-1">
                       <label className="label-text">Card List Cutoff Preview</label>
-                      <div className="relative rounded-lg overflow-hidden border border-gold/25 shadow-lg bg-black/40 h-[320px] flex flex-col justify-end">
+                      <div className="relative rounded-lg overflow-hidden border border-gold/20 shadow-lg bg-black/40 h-[320px] flex flex-col justify-end">
                         {/* Simulated Background */}
                         {imageUrl && (
                           <div className="absolute inset-0 z-0">
@@ -1974,13 +1661,13 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                             <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
                           </div>
                         )}
-                        <div className="relative z-10 p-4 border-t border-gold/25 bg-black/10 backdrop-blur-md h-[45%] flex flex-col items-center text-center">
+                        <div className="relative z-10 p-4 border-t border-gold/20 bg-black/10 backdrop-blur-md h-[45%] flex flex-col items-center text-center">
                           <div className="text-white/80 text-xs italic line-clamp-6 overflow-hidden w-full font-serif leading-relaxed">
                             <Markdown>{preview || description || "No preview description available."}</Markdown>
                           </div>
                         </div>
                       </div>
-                      <p className="text-[10px] text-ink/45 leading-tight pt-1">This simulates how the text fits into the class selection cards. If it cuts off with ellipses, shorten it!</p>
+                      <p className="text-[10px] text-ink/40 leading-tight pt-1">This simulates how the text fits into the class selection cards. If it cuts off with ellipses, shorten it!</p>
                     </div>
                   </div>
                   <ReviewFieldHighlight columnKey="description">
@@ -2008,7 +1695,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
             {/* Subclasses */}
             {effectiveId && (
               <TabsContent value="subclasses" className="space-y-6 mt-0">
-                <div className="p-4 border border-gold/25 bg-card/50 space-y-4">
+                <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
                   <div className="section-header">
                     <h2 className="label-text text-gold">Subclasses</h2>
                     <Link to={
@@ -2026,22 +1713,22 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                   </div>
 
                   {/* Subclass Feature Progression */}
-                  <div className="space-y-4 bg-gold/5 p-3 border border-gold/15 rounded">
+                  <div className="space-y-4 bg-gold/5 p-3 border border-gold/10 rounded">
                     <div className="space-y-3">
                       <div className="section-header">
                         <div className="space-y-1 flex-1">
-                          <label className="label-text text-[10px] text-gold/65">Subclass Title (e.g. Sorcerous Origin)</label>
+                          <label className="label-text text-[10px] text-gold/60">Subclass Title (e.g. Sorcerous Origin)</label>
                           <Input
                             value={subclassTitle}
                             onChange={e => setSubclassTitle(e.target.value)}
                             placeholder="Archetype, Domain, Path..."
-                            className="h-7 text-xs bg-background/50 border-gold/15 focus:border-gold"
+                            className="h-7 text-xs bg-background/50 border-gold/10 focus:border-gold"
                           />
                         </div>
                       </div>
 
                       <div className="space-y-2">
-                        <label className="label-text text-[10px] text-gold/65">Subclass Feature Levels (comma separated, e.g. 1, 6, 14, 18)</label>
+                        <label className="label-text text-[10px] text-gold/60">Subclass Feature Levels (comma separated, e.g. 1, 6, 14, 18)</label>
                         <Input
                           value={levelsInput}
                           onChange={e => {
@@ -2051,18 +1738,18 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                             setSubclassFeatureLevels(levels);
                           }}
                           placeholder="1, 6, 14, 18"
-                          className="h-8 text-xs bg-background/50 border-gold/15 focus:border-gold"
+                          className="h-8 text-xs bg-background/50 border-gold/10 focus:border-gold"
                         />
                       </div>
                     </div>
                   </div>
 
-                  <div className="divide-y divide-gold/15">
+                  <div className="divide-y divide-gold/10">
                     {displaySubclasses.map(sub => (
                       <div key={sub.id} className="py-2 flex items-center justify-between group">
                         <div className="flex items-center gap-3">
                           <span className="text-sm font-bold text-ink">{sub.name}</span>
-                          <span className="text-[10px] text-ink/45 uppercase font-mono">
+                          <span className="text-[10px] text-ink/40 uppercase font-mono">
                             {sources.find(s => s.id === sub.sourceId)?.abbreviation || 'Unknown'}
                           </span>
                         </div>
@@ -2089,866 +1776,44 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
 
             {/* Proficiencies */}
             <TabsContent value="proficiencies" className="space-y-6 mt-0">{activeTab === 'proficiencies' && (
-              <div className="p-4 border border-gold/25 bg-card/50 space-y-6">
+              <div className="p-4 border border-gold/20 bg-card/50 space-y-6">
                 <div className="section-header">
                   <h2 className="label-text text-gold">Proficiencies</h2>
-                  <Shield className="w-4 h-4 text-gold/45" />
+                  <Shield className="w-4 h-4 text-gold/40" />
                 </div>
 
-                <div className="space-y-8">
-                  {/* Saving Throws Section */}
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between border-b border-gold/5 pb-2">
-                      <h3 className="text-xs font-bold uppercase tracking-widest text-ink/65 flex items-center gap-2">
-                        <Shield className="w-3.5 h-3.5 text-gold/45" /> Saving Throws
-                      </h3>
-                      <div className="flex items-center gap-2">
-                        <label className="text-[10px] font-bold uppercase text-ink/45">Choices:</label>
-                        <Input
-                          type="number"
-                          value={proficiencies.savingThrows?.choiceCount || 0}
-                          onChange={e => setProficiencies({
-                            ...proficiencies,
-                            savingThrows: { ...proficiencies.savingThrows, choiceCount: parseInt(e.target.value) || 0 }
-                          })}
-                          className="w-12 h-6 text-center text-xs bg-background/50 border-gold/15"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-gold/65">Choice Options</label>
-                        <div className="flex flex-wrap gap-2">
-                          {allAttributes.map(attr => {
-                            const iden = (attr.identifier || attr.id).toUpperCase();
-                            const isSelected = proficiencies.savingThrows?.optionIds?.includes(iden);
-                            return (
-                              <button
-                                key={attr.id}
-                                type="button"
-                                onClick={() => {
-                                  const currentOptions = proficiencies.savingThrows?.optionIds || [];
-                                  setProficiencies({
-                                    ...proficiencies,
-                                    savingThrows: {
-                                      ...proficiencies.savingThrows,
-                                      optionIds: isSelected
-                                        ? currentOptions.filter((id: string) => id !== iden)
-                                        : [...currentOptions, iden]
-                                    }
-                                  });
-                                }}
-                                className={`px-4 py-1.5 rounded text-xs font-bold transition-all border ${isSelected
-                                    ? 'bg-gold text-[var(--primary-foreground)] border-gold'
-                                    : 'bg-card text-gold/65 border-gold/15 hover:border-gold/25'
-                                  }`}
-                              >
-                                {attr.name}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-gold/65">Given (Fixed)</label>
-                        <div className="flex flex-wrap gap-2">
-                          {allAttributes.map(attr => {
-                            const iden = (attr.identifier || attr.id).toUpperCase();
-                            const isFixed = proficiencies.savingThrows?.fixedIds?.includes(iden);
-                            return (
-                              <button
-                                key={attr.id}
-                                type="button"
-                                onClick={() => {
-                                  const currentFixed = proficiencies.savingThrows?.fixedIds || [];
-                                  const newFixed = isFixed
-                                    ? currentFixed.filter((id: string) => id !== iden)
-                                    : [...currentFixed, iden];
-
-                                  setProficiencies({
-                                    ...proficiencies,
-                                    savingThrows: {
-                                      ...proficiencies.savingThrows,
-                                      fixedIds: newFixed
-                                    }
-                                  });
-                                  // Also sync legacy state for now to be safe, though we migrated handleSave
-                                  setSavingThrows(newFixed);
-                                }}
-                                className={`px-4 py-1.5 rounded text-xs font-bold transition-all border ${isFixed
-                                    ? 'bg-gold text-[var(--primary-foreground)] border-gold'
-                                    : 'bg-card text-gold/65 border-gold/15 hover:border-gold/25'
-                                  }`}
-                              >
-                                {attr.name}
-                              </button>
-                            );
-                          })}
-                          {allAttributes.length === 0 && <p className="text-[10px] text-ink/35 italic col-span-2">No attributes defined. <Link to="/admin/proficiencies" className="text-gold underline">Manage Attributes</Link></p>}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Armor Section */}
-                  <div className="space-y-4 pt-4 border-t border-gold/15">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-xs font-bold uppercase tracking-widest text-ink/65 flex items-center gap-2">
-                        <Shield className="w-3.5 h-3.5 text-gold/45" /> Armor
-                      </h3>
-                      <div className="flex items-center gap-2">
-                        <label className="text-[10px] font-bold uppercase text-ink/45">Choices:</label>
-                        <Input
-                          type="number"
-                          value={proficiencies.armor.choiceCount}
-                          onChange={e => setProficiencies({
-                            ...proficiencies,
-                            armor: { ...proficiencies.armor, choiceCount: parseInt(e.target.value) || 0 }
-                          })}
-                          className="w-12 h-6 text-center text-xs bg-background/50 border-gold/15"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="label-text">Armor Display Name (e.g. Light Armor, Shields)</label>
-                      <div className="flex gap-2">
-                        <Input
-                          value={proficiencies.armorDisplayName || ''}
-                          onChange={e => setProficiencies({ ...proficiencies, armorDisplayName: e.target.value })}
-                          placeholder="e.g. All armor, shields"
-                          className="h-8 text-xs bg-background/50 border-gold/15 focus:border-gold"
-                        />
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-8 text-[10px] uppercase font-bold border-gold/25"
-                          onClick={() => syncGroupedDisplayName(proficiencies, setProficiencies, 'armor', 'armorDisplayName', allArmor, allArmorCategories)}
-                        >
-                          Sync
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-gold/65">Armor Options</label>
-                        <div className="p-3 border border-gold/15 bg-background/30 rounded-md space-y-4">
-                          {Object.entries(groupedArmor).sort().map(([category, items]) => {
-                            const currentIds = new Set(proficiencies.armor.optionIds || []);
-                            const allExist = (items as any[]).every(item => currentIds.has(item.id));
-                            return (
-                              <div key={`armor-options-${category}`} className="space-y-1">
-                                <div className="flex items-center gap-2 border-b border-gold/5 pb-1 mb-1 group/header">
-                                  <label className="flex items-center gap-2 cursor-pointer group/label">
-                                    <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${allExist ? 'bg-gold border-gold' : 'border-gold/35 group-hover/label:border-gold/55'}`}>
-                                      {allExist && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                    </div>
-                                    <input
-                                      type="checkbox"
-                                      className="hidden"
-                                      checked={allExist}
-                                      onChange={() => {
-                                        const catId = allArmorCategories.find(c => c.name === category)?.id;
-                                        toggleGroup(items as any[], 'armor', 'optionIds', catId);
-                                      }}
-                                    />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-gold/45 italic">{category}</span>
-                                  </label>
-                                  {allExist && <span className="text-[9px] text-ink/25 ml-auto italic">All Selected</span>}
-                                </div>
-                                {!allExist && (
-                                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                                    {(items as any[]).map(armor => {
-                                      const isOption = proficiencies.armor.optionIds?.includes(armor.id);
-                                      const isFixed = proficiencies.armor.fixedIds?.includes(armor.id);
-                                      return (
-                                        <label key={`armor-option-${armor.id}`} className="flex items-center gap-2 cursor-pointer group">
-                                          <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isOption ? 'bg-gold border-gold' : 'border-gold/35 group-hover:border-gold/55'}`}>
-                                            {isOption && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                          </div>
-                                          <input
-                                            type="checkbox"
-                                            className="hidden"
-                                            checked={isOption}
-                                            onChange={e => {
-                                              const current = proficiencies.armor.optionIds;
-                                              const next = e.target.checked ? [...current, armor.id] : current.filter((id: string) => id !== armor.id);
-                                              setProficiencies({ ...proficiencies, armor: { ...proficiencies.armor, optionIds: next } });
-                                            }}
-                                          />
-                                          <span className="text-[10px] font-bold text-ink/65 truncate">{armor.name}</span>
-                                        </label>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                          {allArmor.length === 0 && <p className="text-[10px] text-ink/35 italic">No armor defined.</p>}
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-gold/65">Fixed Armor (Automatic)</label>
-                        <div className="p-3 border border-gold/15 bg-background/30 rounded-md space-y-4">
-                          {Object.entries(groupedArmor).sort().map(([category, items]) => {
-                            const currentFixedIds = new Set(proficiencies.armor.fixedIds || []);
-                            const allFixed = (items as any[]).every(item => currentFixedIds.has(item.id));
-                            return (
-                              <div key={`armor-fixed-${category}`} className="space-y-1">
-                                <div className="flex items-center gap-2 border-b border-gold/5 pb-1 mb-1 group/header">
-                                  <label className="flex items-center gap-2 cursor-pointer group/label">
-                                    <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${allFixed ? 'bg-gold border-gold' : 'border-gold/35 group-hover/label:border-gold/55'}`}>
-                                      {allFixed && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                    </div>
-                                    <input
-                                      type="checkbox"
-                                      className="hidden"
-                                      checked={allFixed}
-                                      onChange={() => {
-                                        const catId = allArmorCategories.find(c => c.name === category)?.id;
-                                        toggleGroup(items as any[], 'armor', 'fixedIds', catId);
-                                      }}
-                                    />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-gold/45 italic">{category}</span>
-                                  </label>
-                                  {allFixed && <span className="text-[9px] text-ink/25 ml-auto italic">All Fixed</span>}
-                                </div>
-                                {!allFixed && (
-                                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                                    {(items as any[]).map(armor => {
-                                      const isFixed = proficiencies.armor.fixedIds?.includes(armor.id);
-                                      return (
-                                        <label key={`armor-fixed-item-${armor.id}`} className="flex items-center gap-2 cursor-pointer group">
-                                          <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isFixed ? 'bg-gold border-gold' : 'border-gold/35 group-hover:border-gold/55'}`}>
-                                            {isFixed && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                          </div>
-                                          <input
-                                            type="checkbox"
-                                            className="hidden"
-                                            checked={isFixed}
-                                            onChange={e => {
-                                              const current = proficiencies.armor.fixedIds;
-                                              const next = e.target.checked ? [...current, armor.id] : current.filter((id: string) => id !== armor.id);
-                                              const nextOptions = proficiencies.armor.optionIds;
-                                              setProficiencies({ ...proficiencies, armor: { ...proficiencies.armor, fixedIds: next, optionIds: nextOptions } });
-                                            }}
-                                          />
-                                          <span className="text-[10px] font-bold text-ink/65 truncate">{armor.name}</span>
-                                        </label>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Weapons Section */}
-                  <div className="space-y-4 pt-4 border-t border-gold/15">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-xs font-bold uppercase tracking-widest text-ink/65 flex items-center gap-2">
-                        <Sword className="w-3.5 h-3.5 text-gold/45" /> Weapons
-                      </h3>
-                      <div className="flex items-center gap-2">
-                        <label className="text-[10px] font-bold uppercase text-ink/45">Choices:</label>
-                        <Input
-                          type="number"
-                          value={proficiencies.weapons.choiceCount}
-                          onChange={e => setProficiencies({
-                            ...proficiencies,
-                            weapons: { ...proficiencies.weapons, choiceCount: parseInt(e.target.value) || 0 }
-                          })}
-                          className="w-12 h-6 text-center text-xs bg-background/50 border-gold/15"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="label-text">Weapons Display Name (e.g. Simple weapons, martial weapons)</label>
-                      <div className="flex gap-2">
-                        <Input
-                          value={proficiencies.weaponsDisplayName || ''}
-                          onChange={e => setProficiencies({ ...proficiencies, weaponsDisplayName: e.target.value })}
-                          placeholder="e.g. Simple weapons, martial weapons"
-                          className="h-8 text-xs bg-background/50 border-gold/15 focus:border-gold"
-                        />
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-8 text-[10px] uppercase font-bold border-gold/25"
-                          onClick={() => syncGroupedDisplayName(proficiencies, setProficiencies, 'weapons', 'weaponsDisplayName', allWeapons, allWeaponCategories)}
-                        >
-                          Sync
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-gold/65">Weapon Options</label>
-                        <div className="p-3 border border-gold/15 bg-background/30 rounded-md space-y-4">
-                          {Object.entries(groupedWeapons).sort().map(([category, items]) => {
-                            const currentIds = new Set(proficiencies.weapons.optionIds || []);
-                            const allExist = (items as any[]).every(item => currentIds.has(item.id));
-                            return (
-                              <div key={`weapon-options-${category}`} className="space-y-1">
-                                <div className="flex items-center gap-2 border-b border-gold/5 pb-1 mb-1 group/header">
-                                  <label className="flex items-center gap-2 cursor-pointer group/label">
-                                    <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${allExist ? 'bg-gold border-gold' : 'border-gold/35 group-hover/label:border-gold/55'}`}>
-                                      {allExist && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                    </div>
-                                    <input
-                                      type="checkbox"
-                                      className="hidden"
-                                      checked={allExist}
-                                      onChange={() => {
-                                        const catId = allWeaponCategories.find(c => c.name === category)?.id;
-                                        toggleGroup(items as any[], 'weapons', 'optionIds', catId);
-                                      }}
-                                    />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-gold/45 italic">{category}</span>
-                                  </label>
-                                  {renderWeaponTypePills(proficiencies, setProficiencies, items as any[], category, 'optionIds')}
-                                  {allExist && <span className="text-[9px] text-ink/25 ml-auto italic">All Selected</span>}
-                                </div>
-                                {!allExist && (
-                                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                                    {(items as any[]).map(weapon => {
-                                      const isOption = proficiencies.weapons.optionIds?.includes(weapon.id);
-                                      const isFixed = proficiencies.weapons.fixedIds?.includes(weapon.id);
-                                      return (
-                                        <label key={`weapon-option-${weapon.id}`} className="flex items-center gap-2 cursor-pointer group">
-                                          <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isOption ? 'bg-gold border-gold' : 'border-gold/35 group-hover:border-gold/55'}`}>
-                                            {isOption && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                          </div>
-                                          <input
-                                            type="checkbox"
-                                            className="hidden"
-                                            checked={isOption}
-                                            onChange={e => {
-                                              const current = proficiencies.weapons.optionIds;
-                                              const next = e.target.checked ? [...current, weapon.id] : current.filter((id: string) => id !== weapon.id);
-                                              setProficiencies({ ...proficiencies, weapons: { ...proficiencies.weapons, optionIds: next } });
-                                            }}
-                                          />
-                                          <span className="text-[10px] font-bold text-ink/65 truncate">{weapon.name}</span>
-                                        </label>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-gold/65">Fixed Weapons (Automatic)</label>
-                        <div className="p-3 border border-gold/15 bg-background/30 rounded-md space-y-4">
-                          {Object.entries(groupedWeapons).sort().map(([category, items]) => {
-                            const currentFixedIds = new Set(proficiencies.weapons.fixedIds || []);
-                            const allFixed = (items as any[]).every(item => currentFixedIds.has(item.id));
-                            return (
-                              <div key={`weapon-fixed-${category}`} className="space-y-1">
-                                <div className="flex items-center gap-2 border-b border-gold/5 pb-1 mb-1 group/header">
-                                  <label className="flex items-center gap-2 cursor-pointer group/label">
-                                    <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${allFixed ? 'bg-gold border-gold' : 'border-gold/35 group-hover/label:border-gold/55'}`}>
-                                      {allFixed && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                    </div>
-                                    <input
-                                      type="checkbox"
-                                      className="hidden"
-                                      checked={allFixed}
-                                      onChange={() => {
-                                        const catId = allWeaponCategories.find(c => c.name === category)?.id;
-                                        toggleGroup(items as any[], 'weapons', 'fixedIds', catId);
-                                      }}
-                                    />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-gold/45 italic">{category}</span>
-                                  </label>
-                                  {renderWeaponTypePills(proficiencies, setProficiencies, items as any[], category, 'fixedIds')}
-                                  {allFixed && <span className="text-[9px] text-ink/25 ml-auto italic">All Fixed</span>}
-                                </div>
-                                {!allFixed && (
-                                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                                    {(items as any[]).map(weapon => {
-                                      const isFixed = proficiencies.weapons.fixedIds?.includes(weapon.id);
-                                      return (
-                                        <label key={`weapon-fixed-item-${weapon.id}`} className="flex items-center gap-2 cursor-pointer group">
-                                          <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isFixed ? 'bg-gold border-gold' : 'border-gold/35 group-hover:border-gold/55'}`}>
-                                            {isFixed && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                          </div>
-                                          <input
-                                            type="checkbox"
-                                            className="hidden"
-                                            checked={isFixed}
-                                            onChange={e => {
-                                              const current = proficiencies.weapons.fixedIds;
-                                              const next = e.target.checked ? [...current, weapon.id] : current.filter((id: string) => id !== weapon.id);
-                                              const nextOptions = proficiencies.weapons.optionIds;
-                                              setProficiencies({ ...proficiencies, weapons: { ...proficiencies.weapons, fixedIds: next, optionIds: nextOptions } });
-                                            }}
-                                          />
-                                          <span className="text-[10px] font-bold text-ink/65 truncate">{weapon.name}</span>
-                                        </label>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-6 pt-4 border-t border-gold/15">
-                  {/* Skills Section */}
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-xs font-bold uppercase tracking-widest text-ink/65">Skills</h3>
-                      <div className="flex items-center gap-2">
-                        <label className="text-[10px] font-bold uppercase text-ink/45">Choices:</label>
-                        <Input
-                          type="number"
-                          value={proficiencies.skills.choiceCount}
-                          onChange={e => setProficiencies({
-                            ...proficiencies,
-                            skills: { ...proficiencies.skills, choiceCount: parseInt(e.target.value) || 0 }
-                          })}
-                          className="w-12 h-6 text-center text-xs bg-background/50 border-gold/15"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="label-text">Skills Display Name (e.g. Choose 2 from Arcana, History, Insight)</label>
-                      <div className="flex gap-2">
-                        <Input
-                          value={proficiencies.skillsDisplayName || ''}
-                          onChange={e => setProficiencies({ ...proficiencies, skillsDisplayName: e.target.value })}
-                          placeholder="e.g. 2 skills of your choice from the class list"
-                          className="h-8 text-xs bg-background/50 border-gold/15 focus:border-gold"
-                        />
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-8 text-[10px] uppercase font-bold border-gold/25"
-                          onClick={() => syncGroupedDisplayName(proficiencies, setProficiencies, 'skills', 'skillsDisplayName', allSkills, [])}
-                        >
-                          Sync
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-gold/65">Skill Options</label>
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 p-3 border border-gold/15 bg-background/30 rounded-md min-h-[100px]">
-                          {allSkills.map(skill => {
-                            const isOption = proficiencies.skills.optionIds?.includes(skill.id);
-                            const isFixed = proficiencies.skills.fixedIds?.includes(skill.id);
-                            return (
-                              <label
-                                key={skill.id}
-                                className={`flex items-center gap-2 cursor-pointer group ${isFixed ? 'opacity-50 cursor-not-allowed' : ''}`}
-                              >
-                                <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isOption || isFixed ? 'bg-gold border-gold' : 'border-gold/35 group-hover:border-gold/55'}`}>
-                                  {(isOption || isFixed) && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                </div>
-                                <input
-                                  type="checkbox"
-                                  className="hidden"
-                                  disabled={isFixed}
-                                  checked={isOption || isFixed}
-                                  onChange={e => {
-                                    const current = proficiencies.skills.optionIds;
-                                    const next = e.target.checked ? [...current, skill.id] : current.filter((id: string) => id !== skill.id);
-                                    setProficiencies({
-                                      ...proficiencies,
-                                      skills: { ...proficiencies.skills, optionIds: next }
-                                    });
-                                  }}
-                                />
-                                <span className="text-[10px] font-bold text-ink/65 truncate">{skill.name}</span>
-                              </label>
-                            );
-                          })}
-                          {allSkills.length === 0 && <p className="text-[10px] text-ink/35 italic col-span-2">No skills defined. <Link to="/compendium/skills" className="text-gold underline">Add skills</Link></p>}
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-gold/65">Fixed Skills (Automatic)</label>
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 p-3 border border-gold/15 bg-background/30 rounded-md min-h-[100px]">
-                          {allSkills.map(skill => {
-                            const isFixed = proficiencies.skills.fixedIds?.includes(skill.id);
-                            return (
-                              <label
-                                key={skill.id}
-                                className="flex items-center gap-2 cursor-pointer group"
-                              >
-                                <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isFixed ? 'bg-gold border-gold' : 'border-gold/35 group-hover:border-gold/55'}`}>
-                                  {isFixed && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                </div>
-                                <input
-                                  type="checkbox"
-                                  className="hidden"
-                                  checked={isFixed}
-                                  onChange={e => {
-                                    const current = proficiencies.skills.fixedIds;
-                                    const next = e.target.checked ? [...current, skill.id] : current.filter((id: string) => id !== skill.id);
-
-                                    // If adding to fixed, remove from options
-                                    let nextOptions = proficiencies.skills.optionIds;
-                                    if (e.target.checked) {
-                                      nextOptions = nextOptions.filter((id: string) => id !== skill.id);
-                                    }
-
-                                    setProficiencies({
-                                      ...proficiencies,
-                                      skills: { ...proficiencies.skills, fixedIds: next, optionIds: nextOptions }
-                                    });
-                                  }}
-                                />
-                                <span className="text-[10px] font-bold text-ink/65 truncate">{skill.name}</span>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Tools Section */}
-                  <div className="space-y-4 pt-4 border-t border-gold/15">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-xs font-bold uppercase tracking-widest text-ink/65 flex items-center gap-2">
-                        <Hammer className="w-3.5 h-3.5 text-gold/45" /> Tools
-                      </h3>
-                      <div className="flex items-center gap-2">
-                        <label className="text-[10px] font-bold uppercase text-ink/45">Choices:</label>
-                        <Input
-                          type="number"
-                          value={proficiencies.tools.choiceCount}
-                          onChange={e => setProficiencies({
-                            ...proficiencies,
-                            tools: { ...proficiencies.tools, choiceCount: parseInt(e.target.value) || 0 }
-                          })}
-                          className="w-12 h-6 text-center text-xs bg-background/50 border-gold/15"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="label-text text-[10px] text-gold/65">Tools Display Name (e.g. any three artisan's tools)</label>
-                      <div className="flex gap-2">
-                        <Input
-                          value={proficiencies.toolsDisplayName || ''}
-                          onChange={e => setProficiencies({ ...proficiencies, toolsDisplayName: e.target.value })}
-                          placeholder="e.g. Any three artisan's tools"
-                          className="h-8 text-xs bg-background/50 border-gold/15 focus:border-gold"
-                        />
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-8 text-[10px] uppercase font-bold border-gold/25"
-                          onClick={() => syncGroupedDisplayName(proficiencies, setProficiencies, 'tools', 'toolsDisplayName', allTools, allToolCategories)}
-                        >
-                          Sync
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-gold/65">Tool Options</label>
-                        <div className="p-3 border border-gold/15 bg-background/30 rounded-md space-y-4">
-                          {Object.entries(groupedTools).sort().map(([categoryName, items]) => {
-                            const catId = allToolCategories.find(c => c.name === categoryName)?.id;
-                            const currentIds = new Set(proficiencies.tools.optionIds || []);
-                            const allExist = (items as any[]).every(item => currentIds.has(item.id));
-                            return (
-                              <div key={`tool-options-${categoryName}`} className="space-y-1">
-                                <div className="flex items-center gap-2 border-b border-gold/5 pb-1 mb-1 group/header">
-                                  <label className="flex items-center gap-2 cursor-pointer group/label">
-                                    <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${allExist ? 'bg-gold border-gold' : 'border-gold/35 group-hover/label:border-gold/55'}`}>
-                                      {allExist && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                    </div>
-                                    <input
-                                      type="checkbox"
-                                      className="hidden"
-                                      checked={allExist}
-                                      onChange={() => toggleGroup(items as any[], 'tools', 'optionIds', catId)}
-                                    />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-gold/45 italic">{categoryName}</span>
-                                  </label>
-                                  {allExist && <span className="text-[9px] text-ink/25 ml-auto italic">All Selected</span>}
-                                </div>
-                                {!allExist && (
-                                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                                    {(items as any[]).map(tool => {
-                                      const isOption = proficiencies.tools.optionIds?.includes(tool.id);
-                                      const isFixed = proficiencies.tools.fixedIds?.includes(tool.id);
-                                      return (
-                                        <label key={`tool-option-${tool.id}`} className="flex items-center gap-2 cursor-pointer group">
-                                          <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isOption ? 'bg-gold border-gold' : 'border-gold/35 group-hover:border-gold/55'}`}>
-                                            {isOption && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                          </div>
-                                          <input
-                                            type="checkbox"
-                                            className="hidden"
-                                            checked={isOption}
-                                            onChange={e => {
-                                              const current = proficiencies.tools.optionIds;
-                                              const next = e.target.checked ? [...current, tool.id] : current.filter((id: string) => id !== tool.id);
-                                              setProficiencies({ ...proficiencies, tools: { ...proficiencies.tools, optionIds: next } });
-                                            }}
-                                          />
-                                          <span className="text-[10px] font-bold text-ink/65 truncate">{tool.name}</span>
-                                        </label>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                          {allTools.length === 0 && <p className="text-[10px] text-ink/35 italic col-span-2">No tools defined. <Link to="/compendium/tools" className="text-gold underline">Add tools</Link></p>}
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-gold/65">Fixed Tools (Automatic)</label>
-                        <div className="p-3 border border-gold/15 bg-background/30 rounded-md space-y-4">
-                          {Object.entries(groupedTools).sort().map(([categoryName, items]) => {
-                            const catId = allToolCategories.find(c => c.name === categoryName)?.id;
-                            const currentFixedIds = new Set(proficiencies.tools.fixedIds || []);
-                            const allFixed = (items as any[]).every(item => currentFixedIds.has(item.id));
-                            return (
-                              <div key={`tool-fixed-${categoryName}`} className="space-y-1">
-                                <div className="flex items-center gap-2 border-b border-gold/5 pb-1 mb-1 group/header">
-                                  <label className="flex items-center gap-2 cursor-pointer group/label">
-                                    <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${allFixed ? 'bg-gold border-gold' : 'border-gold/35 group-hover:border-gold/55'}`}>
-                                      {allFixed && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                    </div>
-                                    <input
-                                      type="checkbox"
-                                      className="hidden"
-                                      checked={allFixed}
-                                      onChange={() => toggleGroup(items as any[], 'tools', 'fixedIds', catId)}
-                                    />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-gold/45 italic">{categoryName}</span>
-                                  </label>
-                                  {allFixed && <span className="text-[9px] text-ink/25 ml-auto italic">All Selected</span>}
-                                </div>
-                                {!allFixed && (
-                                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                                    {(items as any[]).map(tool => {
-                                      const isFixed = proficiencies.tools.fixedIds?.includes(tool.id);
-                                      return (
-                                        <label key={`tool-fixed-item-${tool.id}`} className="flex items-center gap-2 cursor-pointer group">
-                                          <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isFixed ? 'bg-gold border-gold' : 'border-gold/35 group-hover:border-gold/55'}`}>
-                                            {isFixed && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                          </div>
-                                          <input
-                                            type="checkbox"
-                                            className="hidden"
-                                            checked={isFixed}
-                                            onChange={e => {
-                                              const current = proficiencies.tools.fixedIds;
-                                              const next = e.target.checked ? [...current, tool.id] : current.filter((id: string) => id !== tool.id);
-
-                                              // If adding to fixed, remove from options
-                                              setProficiencies({
-                                                ...proficiencies,
-                                                tools: { ...proficiencies.tools, fixedIds: next, optionIds: proficiencies.tools.optionIds }
-                                              });
-                                            }}
-                                          />
-                                          <span className="text-[10px] font-bold text-ink/65 truncate">{tool.name}</span>
-                                        </label>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Languages Section */}
-                  <div className="space-y-4 pt-4 border-t border-gold/15">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-xs font-bold uppercase tracking-widest text-ink/65 flex items-center gap-2">
-                        <MessageCircle className="w-3.5 h-3.5 text-gold/45" /> Languages
-                      </h3>
-                      <div className="flex items-center gap-2">
-                        <label className="text-[10px] font-bold uppercase text-ink/45">Choices:</label>
-                        <Input
-                          type="number"
-                          value={proficiencies.languages.choiceCount}
-                          onChange={e => setProficiencies({
-                            ...proficiencies,
-                            languages: { ...proficiencies.languages, choiceCount: parseInt(e.target.value) || 0 }
-                          })}
-                          className="w-12 h-6 text-center text-xs bg-background/50 border-gold/15"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-gold/65">Language Options</label>
-                        <div className="p-3 border border-gold/15 bg-background/30 rounded-md space-y-4">
-                          {Object.entries(groupedLanguages).sort().map(([categoryName, items]) => {
-                            const catId = allLanguageCategories.find(c => c.name === categoryName)?.id;
-                            const currentIds = new Set(proficiencies.languages.optionIds || []);
-                            const allExist = (items as any[]).every(item => currentIds.has(item.id));
-                            return (
-                              <div key={`lang-options-${categoryName}`} className="space-y-1">
-                                <div className="flex items-center gap-2 border-b border-gold/5 pb-1 mb-1 group/header">
-                                  <label className="flex items-center gap-2 cursor-pointer group/label">
-                                    <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${allExist ? 'bg-gold border-gold' : 'border-gold/35 group-hover/label:border-gold/55'}`}>
-                                      {allExist && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                    </div>
-                                    <input
-                                      type="checkbox"
-                                      className="hidden"
-                                      checked={allExist}
-                                      onChange={() => toggleGroup(items as any[], 'languages', 'optionIds', catId)}
-                                    />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-gold/45 italic">{categoryName}</span>
-                                  </label>
-                                  {allExist && <span className="text-[9px] text-ink/25 ml-auto italic">All Selected</span>}
-                                </div>
-                                {!allExist && (
-                                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                                    {(items as any[]).map(lang => {
-                                      const isOption = proficiencies.languages.optionIds?.includes(lang.id);
-                                      const isFixed = proficiencies.languages.fixedIds?.includes(lang.id);
-                                      return (
-                                        <label key={`lang-option-${lang.id}`} className="flex items-center gap-2 cursor-pointer group">
-                                          <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isOption ? 'bg-gold border-gold' : 'border-gold/35 group-hover:border-gold/55'}`}>
-                                            {isOption && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                          </div>
-                                          <input
-                                            type="checkbox"
-                                            className="hidden"
-                                            checked={isOption}
-                                            onChange={e => {
-                                              const current = proficiencies.languages.optionIds;
-                                              const next = e.target.checked ? [...current, lang.id] : current.filter((id: string) => id !== lang.id);
-                                              setProficiencies({ ...proficiencies, languages: { ...proficiencies.languages, optionIds: next } });
-                                            }}
-                                          />
-                                          <span className="text-[10px] font-bold text-ink/65 truncate">{lang.name}</span>
-                                        </label>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                          {allLanguages.length === 0 && <p className="text-[10px] text-ink/35 italic col-span-2">No languages defined. <Link to="/admin/proficiencies" className="text-gold underline">Manage Languages</Link></p>}
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-gold/65">Fixed Languages (Automatic)</label>
-                        <div className="p-3 border border-gold/15 bg-background/30 rounded-md space-y-4">
-                          {Object.entries(groupedLanguages).sort().map(([categoryName, items]) => {
-                            const catId = allLanguageCategories.find(c => c.name === categoryName)?.id;
-                            const currentFixedIds = new Set(proficiencies.languages.fixedIds || []);
-                            const allFixed = (items as any[]).every(item => currentFixedIds.has(item.id));
-                            return (
-                              <div key={`lang-fixed-${categoryName}`} className="space-y-1">
-                                <div className="flex items-center gap-2 border-b border-gold/5 pb-1 mb-1 group/header">
-                                  <label className="flex items-center gap-2 cursor-pointer group/label">
-                                    <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${allFixed ? 'bg-gold border-gold' : 'border-gold/35 group-hover/label:border-gold/55'}`}>
-                                      {allFixed && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                    </div>
-                                    <input
-                                      type="checkbox"
-                                      className="hidden"
-                                      checked={allFixed}
-                                      onChange={() => toggleGroup(items as any[], 'languages', 'fixedIds', catId)}
-                                    />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-gold/45 italic">{categoryName}</span>
-                                  </label>
-                                  {allFixed && <span className="text-[9px] text-ink/25 ml-auto italic">All Selected</span>}
-                                </div>
-                                {!allFixed && (
-                                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                                    {(items as any[]).map(lang => {
-                                      const isFixed = proficiencies.languages.fixedIds?.includes(lang.id);
-                                      return (
-                                        <label key={`lang-fixed-item-${lang.id}`} className="flex items-center gap-2 cursor-pointer group">
-                                          <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isFixed ? 'bg-gold border-gold' : 'border-gold/35 group-hover:border-gold/55'}`}>
-                                            {isFixed && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                          </div>
-                                          <input
-                                            type="checkbox"
-                                            className="hidden"
-                                            checked={isFixed}
-                                            onChange={e => {
-                                              const current = proficiencies.languages.fixedIds;
-                                              const next = e.target.checked ? [...current, lang.id] : current.filter((id: string) => id !== lang.id);
-
-                                              // If adding to fixed, remove from options
-                                              setProficiencies({
-                                                ...proficiencies,
-                                                languages: { ...proficiencies.languages, fixedIds: next, optionIds: proficiencies.languages.optionIds }
-                                              });
-                                            }}
-                                          />
-                                          <span className="text-[10px] font-bold text-ink/65 truncate">{lang.name}</span>
-                                        </label>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <ProficienciesEditor
+                  proficiencies={proficiencies}
+                  setProficiencies={setProficiencies}
+                  types={['savingThrows', 'armor', 'weapons', 'skills', 'tools', 'languages']}
+                  allAttributes={allAttributes}
+                  allSkills={allSkills}
+                  groupedArmor={groupedArmor}
+                  allArmor={allArmor}
+                  allArmorCategories={allArmorCategories}
+                  groupedWeapons={groupedWeapons}
+                  allWeapons={allWeapons}
+                  allWeaponCategories={allWeaponCategories}
+                  groupedTools={groupedTools}
+                  allTools={allTools}
+                  allToolCategories={allToolCategories}
+                  groupedLanguages={groupedLanguages}
+                  allLanguages={allLanguages}
+                  allLanguageCategories={allLanguageCategories}
+                />
               </div>
             )}
             </TabsContent>
 
             {/* Spellcasting */}
             <TabsContent value="spellcasting" className="space-y-6 mt-0">
-              <div className="p-4 border border-gold/25 bg-card/50 space-y-4">
+              <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
                 <div className="section-header">
                   <div className="flex items-center gap-3">
                     <h2 className="label-text text-gold">Spellcasting</h2>
                     <label className="flex items-center gap-2 cursor-pointer group">
-                      <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${spellcasting.hasSpellcasting ? 'bg-gold border-gold' : 'border-gold/35 group-hover:border-gold/55'}`}>
-                        {spellcasting.hasSpellcasting && <Check className="w-3 h-3 text-[var(--primary-foreground)]" />}
+                      <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${spellcasting.hasSpellcasting ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/50'}`}>
+                        {spellcasting.hasSpellcasting && <Check className="w-3 h-3 text-white" />}
                       </div>
                       <input
                         type="checkbox"
@@ -2956,19 +1821,19 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                         checked={spellcasting.hasSpellcasting}
                         onChange={e => setSpellcasting({ ...spellcasting, hasSpellcasting: e.target.checked })}
                       />
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-ink/45">Enable Spellcasting</span>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Enable Spellcasting</span>
                     </label>
                   </div>
                   <div className="flex items-center gap-3">
                     {id ? (
                       <Link
                         to={`/compendium/spell-lists?class=${id}`}
-                        className="text-[10px] font-bold uppercase tracking-widest text-gold/75 hover:text-gold underline-offset-4 hover:underline"
+                        className="text-[10px] font-bold uppercase tracking-widest text-gold/70 hover:text-gold underline-offset-4 hover:underline"
                       >
                         Manage Spell List →
                       </Link>
                     ) : null}
-                    <Wand2 className="w-4 h-4 text-gold/45" />
+                    <Wand2 className="w-4 h-4 text-gold/40" />
                   </div>
                 </div>
 
@@ -2977,8 +1842,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                     <div className="grid sm:grid-cols-4 gap-4">
                       <div className="flex items-center gap-2 col-span-full mb-[-12px]">
                         <div className="flex items-center gap-2 cursor-pointer group p-2 -ml-2 rounded hover:bg-gold/5" onClick={() => setSpellcasting({ ...spellcasting, isRitualCaster: !spellcasting.isRitualCaster })}>
-                          <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${spellcasting.isRitualCaster ? 'bg-gold border-gold' : 'border-gold/35 group-hover:border-gold/55'}`}>
-                            {spellcasting.isRitualCaster && <Check className="w-3 h-3 text-[var(--primary-foreground)]" />}
+                          <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${spellcasting.isRitualCaster ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/50'}`}>
+                            {spellcasting.isRitualCaster && <Check className="w-3 h-3 text-white" />}
                           </div>
                           <span className="text-[10px] font-bold uppercase tracking-widest text-gold select-none">Ritual Caster</span>
                         </div>
@@ -2989,7 +1854,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                           type="number"
                           value={spellcasting.level}
                           onChange={e => setSpellcasting({ ...spellcasting, level: parseInt(e.target.value) || 1 })}
-                          className="h-8 text-xs bg-background/50 border-gold/15 focus:border-gold"
+                          className="h-8 text-xs bg-background/50 border-gold/10 focus:border-gold"
                         />
                       </div>
                       <div className="space-y-1">
@@ -2997,7 +1862,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                         <select
                           value={spellcasting.progressionId || ''}
                           onChange={e => setSpellcasting({ ...spellcasting, progressionId: e.target.value })}
-                          className="w-full h-8 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-xs text-ink"
+                          className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink"
                         >
                           <option value="">None</option>
                           {spellcastingTypes.map(type => (
@@ -3006,11 +1871,11 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                           <option value="custom">Custom / Pact</option>
                         </select>
                         {selectedSpellcastingType && (
-                          <p className="text-[9px] text-ink/45 italic">
-                            Foundry: <span className="font-mono text-gold/75">{selectedSpellcastingType.foundryName || 'unset'}</span>
+                          <p className="text-[9px] text-ink/40 italic">
+                            Foundry: <span className="font-mono text-gold/70">{selectedSpellcastingType.foundryName || 'unset'}</span>
                             {selectedSpellcastingType.formula ? (
                               <>
-                                {' '}| Formula: <span className="font-mono text-gold/75">{selectedSpellcastingType.formula}</span>
+                                {' '}| Formula: <span className="font-mono text-gold/70">{selectedSpellcastingType.formula}</span>
                               </>
                             ) : null}
                           </p>
@@ -3021,7 +1886,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                         <select
                           value={spellcasting.ability}
                           onChange={e => setSpellcasting({ ...spellcasting, ability: e.target.value.toUpperCase() })}
-                          className="w-full h-8 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-xs text-ink"
+                          className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink"
                         >
                           {allAttributes.map(attr => (
                             <option key={attr.id} value={(attr.identifier || attr.id).toUpperCase()}>{attr.name}</option>
@@ -3040,7 +1905,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                         <select
                           value={spellcasting.type}
                           onChange={e => setSpellcasting({ ...spellcasting, type: e.target.value })}
-                          className="w-full h-8 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-xs text-ink"
+                          className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink"
                         >
                           <option value="prepared">Prepared</option>
                           <option value="known">Known</option>
@@ -3149,7 +2014,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                               <select
                                 value={spellcasting.altProgressionId}
                                 onChange={e => setSpellcasting({ ...spellcasting, altProgressionId: e.target.value })}
-                                className="flex-1 h-8 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-xs text-ink"
+                                className="flex-1 h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink"
                               >
                                 <option value="">None</option>
                                 {pactScalings.map(s => (
@@ -3157,7 +2022,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                                 ))}
                               </select>
                             </div>
-                            <p className="text-[9px] text-ink/45 italic">Use this only for separate alternative slot systems such as Pact-style casting. (Editing UI deprecated; uses existing entries only.)</p>
+                            <p className="text-[9px] text-ink/40 italic">Use this only for separate alternative slot systems such as Pact-style casting. (Editing UI deprecated; uses existing entries only.)</p>
                           </div>
                         )}
 
@@ -3167,7 +2032,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                             <select
                               value={spellcasting.spellsKnownId}
                               onChange={e => setSpellcasting({ ...spellcasting, spellsKnownId: e.target.value })}
-                              className="flex-1 h-8 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-xs text-ink"
+                              className="flex-1 h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink"
                             >
                               <option value="">None</option>
                               {knownScalings.map(s => (
@@ -3177,13 +2042,13 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                             <div className="flex gap-1">
                               {spellcasting.spellsKnownId && (
                                 <Link to={`/compendium/spells-known-scaling/edit/${spellcasting.spellsKnownId}`}>
-                                  <Button variant="outline" size="sm" className="h-8 w-8 border-gold/15 text-gold hover:bg-gold/5 p-0">
+                                  <Button variant="outline" size="sm" className="h-8 w-8 border-gold/10 text-gold hover:bg-gold/5 p-0">
                                     <Edit className="w-3 h-3" />
                                   </Button>
                                 </Link>
                               )}
                               <Link to="/compendium/spells-known-scaling/new">
-                                <Button variant="outline" size="sm" className="h-8 w-8 border-gold/15 text-gold hover:bg-gold/5 p-0">
+                                <Button variant="outline" size="sm" className="h-8 w-8 border-gold/10 text-gold hover:bg-gold/5 p-0">
                                   <Plus className="w-3 h-3" />
                                 </Button>
                               </Link>
@@ -3210,8 +2075,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
 
             {/* Equipment */}
             <TabsContent value="equipment" className="space-y-6 mt-0">
-              <div className="p-4 border border-gold/25 bg-card/50 space-y-4">
-                <h2 className="label-text text-gold border-b border-gold/15 pb-2">Starting Equipment & Wealth</h2>
+              <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
+                <h2 className="label-text text-gold border-b border-gold/10 pb-2">Starting Equipment & Wealth</h2>
 
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
@@ -3220,7 +2085,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                       value={wealth}
                       onChange={e => setWealth(e.target.value)}
                       placeholder="e.g. 3d4*10"
-                      className="h-full min-h-[42px] text-sm bg-background/50 border-gold/15 focus:border-gold"
+                      className="h-full min-h-[42px] text-sm bg-background/50 border-gold/10 focus:border-gold"
                     />
                   </div>
                 </div>
@@ -3243,7 +2108,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
               {/* Features — gate on effectiveId (not id) so the section is usable
                   on a class created in-block before useParams.id is set. */}
               {effectiveId && (
-                <div className="p-4 border border-gold/25 bg-card/50 space-y-4">
+                <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
                   <div className="section-header">
                     <h2 className="label-text text-gold">Class Features</h2>
                     <Button
@@ -3298,11 +2163,11 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                       <Plus className="w-3 h-3" /> Add Feature
                     </Button>
                   </div>
-                  <div className="divide-y divide-gold/15">
+                  <div className="divide-y divide-gold/10">
                     {displayFeatures.map((feature) => (
                       <div key={feature.id} className="py-2 flex items-center justify-between group">
                         <div className="flex items-center gap-3">
-                          <span className="text-xs font-mono text-gold/65 w-4">L{feature.level}</span>
+                          <span className="text-xs font-mono text-gold/60 w-4">L{feature.level}</span>
                           <span className="text-sm font-bold text-ink">{feature.name}</span>
                         </div>
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -3333,8 +2198,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
 
             {/* Multiclassing */}
             <TabsContent value="multiclassing" className="space-y-6 mt-0">
-              <div className="p-4 border border-gold/25 bg-card/50 space-y-4">
-                <h2 className="label-text text-gold border-b border-gold/15 pb-2">Multiclassing</h2>
+              <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
+                <h2 className="label-text text-gold border-b border-gold/10 pb-2">Multiclassing</h2>
 
                 <div className="grid sm:grid-cols-2 gap-6">
                   <div className="space-y-4">
@@ -3342,8 +2207,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                       <label className="label-text group flex items-center gap-2">
                         Primary Ability
                       </label>
-                      <p className="text-[10px] text-ink/45 italic mb-2">Attributes that are ALL required.</p>
-                      <div className="flex flex-wrap gap-2 pt-1 border border-gold/15 bg-background/50 p-2 rounded-md">
+                      <p className="text-[10px] text-ink/40 italic mb-2">Attributes that are ALL required.</p>
+                      <div className="flex flex-wrap gap-2 pt-1 border border-gold/10 bg-background/50 p-2 rounded-md">
                         {allAttributes.map(attr => (
                           <button
                             key={attr.id}
@@ -3358,21 +2223,21 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                               }
                             }}
                             className={`px-2 py-1 rounded text-[10px] font-bold transition-all border ${primaryAbility.includes((attr.identifier || attr.id).toUpperCase())
-                                ? 'bg-gold text-[var(--primary-foreground)] border-gold'
-                                : 'bg-gold/5 text-gold border-gold/15 hover:bg-gold/15'
+                                ? 'bg-gold text-white border-gold'
+                                : 'bg-gold/5 text-gold border-gold/10 hover:bg-gold/10'
                               }`}
                           >
                             {attr.name}
                           </button>
                         ))}
-                        {allAttributes.length === 0 && <p className="text-[10px] text-ink/35 italic">No attributes defined.</p>}
+                        {allAttributes.length === 0 && <p className="text-[10px] text-ink/30 italic">No attributes defined.</p>}
                       </div>
                     </div>
 
                     <div className="space-y-1">
                       <label className="label-text">Primary Ability Choice Row</label>
-                      <p className="text-[10px] text-ink/45 italic mb-2">Choose ONE of these attributes to fulfill the requirement.</p>
-                      <div className="flex flex-wrap gap-2 pt-1 border border-gold/15 bg-background/50 p-2 rounded-md">
+                      <p className="text-[10px] text-ink/40 italic mb-2">Choose ONE of these attributes to fulfill the requirement.</p>
+                      <div className="flex flex-wrap gap-2 pt-1 border border-gold/10 bg-background/50 p-2 rounded-md">
                         {allAttributes.map(attr => (
                           <button
                             key={attr.id}
@@ -3387,14 +2252,14 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                               }
                             }}
                             className={`px-2 py-1 rounded text-[10px] font-bold transition-all border ${primaryAbilityChoice.includes((attr.identifier || attr.id).toUpperCase())
-                                ? 'bg-gold text-[var(--primary-foreground)] border-gold'
-                                : 'bg-gold/5 text-gold border-gold/15 hover:bg-gold/15'
+                                ? 'bg-gold text-white border-gold'
+                                : 'bg-gold/5 text-gold border-gold/10 hover:bg-gold/10'
                               }`}
                           >
                             {attr.name}
                           </button>
                         ))}
-                        {allAttributes.length === 0 && <p className="text-[10px] text-ink/35 italic">No attributes defined.</p>}
+                        {allAttributes.length === 0 && <p className="text-[10px] text-ink/30 italic">No attributes defined.</p>}
                       </div>
                     </div>
                   </div>
@@ -3402,13 +2267,13 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                   <div className="space-y-4">
                     <div className="space-y-1">
                       <label className="label-text">Multiclassing Requirement Preview</label>
-                      <div className="p-4 bg-background/80 border border-gold/25 rounded-lg min-h-[100px] flex items-center justify-center text-center">
+                      <div className="p-4 bg-background/80 border border-gold/20 rounded-lg min-h-[100px] flex items-center justify-center text-center">
                         {(() => {
                           const fixedNames = primaryAbility.map(id => allAttributes.find(a => (a.identifier || a.id).toUpperCase() === id.toUpperCase())?.name || id.toUpperCase());
                           const choiceNames = primaryAbilityChoice.map(id => allAttributes.find(a => (a.identifier || a.id).toUpperCase() === id.toUpperCase())?.name || id.toUpperCase());
 
                           if (fixedNames.length === 0 && choiceNames.length === 0) {
-                            return <span className="text-ink/25 italic text-xs">No multiclassing requirements defined.</span>;
+                            return <span className="text-ink/20 italic text-xs">No multiclassing requirements defined.</span>;
                           }
 
                           let requirementPart = "";
@@ -3424,7 +2289,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                           if (multiclassing && multiclassing.trim() !== '') {
                             return (
                               <div className="w-full text-left" key="multiclassing-manual">
-                                <div className="text-sm font-serif italic text-gold/85 leading-relaxed group">
+                                <div className="text-sm font-serif italic text-gold/80 leading-relaxed group">
                                   <BBCodeRenderer content={multiclassing} className="prose-sm italic text-xs" />
                                 </div>
                               </div>
@@ -3432,11 +2297,11 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                           }
 
                           if (!requirementPart) {
-                            return <span className="text-ink/25 italic text-xs">No multiclassing requirements defined.</span>;
+                            return <span className="text-ink/20 italic text-xs">No multiclassing requirements defined.</span>;
                           }
 
                           return (
-                            <div className="text-sm font-serif italic text-gold/85 leading-relaxed">
+                            <div className="text-sm font-serif italic text-gold/80 leading-relaxed">
                               You must have a {requirementPart} score of 13 or higher in order to multiclass in or out of this class.
                             </div>
                           );
@@ -3460,860 +2325,38 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
 
             {/* Multiclass Proficiencies */}
             <TabsContent value="multiclass-proficiencies" className="space-y-6 mt-0">{activeTab === 'multiclass-proficiencies' && (
-              <div className="p-4 border border-gold/25 bg-card/50 space-y-6">
+              <div className="p-4 border border-gold/20 bg-card/50 space-y-6">
                 <div className="section-header">
                   <h2 className="label-text text-gold">Multiclass Proficiencies</h2>
-                  <Shield className="w-4 h-4 text-gold/45" />
+                  <Shield className="w-4 h-4 text-gold/40" />
                 </div>
 
-                <div className="space-y-8">
-                  {/* Saving Throws Section */}
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between border-b border-gold/5 pb-2">
-                      <h3 className="text-xs font-bold uppercase tracking-widest text-ink/65 flex items-center gap-2">
-                        <Shield className="w-3.5 h-3.5 text-gold/45" /> Saving Throws
-                      </h3>
-                      <div className="flex items-center gap-2">
-                        <label className="text-[10px] font-bold uppercase text-ink/45">Choices:</label>
-                        <Input
-                          type="number"
-                          value={multiclassProficiencies.savingThrows?.choiceCount || 0}
-                          onChange={e => setMulticlassProficiencies({
-                            ...multiclassProficiencies,
-                            savingThrows: { ...multiclassProficiencies.savingThrows, choiceCount: parseInt(e.target.value) || 0 }
-                          })}
-                          className="w-12 h-6 text-center text-xs bg-background/50 border-gold/15"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-gold/65">Choice Options</label>
-                        <div className="flex flex-wrap gap-2">
-                          {allAttributes.map(attr => {
-                            const iden = (attr.identifier || attr.id).toUpperCase();
-                            const isSelected = multiclassProficiencies.savingThrows?.optionIds?.includes(iden);
-                            return (
-                              <button
-                                key={attr.id}
-                                type="button"
-                                onClick={() => {
-                                  const currentOptions = multiclassProficiencies.savingThrows?.optionIds || [];
-                                  setMulticlassProficiencies({
-                                    ...multiclassProficiencies,
-                                    savingThrows: {
-                                      ...multiclassProficiencies.savingThrows,
-                                      optionIds: isSelected
-                                        ? currentOptions.filter((id: string) => id !== iden)
-                                        : [...currentOptions, iden]
-                                    }
-                                  });
-                                }}
-                                className={`px-4 py-1.5 rounded text-xs font-bold transition-all border ${isSelected
-                                    ? 'bg-gold text-[var(--primary-foreground)] border-gold'
-                                    : 'bg-card text-gold/65 border-gold/15 hover:border-gold/25'
-                                  }`}
-                              >
-                                {attr.name}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-gold/65">Given (Fixed)</label>
-                        <div className="flex flex-wrap gap-2">
-                          {allAttributes.map(attr => {
-                            const iden = (attr.identifier || attr.id).toUpperCase();
-                            const isFixed = multiclassProficiencies.savingThrows?.fixedIds?.includes(iden);
-                            return (
-                              <button
-                                key={attr.id}
-                                type="button"
-                                onClick={() => {
-                                  const currentFixed = multiclassProficiencies.savingThrows?.fixedIds || [];
-                                  const newFixed = isFixed
-                                    ? currentFixed.filter((id: string) => id !== iden)
-                                    : [...currentFixed, iden];
-
-                                  setMulticlassProficiencies({
-                                    ...multiclassProficiencies,
-                                    savingThrows: {
-                                      ...multiclassProficiencies.savingThrows,
-                                      fixedIds: newFixed
-                                    }
-                                  });
-                                  // Also sync legacy state for now to be safe, though we migrated handleSave
-                                  setSavingThrows(newFixed);
-                                }}
-                                className={`px-4 py-1.5 rounded text-xs font-bold transition-all border ${isFixed
-                                    ? 'bg-gold text-[var(--primary-foreground)] border-gold'
-                                    : 'bg-card text-gold/65 border-gold/15 hover:border-gold/25'
-                                  }`}
-                              >
-                                {attr.name}
-                              </button>
-                            );
-                          })}
-                          {allAttributes.length === 0 && <p className="text-[10px] text-ink/35 italic col-span-2">No attributes defined. <Link to="/admin/proficiencies" className="text-gold underline">Manage Attributes</Link></p>}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Armor Section */}
-                  <div className="space-y-4 pt-4 border-t border-gold/15">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-xs font-bold uppercase tracking-widest text-ink/65 flex items-center gap-2">
-                        <Shield className="w-3.5 h-3.5 text-gold/45" /> Armor
-                      </h3>
-                      <div className="flex items-center gap-2">
-                        <label className="text-[10px] font-bold uppercase text-ink/45">Choices:</label>
-                        <Input
-                          type="number"
-                          value={multiclassProficiencies.armor.choiceCount}
-                          onChange={e => setMulticlassProficiencies({
-                            ...multiclassProficiencies,
-                            armor: { ...multiclassProficiencies.armor, choiceCount: parseInt(e.target.value) || 0 }
-                          })}
-                          className="w-12 h-6 text-center text-xs bg-background/50 border-gold/15"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="label-text">Armor Display Name (e.g. Light Armor, Shields)</label>
-                      <div className="flex gap-2">
-                        <Input
-                          value={multiclassProficiencies.armorDisplayName || ''}
-                          onChange={e => setMulticlassProficiencies({ ...multiclassProficiencies, armorDisplayName: e.target.value })}
-                          placeholder="e.g. All armor, shields"
-                          className="h-8 text-xs bg-background/50 border-gold/15 focus:border-gold"
-                        />
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-8 text-[10px] uppercase font-bold border-gold/25"
-                          onClick={() => syncGroupedDisplayName(multiclassProficiencies, setMulticlassProficiencies, 'armor', 'armorDisplayName', allArmor, allArmorCategories)}
-                        >
-                          Sync
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-gold/65">Armor Options</label>
-                        <div className="p-3 border border-gold/15 bg-background/30 rounded-md space-y-4">
-                          {Object.entries(groupedArmor).sort().map(([category, items]) => {
-                            const currentIds = new Set(multiclassProficiencies.armor.optionIds || []);
-                            const allExist = (items as any[]).every(item => currentIds.has(item.id));
-                            return (
-                              <div key={`armor-options-${category}`} className="space-y-1">
-                                <div className="flex items-center gap-2 border-b border-gold/5 pb-1 mb-1 group/header">
-                                  <label className="flex items-center gap-2 cursor-pointer group/label">
-                                    <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${allExist ? 'bg-gold border-gold' : 'border-gold/35 group-hover/label:border-gold/55'}`}>
-                                      {allExist && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                    </div>
-                                    <input
-                                      type="checkbox"
-                                      className="hidden"
-                                      checked={allExist}
-                                      onChange={() => {
-                                        const catId = allArmorCategories.find(c => c.name === category)?.id;
-                                        toggleMulticlassGroup(items as any[], 'armor', 'optionIds', catId);
-                                      }}
-                                    />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-gold/45 italic">{category}</span>
-                                  </label>
-                                  {allExist && <span className="text-[9px] text-ink/25 ml-auto italic">All Selected</span>}
-                                </div>
-                                {!allExist && (
-                                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                                    {(items as any[]).map(armor => {
-                                      const isOption = multiclassProficiencies.armor.optionIds?.includes(armor.id);
-                                      const isFixed = multiclassProficiencies.armor.fixedIds?.includes(armor.id);
-                                      return (
-                                        <label key={`armor-option-${armor.id}`} className="flex items-center gap-2 cursor-pointer group">
-                                          <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isOption ? 'bg-gold border-gold' : 'border-gold/35 group-hover:border-gold/55'}`}>
-                                            {isOption && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                          </div>
-                                          <input
-                                            type="checkbox"
-                                            className="hidden"
-                                            checked={isOption}
-                                            onChange={e => {
-                                              const current = multiclassProficiencies.armor.optionIds;
-                                              const next = e.target.checked ? [...current, armor.id] : current.filter((id: string) => id !== armor.id);
-                                              setMulticlassProficiencies({ ...multiclassProficiencies, armor: { ...multiclassProficiencies.armor, optionIds: next } });
-                                            }}
-                                          />
-                                          <span className="text-[10px] font-bold text-ink/65 truncate">{armor.name}</span>
-                                        </label>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                          {allArmor.length === 0 && <p className="text-[10px] text-ink/35 italic">No armor defined.</p>}
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-gold/65">Fixed Armor (Automatic)</label>
-                        <div className="p-3 border border-gold/15 bg-background/30 rounded-md space-y-4">
-                          {Object.entries(groupedArmor).sort().map(([category, items]) => {
-                            const currentFixedIds = new Set(multiclassProficiencies.armor.fixedIds || []);
-                            const allFixed = (items as any[]).every(item => currentFixedIds.has(item.id));
-                            return (
-                              <div key={`armor-fixed-${category}`} className="space-y-1">
-                                <div className="flex items-center gap-2 border-b border-gold/5 pb-1 mb-1 group/header">
-                                  <label className="flex items-center gap-2 cursor-pointer group/label">
-                                    <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${allFixed ? 'bg-gold border-gold' : 'border-gold/35 group-hover/label:border-gold/55'}`}>
-                                      {allFixed && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                    </div>
-                                    <input
-                                      type="checkbox"
-                                      className="hidden"
-                                      checked={allFixed}
-                                      onChange={() => {
-                                        const catId = allArmorCategories.find(c => c.name === category)?.id;
-                                        toggleMulticlassGroup(items as any[], 'armor', 'fixedIds', catId);
-                                      }}
-                                    />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-gold/45 italic">{category}</span>
-                                  </label>
-                                  {allFixed && <span className="text-[9px] text-ink/25 ml-auto italic">All Fixed</span>}
-                                </div>
-                                {!allFixed && (
-                                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                                    {(items as any[]).map(armor => {
-                                      const isFixed = multiclassProficiencies.armor.fixedIds?.includes(armor.id);
-                                      return (
-                                        <label key={`armor-fixed-item-${armor.id}`} className="flex items-center gap-2 cursor-pointer group">
-                                          <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isFixed ? 'bg-gold border-gold' : 'border-gold/35 group-hover:border-gold/55'}`}>
-                                            {isFixed && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                          </div>
-                                          <input
-                                            type="checkbox"
-                                            className="hidden"
-                                            checked={isFixed}
-                                            onChange={e => {
-                                              const current = multiclassProficiencies.armor.fixedIds;
-                                              const next = e.target.checked ? [...current, armor.id] : current.filter((id: string) => id !== armor.id);
-                                              const nextOptions = multiclassProficiencies.armor.optionIds;
-                                              setMulticlassProficiencies({ ...multiclassProficiencies, armor: { ...multiclassProficiencies.armor, fixedIds: next, optionIds: nextOptions } });
-                                            }}
-                                          />
-                                          <span className="text-[10px] font-bold text-ink/65 truncate">{armor.name}</span>
-                                        </label>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Weapons Section */}
-                  <div className="space-y-4 pt-4 border-t border-gold/15">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-xs font-bold uppercase tracking-widest text-ink/65 flex items-center gap-2">
-                        <Sword className="w-3.5 h-3.5 text-gold/45" /> Weapons
-                      </h3>
-                      <div className="flex items-center gap-2">
-                        <label className="text-[10px] font-bold uppercase text-ink/45">Choices:</label>
-                        <Input
-                          type="number"
-                          value={multiclassProficiencies.weapons.choiceCount}
-                          onChange={e => setMulticlassProficiencies({
-                            ...multiclassProficiencies,
-                            weapons: { ...multiclassProficiencies.weapons, choiceCount: parseInt(e.target.value) || 0 }
-                          })}
-                          className="w-12 h-6 text-center text-xs bg-background/50 border-gold/15"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="label-text">Weapons Display Name (e.g. Simple weapons, martial weapons)</label>
-                      <div className="flex gap-2">
-                        <Input
-                          value={multiclassProficiencies.weaponsDisplayName || ''}
-                          onChange={e => setMulticlassProficiencies({ ...multiclassProficiencies, weaponsDisplayName: e.target.value })}
-                          placeholder="e.g. Simple weapons, martial weapons"
-                          className="h-8 text-xs bg-background/50 border-gold/15 focus:border-gold"
-                        />
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-8 text-[10px] uppercase font-bold border-gold/25"
-                          onClick={() => syncGroupedDisplayName(multiclassProficiencies, setMulticlassProficiencies, 'weapons', 'weaponsDisplayName', allWeapons, allWeaponCategories)}
-                        >
-                          Sync
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-gold/65">Weapon Options</label>
-                        <div className="p-3 border border-gold/15 bg-background/30 rounded-md space-y-4">
-                          {Object.entries(groupedWeapons).sort().map(([category, items]) => {
-                            const currentIds = new Set(multiclassProficiencies.weapons.optionIds || []);
-                            const allExist = (items as any[]).every(item => currentIds.has(item.id));
-                            return (
-                              <div key={`weapon-options-${category}`} className="space-y-1">
-                                <div className="flex items-center gap-2 border-b border-gold/5 pb-1 mb-1 group/header">
-                                  <label className="flex items-center gap-2 cursor-pointer group/label">
-                                    <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${allExist ? 'bg-gold border-gold' : 'border-gold/35 group-hover/label:border-gold/55'}`}>
-                                      {allExist && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                    </div>
-                                    <input
-                                      type="checkbox"
-                                      className="hidden"
-                                      checked={allExist}
-                                      onChange={() => {
-                                        const catId = allWeaponCategories.find(c => c.name === category)?.id;
-                                        toggleMulticlassGroup(items as any[], 'weapons', 'optionIds', catId);
-                                      }}
-                                    />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-gold/45 italic">{category}</span>
-                                  </label>
-                                  {renderWeaponTypePills(multiclassProficiencies, setMulticlassProficiencies, items as any[], category, 'optionIds')}
-                                  {allExist && <span className="text-[9px] text-ink/25 ml-auto italic">All Selected</span>}
-                                </div>
-                                {!allExist && (
-                                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                                    {(items as any[]).map(weapon => {
-                                      const isOption = multiclassProficiencies.weapons.optionIds?.includes(weapon.id);
-                                      const isFixed = multiclassProficiencies.weapons.fixedIds?.includes(weapon.id);
-                                      return (
-                                        <label key={`weapon-option-${weapon.id}`} className="flex items-center gap-2 cursor-pointer group">
-                                          <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isOption ? 'bg-gold border-gold' : 'border-gold/35 group-hover:border-gold/55'}`}>
-                                            {isOption && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                          </div>
-                                          <input
-                                            type="checkbox"
-                                            className="hidden"
-                                            checked={isOption}
-                                            onChange={e => {
-                                              const current = multiclassProficiencies.weapons.optionIds;
-                                              const next = e.target.checked ? [...current, weapon.id] : current.filter((id: string) => id !== weapon.id);
-                                              setMulticlassProficiencies({ ...multiclassProficiencies, weapons: { ...multiclassProficiencies.weapons, optionIds: next } });
-                                            }}
-                                          />
-                                          <span className="text-[10px] font-bold text-ink/65 truncate">{weapon.name}</span>
-                                        </label>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-gold/65">Fixed Weapons (Automatic)</label>
-                        <div className="p-3 border border-gold/15 bg-background/30 rounded-md space-y-4">
-                          {Object.entries(groupedWeapons).sort().map(([category, items]) => {
-                            const currentFixedIds = new Set(multiclassProficiencies.weapons.fixedIds || []);
-                            const allFixed = (items as any[]).every(item => currentFixedIds.has(item.id));
-                            return (
-                              <div key={`weapon-fixed-${category}`} className="space-y-1">
-                                <div className="flex items-center gap-2 border-b border-gold/5 pb-1 mb-1 group/header">
-                                  <label className="flex items-center gap-2 cursor-pointer group/label">
-                                    <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${allFixed ? 'bg-gold border-gold' : 'border-gold/35 group-hover/label:border-gold/55'}`}>
-                                      {allFixed && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                    </div>
-                                    <input
-                                      type="checkbox"
-                                      className="hidden"
-                                      checked={allFixed}
-                                      onChange={() => {
-                                        const catId = allWeaponCategories.find(c => c.name === category)?.id;
-                                        toggleMulticlassGroup(items as any[], 'weapons', 'fixedIds', catId);
-                                      }}
-                                    />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-gold/45 italic">{category}</span>
-                                  </label>
-                                  {renderWeaponTypePills(multiclassProficiencies, setMulticlassProficiencies, items as any[], category, 'fixedIds')}
-                                  {allFixed && <span className="text-[9px] text-ink/25 ml-auto italic">All Fixed</span>}
-                                </div>
-                                {!allFixed && (
-                                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                                    {(items as any[]).map(weapon => {
-                                      const isFixed = multiclassProficiencies.weapons.fixedIds?.includes(weapon.id);
-                                      return (
-                                        <label key={`weapon-fixed-item-${weapon.id}`} className="flex items-center gap-2 cursor-pointer group">
-                                          <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isFixed ? 'bg-gold border-gold' : 'border-gold/35 group-hover:border-gold/55'}`}>
-                                            {isFixed && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                          </div>
-                                          <input
-                                            type="checkbox"
-                                            className="hidden"
-                                            checked={isFixed}
-                                            onChange={e => {
-                                              const current = multiclassProficiencies.weapons.fixedIds;
-                                              const next = e.target.checked ? [...current, weapon.id] : current.filter((id: string) => id !== weapon.id);
-                                              const nextOptions = multiclassProficiencies.weapons.optionIds;
-                                              setMulticlassProficiencies({ ...multiclassProficiencies, weapons: { ...multiclassProficiencies.weapons, fixedIds: next, optionIds: nextOptions } });
-                                            }}
-                                          />
-                                          <span className="text-[10px] font-bold text-ink/65 truncate">{weapon.name}</span>
-                                        </label>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-6 pt-4 border-t border-gold/15">
-                  {/* Skills Section */}
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-xs font-bold uppercase tracking-widest text-ink/65">Skills</h3>
-                      <div className="flex items-center gap-2">
-                        <label className="text-[10px] font-bold uppercase text-ink/45">Choices:</label>
-                        <Input
-                          type="number"
-                          value={multiclassProficiencies.skills.choiceCount}
-                          onChange={e => setMulticlassProficiencies({
-                            ...multiclassProficiencies,
-                            skills: { ...multiclassProficiencies.skills, choiceCount: parseInt(e.target.value) || 0 }
-                          })}
-                          className="w-12 h-6 text-center text-xs bg-background/50 border-gold/15"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="label-text">Skills Display Name (e.g. Choose 2 from Arcana, History, Insight)</label>
-                      <div className="flex gap-2">
-                        <Input
-                          value={multiclassProficiencies.skillsDisplayName || ''}
-                          onChange={e => setMulticlassProficiencies({ ...multiclassProficiencies, skillsDisplayName: e.target.value })}
-                          placeholder="e.g. 1 skill of your choice from the class list"
-                          className="h-8 text-xs bg-background/50 border-gold/15 focus:border-gold"
-                        />
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-8 text-[10px] uppercase font-bold border-gold/25"
-                          onClick={() => syncGroupedDisplayName(multiclassProficiencies, setMulticlassProficiencies, 'skills', 'skillsDisplayName', allSkills, [])}
-                        >
-                          Sync
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-gold/65">Skill Options</label>
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 p-3 border border-gold/15 bg-background/30 rounded-md min-h-[100px]">
-                          {allSkills.map(skill => {
-                            const isOption = multiclassProficiencies.skills.optionIds?.includes(skill.id);
-                            const isFixed = multiclassProficiencies.skills.fixedIds?.includes(skill.id);
-                            return (
-                              <label
-                                key={skill.id}
-                                className={`flex items-center gap-2 cursor-pointer group ${isFixed ? 'opacity-50 cursor-not-allowed' : ''}`}
-                              >
-                                <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isOption || isFixed ? 'bg-gold border-gold' : 'border-gold/35 group-hover:border-gold/55'}`}>
-                                  {(isOption || isFixed) && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                </div>
-                                <input
-                                  type="checkbox"
-                                  className="hidden"
-                                  disabled={isFixed}
-                                  checked={isOption || isFixed}
-                                  onChange={e => {
-                                    const current = multiclassProficiencies.skills.optionIds;
-                                    const next = e.target.checked ? [...current, skill.id] : current.filter((id: string) => id !== skill.id);
-                                    setMulticlassProficiencies({
-                                      ...multiclassProficiencies,
-                                      skills: { ...multiclassProficiencies.skills, optionIds: next }
-                                    });
-                                  }}
-                                />
-                                <span className="text-[10px] font-bold text-ink/65 truncate">{skill.name}</span>
-                              </label>
-                            );
-                          })}
-                          {allSkills.length === 0 && <p className="text-[10px] text-ink/35 italic col-span-2">No skills defined. <Link to="/compendium/skills" className="text-gold underline">Add skills</Link></p>}
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-gold/65">Fixed Skills (Automatic)</label>
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 p-3 border border-gold/15 bg-background/30 rounded-md min-h-[100px]">
-                          {allSkills.map(skill => {
-                            const isFixed = multiclassProficiencies.skills.fixedIds?.includes(skill.id);
-                            return (
-                              <label
-                                key={skill.id}
-                                className="flex items-center gap-2 cursor-pointer group"
-                              >
-                                <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isFixed ? 'bg-gold border-gold' : 'border-gold/35 group-hover:border-gold/55'}`}>
-                                  {isFixed && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                </div>
-                                <input
-                                  type="checkbox"
-                                  className="hidden"
-                                  checked={isFixed}
-                                  onChange={e => {
-                                    const current = multiclassProficiencies.skills.fixedIds;
-                                    const next = e.target.checked ? [...current, skill.id] : current.filter((id: string) => id !== skill.id);
-
-                                    // If adding to fixed, remove from options
-                                    let nextOptions = multiclassProficiencies.skills.optionIds;
-                                    if (e.target.checked) {
-                                      nextOptions = nextOptions.filter((id: string) => id !== skill.id);
-                                    }
-
-                                    setMulticlassProficiencies({
-                                      ...multiclassProficiencies,
-                                      skills: { ...multiclassProficiencies.skills, fixedIds: next, optionIds: nextOptions }
-                                    });
-                                  }}
-                                />
-                                <span className="text-[10px] font-bold text-ink/65 truncate">{skill.name}</span>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Tools Section */}
-                  <div className="space-y-4 pt-4 border-t border-gold/15">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-xs font-bold uppercase tracking-widest text-ink/65 flex items-center gap-2">
-                        <Hammer className="w-3.5 h-3.5 text-gold/45" /> Tools
-                      </h3>
-                      <div className="flex items-center gap-2">
-                        <label className="text-[10px] font-bold uppercase text-ink/45">Choices:</label>
-                        <Input
-                          type="number"
-                          value={multiclassProficiencies.tools.choiceCount}
-                          onChange={e => setMulticlassProficiencies({
-                            ...multiclassProficiencies,
-                            tools: { ...multiclassProficiencies.tools, choiceCount: parseInt(e.target.value) || 0 }
-                          })}
-                          className="w-12 h-6 text-center text-xs bg-background/50 border-gold/15"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="label-text text-[10px] text-gold/65">Tools Display Name (e.g. any three artisan's tools)</label>
-                      <div className="flex gap-2">
-                        <Input
-                          value={multiclassProficiencies.toolsDisplayName || ''}
-                          onChange={e => setMulticlassProficiencies({ ...multiclassProficiencies, toolsDisplayName: e.target.value })}
-                          placeholder="e.g. Any three artisan's tools"
-                          className="h-8 text-xs bg-background/50 border-gold/15 focus:border-gold"
-                        />
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-8 text-[10px] uppercase font-bold border-gold/25"
-                          onClick={() => syncGroupedDisplayName(multiclassProficiencies, setMulticlassProficiencies, 'tools', 'toolsDisplayName', allTools, allToolCategories)}
-                        >
-                          Sync
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-gold/65">Tool Options</label>
-                        <div className="p-3 border border-gold/15 bg-background/30 rounded-md space-y-4">
-                          {Object.entries(groupedTools).sort().map(([categoryName, items]) => {
-                            const catId = allToolCategories.find(c => c.name === categoryName)?.id;
-                            const currentIds = new Set(multiclassProficiencies.tools.optionIds || []);
-                            const allExist = (items as any[]).every(item => currentIds.has(item.id));
-                            return (
-                              <div key={`tool-options-${categoryName}`} className="space-y-1">
-                                <div className="flex items-center gap-2 border-b border-gold/5 pb-1 mb-1 group/header">
-                                  <label className="flex items-center gap-2 cursor-pointer group/label">
-                                    <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${allExist ? 'bg-gold border-gold' : 'border-gold/35 group-hover/label:border-gold/55'}`}>
-                                      {allExist && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                    </div>
-                                    <input
-                                      type="checkbox"
-                                      className="hidden"
-                                      checked={allExist}
-                                      onChange={() => toggleMulticlassGroup(items as any[], 'tools', 'optionIds', catId)}
-                                    />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-gold/45 italic">{categoryName}</span>
-                                  </label>
-                                  {allExist && <span className="text-[9px] text-ink/25 ml-auto italic">All Selected</span>}
-                                </div>
-                                {!allExist && (
-                                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                                    {(items as any[]).map(tool => {
-                                      const isOption = multiclassProficiencies.tools.optionIds?.includes(tool.id);
-                                      const isFixed = multiclassProficiencies.tools.fixedIds?.includes(tool.id);
-                                      return (
-                                        <label key={`tool-option-${tool.id}`} className="flex items-center gap-2 cursor-pointer group">
-                                          <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isOption ? 'bg-gold border-gold' : 'border-gold/35 group-hover:border-gold/55'}`}>
-                                            {isOption && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                          </div>
-                                          <input
-                                            type="checkbox"
-                                            className="hidden"
-                                            checked={isOption}
-                                            onChange={e => {
-                                              const current = multiclassProficiencies.tools.optionIds;
-                                              const next = e.target.checked ? [...current, tool.id] : current.filter((id: string) => id !== tool.id);
-                                              setMulticlassProficiencies({ ...multiclassProficiencies, tools: { ...multiclassProficiencies.tools, optionIds: next } });
-                                            }}
-                                          />
-                                          <span className="text-[10px] font-bold text-ink/65 truncate">{tool.name}</span>
-                                        </label>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                          {allTools.length === 0 && <p className="text-[10px] text-ink/35 italic col-span-2">No tools defined. <Link to="/compendium/tools" className="text-gold underline">Add tools</Link></p>}
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-gold/65">Fixed Tools (Automatic)</label>
-                        <div className="p-3 border border-gold/15 bg-background/30 rounded-md space-y-4">
-                          {Object.entries(groupedTools).sort().map(([categoryName, items]) => {
-                            const catId = allToolCategories.find(c => c.name === categoryName)?.id;
-                            const currentFixedIds = new Set(multiclassProficiencies.tools.fixedIds || []);
-                            const allFixed = (items as any[]).every(item => currentFixedIds.has(item.id));
-                            return (
-                              <div key={`tool-fixed-${categoryName}`} className="space-y-1">
-                                <div className="flex items-center gap-2 border-b border-gold/5 pb-1 mb-1 group/header">
-                                  <label className="flex items-center gap-2 cursor-pointer group/label">
-                                    <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${allFixed ? 'bg-gold border-gold' : 'border-gold/35 group-hover:border-gold/55'}`}>
-                                      {allFixed && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                    </div>
-                                    <input
-                                      type="checkbox"
-                                      className="hidden"
-                                      checked={allFixed}
-                                      onChange={() => toggleMulticlassGroup(items as any[], 'tools', 'fixedIds', catId)}
-                                    />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-gold/45 italic">{categoryName}</span>
-                                  </label>
-                                  {allFixed && <span className="text-[9px] text-ink/25 ml-auto italic">All Selected</span>}
-                                </div>
-                                {!allFixed && (
-                                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                                    {(items as any[]).map(tool => {
-                                      const isFixed = multiclassProficiencies.tools.fixedIds?.includes(tool.id);
-                                      return (
-                                        <label key={`tool-fixed-item-${tool.id}`} className="flex items-center gap-2 cursor-pointer group">
-                                          <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isFixed ? 'bg-gold border-gold' : 'border-gold/35 group-hover:border-gold/55'}`}>
-                                            {isFixed && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                          </div>
-                                          <input
-                                            type="checkbox"
-                                            className="hidden"
-                                            checked={isFixed}
-                                            onChange={e => {
-                                              const current = multiclassProficiencies.tools.fixedIds;
-                                              const next = e.target.checked ? [...current, tool.id] : current.filter((id: string) => id !== tool.id);
-
-                                              // If adding to fixed, remove from options
-                                              setMulticlassProficiencies({
-                                                ...multiclassProficiencies,
-                                                tools: { ...multiclassProficiencies.tools, fixedIds: next, optionIds: multiclassProficiencies.tools.optionIds }
-                                              });
-                                            }}
-                                          />
-                                          <span className="text-[10px] font-bold text-ink/65 truncate">{tool.name}</span>
-                                        </label>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Languages Section */}
-                  <div className="space-y-4 pt-4 border-t border-gold/15">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-xs font-bold uppercase tracking-widest text-ink/65 flex items-center gap-2">
-                        <MessageCircle className="w-3.5 h-3.5 text-gold/45" /> Languages
-                      </h3>
-                      <div className="flex items-center gap-2">
-                        <label className="text-[10px] font-bold uppercase text-ink/45">Choices:</label>
-                        <Input
-                          type="number"
-                          value={multiclassProficiencies.languages.choiceCount}
-                          onChange={e => setMulticlassProficiencies({
-                            ...multiclassProficiencies,
-                            languages: { ...multiclassProficiencies.languages, choiceCount: parseInt(e.target.value) || 0 }
-                          })}
-                          className="w-12 h-6 text-center text-xs bg-background/50 border-gold/15"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-gold/65">Language Options</label>
-                        <div className="p-3 border border-gold/15 bg-background/30 rounded-md space-y-4">
-                          {Object.entries(groupedLanguages).sort().map(([categoryName, items]) => {
-                            const catId = allLanguageCategories.find(c => c.name === categoryName)?.id;
-                            const currentIds = new Set(multiclassProficiencies.languages.optionIds || []);
-                            const allExist = (items as any[]).every(item => currentIds.has(item.id));
-                            return (
-                              <div key={`lang-options-${categoryName}`} className="space-y-1">
-                                <div className="flex items-center gap-2 border-b border-gold/5 pb-1 mb-1 group/header">
-                                  <label className="flex items-center gap-2 cursor-pointer group/label">
-                                    <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${allExist ? 'bg-gold border-gold' : 'border-gold/35 group-hover/label:border-gold/55'}`}>
-                                      {allExist && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                    </div>
-                                    <input
-                                      type="checkbox"
-                                      className="hidden"
-                                      checked={allExist}
-                                      onChange={() => toggleMulticlassGroup(items as any[], 'languages', 'optionIds', catId)}
-                                    />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-gold/45 italic">{categoryName}</span>
-                                  </label>
-                                  {allExist && <span className="text-[9px] text-ink/25 ml-auto italic">All Selected</span>}
-                                </div>
-                                {!allExist && (
-                                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                                    {(items as any[]).map(lang => {
-                                      const isOption = multiclassProficiencies.languages.optionIds?.includes(lang.id);
-                                      const isFixed = multiclassProficiencies.languages.fixedIds?.includes(lang.id);
-                                      return (
-                                        <label key={`lang-option-${lang.id}`} className="flex items-center gap-2 cursor-pointer group">
-                                          <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isOption ? 'bg-gold border-gold' : 'border-gold/35 group-hover:border-gold/55'}`}>
-                                            {isOption && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                          </div>
-                                          <input
-                                            type="checkbox"
-                                            className="hidden"
-                                            checked={isOption}
-                                            onChange={e => {
-                                              const current = multiclassProficiencies.languages.optionIds;
-                                              const next = e.target.checked ? [...current, lang.id] : current.filter((id: string) => id !== lang.id);
-                                              setMulticlassProficiencies({ ...multiclassProficiencies, languages: { ...multiclassProficiencies.languages, optionIds: next } });
-                                            }}
-                                          />
-                                          <span className="text-[10px] font-bold text-ink/65 truncate">{lang.name}</span>
-                                        </label>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                          {allLanguages.length === 0 && <p className="text-[10px] text-ink/35 italic col-span-2">No languages defined. <Link to="/admin/proficiencies" className="text-gold underline">Manage Languages</Link></p>}
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-gold/65">Fixed Languages (Automatic)</label>
-                        <div className="p-3 border border-gold/15 bg-background/30 rounded-md space-y-4">
-                          {Object.entries(groupedLanguages).sort().map(([categoryName, items]) => {
-                            const catId = allLanguageCategories.find(c => c.name === categoryName)?.id;
-                            const currentFixedIds = new Set(multiclassProficiencies.languages.fixedIds || []);
-                            const allFixed = (items as any[]).every(item => currentFixedIds.has(item.id));
-                            return (
-                              <div key={`lang-fixed-${categoryName}`} className="space-y-1">
-                                <div className="flex items-center gap-2 border-b border-gold/5 pb-1 mb-1 group/header">
-                                  <label className="flex items-center gap-2 cursor-pointer group/label">
-                                    <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${allFixed ? 'bg-gold border-gold' : 'border-gold/35 group-hover/label:border-gold/55'}`}>
-                                      {allFixed && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                    </div>
-                                    <input
-                                      type="checkbox"
-                                      className="hidden"
-                                      checked={allFixed}
-                                      onChange={() => toggleMulticlassGroup(items as any[], 'languages', 'fixedIds', catId)}
-                                    />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-gold/45 italic">{categoryName}</span>
-                                  </label>
-                                  {allFixed && <span className="text-[9px] text-ink/25 ml-auto italic">All Selected</span>}
-                                </div>
-                                {!allFixed && (
-                                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                                    {(items as any[]).map(lang => {
-                                      const isFixed = multiclassProficiencies.languages.fixedIds?.includes(lang.id);
-                                      return (
-                                        <label key={`lang-fixed-item-${lang.id}`} className="flex items-center gap-2 cursor-pointer group">
-                                          <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isFixed ? 'bg-gold border-gold' : 'border-gold/35 group-hover:border-gold/55'}`}>
-                                            {isFixed && <Check className="w-2 h-2 text-[var(--primary-foreground)]" />}
-                                          </div>
-                                          <input
-                                            type="checkbox"
-                                            className="hidden"
-                                            checked={isFixed}
-                                            onChange={e => {
-                                              const current = multiclassProficiencies.languages.fixedIds;
-                                              const next = e.target.checked ? [...current, lang.id] : current.filter((id: string) => id !== lang.id);
-
-                                              // If adding to fixed, remove from options
-                                              setMulticlassProficiencies({
-                                                ...multiclassProficiencies,
-                                                languages: { ...multiclassProficiencies.languages, fixedIds: next, optionIds: multiclassProficiencies.languages.optionIds }
-                                              });
-                                            }}
-                                          />
-                                          <span className="text-[10px] font-bold text-ink/65 truncate">{lang.name}</span>
-                                        </label>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <ProficienciesEditor
+                  proficiencies={multiclassProficiencies}
+                  setProficiencies={setMulticlassProficiencies}
+                  types={['savingThrows', 'armor', 'weapons', 'skills', 'tools', 'languages']}
+                  allAttributes={allAttributes}
+                  allSkills={allSkills}
+                  groupedArmor={groupedArmor}
+                  allArmor={allArmor}
+                  allArmorCategories={allArmorCategories}
+                  groupedWeapons={groupedWeapons}
+                  allWeapons={allWeapons}
+                  allWeaponCategories={allWeaponCategories}
+                  groupedTools={groupedTools}
+                  allTools={allTools}
+                  allToolCategories={allToolCategories}
+                  groupedLanguages={groupedLanguages}
+                  allLanguages={allLanguages}
+                  allLanguageCategories={allLanguageCategories}
+                />
               </div>
             )}
             </TabsContent>
 
             {/* Tags */}
             <TabsContent value="tags" className="space-y-6 mt-0">
-              <div className="p-4 border border-gold/25 bg-card/50 space-y-4">
+              <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
                 <div className="section-header">
                   <h2 className="label-text text-gold">Tags & Categorization</h2>
                   <Link to="/compendium/tags">
@@ -4331,7 +2374,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                     if (groupTags.length === 0) return null;
                     return (
                       <div key={group.id} className="space-y-2">
-                        <label className="label-text text-ink/35">{group.name}</label>
+                        <label className="label-text text-ink/30">{group.name}</label>
                         <div className="flex flex-wrap gap-2">
                           {groupTags.map(tag => (
                             <button
@@ -4347,8 +2390,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                               className={cn(
                                 "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider transition-all border",
                                 tagIds.includes(tag.id)
-                                  ? 'bg-gold/25 border-gold/45 text-gold shadow-sm shadow-gold/15'
-                                  : 'bg-card text-ink/65 border-gold/15 hover:border-gold/35 hover:text-gold'
+                                  ? 'bg-gold/20 border-gold/40 text-gold shadow-sm shadow-gold/10'
+                                  : 'bg-card text-ink/60 border-gold/10 hover:border-gold/30 hover:text-gold'
                               )}
                             >
                               <div className="flex items-center gap-2">
@@ -4370,23 +2413,23 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
 
             {/* Progression & Advancements */}
             <TabsContent value="progression" className="space-y-6 mt-0">
-              <div className="p-4 border border-gold/25 bg-card/50 space-y-4">
+              <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
                 <div className="section-header">
                   <div className="flex items-center gap-2">
                     <h2 className="label-text text-gold">Class Progression & Advancements</h2>
-                    <Zap className="w-4 h-4 text-gold/45" />
+                    <Zap className="w-4 h-4 text-gold/40" />
                   </div>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={handleInitializeBaseAdvancements}
-                    className="h-7 text-[9px] uppercase font-black bg-gold/5 text-gold/65 border-gold/15 hover:bg-gold/15"
+                    className="h-7 text-[9px] uppercase font-black bg-gold/5 text-gold/60 border-gold/10 hover:bg-gold/10"
                   >
                     Initialize Base Advancements
                   </Button>
                 </div>
                 <div className="space-y-4">
-                  <p className="text-[10px] text-ink/45 italic">Global progression rules for this class (Ability Score Improvements, Hit Points, etc.)</p>
+                  <p className="text-[10px] text-ink/40 italic">Global progression rules for this class (Ability Score Improvements, Hit Points, etc.)</p>
                   <AdvancementManager
                     advancements={advancements}
                     onChange={setAdvancements}
@@ -4470,14 +2513,14 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                 nameExtras={
                   <>
                     <div className="flex justify-center transition-all">
-                      <span className="text-xs text-ink/65 my-auto mr-1 select-none pointer-events-none">Level</span>
+                      <span className="text-xs text-ink/60 my-auto mr-1 select-none pointer-events-none">Level</span>
                       <input
                         type="number"
                         min="1"
                         max="20"
                         value={editingFeature.level || 1}
                         onChange={e => setEditingFeature({ ...editingFeature, level: parseInt(e.target.value) || 1, configuration: { ...editingFeature.configuration, requiredLevel: parseInt(e.target.value) || 1 } })}
-                        className="w-12 h-8 bg-transparent border border-transparent rounded text-left text-xs text-ink/65 px-2 py-0 focus:ring-1 focus:ring-gold/55 hover:bg-gold/5 outline-none transition-colors"
+                        className="w-12 h-8 bg-transparent border border-transparent rounded text-left text-xs text-ink/60 px-2 py-0 focus:ring-1 focus:ring-gold/50 hover:bg-gold/5 outline-none transition-colors"
                       />
                     </div>
                     <ReferenceSheetDialog
@@ -4518,90 +2561,90 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                   const hasSourceContent = !!(editingFeature.sourceId || editingFeature.source?.page || editingFeature.source?.custom);
 
                   return (
-                    <div className="divide-y divide-gold/15 pt-1">
+                    <div className="divide-y divide-gold/10 pt-1">
 
                       {/* ── FEATURE DETAILS ─────────────────────────────── */}
                       <div className="py-3 space-y-0 divide-y divide-gold/5">
-                        <p className="text-[9px] uppercase tracking-[0.2em] font-black text-gold/55 pb-2 select-none">Feature Details</p>
+                        <p className="text-[9px] uppercase tracking-[0.2em] font-black text-gold/50 pb-2 select-none">Feature Details</p>
 
                         {/* Type */}
                         <div className="flex items-center justify-between py-2 gap-4">
-                          <label className="text-xs font-semibold text-ink/75 shrink-0 w-36">Type</label>
+                          <label className="text-xs font-semibold text-ink/70 shrink-0 w-36">Type</label>
                           <Select value={editingFeature.type || 'class'} onValueChange={val => setEditingFeature({ ...editingFeature, type: val })}>
-                            <SelectTrigger className="h-7 text-xs flex-1 bg-background/50 border-gold/15 focus:border-gold"><SelectValue /></SelectTrigger>
+                            <SelectTrigger className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold"><SelectValue /></SelectTrigger>
                             <SelectContent>{FEATURE_TYPES.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
                           </Select>
                         </div>
 
                         {/* Subtype */}
                         <div className="flex items-center justify-between py-2 gap-4">
-                          <label className="text-xs font-semibold text-ink/75 shrink-0 w-36">Subtype</label>
+                          <label className="text-xs font-semibold text-ink/70 shrink-0 w-36">Subtype</label>
                           {editingFeature.type === 'class' ? (
                             <Select value={editingFeature.subtype || ''} onValueChange={val => setEditingFeature({ ...editingFeature, subtype: val })}>
-                              <SelectTrigger className="h-7 text-xs flex-1 bg-background/50 border-gold/15 focus:border-gold"><SelectValue placeholder="None" /></SelectTrigger>
+                              <SelectTrigger className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold"><SelectValue placeholder="None" /></SelectTrigger>
                               <SelectContent>{CLASS_FEATURE_SUBTYPES.map(o => <SelectItem key={o.id || 'none'} value={o.id}>{o.name}</SelectItem>)}</SelectContent>
                             </Select>
                           ) : (
-                            <Input value={editingFeature.subtype || ''} onChange={e => setEditingFeature({ ...editingFeature, subtype: e.target.value })} className="h-7 text-xs flex-1 bg-background/50 border-gold/15 focus:border-gold" />
+                            <Input value={editingFeature.subtype || ''} onChange={e => setEditingFeature({ ...editingFeature, subtype: e.target.value })} className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold" />
                           )}
                         </div>
 
                         {/* Identifier */}
                         <div className="flex items-center justify-between py-2 gap-4">
                           <div className="shrink-0 w-36">
-                            <p className="text-xs font-semibold text-ink/75">Identifier</p>
+                            <p className="text-xs font-semibold text-ink/70">Identifier</p>
                           </div>
-                          <Input value={editingFeature.identifier || ''} onChange={e => setEditingFeature({ ...editingFeature, identifier: slugify(e.target.value) })} placeholder={slugify(editingFeature.name || 'feature')} className="h-7 text-xs flex-1 font-mono bg-background/50 border-gold/15 focus:border-gold" />
+                          <Input value={editingFeature.identifier || ''} onChange={e => setEditingFeature({ ...editingFeature, identifier: slugify(e.target.value) })} placeholder={slugify(editingFeature.name || 'feature')} className="h-7 text-xs flex-1 font-mono bg-background/50 border-gold/10 focus:border-gold" />
                         </div>
 
                         {/* Requirements */}
                         <div className="flex items-center justify-between py-2 gap-4">
-                          <label className="text-xs font-semibold text-ink/75 shrink-0 w-36">Requirements</label>
-                          <Input value={editingFeature.requirements || ''} onChange={e => setEditingFeature({ ...editingFeature, requirements: e.target.value })} placeholder="Barbarian 1" className="h-7 text-xs flex-1 bg-background/50 border-gold/15 focus:border-gold" />
+                          <label className="text-xs font-semibold text-ink/70 shrink-0 w-36">Requirements</label>
+                          <Input value={editingFeature.requirements || ''} onChange={e => setEditingFeature({ ...editingFeature, requirements: e.target.value })} placeholder="Barbarian 1" className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold" />
                         </div>
 
                         {/* Required Level */}
                         <div className="flex items-center justify-between py-2 gap-4">
                           <div className="shrink-0 w-36">
-                            <p className="text-xs font-semibold text-ink/75">Required Level</p>
-                            <p className="text-[10px] text-ink/45">Character or class level to select this feature when levelling up.</p>
+                            <p className="text-xs font-semibold text-ink/70">Required Level</p>
+                            <p className="text-[10px] text-ink/40">Character or class level to select this feature when levelling up.</p>
                           </div>
-                          <Input type="number" value={editingFeature.prerequisites?.level ?? ''} onChange={e => setEditingFeature({ ...editingFeature, prerequisites: { ...editingFeature.prerequisites, level: e.target.value ? parseInt(e.target.value) || null : null } })} placeholder="—" className="h-7 text-xs w-24 shrink-0 bg-background/50 border-gold/15 focus:border-gold" />
+                          <Input type="number" value={editingFeature.prerequisites?.level ?? ''} onChange={e => setEditingFeature({ ...editingFeature, prerequisites: { ...editingFeature.prerequisites, level: e.target.value ? parseInt(e.target.value) || null : null } })} placeholder="—" className="h-7 text-xs w-24 shrink-0 bg-background/50 border-gold/10 focus:border-gold" />
                         </div>
 
                         {/* Required Items */}
                         <div className="flex items-center justify-between py-2 gap-4">
                           <div className="shrink-0 w-36">
-                            <p className="text-xs font-semibold text-ink/75">Required Items</p>
-                            <p className="text-[10px] text-ink/45">Identifiers the character must have before selecting this.</p>
+                            <p className="text-xs font-semibold text-ink/70">Required Items</p>
+                            <p className="text-[10px] text-ink/40">Identifiers the character must have before selecting this.</p>
                           </div>
-                          <Input value={editingFeature.prerequisites?.items?.join(', ') || ''} onChange={e => setEditingFeature({ ...editingFeature, prerequisites: { ...editingFeature.prerequisites, items: e.target.value.split(',').map((s: string) => s.trim()).filter(Boolean) } })} placeholder="item-identifier-1, item-identifier-2" className="h-7 text-xs flex-1 bg-background/50 border-gold/15 focus:border-gold" />
+                          <Input value={editingFeature.prerequisites?.items?.join(', ') || ''} onChange={e => setEditingFeature({ ...editingFeature, prerequisites: { ...editingFeature.prerequisites, items: e.target.value.split(',').map((s: string) => s.trim()).filter(Boolean) } })} placeholder="item-identifier-1, item-identifier-2" className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold" />
                         </div>
 
                         {/* Repeatable */}
                         <div className="flex items-center justify-between py-2 gap-4">
                           <div className="shrink-0 w-36">
-                            <p className="text-xs font-semibold text-ink/75">Repeatable</p>
-                            <p className="text-[10px] text-ink/45">This feature can be chosen more than once.</p>
+                            <p className="text-xs font-semibold text-ink/70">Repeatable</p>
+                            <p className="text-[10px] text-ink/40">This feature can be chosen more than once.</p>
                           </div>
-                          <Checkbox id="feat-repeatable" className="border-gold/35 data-[state=checked]:bg-gold data-[state=checked]:text-[var(--primary-foreground)]" checked={editingFeature.prerequisites?.repeatable || false} onCheckedChange={checked => setEditingFeature({ ...editingFeature, prerequisites: { ...editingFeature.prerequisites, repeatable: !!checked } })} />
+                          <Checkbox id="feat-repeatable" className="border-gold/30 data-[state=checked]:bg-gold data-[state=checked]:text-white" checked={editingFeature.prerequisites?.repeatable || false} onCheckedChange={checked => setEditingFeature({ ...editingFeature, prerequisites: { ...editingFeature.prerequisites, repeatable: !!checked } })} />
                         </div>
 
                         {/* Feature Properties */}
                         <div className="py-2">
-                          <p className="text-xs font-semibold text-ink/75 mb-2">Feature Properties</p>
+                          <p className="text-xs font-semibold text-ink/70 mb-2">Feature Properties</p>
                           <div className="flex items-center gap-6">
                             <div className="flex items-center gap-2">
-                              <Checkbox id="feat-magical" className="border-gold/35 data-[state=checked]:bg-gold data-[state=checked]:text-[var(--primary-foreground)]" checked={editingFeature.properties?.includes('mgc') || false} onCheckedChange={checked => { const props = normalizeFeaturePropertiesForEditor(editingFeature.properties || []); setEditingFeature({ ...editingFeature, properties: checked ? Array.from(new Set([...props, 'mgc'])) : props.filter((p: string) => p !== 'mgc') }); }} />
-                              <label htmlFor="feat-magical" className="text-xs text-ink/75 cursor-pointer">Magical</label>
+                              <Checkbox id="feat-magical" className="border-gold/30 data-[state=checked]:bg-gold data-[state=checked]:text-white" checked={editingFeature.properties?.includes('mgc') || false} onCheckedChange={checked => { const props = normalizeFeaturePropertiesForEditor(editingFeature.properties || []); setEditingFeature({ ...editingFeature, properties: checked ? Array.from(new Set([...props, 'mgc'])) : props.filter((p: string) => p !== 'mgc') }); }} />
+                              <label htmlFor="feat-magical" className="text-xs text-ink/70 cursor-pointer">Magical</label>
                             </div>
                             <div className="flex items-center gap-2">
-                              <Checkbox id="feat-passive" className="border-gold/35 data-[state=checked]:bg-gold data-[state=checked]:text-[var(--primary-foreground)]" checked={editingFeature.properties?.includes('trait') || false} onCheckedChange={checked => { const props = normalizeFeaturePropertiesForEditor(editingFeature.properties || []); setEditingFeature({ ...editingFeature, properties: checked ? Array.from(new Set([...props, 'trait'])) : props.filter((p: string) => p !== 'trait') }); }} />
-                              <label htmlFor="feat-passive" className="text-xs text-ink/75 cursor-pointer">Passive Trait</label>
+                              <Checkbox id="feat-passive" className="border-gold/30 data-[state=checked]:bg-gold data-[state=checked]:text-white" checked={editingFeature.properties?.includes('trait') || false} onCheckedChange={checked => { const props = normalizeFeaturePropertiesForEditor(editingFeature.properties || []); setEditingFeature({ ...editingFeature, properties: checked ? Array.from(new Set([...props, 'trait'])) : props.filter((p: string) => p !== 'trait') }); }} />
+                              <label htmlFor="feat-passive" className="text-xs text-ink/70 cursor-pointer">Passive Trait</label>
                             </div>
                             <div className="flex items-center gap-2">
-                              <Checkbox id="isSubclassFeature" className="border-gold/35 data-[state=checked]:bg-gold data-[state=checked]:text-[var(--primary-foreground)]" checked={editingFeature?.isSubclassFeature || false} onCheckedChange={checked => setEditingFeature({ ...editingFeature, isSubclassFeature: !!checked })} />
-                              <label htmlFor="isSubclassFeature" className="text-xs text-ink/75 cursor-pointer">Subclass Choice Point</label>
+                              <Checkbox id="isSubclassFeature" className="border-gold/30 data-[state=checked]:bg-gold data-[state=checked]:text-white" checked={editingFeature?.isSubclassFeature || false} onCheckedChange={checked => setEditingFeature({ ...editingFeature, isSubclassFeature: !!checked })} />
+                              <label htmlFor="isSubclassFeature" className="text-xs text-ink/70 cursor-pointer">Subclass Choice Point</label>
                             </div>
                           </div>
                         </div>
@@ -4614,35 +2657,35 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                           onClick={() => setShowFeatureSource(v => !v)}
                           className="flex items-center gap-2 w-full text-left group"
                         >
-                          <p className="text-[9px] uppercase tracking-[0.2em] font-black text-gold/55 select-none">Source</p>
+                          <p className="text-[9px] uppercase tracking-[0.2em] font-black text-gold/50 select-none">Source</p>
                           {hasSourceContent && !showFeatureSource && (
-                            <span className="text-[10px] text-ink/55 font-mono">
+                            <span className="text-[10px] text-ink/50 font-mono">
                               {sources.find((s: any) => s.id === editingFeature.sourceId)?.abbreviation || editingFeature.source?.book || ''}
                               {editingFeature.source?.page ? ` p.${editingFeature.source.page}` : ''}
                             </span>
                           )}
-                          <span className="ml-auto text-ink/35 text-xs">{showFeatureSource ? '▲' : '▼'}</span>
+                          <span className="ml-auto text-ink/30 text-xs">{showFeatureSource ? '▲' : '▼'}</span>
                         </button>
                         {showFeatureSource && (
                           <div className="mt-2 space-y-0 divide-y divide-gold/5">
                             <div className="flex items-center justify-between py-2 gap-4">
-                              <label className="text-xs font-semibold text-ink/75 shrink-0 w-36">Book</label>
-                              <select value={editingFeature.sourceId || ''} onChange={e => { const match = sources.find((s: any) => s.id === e.target.value); setEditingFeature({ ...editingFeature, sourceId: e.target.value, source: { ...editingFeature.source, book: match?.abbreviation || match?.name || editingFeature.source?.book || '' } }); }} className="h-7 flex-1 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-xs text-ink">
+                              <label className="text-xs font-semibold text-ink/70 shrink-0 w-36">Book</label>
+                              <select value={editingFeature.sourceId || ''} onChange={e => { const match = sources.find((s: any) => s.id === e.target.value); setEditingFeature({ ...editingFeature, sourceId: e.target.value, source: { ...editingFeature.source, book: match?.abbreviation || match?.name || editingFeature.source?.book || '' } }); }} className="h-7 flex-1 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink">
                                 <option value="">Inherit class source</option>
                                 {sources.map((entry: any) => <option key={entry.id} value={entry.id}>{entry.name}{entry.abbreviation ? ` (${entry.abbreviation})` : ''}</option>)}
                               </select>
                             </div>
                             <div className="flex items-center justify-between py-2 gap-4">
-                              <label className="text-xs font-semibold text-ink/75 shrink-0 w-36">Page</label>
-                              <Input value={editingFeature.source?.page || ''} onChange={e => setEditingFeature({ ...editingFeature, source: { ...editingFeature.source, page: e.target.value } })} className="h-7 text-xs flex-1 bg-background/50 border-gold/15 focus:border-gold" />
+                              <label className="text-xs font-semibold text-ink/70 shrink-0 w-36">Page</label>
+                              <Input value={editingFeature.source?.page || ''} onChange={e => setEditingFeature({ ...editingFeature, source: { ...editingFeature.source, page: e.target.value } })} className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold" />
                             </div>
                             <div className="flex items-center justify-between py-2 gap-4">
-                              <label className="text-xs font-semibold text-ink/75 shrink-0 w-36">Rules</label>
-                              <Input value={editingFeature.source?.rules || ''} onChange={e => setEditingFeature({ ...editingFeature, source: { ...editingFeature.source, rules: e.target.value } })} placeholder="2014, 2024" className="h-7 text-xs flex-1 bg-background/50 border-gold/15 focus:border-gold" />
+                              <label className="text-xs font-semibold text-ink/70 shrink-0 w-36">Rules</label>
+                              <Input value={editingFeature.source?.rules || ''} onChange={e => setEditingFeature({ ...editingFeature, source: { ...editingFeature.source, rules: e.target.value } })} placeholder="2014, 2024" className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold" />
                             </div>
                             <div className="flex items-center justify-between py-2 gap-4">
-                              <label className="text-xs font-semibold text-ink/75 shrink-0 w-36">Custom Note</label>
-                              <Input value={editingFeature.source?.custom || ''} onChange={e => setEditingFeature({ ...editingFeature, source: { ...editingFeature.source, custom: e.target.value } })} className="h-7 text-xs flex-1 bg-background/50 border-gold/15 focus:border-gold" />
+                              <label className="text-xs font-semibold text-ink/70 shrink-0 w-36">Custom Note</label>
+                              <Input value={editingFeature.source?.custom || ''} onChange={e => setEditingFeature({ ...editingFeature, source: { ...editingFeature.source, custom: e.target.value } })} className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold" />
                             </div>
                           </div>
                         )}
@@ -4651,19 +2694,19 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                       {/* ── USAGE ───────────────────────────────────────── */}
                       <div className="py-3 space-y-0 divide-y divide-gold/5">
                         <div className="flex items-center justify-between pb-2">
-                          <p className="text-[9px] uppercase tracking-[0.2em] font-black text-gold/55 select-none">Usage</p>
+                          <p className="text-[9px] uppercase tracking-[0.2em] font-black text-gold/50 select-none">Usage</p>
                           <ReferenceSyntaxHelp title="Usage Formula References" description="Use semantic references for feature uses on the site. The helper previews the Foundry-native target shape." buttonLabel="Usage Help" value={editingFeature.uses?.max || ''} context={classReferenceContext} />
                         </div>
                         <div className="flex items-center gap-4 py-2">
-                          <label className="text-xs font-semibold text-ink/75 shrink-0 w-36">Limited Uses</label>
+                          <label className="text-xs font-semibold text-ink/70 shrink-0 w-36">Limited Uses</label>
                           <div className="flex items-center gap-3 flex-1">
                             <div className="flex flex-col items-center gap-0.5">
-                              <span className="text-[9px] uppercase text-ink/45 font-black tracking-wider">Spent</span>
-                              <Input type="number" value={editingFeature.uses?.spent || 0} onChange={e => setEditingFeature({ ...editingFeature, uses: { ...editingFeature.uses, spent: parseInt(e.target.value) || 0 } })} className="h-7 w-16 text-center text-xs bg-background/50 border-gold/15 focus:border-gold" />
+                              <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Spent</span>
+                              <Input type="number" value={editingFeature.uses?.spent || 0} onChange={e => setEditingFeature({ ...editingFeature, uses: { ...editingFeature.uses, spent: parseInt(e.target.value) || 0 } })} className="h-7 w-16 text-center text-xs bg-background/50 border-gold/10 focus:border-gold" />
                             </div>
                             <div className="flex flex-col items-center gap-0.5">
-                              <span className="text-[9px] uppercase text-ink/45 font-black tracking-wider">Max</span>
-                              <Input value={editingFeature.uses?.max || ''} onChange={e => setEditingFeature({ ...editingFeature, uses: { ...editingFeature.uses, max: e.target.value } })} placeholder="—" className="h-7 w-28 text-center text-xs bg-background/50 border-gold/15 focus:border-gold" />
+                              <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Max</span>
+                              <Input value={editingFeature.uses?.max || ''} onChange={e => setEditingFeature({ ...editingFeature, uses: { ...editingFeature.uses, max: e.target.value } })} placeholder="—" className="h-7 w-28 text-center text-xs bg-background/50 border-gold/10 focus:border-gold" />
                             </div>
                           </div>
                         </div>
@@ -4672,19 +2715,19 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                       {/* ── RECOVERY ────────────────────────────────────── */}
                       <div className="py-3">
                         <div className="flex items-center justify-between mb-2">
-                          <p className="text-[9px] uppercase tracking-[0.2em] font-black text-gold/55 select-none">Recovery</p>
-                          <button type="button" onClick={addRecovery} className="text-[10px] font-black text-gold/65 hover:text-gold transition-colors px-1">+ ADD</button>
+                          <p className="text-[9px] uppercase tracking-[0.2em] font-black text-gold/50 select-none">Recovery</p>
+                          <button type="button" onClick={addRecovery} className="text-[10px] font-black text-gold/60 hover:text-gold transition-colors px-1">+ ADD</button>
                         </div>
                         {recovery.length === 0 && (
-                          <p className="text-xs text-ink/35 italic py-1">No recovery rules. Click + ADD to add one.</p>
+                          <p className="text-xs text-ink/30 italic py-1">No recovery rules. Click + ADD to add one.</p>
                         )}
                         <div className="space-y-1.5">
                           {recovery.map((row: any, i: number) => (
                             <div key={i} className="flex items-center gap-2">
                               {/* Period */}
                               <div className="flex flex-col gap-0.5 flex-1">
-                                {i === 0 && <span className="text-[9px] uppercase text-ink/45 font-black tracking-wider">Period</span>}
-                                <select value={row.period || 'lr'} onChange={e => patchRecovery(i, { period: e.target.value, ...(e.target.value === 'recharge' ? { type: 'recoverAll', formula: '6' } : { formula: undefined }) })} className="h-7 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-xs text-ink w-full">
+                                {i === 0 && <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Period</span>}
+                                <select value={row.period || 'lr'} onChange={e => patchRecovery(i, { period: e.target.value, ...(e.target.value === 'recharge' ? { type: 'recoverAll', formula: '6' } : { formula: undefined }) })} className="h-7 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink w-full">
                                   <option value="lr">Long Rest</option>
                                   <option value="sr">Short Rest</option>
                                   <option value="day">Daily</option>
@@ -4700,8 +2743,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                               {/* Recovery type or Recharge value */}
                               {row.period === 'recharge' ? (
                                 <div className="flex flex-col gap-0.5 flex-1">
-                                  {i === 0 && <span className="text-[9px] uppercase text-ink/45 font-black tracking-wider">Value</span>}
-                                  <select value={row.formula || '6'} onChange={e => patchRecovery(i, { formula: e.target.value })} className="h-7 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-xs text-ink w-full">
+                                  {i === 0 && <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Value</span>}
+                                  <select value={row.formula || '6'} onChange={e => patchRecovery(i, { formula: e.target.value })} className="h-7 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink w-full">
                                     <option value="6">Recharge 6</option>
                                     <option value="5">Recharge 5–6</option>
                                     <option value="4">Recharge 4–6</option>
@@ -4712,8 +2755,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                               ) : (
                                 <>
                                   <div className="flex flex-col gap-0.5 flex-1">
-                                    {i === 0 && <span className="text-[9px] uppercase text-ink/45 font-black tracking-wider">Recovery</span>}
-                                    <select value={row.type || 'recoverAll'} onChange={e => patchRecovery(i, { type: e.target.value, ...(e.target.value !== 'formula' ? { formula: undefined } : {}) })} className="h-7 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-xs text-ink w-full">
+                                    {i === 0 && <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Recovery</span>}
+                                    <select value={row.type || 'recoverAll'} onChange={e => patchRecovery(i, { type: e.target.value, ...(e.target.value !== 'formula' ? { formula: undefined } : {}) })} className="h-7 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink w-full">
                                       <option value="recoverAll">Recover All Uses</option>
                                       <option value="loseAll">Lose All Uses</option>
                                       <option value="formula">Custom Formula</option>
@@ -4721,15 +2764,15 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                                   </div>
                                   {row.type === 'formula' && (
                                     <div className="flex flex-col gap-0.5 flex-1">
-                                      {i === 0 && <span className="text-[9px] uppercase text-ink/45 font-black tracking-wider">Formula</span>}
-                                      <Input value={row.formula || ''} onChange={e => patchRecovery(i, { formula: e.target.value })} placeholder="2 + @class.level" className="h-7 text-xs font-mono bg-background/50 border-gold/15 focus:border-gold" />
+                                      {i === 0 && <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Formula</span>}
+                                      <Input value={row.formula || ''} onChange={e => patchRecovery(i, { formula: e.target.value })} placeholder="2 + @class.level" className="h-7 text-xs font-mono bg-background/50 border-gold/10 focus:border-gold" />
                                     </div>
                                   )}
                                 </>
                               )}
                               {/* Remove */}
                               <div className={i === 0 ? 'pt-3.5' : ''}>
-                                <button type="button" onClick={() => removeRecovery(i)} className="h-7 w-7 flex items-center justify-center text-ink/35 hover:text-blood transition-colors rounded border border-transparent hover:border-blood/20">
+                                <button type="button" onClick={() => removeRecovery(i)} className="h-7 w-7 flex items-center justify-center text-ink/30 hover:text-blood transition-colors rounded border border-transparent hover:border-blood/20">
                                   <span className="text-sm leading-none">−</span>
                                 </button>
                               </div>
@@ -4748,36 +2791,36 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                           they remember which column the feature relates
                           to, and so a future activity-authoring layer can
                           surface the formula automatically. */}
-                      <div className="py-3 space-y-3 border-t border-gold/15">
+                      <div className="py-3 space-y-3 border-t border-gold/10">
                         <h4 className="text-[10px] text-gold uppercase tracking-widest font-black">Table Column Links</h4>
                         <div className="grid gap-3">
                           <div className="space-y-1">
-                            <label className="text-[10px] uppercase text-ink/65 font-bold">Quantity Column</label>
+                            <label className="text-[10px] uppercase text-ink/60 font-bold">Quantity Column</label>
                             <select
                               value={editingFeature?.quantityColumnId || ''}
                               onChange={e => setEditingFeature({ ...editingFeature, quantityColumnId: e.target.value })}
-                              className="w-full h-9 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm text-ink"
+                              className="w-full h-9 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm text-ink"
                             >
                               <option value="">None</option>
                               {scalingColumnPickerOptions.map((col: any) => (
                                 <option key={col.id} value={col.id}>{col.name}</option>
                               ))}
                             </select>
-                            <p className="text-[10px] text-ink/45 italic">Link to a column that dictates the quantity of uses — e.g. the number of bardic inspiration or superiority dice the class has. Pre-fills <code className="text-gold/75">system.uses.max</code> on the embedded feature with the column's <code className="text-gold/75">@scale.&lt;class&gt;.&lt;identifier&gt;</code> reference when no manual Max is set. Manual values in the Max field always win.</p>
+                            <p className="text-[10px] text-ink/40 italic">Link to a column that dictates the quantity of uses — e.g. the number of bardic inspiration or superiority dice the class has. Pre-fills <code className="text-gold/70">system.uses.max</code> on the embedded feature with the column's <code className="text-gold/70">@scale.&lt;class&gt;.&lt;identifier&gt;</code> reference when no manual Max is set. Manual values in the Max field always win.</p>
                           </div>
                           <div className="space-y-1">
-                            <label className="text-[10px] uppercase text-ink/65 font-bold">Scaling Column</label>
+                            <label className="text-[10px] uppercase text-ink/60 font-bold">Scaling Column</label>
                             <select
                               value={editingFeature?.scalingColumnId || ''}
                               onChange={e => setEditingFeature({ ...editingFeature, scalingColumnId: e.target.value })}
-                              className="w-full h-9 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm text-ink"
+                              className="w-full h-9 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm text-ink"
                             >
                               <option value="">None</option>
                               {scalingColumnPickerOptions.map((col: any) => (
                                 <option key={col.id} value={col.id}>{col.name}</option>
                               ))}
                             </select>
-                            <p className="text-[10px] text-ink/45 italic">Link to a column that dictates the scaling values — e.g. the roll of a bardic inspiration or a superiority dice. The column's <code className="text-gold/75">@scale.&lt;class&gt;.&lt;identifier&gt;</code> reference is stashed on the embedded feature so activity damage / dice formulas can pick it up automatically (and authors can paste it without typing the path).</p>
+                            <p className="text-[10px] text-ink/40 italic">Link to a column that dictates the scaling values — e.g. the roll of a bardic inspiration or a superiority dice. The column's <code className="text-gold/70">@scale.&lt;class&gt;.&lt;identifier&gt;</code> reference is stashed on the embedded feature so activity damage / dice formulas can pick it up automatically (and authors can paste it without typing the path).</p>
                           </div>
                         </div>
                       </div>
@@ -4810,7 +2853,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                   <div className="pt-4 space-y-4">
                     <div className="section-header">
                       <h4 className="text-[10px] text-gold uppercase tracking-widest font-black">Linked Advancements</h4>
-                      <p className="text-[10px] text-ink/45">Link this feature to progression rules defined on the class.</p>
+                      <p className="text-[10px] text-ink/40">Link this feature to progression rules defined on the class.</p>
                     </div>
                     <AdvancementManager
                       advancements={[]} // Not used for management here
@@ -4840,7 +2883,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                 )}
               </div>
 
-              <div className="p-4 border-t border-gold/15 bg-background flex justify-end shrink-0 gap-3">
+              <div className="p-4 border-t border-gold/10 bg-background flex justify-end shrink-0 gap-3">
                 <Button type="button" variant="ghost" onClick={() => setIsFeatureModalOpen(false)} className="label-text opacity-70 hover:opacity-100">Cancel</Button>
                 <Button onClick={handleSaveFeature} className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2 px-8 label-text">
                   Save Feature
@@ -4857,7 +2900,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
           setManagingGroupSearch('');
         }
       }}>
-        <DialogContentLarge className="bg-card border-gold/35">
+        <DialogContentLarge className="bg-card border-gold/30">
           <DialogHeader>
             <DialogTitle className="text-gold font-serif uppercase tracking-tight">
               Manage {allOptionGroups.find(g => g.id === managingGroupId)?.name} Options
@@ -4865,7 +2908,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            <p className="text-xs text-ink/65 italic">
+            <p className="text-xs text-ink/60 italic">
               Uncheck options that are NOT available to the {name || 'this'} class.
             </p>
 
@@ -4873,7 +2916,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
               placeholder="Search options..."
               value={managingGroupSearch}
               onChange={e => setManagingGroupSearch(e.target.value)}
-              className="h-8 text-xs bg-background/50 border-gold/15"
+              className="h-8 text-xs bg-background/50 border-gold/10"
             />
 
             <div className="grid sm:grid-cols-2 gap-2">
@@ -4888,8 +2931,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                     <label
                       key={item.id}
                       className={`flex items-start gap-3 p-2 border transition-all cursor-pointer ${isExcluded || isClassRestricted
-                          ? 'bg-background/20 border-gold/5 opacity-50 text-ink/55'
-                          : 'bg-gold/15 border-gold/35 text-ink'
+                          ? 'bg-background/20 border-gold/5 opacity-50 text-ink/50'
+                          : 'bg-gold/10 border-gold/30 text-ink'
                         }`}
                     >
                       <input
@@ -4909,12 +2952,12 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                             [managingGroupId!]: newExcluded
                           });
                         }}
-                        className="mt-1 w-3 h-3 rounded border-gold/25 text-gold focus:ring-gold"
+                        className="mt-1 w-3 h-3 rounded border-gold/20 text-gold focus:ring-gold"
                       />
                       <div className="space-y-0.5">
                         <span className="text-xs font-bold text-ink block">{item.name}</span>
                         {item.levelPrerequisite > 0 && (
-                          <span className="text-[10px] text-gold/65 font-mono block">Level {item.levelPrerequisite}+</span>
+                          <span className="text-[10px] text-gold/60 font-mono block">Level {item.levelPrerequisite}+</span>
                         )}
                         {isClassRestricted && (
                           <span className="text-[9px] text-blood font-bold uppercase block">Restricted by Item</span>

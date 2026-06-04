@@ -1,21 +1,18 @@
 import React from 'react';
-import FeatsEditor from './FeatsEditor';
+import SpeciesBackgroundEditor from './SpeciesBackgroundEditor';
 
 /**
  * RaceEditor
  * ──────────
- * Dedicated editor surface for race entries. Races today live in the
- * `feats` table with `feat_type='race'`; the storage shape is
- * identical to feats, so the editor surface is too. This wrapper just
- * threads `scopeFeatType='race'` through to FeatsEditor, which then
- * filters its list / locks the new-entry default / re-labels the
- * shell + back link / forwards `parentContext='race'` to
- * AdvancementManager.
+ * Mount point for the Species editor at `/compendium/races/manage`.
  *
- * When a dedicated `races` table lands later, this wrapper becomes the
- * replacement point — swap FeatsEditor for a races-specific editor and
- * the route + sidebar entry stay untouched.
+ * Species (the 2024 rename of "Race") graduated out of the shared
+ * `feats` table into its own `species` table (migration 20260601-1200).
+ * This wrapper — once a thin `<FeatsEditor scopeFeatType="race" />` —
+ * now renders the dedicated `SpeciesBackgroundEditor` against that
+ * table. The route + sidebar entry stay on `/compendium/races` so
+ * existing links keep working; only the UI labels say "Species".
  */
 export default function RaceEditor({ userProfile }: { userProfile: any }) {
-  return <FeatsEditor userProfile={userProfile} scopeFeatType="race" />;
+  return <SpeciesBackgroundEditor userProfile={userProfile} kind="species" />;
 }

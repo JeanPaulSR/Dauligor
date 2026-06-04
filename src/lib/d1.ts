@@ -24,7 +24,11 @@ const PERSISTENT_TABLES = [
   // Spell catalogue is read-heavy across multiple pages; the long session cache
   // matters as the catalogue grows (~5000 spells planned).
   // (claude/kind-maxwell-bfa076 — Spellbook Manager.)
-  'spells'
+  'spells',
+  // Backgrounds + Species graduated from the `feats` table into their own
+  // tables (migration 20260601-1200). Read-heavy compendium catalogue that
+  // changes rarely — same caching rationale as items / feats / spells.
+  'backgrounds', 'species', 'background_features', 'species_options'
 ];
 
 /**
@@ -330,6 +334,14 @@ export async function queryD1<T>(sql: string, params: any[] = [], options: { noC
         // hand-parse — and the backfill missed every row because it
         // dereferenced `.system.description.value` on a raw JSON string.
         'foundry_data', 'foundryData',
+        // backgrounds + species camelCase JSON columns (migration
+        // 20260601-1200). These tables don't route through compendium.ts
+        // denormalize, so queryD1 is the only parse hook — without these the
+        // editor reads them as raw JSON strings. (tags + advancements above.)
+        'startingEquipment', 'movement', 'senses', 'creatureType', 'prerequisiteTree',
+        // species.speciesOptionIds — JSON id array of attached species_options
+        // (migration 20260603-1600).
+        'speciesOptionIds',
       ];
       const parsedResults = (data.results || []).map((row: any) => {
         const parsed: any = { ...row };

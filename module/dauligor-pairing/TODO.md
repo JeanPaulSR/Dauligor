@@ -4,6 +4,29 @@
 > The current-state audit (`docs/_drafts/module-current-state-2026-05-30.html`) is the
 > source for what is *built* vs *deferred*; this file is the deferred-work backlog.
 
+## Character Creator walkthrough
+
+Guided six-step creation flow (`scripts/character-creator-app.js` +
+`templates/character-creator-shell.hbs` + `styles/character-creator.css` +
+`scripts/ability-roll-pool.js`). Design: `docs/_drafts/character-creator-design-2026-05-30.html`.
+Opened from the Dauligor Options launcher ("Character Creator"); applies onto the launching
+actor, or creates a new empty `character` from the Actor-directory path.
+
+- **[done 2026-05-30]** Steps 1–6: ability scores (Point Buy 32/8–16 + shared world roll pool),
+  background, race, class (delegates to the existing importer scoped + level 1), starting-items
+  **stub**, review with Edit-jumps + free stepper nav. Roll pool is a world setting synced to all
+  clients; non-GM rolls relay to the GM via socketlib; DM can add/clear sets manually.
+- **‼ Needs a live-world eyeball** (can't run Foundry here): full flow, and especially the
+  **cross-client roll pool** (two connected clients to exercise the GM relay + live re-render).
+- **Follow-up — starting items (step 5).** Replace the stub once an item-list endpoint exists and
+  class/background `startingEquipment` data is populated. The wizard slot is ready.
+- **Follow-up — "Respec" mode.** When applied onto a non-empty actor, detect + clear prior
+  creator-applied choices first (currently assumes an empty actor).
+- **Follow-up — point-buy cost table** is homebrew (16=11). Confirm against the table the owner
+  actually wants; it's a single constant in `ability-roll-pool.js` (`POINT_BUY.cost`).
+- **Maybe — dedicated Actor-directory button** for discoverability (currently reached via the
+  Options launcher).
+
 ## Local data cache (future)
 
 - **Revisit a local cache of module data for data saving.** The bundled offline mirror

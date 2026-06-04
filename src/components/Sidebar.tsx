@@ -196,14 +196,15 @@ export default function Sidebar({
           // itself for admins (same pattern as Spells).
           { label: 'Feats', path: '/compendium/feats' },
           // Public browsers for the remaining catalog surfaces. Items
-          // unifies items+weapons+armor+tools into one page; races
-          // and backgrounds are placeholder routes until their
-          // schemas land.
+          // unifies items+weapons+armor+tools into one page; Species
+          // and Backgrounds have dedicated tables + editors now
+          // (migration 20260601-1200) but their public list pages are
+          // still placeholders.
           { label: 'Items', path: '/compendium/items' },
           // Facilities (Bastions, 2024 DMG) — separate browser at
           // /compendium/facilities, admin editor at /facilities/manage.
           { label: 'Facilities', path: '/compendium/facilities' },
-          { label: 'Races', path: '/compendium/races' },
+          { label: 'Species', path: '/compendium/races' },
           { label: 'Backgrounds', path: '/compendium/backgrounds' },
           // Admin-only editor links. Content-creators reach the same
           // editors via the "Proposals" section's `/proposals/edit/*`

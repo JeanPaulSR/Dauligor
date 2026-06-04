@@ -104,6 +104,10 @@ function MarkdownEditor({
   const [isWYSIWYG, setIsWYSIWYG] = useState(true);
   const [currentHeight, setCurrentHeight] = useState<string | number>(minHeight);
   const [hasManuallyResized, setHasManuallyResized] = useState(false);
+  // Bumped on every TipTap selection change to force a real re-render so the
+  // toolbar re-evaluates isActive(...) — table-tools visibility + button active
+  // states — on cursor CLICK / arrow movement, not only on typing.
+  const [, setSelectionTick] = useState(0);
   const resizableRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const internalRef = useRef<HTMLTextAreaElement>(null);
@@ -239,10 +243,14 @@ function MarkdownEditor({
         }
       }
     },
-    onSelectionUpdate: ({ editor }) => {
-      // Force a slight state change to ensure toolbar re-evaluates isActive
+    onSelectionUpdate: () => {
+      // Force a REAL re-render so the toolbar re-evaluates isActive(...) on every
+      // selection change. The previous `setHasManuallyResized(prev => prev)` was
+      // a no-op (React bails on same-value setState), so the toolbar — table
+      // tools visibility AND button active highlights — only refreshed on typing,
+      // never on a plain click or arrow-key move into/out of a table.
       if (isWYSIWYG) {
-        setHasManuallyResized(prev => prev); // dummy update
+        setSelectionTick((t) => t + 1);
       }
     },
     editorProps: {
@@ -293,11 +301,21 @@ function MarkdownEditor({
   // Sync TipTap content when BBCode changes externally or when switching modes
   useEffect(() => {
     if (!editor) return;
-    
+
     if (internalUpdateRef.current) {
       internalUpdateRef.current = false;
       return;
     }
+
+    // While the editor is focused the USER is typing, and the editor is the
+    // source of truth — never setContent here. setContent rebuilds the doc and
+    // resets the caret to the end. Fast typing (or holding a key, which
+    // auto-repeats) queues several deferred onChange echoes; the single
+    // `internalUpdateRef` boolean only masks the first, so a later stale echo
+    // would otherwise reach setContent mid-type and jump the caret to the end.
+    // External value changes (loading a different entry, Visual/Source toggle)
+    // happen while the editor is NOT focused, so they still sync through below.
+    if (editor.isFocused) return;
 
     const currentHtml = editor.getHTML();
     const newHtml = bbcodeToHtml(value, { editor: true });

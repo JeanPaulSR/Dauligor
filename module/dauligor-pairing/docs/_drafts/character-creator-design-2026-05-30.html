@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Character Creator Walkthrough — design (2026-05-30)</title>
+<style>
+  :root{--parchment:#f5f2e8;--parchment-soft:#faf7ed;--ink:#1a1a1a;--ink-soft:#3a3a3a;--muted:#6b6457;--gold:#c5a059;--gold-deep:#8a6d2f;--blood:#7a1f1f;--leaf:#355c3a;--card:#fbf8ee;--rule:#d8cfb8;--code-bg:#2b2620;--code-ink:#f0e9d2;--shadow:0 1px 3px rgba(0,0,0,.08),0 4px 10px rgba(0,0,0,.04);}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--parchment);color:var(--ink);font-family:"Inter",-apple-system,"Segoe UI",Roboto,sans-serif;font-size:15px;line-height:1.55;}
+  .wrap{max-width:1080px;margin:0 auto;padding:40px 32px 80px;}
+  header.hero{border-bottom:1px solid var(--rule);padding-bottom:20px;margin-bottom:24px;}
+  header.hero h1{font-family:"Cormorant Garamond","Georgia",serif;font-weight:600;font-size:34px;line-height:1.1;margin:0 0 6px;}
+  header.hero .sub{color:var(--muted);font-size:14px;}
+  h2{font-family:"Cormorant Garamond","Georgia",serif;font-size:24px;font-weight:600;margin:32px 0 10px;padding-bottom:6px;border-bottom:2px solid var(--gold);}
+  h3{font-family:"Cormorant Garamond","Georgia",serif;font-size:19px;font-weight:600;margin:20px 0 6px;color:var(--gold-deep);}
+  p{margin:8px 0;} ul,ol{margin:8px 0 8px 22px;padding:0;} li{margin:5px 0;}
+  code{font-family:"JetBrains Mono","Consolas",monospace;font-size:12.5px;background:rgba(138,109,47,.12);padding:1px 5px;border-radius:3px;}
+  pre{background:var(--code-bg);color:var(--code-ink);padding:13px 15px;border-radius:5px;overflow-x:auto;font-family:"JetBrains Mono","Consolas",monospace;font-size:12.5px;line-height:1.5;box-shadow:var(--shadow);}
+  pre code{background:transparent;color:inherit;padding:0;}
+  table{border-collapse:collapse;width:100%;margin:12px 0;background:var(--parchment-soft);box-shadow:var(--shadow);border-radius:4px;overflow:hidden;}
+  th,td{text-align:left;padding:8px 11px;border-bottom:1px solid var(--rule);font-size:13.5px;vertical-align:top;} tr:last-child td{border-bottom:none;}
+  th{background:rgba(138,109,47,.10);font-weight:600;color:var(--gold-deep);text-transform:uppercase;font-size:11px;letter-spacing:.6px;}
+  .callout{background:rgba(122,31,31,.06);border:1px solid rgba(122,31,31,.25);border-radius:4px;padding:12px 16px;margin:14px 0;font-size:14px;}
+  .callout strong{color:var(--blood);}
+  .callout.leaf{background:rgba(53,92,58,.07);border-color:rgba(53,92,58,.3);} .callout.leaf strong{color:var(--leaf);}
+  .callout.gold{background:rgba(197,160,89,.10);border-color:rgba(138,109,47,.35);} .callout.gold strong{color:var(--gold-deep);}
+  .path{font-family:"JetBrains Mono","Consolas",monospace;font-size:12.5px;color:var(--gold-deep);}
+  .steps{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0;}
+  .chip{background:var(--card);border:1px solid var(--rule);border-radius:20px;padding:5px 14px;font-size:13px;font-weight:600;box-shadow:var(--shadow);}
+  .chip .n{display:inline-block;width:18px;height:18px;line-height:18px;text-align:center;background:var(--gold);color:#fff;border-radius:50%;font-size:11px;margin-right:6px;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:12px 0;}
+  .panel{background:var(--card);border:1px solid var(--rule);border-radius:6px;padding:14px 16px;box-shadow:var(--shadow);}
+  .panel h3{margin-top:0;}
+  small.note{color:var(--muted);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>Character Creator Walkthrough</h1>
+  <div class="sub">module/dauligor-pairing &middot; design &middot; 2026-05-30 &middot; <em>foundry-module</em> branch</div>
+</header>
+
+<p>A guided, in-Foundry character-creation flow that walks a player through six steps and assembles
+a finished level-1 character. It replaces the <em>Character Creator</em> placeholder that currently
+opens an "under construction" dialog in the Dauligor Options launcher.</p>
+
+<div class="steps">
+  <span class="chip"><span class="n">1</span>Ability Scores</span>
+  <span class="chip"><span class="n">2</span>Background</span>
+  <span class="chip"><span class="n">3</span>Race</span>
+  <span class="chip"><span class="n">4</span>Class</span>
+  <span class="chip"><span class="n">5</span>Starting Items</span>
+  <span class="chip"><span class="n">6</span>Review &amp; Finish</span>
+</div>
+
+<h2>Shape &amp; reuse</h2>
+<p>Built as an <code>ApplicationV2 + HandlebarsApplicationMixin</code> wizard — same family as the
+importer, feat browser, and spell manager — so it inherits the unified window chrome, the shared
+<code>.dauligor-detail</code> panes, and the button/token CSS we just consolidated.</p>
+<ul>
+  <li><span class="path">scripts/character-creator-app.js</span> — the wizard (new)</li>
+  <li><span class="path">templates/character-creator-shell.hbs</span> — stepper rail + step body + footer (new)</li>
+  <li><span class="path">styles/character-creator.css</span> — registered in <code>module.json</code> before <span class="path">responsive.css</span> (new)</li>
+  <li><span class="path">scripts/ability-roll-pool.js</span> — the shared roll-pool service + socket relay (new)</li>
+  <li><span class="path">scripts/main.js</span> — launcher entry re-pointed from the stub to the real opener; new world setting registered</li>
+</ul>
+
+<div class="callout gold">
+  <strong>No duplicated machinery.</strong> The class step does <em>not</em> re-implement advancement
+  resolution. It hands the chosen class to the existing, tested class importer
+  (<code>openDauligorImporter({ actor, sourceTypeIds, selectedEntryIds, targetLevel: 1 })</code>) so
+  Fighting Style / skill picks / option-group exclusions all run through the one code path that
+  already handles them. Backgrounds and races embed exactly the way the feat browser already does.
+</div>
+
+<h2>Output — what it produces</h2>
+<table>
+  <tr><th>Opened from</th><th>Behaviour</th></tr>
+  <tr><td>An actor sheet (header control)</td><td>Applies the choices onto <strong>that actor</strong>. v1 assumes it's an empty actor; a "Respec" pass that clears prior choices comes later.</td></tr>
+  <tr><td>The Actor directory sidebar</td><td>Creates a fresh empty <code>character</code> actor, then applies onto it and opens its sheet.</td></tr>
+</table>
+
+<h2>Step 1 — Ability Scores</h2>
+<p>Two generation modes the player toggles between, then a common <strong>assignment</strong> grid
+(map six values onto STR/DEX/CON/INT/WIS/CHA).</p>
+
+<div class="grid2">
+  <div class="panel">
+    <h3>Mode A · Point Buy</h3>
+    <p>Homebrew budget: <strong>32 points</strong>, each score <strong>8–16</strong> before racial bonuses.</p>
+    <table>
+      <tr><th>Score</th><th>8</th><th>9</th><th>10</th><th>11</th><th>12</th><th>13</th><th>14</th><th>15</th><th>16</th></tr>
+      <tr><td>Cost</td><td>0</td><td>1</td><td>2</td><td>3</td><td>4</td><td>5</td><td>7</td><td>9</td><td>11</td></tr>
+    </table>
+    <small class="note">Extends the standard 5e table arithmetically (+2 per step past 13). A live "points remaining / 32" meter blocks over-spend.</small>
+  </div>
+  <div class="panel">
+    <h3>Mode B · Shared Roll Pool</h3>
+    <p>A <strong>world-level public pool</strong> of roll-sets. Every player may roll <em>one</em> set
+    of six (4d6, drop lowest) into the pool; <strong>anyone may choose any set</strong> — including
+    another player's. The DM can also enter sets <strong>manually</strong> (rolled at the table).</p>
+    <small class="note">Stored as a world setting → propagates to every client automatically. Non-GM rolls are relayed to the GM via socketlib (<code>executeAsGM</code>) since players can't write world settings directly.</small>
+  </div>
+</div>
+
+<h3>Roll-pool mechanics</h3>
+<ul>
+  <li>Pool entry: <code>{ id, userId, userName, rolls:[6], total, source:"rolled"|"manual", createdAt }</code>.</li>
+  <li><strong>One rolled set per player</strong> — re-rolling replaces your own set (with a confirm). The DM can clear any set.</li>
+  <li>Each set shows its six dice and its total, so the "one player rolled 72, another 76, pick from either" comparison is visible at a glance.</li>
+  <li>Picking a set copies its six numbers into the assignment grid; the set stays in the pool for others.</li>
+</ul>
+
+<div class="callout">
+  <strong>Open question for you:</strong> when a player picks a roll-set, should it become
+  <em>claimed</em> (greyed for others) or stay freely shareable? Your description ("both players can
+  choose from either set") reads as <strong>freely shareable</strong> — that's the default I'll build
+  unless you'd rather sets be claimed once used.
+</div>
+
+<h2>Steps 2 &amp; 3 — Background &amp; Race</h2>
+<p>Backgrounds and races are served inside <code>/api/module/&lt;source&gt;/feats.json</code>, tagged by
+<code>featType</code> (<code>"background"</code> / <code>"race"</code>) — the same pool the feat browser
+reads. The creator fetches the selected sources' feat lists once, filters to the relevant
+<code>featType</code>, and shows a searchable list + a <code>.dauligor-detail</code> preview pane. On
+selection it lazy-fetches the full item from <code>/api/module/backgrounds/&lt;id&gt;.json</code> /
+<code>/races/&lt;id&gt;.json</code> and embeds it at apply time (Foundry <code>type:"background"</code> /
+<code>"race"</code>), reusing the feat browser's embed path.</p>
+
+<div class="callout leaf">
+  <strong>Data note:</strong> background/race <code>system</code> fields (movement, senses,
+  <code>startingEquipment</code>, wealth) currently ship as <em>empty placeholders</em> until the
+  dedicated bg/race tables land app-side. The name/description/flags are real and embed fine today;
+  the structured fields fill in transparently as the app data matures. This is also why step 5 is a
+  stub (below).
+</div>
+
+<h2>Step 4 — Class</h2>
+<p>Lists the class catalog for the selected sources (<code>/api/module/&lt;source&gt;/classes/catalog.json</code>)
+with a preview pane. The player picks one class (creation = level 1). At <strong>Apply</strong>, after
+abilities/background/race are written, the creator launches the existing class importer pre-scoped to
+that class against the actor, so the player finishes any level-1 advancement choices (e.g. skills,
+Fighting Style) in the polished flow that already exists.</p>
+
+<h2>Step 5 — Starting Items <small class="note">(stubbed for v1)</small></h2>
+<p>There is no item <em>list</em> endpoint yet (only <code>/api/module/items/&lt;id&gt;.json</code> by id),
+and class/background <code>startingEquipment</code> data isn't populated. So v1 shows an informative
+placeholder ("available once the item catalog endpoint exists") and the step is skippable. The wizard
+structure leaves a clean slot to drop the real picker in later.</p>
+
+<h2>Step 6 — Review &amp; Finish</h2>
+<p>A summary card per step with an <strong>Edit</strong> link that jumps back to that step (the
+"offer to go back and change anything" requirement). The stepper rail is also freely clickable
+throughout — every prior step stays editable. <strong>Finish</strong> runs the apply sequence:</p>
+<ol>
+  <li>Resolve the target actor (existing, or create a new empty <code>character</code>).</li>
+  <li>Write the six ability scores.</li>
+  <li>Embed the background item, then the race item.</li>
+  <li>Launch the class importer (scoped, level 1) to complete the class.</li>
+  <li>Open the finished actor's sheet.</li>
+</ol>
+
+<h2>Build order</h2>
+<ol>
+  <li>Wizard shell + stepper + footer nav + free back/forward (scaffold).</li>
+  <li>Step 1 ability scores — point buy + shared roll pool + socket relay + assignment grid (the novel part).</li>
+  <li>Steps 2–3 background + race (list + detail + deferred embed).</li>
+  <li>Step 4 class selection + delegated apply.</li>
+  <li>Step 5 stub; Step 6 review + apply sequence; actor create/target.</li>
+  <li>CSS pass + <code>module.json</code> registration; owner eyeball in Foundry.</li>
+</ol>
+
+<div class="callout">
+  <strong>I can't run Foundry here</strong> — as with all module work this session, the flow is
+  logic-checked + syntax-checked but needs your eyeball in a live world (especially the cross-client
+  roll pool, which needs two connected clients to exercise the GM relay).
+</div>
+
+<p style="margin-top:18px;"><small class="note">This design: <span class="path">module/dauligor-pairing/docs/_drafts/character-creator-design-2026-05-30.html</span>.</small></p>
+
+</div>
+</body>
+</html>

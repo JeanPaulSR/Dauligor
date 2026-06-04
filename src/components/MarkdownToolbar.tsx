@@ -36,18 +36,12 @@ export default function MarkdownToolbar({
 }: MarkdownToolbarProps) {
   const [isTableToolsCollapsed, setIsTableToolsCollapsed] = React.useState(false);
   
-  let hasTable = false;
-  if (editor && isWYSIWYG) {
-    hasTable = editor.isActive('table');
-    // Fast scan for tables if not currently active
-    if (!hasTable) {
-      editor.state.doc.descendants((node) => {
-        if (node.type.name === 'table') {
-          hasTable = true;
-        }
-      });
-    }
-  }
+  // Show the Table Tools sub-toolbar ONLY while the cursor is actually inside a
+  // table — not whenever the document merely contains one somewhere. The old
+  // doc-wide scan kept this row permanently mounted on any entry that has a
+  // table, eating editor height and shrinking the writing area during normal
+  // prose editing. Clicking into the table brings the tools back.
+  const hasTable = !!(editor && isWYSIWYG && editor.isActive('table'));
 
   const [linkDialogOpen, setLinkDialogOpen] = React.useState(false);
   const [linkUrl, setLinkUrl] = React.useState('');

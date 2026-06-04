@@ -9,6 +9,12 @@
   padding: 0;
   overflow: hidden;
   min-height: 0;
+  /* Paint the panel surface on the shared content box so EVERY Dauligor
+   * window has a consistent background, instead of relying on each shell to
+   * repaint it (the character creator didn't, so dnd5e's themed window
+   * default bled through as a two-tone). Shells that set their own panel bg
+   * (importer, spell-manager, launcher) are unaffected — same color. */
+  background: var(--dauligor-panel);
 }
 
 .application.dauligor-importer-app .window-content {

@@ -38,6 +38,19 @@ export const D1_TABLE_MAP: Record<string, string> = {
   campaigns: 'campaigns',
   items: 'items',
   feats: 'feats',
+  // Backgrounds + Species — promoted out of the `feats` table into their own
+  // tables (migration 20260601-1200). camelCase columns; "species" is the 2024
+  // name for "race" (the Foundry export type stays "race").
+  backgrounds: 'backgrounds',
+  species: 'species',
+  // Background features — the special feature(s) a background grants
+  // (migration 20260601-1400). Dedicated content type, granted via ItemGrant.
+  backgroundFeatures: 'background_features',
+  // speciesFeatures (species_features) retired — consolidated into species_options.
+  // Species options — a reusable racial-trait library (Darkvision, Powerful
+  // Build, …) attached to species via species.speciesOptionIds and granted as
+  // features on export (migration 20260603-1600).
+  speciesOptions: 'species_options',
   // Admin-managed taxonomy that groups feats into player-facing
   // buckets (General / Fighting Style / Epic Boon / Origin / …).
   // Authored via /admin/feat-categories; feats reference rows here

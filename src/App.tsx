@@ -65,6 +65,7 @@ import RacesList from './pages/compendium/RacesList';
 import RaceEditor from './pages/compendium/RaceEditor';
 import BackgroundsList from './pages/compendium/BackgroundsList';
 import BackgroundEditor from './pages/compendium/BackgroundEditor';
+import CompendiumFeatureEditor from './pages/compendium/CompendiumFeatureEditor';
 import CharacterList from './pages/characters/CharacterList';
 import CharacterBuilder from './pages/characters/CharacterBuilder';
 import BBCodeTester from './pages/dev/BBCodeTester';
@@ -356,6 +357,7 @@ export default function App() {
                   <Route path="/compendium/races/manage" element={<RaceEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/backgrounds" element={<BackgroundsList userProfile={effectiveProfile} />} />
                   <Route path="/compendium/backgrounds/manage" element={<BackgroundEditor userProfile={effectiveProfile} />} />
+                  <Route path="/compendium/background-features/manage" element={<CompendiumFeatureEditor userProfile={effectiveProfile} kind="background" />} />
                   <Route path="/compendium/scaling/new" element={<ScalingEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/scaling/edit/:id" element={<ScalingEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/spellcasting-scaling/new" element={<SpellcastingScalingEditor userProfile={effectiveProfile} />} />

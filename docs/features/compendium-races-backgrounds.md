@@ -1,12 +1,14 @@
-# Compendium — Races & Backgrounds
+# Compendium — Species & Backgrounds
 
-> **Status:** ✅ Editors shipped, ⚠️ Public list pages still placeholders.
+> **Status:** ✅ Dedicated tables + editors + Foundry exporters + importers + public browsers all shipped (migration `20260601-1200`). Backgrounds additionally carry **structured proficiencies, prerequisites, and owned features** (migrations `20260602-1200`…`1500`) — see §3a. Tables start empty; populate them via each editor's admin-only **Foundry Import** tab.
+>
+> **Naming:** the user-facing entity is **"Species"** (the D&D 2024 rename of "Race"). The table is `species`, the editor + sidebar say "Species", but the **Foundry export `type` stays `"race"`** for dnd5e compatibility, and the route URL stays `/compendium/races`.
 >
 > **Read first:**
-> - [`docs/features/compendium-feats-items.md`](compendium-feats-items.md) — feats live in the same table, same shape applies
-> - [`docs/features/compendium-spells-browser.md`](compendium-spells-browser.md) — the public-browser template the placeholders aim to grow into
+> - [`docs/features/compendium-feats-items.md`](compendium-feats-items.md) — the feat/item editors; Species + Backgrounds graduated out of the feats table and reuse its widgets (AdvancementManager, TagPicker, ScalingColumnsPanel)
+> - [`docs/features/compendium-spells-browser.md`](compendium-spells-browser.md) — the public-browser template these pages are built on (`CompendiumBrowserShell`)
 
-This page tells a future contributor how to take the Races / Backgrounds **placeholder** list pages and grow them into a real public browse surface — patterned after `/compendium/spells` and `/compendium/feats`. It also documents the storage shape so backend work that adds dedicated tables knows where to slot in.
+Species and Backgrounds used to live in the `feats` table behind a `feat_type` discriminator (an intentional placeholder). They've now been **promoted to their own dedicated tables** per the roadmap's "new table for new functionality" principle. This page documents what shipped and what's left.
 
 ---
 
@@ -14,142 +16,111 @@ This page tells a future contributor how to take the Races / Backgrounds **place
 
 | Surface | URL | Component | Status |
 |---|---|---|---|
-| Public list (Races) | `/compendium/races` | `src/pages/compendium/RacesList.tsx` | **Placeholder** — explains the storage shape and links to `/manage` for admins |
-| Public list (Backgrounds) | `/compendium/backgrounds` | `src/pages/compendium/BackgroundsList.tsx` | **Placeholder** — same shape |
-| Admin editor (Races) | `/compendium/races/manage` | `src/pages/compendium/RaceEditor.tsx` → `FeatsEditor scopeFeatType="race"` | ✅ Shipped |
-| Admin editor (Backgrounds) | `/compendium/backgrounds/manage` | `src/pages/compendium/BackgroundEditor.tsx` → `FeatsEditor scopeFeatType="background"` | ✅ Shipped |
-| Sidebar nav | `Compendium → Races / Backgrounds` | `src/components/Sidebar.tsx` | ✅ Shipped |
-
-The placeholders intentionally include a "Manage" button for admins / content-creators so the editor is reachable from the public surface while the browser catches up.
-
----
-
-## 2. Storage shape (today)
-
-Race + Background entries live **inside the `feats` table** with a discriminator column:
-
-```sql
-SELECT * FROM feats WHERE feat_type = 'race';        -- races
-SELECT * FROM feats WHERE feat_type = 'background';  -- backgrounds
-```
-
-Everything else about the row matches the existing feat schema — same `description`, `requirements_tree`, `advancements`, `activities`, `effects`, `tags`, etc. This was a deliberate decision: races and backgrounds are mechanically very close to feats (both grant features, ability bumps, language / tool proficiencies, sometimes spells) so duplicating the table layout would have created three near-identical migration paths for very little payoff.
-
-When dedicated `races` / `backgrounds` tables eventually land, the discriminator-based reads become the migration source — see §5.
+| Public browser (Species) | `/compendium/races` | `RacesList.tsx` → `SpeciesBackgroundBrowser kind="species"` | ✅ Shipped |
+| Public browser (Backgrounds) | `/compendium/backgrounds` | `BackgroundsList.tsx` → `SpeciesBackgroundBrowser kind="background"` | ✅ Shipped |
+| Import workbench | each editor's "Foundry Import" tab | `SpeciesBackgroundImportWorkbench` | ✅ Shipped (admin-only) |
+| Editor (Species) | `/compendium/races/manage` | `RaceEditor.tsx` → `SpeciesBackgroundEditor kind="species"` | ✅ Shipped |
+| Editor (Backgrounds) | `/compendium/backgrounds/manage` | `BackgroundEditor.tsx` → `SpeciesBackgroundEditor kind="background"` | ✅ Shipped |
+| Foundry export (Species) | `/api/module/races/<dbId>.json` | `api/_lib/_raceExport.ts` | ✅ Reads the `species` table |
+| Foundry export (Backgrounds) | `/api/module/backgrounds/<dbId>.json` | `api/_lib/_backgroundExport.ts` | ✅ Reads the `backgrounds` table |
+| Sidebar nav | `Compendium → Species / Backgrounds` | `src/components/Sidebar.tsx` | ✅ Shipped |
 
 ---
 
-## 3. RaceEditor / BackgroundEditor — thin wrappers
+## 2. Storage shape
+
+Two dedicated tables, created by [`worker/migrations/20260601-1200_backgrounds_species_tables.sql`](../../worker/migrations/20260601-1200_backgrounds_species_tables.sql). **Columns are camelCase** (the roadmap's 2026-05-27 decision: new compendium tables are camelCase from day one — Foundry is camelCase end-to-end; the legacy snake_case tables migrate later).
+
+**`species`** — `id`, `name`, `identifier`, `sourceId`, `page`, `description`, `advancements` (JSON), `movement` (JSON `{walk,fly,swim,climb,burrow,hover,units}`), `senses` (JSON `{darkvision,blindsight,tremorsense,truesight,units,special}`), `creatureType` (JSON `{value,subtype,swarm,custom}`), `tags` (JSON), `imageUrl`, `contentHash`, `createdAt`, `updatedAt`.
+
+**`backgrounds`** — `id`, `name`, `identifier`, `sourceId`, `page`, `description`, `advancements` (JSON), `startingEquipment` (JSON EquipmentEntryData tree), `wealth` (formula string), `prerequisite` (plain text), `prerequisiteTree` (JSON Requirement tree), `proficiencies` (JSON — the shared class proficiency model: `{skills,tools,languages}`, each `{choiceCount,fixedIds,optionIds,categoryIds}`), `tags` (JSON), `imageUrl`, `contentHash`, `createdAt`, `updatedAt`. (`prerequisite`/`proficiencies`/`prerequisiteTree` added by migrations `20260602-1200`/`1300`/`1400`.)
+
+**`background_features`** (migration `20260601-1400`) — a feat-shaped content table (`id`, `name`, `identifier`, `sourceId`, `page`, `description`, `advancements`/`activities`/`effects`/`uses`/`tags` JSON, `imageUrl`, …) with **`parentBackgroundId`** (migration `20260602-1500`, FK → `backgrounds(id)` ON DELETE CASCADE) so a background can OWN its feature(s); a NULL parent is a standalone catalog feature.
+
+**`species_options`** (migration `20260603-1600`) — the same feat-shaped column set; the **reusable racial-trait library** (Darkvision, Powerful Build, …) attached to a species via `species.speciesOptionIds` and granted on export. The earlier **`species_features`** table (`20260601-1500`) was **consolidated into `species_options`** (data migration `20260603-1900`) — its grant-to-species path was never finished and the shape was identical, so species options are now the single mechanism for a species's granted features. (`species_features` remains as an orphaned tombstone — no destructive DROP.)
+
+Both carry a **source-scoped unique index** `…_source_identifier_uniq ON (COALESCE(sourceId,''), identifier)` — two sources may both ship "soldier"; one source may not ship it twice (same pattern as feats/items).
+
+### Plumbing
+
+- **`src/lib/d1Tables.ts`** — `D1_TABLE_MAP` aliases `backgrounds`/`species` to themselves.
+- **`src/lib/d1.ts`** — `backgrounds`, `species`, `background_features`, `species_options` are all in `PERSISTENT_TABLES` (read-heavy, sessionStorage-cached); the JSON columns `startingEquipment`/`movement`/`senses`/`creatureType`/`proficiencies`/`prerequisiteTree` are in `queryD1`'s `jsonFields` auto-parse list (`tags`/`advancements`/`uses`/`activities`/`effects` were already there). **Rule-4 reminder:** any inline remap reading these must use the `typeof X === 'string' ? JSON.parse(X) : (X ?? default)` passthrough.
+- **No `compendium.ts` mapping.** Because the columns are already camelCase, the editor reads/writes through `fetchDocument` / `upsertDocument` **directly** — it does NOT run `normalizeCompendiumData` / `denormalizeCompendiumData` (those are snake↔camel mappers for the legacy tables). The only boundary rename is `tags` (column) ↔ `tagIds` (form), done inline.
+
+---
+
+## 3. SpeciesBackgroundEditor — the shared editor
+
+[`src/pages/compendium/SpeciesBackgroundEditor.tsx`](../../src/pages/compendium/SpeciesBackgroundEditor.tsx) is one component that drives both entities via a `kind: 'species' | 'background'` prop. `RaceEditor.tsx` / `BackgroundEditor.tsx` are now thin wrappers that pass `kind`:
 
 ```tsx
-// src/pages/compendium/RaceEditor.tsx
-export default function RaceEditor({ userProfile }: { userProfile: any }) {
-  return <FeatsEditor userProfile={userProfile} scopeFeatType="race" />;
+export default function RaceEditor({ userProfile }) {
+  return <SpeciesBackgroundEditor userProfile={userProfile} kind="species" />;
 }
 ```
 
-Both editors are 21-line wrappers that forward `scopeFeatType` to `FeatsEditor`. The prop drives four behaviours in `FeatsEditor` ([`src/pages/compendium/FeatsEditor.tsx`](../../src/pages/compendium/FeatsEditor.tsx)):
+It's a **Pattern E** editor built on [`CompendiumEditorShell`](../../src/components/compendium/CompendiumEditorShell.tsx) (3-pane list | editor | preview, super-tabs Editor/Tags). `kind` selects:
 
-1. **List filter** — only rows with matching `feat_type` show up in the master pane
-2. **New-entry default** — the "+ New" button defaults the new row to the scoped type
-3. **Shell labels** — back link reads "Back to Races" / "Back to Backgrounds", title shows accordingly
-4. **AdvancementManager parentContext** — `parentContext='race'` / `'background'` is forwarded, which configures the advancement editor for the feat-context behaviour (hidden HitPoints / Size, level-floor of 0, etc.)
+- the target table (`species` / `backgrounds`),
+- the type-specific Editor sub-tabs — **Traits** (movement / senses / creature type) for species; **Details** (prerequisite + wealth + starting equipment), **Proficiencies** (the shared `ProficienciesEditor` — skills/tools/languages), and **Features** for backgrounds (see §3a),
+- the `AdvancementManager` `parentContext` (`'race'` / `'background'`).
 
-**When the dedicated `races` / `backgrounds` tables ship**, swap the body of these wrappers to point at the new editors. The route + sidebar entry stay the same so users see no change.
+Shared sub-tabs: **Basics** (image / name / identifier / source / page / description), **Advancement** (`AdvancementManager` with the feats/features/option-group/option-item catalogs + the row's own scaling columns), **Scaling** (`ScalingColumnsPanel`, `parentType='race'|'background'` — for ScaleValue traits like Dragonborn breath), and the **Tags** super-tab (`TagPicker`).
 
----
+**v1 scope / known follow-ups:**
+- **Direct-write, admin + content-creator.** Proposal-mode authoring (cascade banners, review highlights, block drafts) is NOT wired — `species` / `background` aren't registered proposal entity types yet (would need a `proposals` CHECK migration). Other editors route content-creators through `/proposals/edit/*`; these don't yet.
+- The admin-only **Foundry-Import** workbench mode is wired (see §5).
+- **Starting equipment** has no structured tree editor yet (the `wealth` field is editable; existing `startingEquipment` entries round-trip unchanged). The EquipmentEntryData tree is populated by the importer.
 
-## 4. Implementing the public list pages
+### 3a. Background proficiencies, prerequisites & features (backgrounds only)
 
-The placeholders should grow into full list pages mirroring [`SpellList.tsx`](../../src/pages/compendium/SpellList.tsx) / [`FeatList.tsx`](../../src/pages/compendium/FeatList.tsx). Both consume the shared [`CompendiumBrowserShell`](../../src/components/compendium/CompendiumBrowserShell.tsx) — the foundation is already in place; the work is in wiring the data + filter axes.
+Added 2026-06-02/03 (migrations `20260602-1200`…`1500`):
 
-### 4.1 Recommended dependencies
+- **Proficiencies** — a dedicated **Proficiencies** sub-tab backed by the shared [`ProficienciesEditor`](../../src/components/compendium/ProficienciesEditor.tsx) (the same grid the class editor uses, whose helpers now live in [`proficiencySelection.ts`](../../src/lib/proficiencySelection.ts)). Stored in the `proficiencies` column on the class proficiency model (`{skills,tools,languages}`, each `{choiceCount,fixedIds,optionIds,categoryIds}`; `fixedIds`/`optionIds` = skills/tools/languages table ROW ids). The importer fills it from the prose `[ul]` block ([`backgroundProficiencies.ts`](../../src/lib/backgroundProficiencies.ts) → `proficienciesFromEntries`); the view renders structured-first (`resolveBackgroundDisplay`), falling back to parsing the prose block for rows not yet re-imported. No 2024 ability-score / origin-feat modelling — 2014-focused.
+- **Prerequisites** — a free-text `prerequisite` plus an optional structured `prerequisiteTree` (a Requirement tree), authored with the feats' [`RequirementsEditor`](../../src/components/compendium/RequirementsEditor.tsx) and rendered via the shared `resolveDetailPrereq` (italic, under the name — same treatment feats get).
+- **Features** — a **Features** sub-tab ([`BackgroundFeaturesTab`](../../src/components/compendium/BackgroundFeaturesTab.tsx)) authoring rows in `background_features` OWNED by the background (`parentBackgroundId`, ON DELETE CASCADE). The standalone catalog [`CompendiumFeatureEditor`](../../src/pages/compendium/CompendiumFeatureEditor.tsx) still handles un-owned features.
 
-Everything needed already exists in `origin/main`:
-
-| Need | Use |
-|---|---|
-| 3-pane responsive layout | `<CompendiumBrowserShell>` (page shell with master + detail) |
-| Tri-state filter pills | `<SectionFilterPanel>` + `useAxisFilters` hook |
-| Search input with clear ✕ + count | `<SearchInput>` (drop-in) |
-| Filter button + active-count badge | `<FilterBar>` (drop-in) |
-| Detail pane | Pattern after `FeatDetailPanel.tsx` — same shape can serve all three since storage is identical |
-| Favorites system (if wanted) | Add `useRaceFavorites` / `useBackgroundFavorites` libs paralleling [`featFavorites.ts`](../../src/lib/featFavorites.ts) + a new D1 migration |
-
-### 4.2 Data flow
-
-The same fetch path FeatList uses:
-
-```ts
-fetchCollection<any>('feats', {
-  where: "feat_type = ?",
-  params: ['race'],            // or 'background'
-  orderBy: 'name ASC',
-})
-```
-
-Server-side endpoint: existing `/api/d1/query` proxy. Foundry-side
-endpoint for the importer: when the dedicated source-races / source-backgrounds endpoints land, mirror `_sourceFeatList.ts` + `_featExport.ts` — those are the closest precedents.
-
-### 4.3 Suggested filter axes
-
-Mirroring the feat filter set from [`src/lib/featFilters.ts`](../../src/lib/featFilters.ts):
-
-**Races:**
-- Source (PHB / TCE / MOTM / …)
-- Size (Small / Medium / Large)
-- Speed bucket (25 / 30 / 35+)
-- Tag-group filters (Heritage, Subrace tag groups, etc.)
-- Repeatable? (the same flag feats use; rarely set for races)
-
-**Backgrounds:**
-- Source
-- Granted skill proficiencies (filter by which skills it gives)
-- Granted tool / language proficiencies
-- Has feature? (some backgrounds have a unique feature, others don't)
-- Tag-group filters
-
-### 4.4 Step-by-step
-
-1. **Copy `FeatList.tsx` to `RacesList.tsx`** (or `BackgroundsList.tsx`); rename the export, drop the existing placeholder body.
-2. **Scope the fetch** — add `where: "feat_type = 'race'"` to the `fetchCollection` call.
-3. **Add filter axes** — define the relevant axes in a new `src/lib/raceFilters.ts` (or `backgroundFilters.ts`) paralleling `featFilters.ts`.
-4. **Wire up the detail panel** — point `renderDetail` at a new `RaceDetailPanel` (copy `FeatDetailPanel` and trim the feat-only fields).
-5. **Test in the browser** — verify the placeholder warning is gone and the rows render.
-6. **Update this doc** — flip the status table in §1 to ✅.
-
-The CompendiumBrowserShell handles all the responsive collapse, virtualization, sort-column rendering, and favourites pin behaviour for you.
+**Display transform:** proficiency values + descriptions render through the canonical `cleanFoundryHtml(bbcodeToHtml(...))` pipeline (same as feats/spells), which gained a `slug{Display}` mop-up so leftover `&Reference[…]{Display}` / `@type[…]{Display}` enricher braces resolve to their label — a shared fix that also improves feat/spell/item display + import.
 
 ---
 
-## 5. Migration path — when dedicated tables land
+## 4. Foundry export — live read-through
 
-If / when the team decides races and backgrounds deserve their own D1 tables (likely once distinguishing fields like ASI bonus, speed, size, racial features become first-class enough to deserve their own columns), the migration path is:
+Both endpoints are public GET, served live (no R2 cache), and now read the **dedicated tables**:
 
-1. **Add `races` / `backgrounds` tables** — copy the `feats` schema minus the `feat_type` / `feat_subtype` columns. Add table-specific columns (e.g. `races.size`, `races.speed`, `races.ability_score_increases`, `backgrounds.starting_equipment`).
-2. **One-shot migration** — `INSERT INTO races SELECT … FROM feats WHERE feat_type = 'race'`; same for backgrounds. The unique IDs are preserved so cross-references survive.
-3. **Drop the discriminator rows** from `feats` after verification.
-4. **Replace `RaceEditor.tsx` / `BackgroundEditor.tsx` bodies** with the new dedicated editors. Route + sidebar entry stay the same — users see no break.
-5. **Update `AdvancementManager.parentContext`** to read from the dedicated tables (the prop name stays — the logic for race / background context is already discriminator-aware).
+- `api/_lib/_raceExport.ts` → `buildRaceItemBundle` → `type:"race"` + `system.movement` / `system.senses` / `system.type` (from `creatureType`).
+- `api/_lib/_backgroundExport.ts` → `buildBackgroundItemBundle` → `type:"background"` + `system.startingEquipment` / `system.wealth`, plus **`Trait` advancements** synthesized from the structured `proficiencies` (row id → trait identifier; `choiceCount` with an empty pool → whole-category "choose N of any"), and an **`ItemGrant`** per owned `background_features` row — the feature items are embedded in the bundle's `features[]` and each is also served standalone at `/api/module/background-features/<id>.json` ([`api/_lib/_backgroundFeatureExport.ts`](../../api/_lib/_backgroundFeatureExport.ts), a `feat` item with `system.type.value="background"`).
 
-The wrappers' job is to **defer that decision** until product needs it, without leaving the route + nav surface in limbo.
+Both share [`api/_lib/_speciesBackgroundShared.ts`](../../api/_lib/_speciesBackgroundShared.ts) → `buildSpeciesBackgroundItem`, which builds the common `system` block: `identifier`, `description` (BBCode → HTML), `advancement` (array → dnd5e keyed-object map, with ScaleValue normalization against the row's `scaling_columns`), and `source` (resolved from the `sourceId` FK). Flags preserve the feat-export keys (`featType` = the Foundry type, `featSubtype: ""`, `featSpellSourceId`).
+
+> **Server-side JSON note:** the client `queryD1` auto-parses JSON columns, but the server `ExportFetchers` path does NOT — so the shared builder runs every JSON column through `parseJsonField`, same as `_featExport`/`_classExport`.
+
+Verified end-to-end against local D1: a seeded Mountain Dwarf exports with `movement {walk:25}`, `senses {darkvision:60}`, `type {value:humanoid,subtype:dwarf}`, advancement map, and resolved source block; a seeded Soldier exports with `wealth:"50"` and `startingEquipment:[]`. Both HTTP 200.
 
 ---
 
-## 6. Foundry round-trip
+## 5. Public browsers + import workbench (shipped)
 
-Today the Foundry import workbenches treat races / backgrounds as **feats with a discriminator**:
+Both `/compendium/races` and `/compendium/backgrounds` render [`SpeciesBackgroundBrowser`](../../src/pages/compendium/SpeciesBackgroundBrowser.tsx) (one component, `kind` prop) on [`CompendiumBrowserShell`](../../src/components/compendium/CompendiumBrowserShell.tsx). Search + a Source axis (+ Creature Type for species); a thumbnail in the name column surfaces imported art; the detail pane renders image / traits / advancements / description (BBCode→HTML) + a Favorite toggle. `RacesList.tsx` / `BackgroundsList.tsx` are thin wrappers passing `kind`. The browsers are **public**; the editor "Manager" link in the toolbar shows for admins only.
 
-- `feat-import-contract.md` § "General Feats vs. Class Features" — the same `sourceType` discriminator works for `'race'` / `'background'` if the module ever exports them as that shape
-- The Foundry feat browser (`module/dauligor-pairing/scripts/feat-browser-app.js`) doesn't currently surface a "race" / "background" filter axis. Adding one is a small section-filter-panel addition keyed on `flags.dauligor-pairing.featType`
+Per-user **favorites** persist via `user_species_favorites` / `user_background_favorites` (migration `20260601-1300`) through the `/api/species-favorites` + `/api/background-favorites` endpoints + the [`speciesBackgroundFavorites.ts`](../../src/lib/speciesBackgroundFavorites.ts) hook (one hook, `kind`-keyed). Mirrors feat/spell favorites exactly: local-first for anonymous users, cloud-synced + merged on sign-in; the endpoint derives `user_id` from the verified token. (The shell also gained a `hideFavorites` opt-out, symmetric with `hideFilters`, for future browsers that don't want a favorites pane.)
 
-When the dedicated tables land per §5, the Foundry side would need its own import contracts (`race-import-contract.md`, `background-import-contract.md`) + their per-source endpoints, paralleling the existing feat contract.
+**Import** — each editor's admin-only **"Foundry Import"** tab mounts [`SpeciesBackgroundImportWorkbench`](../../src/components/compendium/SpeciesBackgroundImportWorkbench.tsx), backed by [`speciesBackgroundImport.ts`](../../src/lib/speciesBackgroundImport.ts). It ingests the dauligor-pairing folder exports (`races` / `backgrounds` arrays) → camelCase rows via direct `upsertDocument`. Notable mapping rules:
+
+- **Images** follow the spell importer (the working reference): absolute `cdn.5e.tools` art is kept; Foundry-relative plutonium placeholders (`family-tree.svg`) drop to empty (they'd 404 off our R2). ~236/280 species + 76/152 backgrounds carry real art.
+- **`&Reference[key=Value]`** 5etools enrichers (HTML-escaped) are resolved by the shared `foundryHtmlCleanup` — added there so feat/spell/item imports benefit too.
+- **Senses** flatten from `.ranges` on import; `_raceExport` re-nests them for valid dnd5e on export.
+
+---
+
+## 6. Populating the tables
+
+The tables start **empty**; content comes from the Foundry export at `E:\DnD\Professional\Foundry Export` (152 backgrounds + 280 species) via the import workbench (§5). Load the export JSON, review, and **Import Visible** (or per-row). Source-matching is by book/rules against the `sources` table — many 5etools books (EEPC, MPMM, VGM, …) won't match and import with **no source set** (a warning, surfaced as an "unresolved" count + filter, not a blocker). If a future need surfaces a missing column (e.g. top-level `effects`), add it via a follow-up `ALTER TABLE` (local-first).
 
 ---
 
 ## 7. Cross-references
 
-- [`docs/features/compendium-feats-items.md`](compendium-feats-items.md) — the canonical feats reference; everything in §2 is just "the feats schema" + a discriminator
-- [`docs/architecture/compendium-editor-patterns.md`](../architecture/compendium-editor-patterns.md) — the shell architecture
-- [`src/pages/compendium/FeatsEditor.tsx`](../../src/pages/compendium/FeatsEditor.tsx) — read the `scopeFeatType` prop handling around lines 162–414 to see exactly what behaviours the wrapper triggers
-- [`module/dauligor-pairing/docs/feat-import-contract.md`](../../module/dauligor-pairing/docs/feat-import-contract.md) — the Foundry-side feat contract that race / background imports would extend
+- [`docs/features/compendium-feats-items.md`](compendium-feats-items.md) — feats/items editors; the shared widgets (AdvancementManager, TagPicker, ScalingColumnsPanel, CompendiumEditorShell) are documented there
+- [`docs/architecture/compendium-editor-patterns.md`](../architecture/compendium-editor-patterns.md) — the Pattern E shell architecture
+- [`module/dauligor-pairing/docs/feat-import-contract.md`](../../module/dauligor-pairing/docs/feat-import-contract.md) — the Foundry-side feat contract that race / background imports parallel

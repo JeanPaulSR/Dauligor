@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { fetchCollection, fetchDocument } from '../../lib/d1';
 import { useClassRouteId } from '../../lib/useClassRouteId';
@@ -96,6 +96,11 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
   const [selectedOptionItems, setSelectedOptionItems] = useState<Record<string, string>>({});
   const [featureFilter, setFeatureFilter] = useState<'all' | 'class' | 'subclass'>('all');
   const [collapsedFeatures, setCollapsedFeatures] = useState<Record<string, boolean>>({});
+  // In-page feature navigation: id → card node (for jump + scroll-spy), and the
+  // level the jump-bar currently highlights as you scroll.
+  const featureRefs = useRef<Record<string, HTMLElement | null>>({});
+  const tabsTopRef = useRef<HTMLDivElement | null>(null);
+  const [activeLevel, setActiveLevel] = useState<number | null>(null);
   const [classSpellList, setClassSpellList] = useState<ClassSpellListSummary[]>([]);
   const [classSpellListLoading, setClassSpellListLoading] = useState(false);
 
@@ -253,6 +258,29 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
 
     return combined.sort((a, b) => a.level - b.level);
   }, [features, classData?.spellcasting, selectedSubclassId, subclassFeatures, selectedSubclass]);
+
+  // If the Subclass tab is open but the subclass was cleared (or the class
+  // changed), fall back to Class Features. Keyed on the subclass, NOT activeTab,
+  // so normal tab switches never get bounced.
+  useEffect(() => {
+    if (activeTab === 'subclass' && !selectedSubclass) setActiveTab('features');
+  }, [activeTab, selectedSubclass]);
+
+  // Jump-bar scroll-spy: highlight the level of the topmost visible feature card.
+  useEffect(() => {
+    if (activeTab !== 'features' && activeTab !== 'subclass') return;
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries
+        .filter((e) => e.isIntersecting)
+        .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+      if (!visible.length) return;
+      const fid = (visible[0].target as HTMLElement).dataset.featureId;
+      const f = allFeaturesWithSpellcasting.find((x: any) => String(x.id) === fid);
+      if (f) setActiveLevel(f.level);
+    }, { rootMargin: '-80px 0px -55% 0px', threshold: 0 });
+    (Object.values(featureRefs.current).filter(Boolean) as HTMLElement[]).forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, [activeTab, allFeaturesWithSpellcasting, featureFilter, collapsedFeatures]);
 
   useEffect(() => {
     if (!id) return;
@@ -550,15 +578,15 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
   if (slugLoading || loading) return (
     <div className="max-w-6xl mx-auto py-20 text-center space-y-4">
       <div className="font-serif italic text-gold animate-pulse">Consulting the archives...</div>
-      <Button variant="ghost" size="sm" onClick={() => navigate('/compendium/classes')} className="text-ink/45">
+      <Button variant="ghost" size="sm" onClick={() => navigate('/compendium/classes')} className="text-ink/40">
         <ChevronLeft className="w-4 h-4 mr-2" /> Return to Compendium
       </Button>
     </div>
   );
   if (slugNotFound) return (
     <div className="max-w-6xl mx-auto py-20 text-center space-y-4">
-      <div className="font-serif italic text-ink/65">No class matches the slug "{slug}".</div>
-      <Button variant="ghost" size="sm" onClick={() => navigate('/compendium/classes')} className="text-ink/45">
+      <div className="font-serif italic text-ink/60">No class matches the slug "{slug}".</div>
+      <Button variant="ghost" size="sm" onClick={() => navigate('/compendium/classes')} className="text-ink/40">
         <ChevronLeft className="w-4 h-4 mr-2" /> Return to Compendium
       </Button>
     </div>
@@ -641,6 +669,272 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
     return levelFeatures;
   };
 
+  // Scroll a rendered feature card into view. Retries because the tab/card may
+  // mount or expand on the same tick we scroll (a single rAF silently no-ops
+  // there, and the node may not be laid out yet).
+  const scrollToFeature = (featureId: string) => {
+    let tries = 0;
+    const go = () => {
+      const el = featureRefs.current[featureId];
+      if (el) el.scrollIntoView({ block: 'start' });
+      else if (tries++ < 12) setTimeout(go, 50);
+    };
+    setTimeout(go, 0);
+  };
+
+  // Click a feature in the class table → open Class Features, expand it, scroll.
+  // Resolve the cell to a rendered feature by id, else the first feature at that
+  // level (ASI / subclass-placeholder rows have no card of their own).
+  const jumpFromTable = (tableFeature: any) => {
+    const target = allFeaturesWithSpellcasting.find((f: any) => f.id === tableFeature.id)
+      || allFeaturesWithSpellcasting.find((f: any) => f.level === tableFeature.level);
+    if (!target) return;
+    setActiveTab('features');
+    // Don't let the active filter hide the jump target.
+    if (target.isFromSubclass && featureFilter === 'class') setFeatureFilter('all');
+    if (!target.isFromSubclass && featureFilter === 'subclass') setFeatureFilter('all');
+    setCollapsedFeatures(prev => ({ ...prev, [target.id]: false }));
+    scrollToFeature(target.id);
+  };
+
+  // ── Shared feature render (Class Features tab + Subclass tab) ──────────
+  const renderSubclassBanner = () => (
+    <div className="animate-in fade-in slide-in-from-top-4 duration-500 space-y-6 p-6 border border-gold/30 bg-gold/5 rounded-lg relative overflow-hidden">
+      <div className="absolute top-0 right-0 p-2">
+        <Badge variant="outline" className="border-gold/20 text-gold bg-gold/5 uppercase tracking-widest text-[10px]">
+          Subclass Active
+        </Badge>
+      </div>
+      <div className="flex flex-col md:flex-row gap-6">
+        {selectedSubclass.imageUrl && (
+          <div
+            className="w-full md:w-48 h-48 shrink-0 rounded-md overflow-hidden border border-gold/20 shadow-md cursor-pointer transition-transform hover:scale-[1.02]"
+            onClick={() => navigate(`/images/view?url=${encodeURIComponent(selectedSubclass.imageUrl!)}`)}
+          >
+            <img src={selectedSubclass.imageUrl} alt={selectedSubclass.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+          </div>
+        )}
+        <div className="flex-1 space-y-4">
+          <h2 className="h2-title text-gold uppercase underline decoration-gold/20 underline-offset-8">{selectedSubclass.name}</h2>
+          <BBCodeRenderer content={selectedSubclass.description} className="text-lg italic leading-relaxed opacity-90 font-sans" />
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderFeatureCard = (feature: any) => {
+    const isCollapsed = collapsedFeatures[feature.id] ?? false;
+    const isSubclass = !!feature.isFromSubclass;
+    return (
+      <div
+        key={feature.id}
+        ref={(el) => { featureRefs.current[feature.id] = el; }}
+        data-feature-id={feature.id}
+        className={`scroll-mt-24 rounded-lg border transition-colors ${
+          isSubclass ? 'border-gold/30 bg-gold/5' : 'border-gold/10 bg-transparent'
+        }`}
+      >
+        {/* Feature header — always visible, click to collapse */}
+        <button
+          type="button"
+          onClick={() => setCollapsedFeatures(prev => ({ ...prev, [feature.id]: !isCollapsed }))}
+          className="w-full flex items-baseline justify-between px-4 pt-3 pb-3 text-left group"
+        >
+          <div className="flex items-center gap-3">
+            {isSubclass && (
+              <span className="text-[8px] font-black uppercase tracking-widest text-gold/90 border border-gold/40 bg-gold/10 px-1.5 py-0.5 rounded shrink-0">
+                Subclass
+              </span>
+            )}
+            <h3 className="h3-title text-gold uppercase group-hover:text-white transition-colors">{feature.name}</h3>
+          </div>
+          <div className="flex items-center gap-3 shrink-0">
+            <span className="label-text text-ink/40">Level {feature.level}</span>
+            <ChevronDown className={`w-4 h-4 text-gold/40 transition-transform duration-200 ${isCollapsed ? '' : 'rotate-180'}`} />
+          </div>
+        </button>
+
+        {/* Feature body — collapsible */}
+        {!isCollapsed && (
+          <div className="px-4 pb-4 space-y-4">
+            <BBCodeRenderer content={feature.description} />
+            {(() => {
+              const allAdvs = [
+                ...(classData.advancements || []),
+                ...(selectedSubclass?.advancements || [])
+              ];
+              const featureAdvs = allAdvs.filter((a: any) => a.featureId === feature.id && a.type !== 'ScaleValue' && a.type !== 'Trait');
+              if (featureAdvs.length === 0) return null;
+              return (
+                <div className="space-y-4 pt-4 border-t border-gold/10">
+                  {featureAdvs.map((adv: any, idx: number) => {
+                    const isExpanded = expandedGroups[adv._id] || false;
+                    const advTitle = adv.title || adv.configuration?.title || adv.type;
+                    const isOptionGroup = adv.configuration?.choiceType === 'option-group' && adv.configuration?.optionGroupId;
+                    const hasChoices = (adv.type === 'ItemGrant' || adv.type === 'ItemChoice') &&
+                                       (adv.configuration?.pool?.length > 0 || isOptionGroup);
+                    return (
+                      <div key={idx} className="mt-4 space-y-4">
+                        {hasChoices ? (
+                          <>
+                            <button
+                              onClick={() => setExpandedGroups(prev => ({ ...prev, [adv._id]: !isExpanded }))}
+                              className={`flex items-center justify-between group w-full text-left bg-gold/5 hover:bg-gold/10 border border-gold/20 p-3 transition-colors ${isExpanded ? 'rounded-t border-b-0' : 'rounded'}`}
+                            >
+                              <div className="flex items-center gap-2 shrink-0">
+                                <BookOpen className="w-4 h-4 text-gold group-hover:drop-shadow-[0_0_8px_rgba(255,215,0,0.5)] transition-all" />
+                                <span className="text-xs font-bold uppercase tracking-widest text-gold group-hover:text-white transition-colors">{advTitle}</span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <span className="text-[9px] font-medium text-gold/50 uppercase">{adv.type}</span>
+                                <div className={`transform transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}>
+                                  <ChevronLeft className="w-4 h-4 text-gold -rotate-90 group-hover:text-white transition-colors" />
+                                </div>
+                              </div>
+                            </button>
+                            {isExpanded && (
+                              <div className="animate-in fade-in slide-in-from-top-2 duration-300 bg-gold/5 border border-gold/20 rounded-b p-4">
+                                {isOptionGroup ? (() => {
+                                  const groupId = adv.configuration.optionGroupId;
+                                  const exclusions = adv.configuration?.excludedOptionIds || [];
+                                  const groupItems = optionItems.filter((item: any) =>
+                                    item.groupId === groupId &&
+                                    (!item.classIds || item.classIds.length === 0 || item.classIds.includes(id)) &&
+                                    !(classData?.excludedOptionIds?.[groupId] || []).includes(item.id) &&
+                                    !exclusions.includes(item.id)
+                                  );
+                                  if (groupItems.length === 0) {
+                                    return <p className="text-xs text-ink/40 italic">No options available for this group.</p>;
+                                  }
+                                  return (
+                                    <ModularChoiceView
+                                      items={groupItems}
+                                      groupId={adv._id || groupId}
+                                      selectedId={selectedOptionItems[adv._id || groupId] || groupItems[0]?.id}
+                                      onSelect={(itemId) => setSelectedOptionItems(prev => ({ ...prev, [adv._id || groupId]: itemId }))}
+                                      sidebarWidth="240px"
+                                      maxHeight="350px"
+                                    />
+                                  );
+                                })() : (() => {
+                                  const poolIds = adv.configuration?.pool || [];
+                                  if (poolIds.length === 0) {
+                                    return <p className="text-xs text-ink/40 italic">No options available.</p>;
+                                  }
+                                  const poolItems = poolIds
+                                    .map((itemId: string) => allFeaturesWithSpellcasting.find((f: any) => f.id === itemId))
+                                    .filter(Boolean)
+                                    .map((f: any) => ({
+                                      id: f.id,
+                                      name: f.name,
+                                      description: f.description,
+                                      levelPrerequisite: f.level,
+                                      featureId: f.id
+                                    }));
+                                  if (poolItems.length === 0) {
+                                    return <p className="text-xs text-ink/40 italic">Features could not be found.</p>;
+                                  }
+                                  return (
+                                    <ModularChoiceView
+                                      items={poolItems}
+                                      groupId={adv._id || 'pool'}
+                                      selectedId={selectedOptionItems[adv._id || 'pool'] || poolItems[0]?.id}
+                                      onSelect={(itemId) => setSelectedOptionItems(prev => ({ ...prev, [adv._id || 'pool']: itemId }))}
+                                      sidebarWidth="240px"
+                                      maxHeight="350px"
+                                    />
+                                  );
+                                })()}
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="bg-gold/5 border border-gold/20 rounded p-3 flex flex-col gap-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-bold text-ink uppercase tracking-tight">{advTitle}</span>
+                              <span className="text-[9px] font-medium text-gold/60 uppercase">{adv.type}</span>
+                            </div>
+                            {adv.type === 'Trait' && (
+                              <p className="text-[10px] text-ink/60 italic">Gains proficiency in {adv.configuration?.type || 'Trait'}</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Jump rail (left) + feature cards (right) for the given filter. The rail
+  // groups features by level (plain text, no icons) and scroll-spies the level
+  // you're reading; it's sticky with its own scroll so the deepest levels stay
+  // reachable. Used by both the Class Features and Subclass tabs.
+  const renderFeaturesPanel = (filterMode: 'all' | 'class' | 'subclass') => {
+    const list = allFeaturesWithSpellcasting.filter((feature: any) => {
+      if (filterMode === 'class') return !feature.isFromSubclass;
+      if (filterMode === 'subclass') return !!feature.isFromSubclass;
+      return true;
+    });
+    if (list.length === 0) {
+      return <p className="text-ink/40 italic text-sm">No features to show.</p>;
+    }
+    const levelGroups: { level: number; features: any[] }[] = [];
+    for (const f of list) {
+      let g = levelGroups.find((x) => x.level === f.level);
+      if (!g) { g = { level: f.level, features: [] }; levelGroups.push(g); }
+      g.features.push(f);
+    }
+    return (
+      <div className="flex gap-6 items-start">
+        <nav className="hidden lg:block w-48 shrink-0 sticky top-24 max-h-[calc(100vh-8rem)] overflow-y-auto custom-scrollbar pr-1">
+          <button
+            type="button"
+            onClick={() => tabsTopRef.current?.scrollIntoView({ block: 'start' })}
+            className="mb-3 block w-full text-left label-text text-ink/40 hover:text-gold transition-colors"
+          >
+            Back to top
+          </button>
+          <div className="space-y-3">
+            {levelGroups.map((g) => {
+              const isActive = activeLevel === g.level;
+              return (
+                <div key={g.level} className={`pl-2 border-l-2 transition-colors ${isActive ? 'border-gold' : 'border-transparent'}`}>
+                  <div className={`flex items-baseline gap-1.5 transition-colors ${isActive ? 'text-gold' : 'text-ink/40'}`}>
+                    <span className="font-mono text-xs font-bold tabular-nums">{g.level}</span>
+                    <span className="label-text">Level {g.level}</span>
+                  </div>
+                  <div className="mt-1 space-y-px">
+                    {g.features.map((f: any) => (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => { setCollapsedFeatures(prev => ({ ...prev, [f.id]: false })); scrollToFeature(f.id); }}
+                        title={f.name}
+                        className={`flex items-center gap-1.5 w-full text-left text-[11px] leading-snug rounded px-1 py-0.5 transition-colors hover:bg-gold/10 ${f.isFromSubclass ? 'text-gold/80 hover:text-gold' : 'text-ink/55 hover:text-gold'}`}
+                      >
+                        <span className={`w-1 h-1 rounded-[1px] shrink-0 ${f.isFromSubclass ? 'bg-gold/70' : 'bg-ink/30'}`} />
+                        <span className="truncate">{f.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </nav>
+        <div className="space-y-3 flex-1 min-w-0">
+          {list.map((feature: any) => renderFeatureCard(feature))}
+        </div>
+      </div>
+    );
+  };
+
   const handleExportSlice = async (slice: "everything" | "skeleton" | "subclasses" | "features" | "unique-options") => {
     try {
       const data = await exportClassSemantic(id!, { fetchCollection, fetchDocument });
@@ -699,29 +993,29 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
           {isAdmin && (
             <>
               <DropdownMenu>
-                <DropdownMenuTrigger className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border border-gold/25 bg-transparent shadow-sm hover:bg-gold/15 hover:text-gold text-gold h-9 px-4 py-2 gap-2">
+                <DropdownMenuTrigger className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border border-gold/20 bg-transparent shadow-sm hover:bg-gold/10 hover:text-gold text-gold h-9 px-4 py-2 gap-2">
                   <Download className="w-4 h-4" /> Export
                 </DropdownMenuTrigger>
-                <DropdownMenuContent className="bg-card border-gold/25 shadow-xl" align="end">
-                  <DropdownMenuItem className="text-ink hover:bg-gold/15 hover:text-gold cursor-pointer" onClick={() => handleExportSlice('everything')}>
+                <DropdownMenuContent className="bg-card border-gold/20 shadow-xl" align="end">
+                  <DropdownMenuItem className="text-ink hover:bg-gold/10 hover:text-gold cursor-pointer" onClick={() => handleExportSlice('everything')}>
                     Export Everything
                   </DropdownMenuItem>
-                  <DropdownMenuItem className="text-ink hover:bg-gold/15 hover:text-gold cursor-pointer" onClick={() => handleExportSlice('skeleton')}>
+                  <DropdownMenuItem className="text-ink hover:bg-gold/10 hover:text-gold cursor-pointer" onClick={() => handleExportSlice('skeleton')}>
                     Export Class Skeleton
                   </DropdownMenuItem>
-                  <DropdownMenuItem className="text-ink hover:bg-gold/15 hover:text-gold cursor-pointer" onClick={() => handleExportSlice('subclasses')}>
+                  <DropdownMenuItem className="text-ink hover:bg-gold/10 hover:text-gold cursor-pointer" onClick={() => handleExportSlice('subclasses')}>
                     Export Subclasses
                   </DropdownMenuItem>
-                  <DropdownMenuItem className="text-ink hover:bg-gold/15 hover:text-gold cursor-pointer" onClick={() => handleExportSlice('features')}>
+                  <DropdownMenuItem className="text-ink hover:bg-gold/10 hover:text-gold cursor-pointer" onClick={() => handleExportSlice('features')}>
                     Export Features
                   </DropdownMenuItem>
-                  <DropdownMenuItem className="text-ink hover:bg-gold/15 hover:text-gold cursor-pointer" onClick={() => handleExportSlice('unique-options')}>
+                  <DropdownMenuItem className="text-ink hover:bg-gold/10 hover:text-gold cursor-pointer" onClick={() => handleExportSlice('unique-options')}>
                     Export Unique Options
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
               <Link to={`/compendium/classes/edit/${slug ?? id}`}>
-                <Button variant="outline" className="border-gold/25 text-gold gap-2 hover:bg-gold/15">
+                <Button variant="outline" className="border-gold/20 text-gold gap-2 hover:bg-gold/10">
                   <Edit className="w-4 h-4" /> Edit Class
                 </Button>
               </Link>
@@ -732,10 +1026,10 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
 
       <div className="space-y-8">
         {/* Header - Full Width */}
-        <div className="flex flex-col md:flex-row gap-8 border-b border-gold/15 pb-8">
+        <div className="flex flex-col md:flex-row gap-8 border-b border-gold/10 pb-8">
           {classData.imageUrl && (
             <div 
-              className="w-full md:w-64 h-64 shrink-0 rounded-lg overflow-hidden border border-gold/25 shadow-lg cursor-pointer transition-transform hover:scale-[1.02]"
+              className="w-full md:w-64 h-64 shrink-0 rounded-lg overflow-hidden border border-gold/20 shadow-lg cursor-pointer transition-transform hover:scale-[1.02]"
               onClick={() => navigate(`/images/view?url=${encodeURIComponent(classData.imageUrl!)}`)}
             >
               <img
@@ -749,7 +1043,7 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
           )}
           <div className="flex-1 space-y-4">
             <div className="flex items-center gap-3">
-              <Badge variant="outline" className="border-gold/35 text-gold bg-gold/5 px-2 py-0.5 label-text">
+              <Badge variant="outline" className="border-gold/30 text-gold bg-gold/5 px-2 py-0.5 label-text">
                 {source?.name || 'Unknown Source'}
               </Badge>
             </div>
@@ -763,12 +1057,12 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                 if (groupTags.length === 0) return null;
                 return (
                   <div key={group.id} className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-ink/35">{group.name}:</span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-ink/30">{group.name}:</span>
                     <div className="flex flex-wrap gap-1">
                       {groupTags.map(tag => (
                         <div 
                           key={tag.id} 
-                          className="flex items-center gap-1.5 px-2 py-0.5 border rounded-full text-[9px] font-black uppercase tracking-wider bg-gold/15 border-gold/45 text-gold"
+                          className="flex items-center gap-1.5 px-2 py-0.5 border rounded-full text-[9px] font-black uppercase tracking-wider bg-gold/10 border-gold/40 text-gold"
                         >
                           {tag.name}
                         </div>
@@ -789,42 +1083,42 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
         <div className="space-y-4">
           <div className="flex items-center gap-4">
             <h2 className="label-text text-gold shrink-0">The {classData.name} Table</h2>
-            <div className="h-px bg-gold/15 w-full" />
+            <div className="h-px bg-gold/10 w-full" />
           </div>
           
           {tableLoading ? (
-            <div className="h-64 flex flex-col items-center justify-center border border-gold/25 bg-card/50 backdrop-blur-sm rounded-lg space-y-4">
+            <div className="h-64 flex flex-col items-center justify-center border border-gold/20 bg-card/50 backdrop-blur-sm rounded-lg space-y-4">
               <div className="w-8 h-8 border-2 border-gold border-t-transparent rounded-full animate-spin" />
-              <span className="text-[10px] uppercase font-bold tracking-widest text-gold/65">Loading class table...</span>
+              <span className="text-[10px] uppercase font-bold tracking-widest text-gold/60">Loading class table...</span>
             </div>
           ) : (
             <motion.div 
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3 }}
-              className="overflow-x-auto border border-gold/25 bg-card/50 backdrop-blur-sm rounded-lg"
+              className="overflow-x-auto border border-gold/20 bg-card/50 backdrop-blur-sm rounded-lg"
             >
               <table className="w-full text-left border-collapse min-w-[800px] text-sm">
                 <thead>
-                  <tr className="border-b border-gold/25 bg-gold/5">
-                  <th className="p-1.5 label-text italic text-gold text-center w-10 border-r border-gold/15">Level</th>
-                  <th className="p-1.5 label-text italic text-gold text-center w-14 border-r border-gold/15">Proficiency Bonus</th>
-                  <th className="p-1.5 label-text italic text-gold border-r border-gold/15">Features</th>
+                  <tr className="border-b border-gold/20 bg-gold/5">
+                  <th className="p-1.5 label-text italic text-gold text-center w-10 border-r border-gold/10">Level</th>
+                  <th className="p-1.5 label-text italic text-gold text-center w-14 border-r border-gold/10">Proficiency Bonus</th>
+                  <th className="p-1.5 label-text italic text-gold border-r border-gold/10">Features</th>
                   {allScalingColumns.map(col => (
-                    <th key={col.id} className="p-1.5 label-text italic text-gold text-center border-r border-gold/15">
+                    <th key={col.id} className="p-1.5 label-text italic text-gold text-center border-r border-gold/10">
                       {col.name}
                     </th>
                   ))}
                   {hasAnySpellsKnown && (
                     <>
-                      <th className="p-1.5 label-text italic text-gold text-center border-r border-gold/15">Cantrips</th>
-                      <th className="p-1.5 label-text italic text-gold text-center border-r border-gold/15">Spells Known</th>
+                      <th className="p-1.5 label-text italic text-gold text-center border-r border-gold/10">Cantrips</th>
+                      <th className="p-1.5 label-text italic text-gold text-center border-r border-gold/10">Spells Known</th>
                     </>
                   )}
                   {hasAnyAltSpellcasting && (
                     <>
-                      <th className="p-1.5 label-text italic text-gold text-center border-r border-gold/15">Slot Count</th>
-                      <th className="p-1.5 label-text italic text-gold text-center border-r border-gold/15">Slot Level</th>
+                      <th className="p-1.5 label-text italic text-gold text-center border-r border-gold/10">Slot Count</th>
+                      <th className="p-1.5 label-text italic text-gold text-center border-r border-gold/10">Slot Level</th>
                     </>
                   )}
                   {hasAnySpellcasting && (
@@ -832,8 +1126,8 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                   )}
                 </tr>
                 {hasAnySpellcasting && (
-                  <tr className="border-b border-gold/15 bg-gold/5">
-                    <th colSpan={3 + allScalingColumns.length + (hasAnySpellsKnown ? 2 : 0) + (hasAnyAltSpellcasting ? 2 : 0)} className="border-r border-gold/15"></th>
+                  <tr className="border-b border-gold/10 bg-gold/5">
+                    <th colSpan={3 + allScalingColumns.length + (hasAnySpellsKnown ? 2 : 0) + (hasAnyAltSpellcasting ? 2 : 0)} className="border-r border-gold/10"></th>
                     {Array.from({ length: maxSpellLevel }, (_, i) => i + 1).map(lvl => (
                       <th key={lvl} className="p-1 label-text italic text-gold text-center w-6 border-r border-gold/5 last:border-r-0">
                         {lvl}{lvl === 1 ? 'st' : lvl === 2 ? 'nd' : lvl === 3 ? 'rd' : 'th'}
@@ -853,16 +1147,24 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
 
                   return (
                     <tr key={level} className="border-b border-gold/5 hover:bg-gold/5 transition-colors group">
-                      <td className="p-1.5 text-center font-mono text-ink/45 border-r border-gold/5">{level}</td>
-                      <td className="p-1.5 text-center font-mono text-ink/65 border-r border-gold/5">+{pb}</td>
+                      <td className="p-1.5 text-center font-mono text-ink/40 border-r border-gold/5">{level}</td>
+                      <td className="p-1.5 text-center font-mono text-ink/60 border-r border-gold/5">+{pb}</td>
                       <td className="p-1.5 border-r border-gold/5">
                         <div className="flex flex-wrap gap-1">
                           {levelFeatures.map(f => (
-                            <span key={f.id} className={`font-bold hover:underline cursor-help transition-colors ${f.isFromSubclass ? 'text-gold/85 italic' : 'text-gold'}`}>
+                            <span
+                              key={f.id}
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => jumpFromTable(f)}
+                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); jumpFromTable(f); } }}
+                              title={`Jump to ${f.name.split(' (')[0]}`}
+                              className={`font-bold hover:underline cursor-pointer transition-colors focus:outline-none focus-visible:underline ${f.isFromSubclass ? 'text-gold/80 italic' : 'text-gold'}`}
+                            >
                               {f.name.split(' (')[0]}{levelFeatures.indexOf(f) < levelFeatures.length - 1 ? ',' : ''}
                             </span>
                           ))}
-                          {levelFeatures.length === 0 && <span className="text-ink/25">—</span>}
+                          {levelFeatures.length === 0 && <span className="text-ink/20">—</span>}
                         </div>
                       </td>
                       {allScalingColumns.map(col => {
@@ -874,25 +1176,25 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                           }
                         }
                         return (
-                          <td key={col.id} className="p-1.5 text-center font-mono text-ink/85 border-r border-gold/5">
+                          <td key={col.id} className="p-1.5 text-center font-mono text-ink/80 border-r border-gold/5">
                             {displayValue}
                           </td>
                         );
                       })}
                       {hasAnySpellsKnown && (
                         <>
-                          <td className="p-1.5 text-center font-mono text-ink/85 border-r border-gold/5">
+                          <td className="p-1.5 text-center font-mono text-ink/80 border-r border-gold/5">
                             {levelKnown?.cantrips ?? levelKnown?.cantripsKnown ?? '—'}
                           </td>
-                          <td className="p-1.5 text-center font-mono text-ink/85 border-r border-gold/5">
+                          <td className="p-1.5 text-center font-mono text-ink/80 border-r border-gold/5">
                             {levelKnown?.spellsKnown ?? levelKnown?.spells ?? '—'}
                           </td>
                         </>
                       )}
                       {hasAnyAltSpellcasting && (
                         <>
-                          <td className="p-1.5 text-center font-mono text-ink/85 border-r border-gold/5">{levelAlt?.slotCount ?? '—'}</td>
-                          <td className="p-1.5 text-center font-mono text-ink/85 border-r border-gold/5">
+                          <td className="p-1.5 text-center font-mono text-ink/80 border-r border-gold/5">{levelAlt?.slotCount ?? '—'}</td>
+                          <td className="p-1.5 text-center font-mono text-ink/80 border-r border-gold/5">
                             {levelAlt?.slotLevel ? `${levelAlt.slotLevel}${levelAlt.slotLevel === 1 ? 'st' : levelAlt.slotLevel === 2 ? 'nd' : levelAlt.slotLevel === 3 ? 'rd' : 'th'}` : '—'}
                           </td>
                         </>
@@ -903,7 +1205,7 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                             const slots = levelScaling?.slots || [];
                             const paddedSlots = [...slots, ...Array(Math.max(0, maxSpellLevel - slots.length)).fill(0)].slice(0, maxSpellLevel);
                             return paddedSlots.map((sCount: number, idx: number) => (
-                              <td key={idx} className={`p-1 text-center font-mono border-r border-gold/5 last:border-r-0 ${sCount > 0 ? 'text-ink font-bold' : 'text-ink/15'}`}>
+                              <td key={idx} className={`p-1 text-center font-mono border-r border-gold/5 last:border-r-0 ${sCount > 0 ? 'text-ink font-bold' : 'text-ink/10'}`}>
                                 {sCount > 0 ? sCount : '—'}
                               </td>
                             ));
@@ -924,23 +1226,22 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
             class-meta sidebar so the spell content (browser-style
             row layout) gets the full content-area width. The grid
             collapses to a single column. */}
-        <div className={cn(
-          'grid gap-12 pt-8',
-          activeTab === 'spells' ? 'lg:grid-cols-1' : 'lg:grid-cols-4'
-        )}>
-          {/* Features / Tabs - Left (Large) */}
-          <div className={activeTab === 'spells' ? '' : 'lg:col-span-3'}>
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-              {/* ── Tab row: chevron tab bar (left) + Subclass picker
-                  (right). The subclass picker shares the row so the
-                  class-meta sidebar no longer needs to host it — see
-                  the bottom-of-page sidebar where the old Subclass
-                  section used to live. */}
-              <div className="flex items-end justify-between gap-4 mb-8 border-b border-gold/25">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <div className={cn(
+            'grid gap-x-12 pt-8',
+            activeTab === 'spells' ? 'lg:grid-cols-1' : 'lg:grid-cols-4'
+          )}>
+            {/* ── Tab row spans the FULL content width (col-span-4): chevron
+                tabs on the left, the subclass selector at the far right. Core
+                Traits begins in the row below it — mirrors how the Spell List
+                tab renders, so the selector never crowds the sidebar. */}
+            <div className={activeTab === 'spells' ? '' : 'lg:col-span-4'}>
+              <div ref={tabsTopRef} className="flex items-end justify-between gap-4 mb-8 border-b border-gold/20 scroll-mt-24">
                 <TabsList className="flex bg-transparent rounded-none p-0 h-auto gap-0 overflow-visible">
                   {(() => {
                     const tabs = [
                       { value: 'features', label: 'Class Features' },
+                      ...(selectedSubclass ? [{ value: 'subclass', label: selectedSubclass.name }] : []),
                       ...(classData.spellcasting?.hasSpellcasting
                         ? [{ value: 'spells', label: 'Spell List' }]
                         : []),
@@ -958,10 +1259,10 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                         }}
                         className={`
                           relative flex-none rounded-none border-none h-auto
-                          min-w-[160px] py-3 px-8 text-[10px] font-black uppercase tracking-[0.12em] text-center whitespace-nowrap
+                          py-3 px-7 text-[10px] font-black uppercase tracking-[0.12em] text-center whitespace-nowrap
                           transition-colors duration-150
-                          bg-gold/15 text-gold/55 hover:bg-gold/25 hover:text-gold/75
-                          data-active:bg-gold data-active:text-[var(--primary-foreground)] data-active:z-10
+                          bg-gold/10 text-gold/50 hover:bg-gold/20 hover:text-gold/70
+                          data-active:bg-gold data-active:text-black data-active:z-10
                           focus-visible:outline-none focus-visible:ring-0
                           ${i > 0 ? '-ml-3' : ''}
                         `}
@@ -980,14 +1281,14 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                     renders when the class actually defines subclasses;
                     classes with no subclasses skip the button entirely. */}
                 {subclasses.length > 0 && (
-                  <div className="pb-2 shrink-0">
+                  <div className="pb-2 shrink-0 ml-auto">
                     <Popover open={subclassPopoverOpen} onOpenChange={setSubclassPopoverOpen}>
                       <PopoverTrigger
                         className={cn(
                           'inline-flex items-center gap-2 h-8 px-3 rounded-md border text-[10px] font-black uppercase tracking-[0.12em] transition-colors whitespace-nowrap',
                           selectedSubclass
-                            ? 'bg-gold/15 border-gold/45 text-gold hover:bg-gold/25'
-                            : 'bg-transparent border-gold/35 text-gold/75 hover:bg-gold/15 hover:text-gold'
+                            ? 'bg-gold/15 border-gold/40 text-gold hover:bg-gold/25'
+                            : 'bg-transparent border-gold/30 text-gold/70 hover:bg-gold/10 hover:text-gold'
                         )}
                         title={selectedSubclass ? `Active ${classData.subclassTitle || 'Subclass'}: ${selectedSubclass.name}` : `Choose a ${classData.subclassTitle || 'Subclass'}`}
                       >
@@ -1003,7 +1304,7 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                         sideOffset={6}
                         className="w-72 p-1.5"
                       >
-                        <div className="px-2 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-gold/65">
+                        <div className="px-2 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-gold/60">
                           {classData.subclassTitle || 'Subclasses'}
                         </div>
                         <div className="max-h-72 overflow-y-auto custom-scrollbar space-y-0.5">
@@ -1014,7 +1315,7 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                                 setSelectedSubclassId(null);
                                 setSubclassPopoverOpen(false);
                               }}
-                              className="w-full text-left px-2 py-1.5 rounded text-[11px] font-bold uppercase tracking-widest text-ink/45 hover:bg-gold/5 hover:text-gold/75 transition-colors"
+                              className="w-full text-left px-2 py-1.5 rounded text-[11px] font-bold uppercase tracking-widest text-ink/40 hover:bg-gold/5 hover:text-gold/70 transition-colors"
                             >
                               Clear selection
                             </button>
@@ -1032,8 +1333,8 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                                 className={cn(
                                   'w-full text-left px-2 py-1.5 rounded text-sm font-bold uppercase tracking-tight transition-colors flex items-center justify-between gap-2',
                                   isSelected
-                                    ? 'bg-gold text-[var(--primary-foreground)]'
-                                    : 'text-ink hover:bg-gold/15 hover:text-gold'
+                                    ? 'bg-gold text-white'
+                                    : 'text-ink hover:bg-gold/10 hover:text-gold'
                                 )}
                               >
                                 <span className="truncate">{sub.name}</span>
@@ -1047,42 +1348,13 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                   </div>
                 )}
               </div>
+            </div>
+            <div className={activeTab === 'spells' ? '' : 'lg:col-span-3'}>
 
               {/* ── Features Tab ─────────────────────────────────────── */}
               <TabsContent value="features" className="space-y-8">
-                {selectedSubclass && (
-                  <div className="animate-in fade-in slide-in-from-top-4 duration-500 space-y-6 p-6 border border-gold/35 bg-gold/5 rounded-lg relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-2">
-                      <Badge variant="outline" className="border-gold/25 text-gold bg-gold/5 uppercase tracking-widest text-[10px]">
-                        Subclass Active
-                      </Badge>
-                    </div>
-
-                    <div className="flex flex-col md:flex-row gap-6">
-                      {selectedSubclass.imageUrl && (
-                        <div 
-                          className="w-full md:w-48 h-48 shrink-0 rounded-md overflow-hidden border border-gold/25 shadow-md cursor-pointer transition-transform hover:scale-[1.02]"
-                          onClick={() => navigate(`/images/view?url=${encodeURIComponent(selectedSubclass.imageUrl!)}`)}
-                        >
-                          <img
-                            src={selectedSubclass.imageUrl}
-                            alt={selectedSubclass.name}
-                            className="w-full h-full object-cover"
-                            referrerPolicy="no-referrer"
-                          />
-                        </div>
-                      )}
-                      <div className="flex-1 space-y-4">
-                        <h2 className="h2-title text-gold uppercase underline decoration-gold/25 underline-offset-8">
-                          {selectedSubclass.name}
-                        </h2>
-                        <BBCodeRenderer content={selectedSubclass.description} className="text-lg italic leading-relaxed opacity-90 font-sans" />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Filter toggle — only when a subclass is active */}
+                {/* Filter toggle — only when a subclass is active. The subclass
+                    banner/description lives only on the Subclass tab. */}
                 {selectedSubclass && (
                   <div className="flex items-center gap-2">
                     {(['all', 'class', 'subclass'] as const).map((f) => (
@@ -1092,8 +1364,8 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                         onClick={() => setFeatureFilter(f)}
                         className={`px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded transition-colors ${
                           featureFilter === f
-                            ? 'bg-gold/25 text-gold border border-gold/45'
-                            : 'text-ink/45 border border-gold/15 hover:border-gold/35 hover:text-gold/65'
+                            ? 'bg-gold/20 text-gold border border-gold/40'
+                            : 'text-ink/40 border border-gold/10 hover:border-gold/30 hover:text-gold/60'
                         }`}
                       >
                         {f === 'all' ? 'All Features' : f === 'class' ? 'Class Only' : 'Subclass Only'}
@@ -1102,179 +1374,18 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                   </div>
                 )}
 
-                <div className="space-y-3">
-                  {allFeaturesWithSpellcasting
-                    .filter((feature) => {
-                      if (featureFilter === 'class') return !feature.isFromSubclass;
-                      if (featureFilter === 'subclass') return !!feature.isFromSubclass;
-                      return true;
-                    })
-                    .map((feature) => {
-                      const linkedMappings = (classData.uniqueOptionMappings || []).filter((m: any) => m.featureId === feature.id);
-                      const isCollapsed = collapsedFeatures[feature.id] ?? false;
-                      const isSubclass = !!feature.isFromSubclass;
-
-                      return (
-                        <div
-                          key={feature.id}
-                          className={`rounded-lg border transition-colors ${
-                            isSubclass
-                              ? 'border-amber-500/30 bg-amber-500/5'
-                              : 'border-gold/15 bg-transparent'
-                          }`}
-                        >
-                          {/* Feature header — always visible, click to collapse */}
-                          <button
-                            type="button"
-                            onClick={() => setCollapsedFeatures(prev => ({ ...prev, [feature.id]: !isCollapsed }))}
-                            className="w-full flex items-baseline justify-between px-4 pt-3 pb-3 text-left group"
-                          >
-                            <div className="flex items-center gap-3">
-                              {isSubclass && (
-                                <span className="text-[8px] font-black uppercase tracking-widest text-amber-400/80 border border-amber-500/30 px-1.5 py-0.5 rounded shrink-0">
-                                  Subclass
-                                </span>
-                              )}
-                              <h3 className="h3-title text-gold uppercase group-hover:text-white transition-colors">{feature.name}</h3>
-                            </div>
-                            <div className="flex items-center gap-3 shrink-0">
-                              <span className="label-text text-ink/45">Level {feature.level}</span>
-                              <ChevronDown
-                                className={`w-4 h-4 text-gold/45 transition-transform duration-200 ${isCollapsed ? '' : 'rotate-180'}`}
-                              />
-                            </div>
-                          </button>
-
-                          {/* Feature body — collapsible */}
-                          {!isCollapsed && (
-                            <div className="px-4 pb-4 space-y-4">
-                              <BBCodeRenderer content={feature.description} />
-
-                              {/* Linked advancements */}
-                              {(() => {
-                                const allAdvs = [
-                                  ...(classData.advancements || []),
-                                  ...(selectedSubclass?.advancements || [])
-                                ];
-                                const featureAdvs = allAdvs.filter((a: any) => a.featureId === feature.id && a.type !== 'ScaleValue' && a.type !== 'Trait');
-                                if (featureAdvs.length === 0) return null;
-
-                                return (
-                                  <div className="space-y-4 pt-4 border-t border-gold/15">
-                                    {featureAdvs.map((adv: any, idx: number) => {
-                                      const isExpanded = expandedGroups[adv._id] || false;
-                                      const advTitle = adv.title || adv.configuration?.title || adv.type;
-                                      const isOptionGroup = adv.configuration?.choiceType === 'option-group' && adv.configuration?.optionGroupId;
-                                      const hasChoices = (adv.type === 'ItemGrant' || adv.type === 'ItemChoice') &&
-                                                         (adv.configuration?.pool?.length > 0 || isOptionGroup);
-
-                                      return (
-                                        <div key={idx} className="mt-4 space-y-4">
-                                          {hasChoices ? (
-                                            <>
-                                              <button
-                                                onClick={() => setExpandedGroups(prev => ({ ...prev, [adv._id]: !isExpanded }))}
-                                                className={`flex items-center justify-between group w-full text-left bg-gold/5 hover:bg-gold/15 border border-gold/25 p-3 transition-colors ${isExpanded ? 'rounded-t border-b-0' : 'rounded'}`}
-                                              >
-                                                <div className="flex items-center gap-2 shrink-0">
-                                                  <BookOpen className="w-4 h-4 text-gold group-hover:drop-shadow-[0_0_8px_rgba(255,215,0,0.5)] transition-all" />
-                                                  <span className="text-xs font-bold uppercase tracking-widest text-gold group-hover:text-white transition-colors">{advTitle}</span>
-                                                </div>
-                                                <div className="flex items-center gap-3">
-                                                  <span className="text-[9px] font-medium text-gold/55 uppercase">{adv.type}</span>
-                                                  <div className={`transform transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}>
-                                                    <ChevronLeft className="w-4 h-4 text-gold -rotate-90 group-hover:text-white transition-colors" />
-                                                  </div>
-                                                </div>
-                                              </button>
-
-                                              {isExpanded && (
-                                                <div className="animate-in fade-in slide-in-from-top-2 duration-300 bg-gold/5 border border-gold/25 rounded-b p-4">
-                                                  {isOptionGroup ? (() => {
-                                                    const groupId = adv.configuration.optionGroupId;
-                                                    const exclusions = adv.configuration?.excludedOptionIds || [];
-                                                    const groupItems = optionItems.filter((item: any) =>
-                                                      item.groupId === groupId &&
-                                                      (!item.classIds || item.classIds.length === 0 || item.classIds.includes(id)) &&
-                                                      !(classData?.excludedOptionIds?.[groupId] || []).includes(item.id) &&
-                                                      !exclusions.includes(item.id)
-                                                    );
-                                                    console.log("Rendering advancement option group", {
-                                                      adv, groupId, exclusions,
-                                                      groupItems: groupItems.length,
-                                                      totalOptionItems: optionItems.length,
-                                                      allGroupIds
-                                                    });
-                                                    if (groupItems.length === 0) {
-                                                      return <p className="text-xs text-ink/45 italic">No options available for this group.</p>;
-                                                    }
-                                                    return (
-                                                      <ModularChoiceView
-                                                        items={groupItems}
-                                                        groupId={adv._id || groupId}
-                                                        selectedId={selectedOptionItems[adv._id || groupId] || groupItems[0]?.id}
-                                                        onSelect={(itemId) => setSelectedOptionItems(prev => ({ ...prev, [adv._id || groupId]: itemId }))}
-                                                        sidebarWidth="240px"
-                                                        maxHeight="350px"
-                                                      />
-                                                    );
-                                                  })() : (() => {
-                                                    const poolIds = adv.configuration?.pool || [];
-                                                    if (poolIds.length === 0) {
-                                                      return <p className="text-xs text-ink/45 italic">No options available.</p>;
-                                                    }
-                                                    const poolItems = poolIds
-                                                      .map((itemId: string) => allFeaturesWithSpellcasting.find((f: any) => f.id === itemId))
-                                                      .filter(Boolean)
-                                                      .map((f: any) => ({
-                                                        id: f.id,
-                                                        name: f.name,
-                                                        description: f.description,
-                                                        levelPrerequisite: f.level,
-                                                        featureId: f.id
-                                                      }));
-
-                                                    if (poolItems.length === 0) {
-                                                      return <p className="text-xs text-ink/45 italic">Features could not be found.</p>;
-                                                    }
-                                                    return (
-                                                      <ModularChoiceView
-                                                        items={poolItems}
-                                                        groupId={adv._id || 'pool'}
-                                                        selectedId={selectedOptionItems[adv._id || 'pool'] || poolItems[0]?.id}
-                                                        onSelect={(itemId) => setSelectedOptionItems(prev => ({ ...prev, [adv._id || 'pool']: itemId }))}
-                                                        sidebarWidth="240px"
-                                                        maxHeight="350px"
-                                                      />
-                                                    );
-                                                  })()}
-                                                </div>
-                                              )}
-                                            </>
-                                          ) : (
-                                            <div className="bg-gold/5 border border-gold/25 rounded p-3 flex flex-col gap-1">
-                                              <div className="flex items-center justify-between">
-                                                <span className="text-[11px] font-bold text-ink uppercase tracking-tight">{advTitle}</span>
-                                                <span className="text-[9px] font-medium text-gold/65 uppercase">{adv.type}</span>
-                                              </div>
-                                              {adv.type === 'Trait' && (
-                                                <p className="text-[10px] text-ink/65 italic">Gains proficiency in {adv.configuration?.type || 'Trait'}</p>
-                                              )}
-                                            </div>
-                                          )}
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                );
-                              })()}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                </div>
+                {renderFeaturesPanel(featureFilter)}
               </TabsContent>
+
+              {/* ── Subclass Tab — only when a subclass is selected; shows just
+                  that subclass's features (no filter chips, since the tab itself
+                  is the subclass-only view). ──────────────────────────────── */}
+              {selectedSubclass && (
+                <TabsContent value="subclass" className="space-y-8">
+                  {renderSubclassBanner()}
+                  {renderFeaturesPanel('subclass')}
+                </TabsContent>
+              )}
 
               {/* ── Spell List Tab ────────────────────────────────────── */}
               {classData.spellcasting?.hasSpellcasting && (
@@ -1294,311 +1405,311 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                   <div className="space-y-4">
                     <div className="flex items-center gap-4">
                       <h2 className="font-bold uppercase tracking-[0.2em] text-gold shrink-0">Class Description</h2>
-                      <div className="h-px bg-gold/15 w-full" />
+                      <div className="h-px bg-gold/10 w-full" />
                     </div>
                     <BBCodeRenderer content={classData.description} className="body-text" />
                   </div>
                 ) : (
-                  <p className="text-ink/45 italic text-sm">No class description has been written yet.</p>
+                  <p className="text-ink/40 italic text-sm">No class description has been written yet.</p>
                 )}
 
                 {classData.lore && (
                   <div className="space-y-4">
                     <div className="flex items-center gap-4">
                       <h2 className="font-bold uppercase tracking-[0.2em] text-gold shrink-0">Class Lore</h2>
-                      <div className="h-px bg-gold/15 w-full" />
+                      <div className="h-px bg-gold/10 w-full" />
                     </div>
                     <BBCodeRenderer content={classData.lore} className="body-text" />
                   </div>
                 )}
 
                 {!classData.description && !classData.lore && (
-                  <p className="text-ink/45 italic text-sm">No lore has been written yet.</p>
+                  <p className="text-ink/40 italic text-sm">No lore has been written yet.</p>
                 )}
               </TabsContent>
 
               {/* ── Flavor Tab ───────────────────────────────────────── */}
               <TabsContent value="flavor">
-                <div className="flex flex-col items-center justify-center py-24 gap-4 text-center border border-dashed border-gold/25 rounded-lg">
-                  <p className="font-bold uppercase tracking-widest text-gold/45 text-sm">Under Construction</p>
-                  <p className="text-ink/45 text-xs max-w-xs">Flavor recommendations and roleplaying guidance will appear here.</p>
+                <div className="flex flex-col items-center justify-center py-24 gap-4 text-center border border-dashed border-gold/20 rounded-lg">
+                  <p className="font-bold uppercase tracking-widest text-gold/40 text-sm">Under Construction</p>
+                  <p className="text-ink/40 text-xs max-w-xs">Flavor recommendations and roleplaying guidance will appear here.</p>
                 </div>
               </TabsContent>
-            </Tabs>
-          </div>
+            </div>
 
-          {/* Sidebar - Right (Small).
-              Hidden on the Spell List tab because the spell content
-              uses a wider browser-row layout that benefits from the
-              full content-area width. Subclass picker lives in the
-              tab row above (see TabsList sibling) so it's reachable
-              from every tab, including this one. */}
-          {activeTab !== 'spells' && (
-          <div className="space-y-8">
-            {/* Core Traits */}
-            <div className="space-y-4">
-              <h2 className="font-bold uppercase tracking-[0.2em] text-gold border-b border-gold/15 pb-2">Core Traits</h2>
-              <div className="space-y-6">
-                <div className="space-y-1">
-                  <p className="uppercase font-bold tracking-widest text-ink/45">Hit Points</p>
-                  <p className="text-ink/85"><strong>Hit Die:</strong> D{classData.hitDie || 8} per level</p>
-                  <p className="text-ink/85"><strong>HP at 1st Level:</strong> {classData.hitDie || 8} + Con Modifier</p>
-                  <p className="text-ink/85"><strong>HP at Higher Levels:</strong> 1D{classData.hitDie || 8} (or {(classData.hitDie || 8) / 2 + 1}) + Con Modifier</p>
-                </div>
-
-                <div className="space-y-1">
-                  <p className="uppercase font-bold tracking-widest text-ink/45">Proficiencies</p>
-                  <p className="text-ink/85"><strong>Saving Throws:</strong> {(() => {
-                    const st = classData.proficiencies?.savingThrows;
-                    
-                    let fixedIds = (st?.fixedIds || []);
-                    if (!Array.isArray(fixedIds)) fixedIds = [];
-                    // Fallback for legacy class structures
-                    if (fixedIds.length === 0 && Array.isArray(classData.savingThrows)) {
-                      fixedIds = classData.savingThrows.map((id: string) => id.toUpperCase());
-                    } else {
-                      fixedIds = fixedIds.map((id: string) => id.toUpperCase());
-                    }
-                    
-                    // Fixed attributes
-                    let fixedNames = allAttributes
-                      .filter(a => fixedIds.includes((a.identifier || a.id).toUpperCase()))
-                      .map(a => a.name);
-
-                    if (fixedNames.length < fixedIds.length) {
-                      fixedNames = fixedIds.map((id: string) => {
-                        const found = allAttributes.find(a => (a.identifier || a.id).toUpperCase() === id.toUpperCase());
-                        return found ? found.name : id.charAt(0) + id.slice(1).toLowerCase();
-                      });
-                    }
-
-                    // Choice attribute
-                    let choiceStr = "";
-                    if (st?.choiceCount > 0 && st?.optionIds?.length > 0) {
-                      const options = st.optionIds.map((id: string) => {
-                        const attr = allAttributes.find(a => (a.identifier || a.id).toUpperCase() === id.toUpperCase());
-                        return attr ? attr.name : id;
-                      }).filter(Boolean);
-                      
-                      if (options.length > 0) {
-                        if (st.choiceCount === 1 && options.length === 2) {
-                          choiceStr = options.join(' or ');
-                        } else {
-                          const last = options.pop();
-                          choiceStr = `Choose ${st.choiceCount} from ${options.join(', ')}${options.length > 0 ? ', or ' : ''}${last}`;
-                        }
-                      }
-                    }
-
-                    const allParts = [...fixedNames];
-                    if (choiceStr) allParts.push(choiceStr);
-                    
-                    if (allParts.length > 1) {
-                      const last = allParts.pop();
-                      return allParts.join(', ') + ' and ' + last;
-                    }
-                    return allParts[0] || 'None';
-                  })()}</p>
-                  <p className="text-ink/85">
-                    <strong>Armor:</strong> {(() => {
-                      const prof = classData.proficiencies?.armor;
-                      const displayName = classData.proficiencies?.armorDisplayName;
-                      if (typeof prof === 'string') return prof;
-                      if (displayName) return displayName;
-                      if (prof && typeof prof === 'object') {
-                        const categoryIds = prof.categoryIds || [];
-                        const catNames = categoryIds.map((cid: string) => allArmorCategories.find(c => c.id === cid)?.name).filter(Boolean);
-                        
-                        const fixed = (prof.fixedIds || [])
-                          .filter((id: string) => {
-                            const item = allArmor.find(i => i.id === id);
-                            return !categoryIds.includes(item?.categoryId);
-                          })
-                          .map((id: string) => allArmor.find(i => i.id === id)?.name)
-                          .filter(Boolean);
-
-                        let parts = [];
-                        if (catNames.length > 0) parts.push(catNames.join(', '));
-                        if (fixed.length > 0) parts.push(fixed.join(', '));
-                        return parts.length > 0 ? parts.join(', ') : 'None';
-                      }
-                      return 'None';
-                    })()}
-                  </p>
-                  <p className="text-ink/85">
-                    <strong>Weapons:</strong> {(() => {
-                      const prof = classData.proficiencies?.weapons;
-                      const displayName = classData.proficiencies?.weaponsDisplayName;
-                      if (typeof prof === 'string') return prof;
-                      if (displayName) return displayName;
-                      if (prof && typeof prof === 'object') {
-                        const categoryIds = prof.categoryIds || [];
-                        const catNames = categoryIds.map((cid: string) => allWeaponCategories.find(c => c.id === cid)?.name).filter(Boolean);
-                        
-                        const fixed = (prof.fixedIds || [])
-                          .filter((id: string) => {
-                            const item = allWeapons.find(i => i.id === id);
-                            return !categoryIds.includes(item?.categoryId);
-                          })
-                          .map((id: string) => allWeapons.find(i => i.id === id)?.name)
-                          .filter(Boolean);
-
-                        let parts = [];
-                        if (catNames.length > 0) parts.push(catNames.join(', '));
-                        if (fixed.length > 0) parts.push(fixed.join(', '));
-                        return parts.length > 0 ? parts.join(', ') : 'None';
-                      }
-                      return 'None';
-                    })()}
-                  </p>
-                  <div className="text-ink/85">
-                    <strong>Tools:</strong> {(() => {
-                      const tools = classData.proficiencies?.tools;
-                      const displayName = classData.proficiencies?.toolsDisplayName;
-                      if (!tools || typeof tools === 'string') return tools || 'None';
-                      if (displayName) return displayName;
-                      
-                      const categoryIds = tools.categoryIds || [];
-                      const catNames = categoryIds.map((cid: string) => allToolCategories.find(c => c.id === cid)?.name).filter(Boolean);
-                      
-                      const fixed = (tools.fixedIds || [])
-                        .filter((id: string) => {
-                          const tool = allTools.find(t => t.id === id);
-                          return !categoryIds.includes(tool?.categoryId);
-                        })
-                        .map((id: string) => allTools.find(t => t.id === id)?.name)
-                        .filter(Boolean);
-                      const options = (tools.optionIds || []).map((id: string) => allTools.find(t => t.id === id)?.name).filter(Boolean);
-                      
-                      let parts = [];
-                      if (catNames.length > 0) parts.push(catNames.join(', '));
-                      if (fixed.length > 0) parts.push(fixed.join(', '));
-                      if (tools.choiceCount > 0 && options.length > 0) {
-                        parts.push(`Choose ${tools.choiceCount} from: ${options.join(', ')}`);
-                      }
-                      
-                      return parts.length > 0 ? parts.join('; ') : 'None';
-                    })()}
-                  </div>
-                  <div className="text-ink/85">
-                    <strong>Skills:</strong> {(() => {
-                      const skills = classData.proficiencies?.skills;
-                      if (!skills || typeof skills === 'string') return skills || 'None';
-                      
-                      const fixed = (skills.fixedIds || []).map((id: string) => allSkills.find(s => s.id === id)?.name).filter(Boolean);
-                      const options = (skills.optionIds || []).map((id: string) => allSkills.find(s => s.id === id)?.name).filter(Boolean);
-                      
-                      let parts = [];
-                      if (fixed.length > 0) parts.push(fixed.join(', '));
-                      if (skills.choiceCount > 0 && options.length > 0) {
-                        parts.push(`Choose ${skills.choiceCount} from: ${options.join(', ')}`);
-                      }
-                      
-                      return parts.length > 0 ? parts.join('; ') : 'None';
-                    })()}
-                  </div>
-                </div>
-
-                {((classData.primaryAbility?.length || 0) > 0 || (classData.primaryAbilityChoice?.length || 0) > 0 || classData.multiclassing) && (
+            {/* Sidebar - Right (Small).
+                Hidden on the Spell List tab because the spell content
+                uses a wider browser-row layout that benefits from the
+                full content-area width. Subclass picker lives in the
+                tab row above (see TabsList sibling) so it's reachable
+                from every tab, including this one. */}
+            {activeTab !== 'spells' && (
+            <div className="space-y-8">
+              {/* Core Traits */}
+              <div className="space-y-4">
+                <h2 className="font-bold uppercase tracking-[0.2em] text-gold border-b border-gold/10 pb-2">Core Traits</h2>
+                <div className="space-y-6">
                   <div className="space-y-1">
-                    <p className="uppercase font-bold tracking-widest text-ink/45">Multiclassing Requirements</p>
-                    <div className="prose-sm italic text-xs text-ink/85">
-                      {(() => {
-                        const fixedNames = (classData.primaryAbility || []).map((id: string) => {
-                          const attr = allAttributes.find(a => (a.identifier || a.id).toUpperCase() === id.toUpperCase());
-                          return attr ? attr.name : id.toUpperCase();
-                        });
-                        const choiceNames = (classData.primaryAbilityChoice || []).map((id: string) => {
-                          const attr = allAttributes.find(a => (a.identifier || a.id).toUpperCase() === id.toUpperCase());
-                          return attr ? attr.name : id.toUpperCase();
-                        });
+                    <p className="uppercase font-bold tracking-widest text-ink/40">Hit Points</p>
+                    <p className="text-ink/80"><strong>Hit Die:</strong> D{classData.hitDie || 8} per level</p>
+                    <p className="text-ink/80"><strong>HP at 1st Level:</strong> {classData.hitDie || 8} + Con Modifier</p>
+                    <p className="text-ink/80"><strong>HP at Higher Levels:</strong> 1D{classData.hitDie || 8} (or {(classData.hitDie || 8) / 2 + 1}) + Con Modifier</p>
+                  </div>
 
-                        if (fixedNames.length === 0 && choiceNames.length === 0) {
-                          return classData.multiclassing ? <BBCodeRenderer content={classData.multiclassing} /> : null;
-                        }
+                  <div className="space-y-1">
+                    <p className="uppercase font-bold tracking-widest text-ink/40">Proficiencies</p>
+                    <p className="text-ink/80"><strong>Saving Throws:</strong> {(() => {
+                      const st = classData.proficiencies?.savingThrows;
+                    
+                      let fixedIds = (st?.fixedIds || []);
+                      if (!Array.isArray(fixedIds)) fixedIds = [];
+                      // Fallback for legacy class structures
+                      if (fixedIds.length === 0 && Array.isArray(classData.savingThrows)) {
+                        fixedIds = classData.savingThrows.map((id: string) => id.toUpperCase());
+                      } else {
+                        fixedIds = fixedIds.map((id: string) => id.toUpperCase());
+                      }
+                    
+                      // Fixed attributes
+                      let fixedNames = allAttributes
+                        .filter(a => fixedIds.includes((a.identifier || a.id).toUpperCase()))
+                        .map(a => a.name);
 
-                        let requirementPart = "";
-                        if (fixedNames.length > 0) {
-                          requirementPart = fixedNames.join(" and ");
+                      if (fixedNames.length < fixedIds.length) {
+                        fixedNames = fixedIds.map((id: string) => {
+                          const found = allAttributes.find(a => (a.identifier || a.id).toUpperCase() === id.toUpperCase());
+                          return found ? found.name : id.charAt(0) + id.slice(1).toLowerCase();
+                        });
+                      }
+
+                      // Choice attribute
+                      let choiceStr = "";
+                      if (st?.choiceCount > 0 && st?.optionIds?.length > 0) {
+                        const options = st.optionIds.map((id: string) => {
+                          const attr = allAttributes.find(a => (a.identifier || a.id).toUpperCase() === id.toUpperCase());
+                          return attr ? attr.name : id;
+                        }).filter(Boolean);
+                      
+                        if (options.length > 0) {
+                          if (st.choiceCount === 1 && options.length === 2) {
+                            choiceStr = options.join(' or ');
+                          } else {
+                            const last = options.pop();
+                            choiceStr = `Choose ${st.choiceCount} from ${options.join(', ')}${options.length > 0 ? ', or ' : ''}${last}`;
+                          }
                         }
+                      }
+
+                      const allParts = [...fixedNames];
+                      if (choiceStr) allParts.push(choiceStr);
+                    
+                      if (allParts.length > 1) {
+                        const last = allParts.pop();
+                        return allParts.join(', ') + ' and ' + last;
+                      }
+                      return allParts[0] || 'None';
+                    })()}</p>
+                    <p className="text-ink/80">
+                      <strong>Armor:</strong> {(() => {
+                        const prof = classData.proficiencies?.armor;
+                        const displayName = classData.proficiencies?.armorDisplayName;
+                        if (typeof prof === 'string') return prof;
+                        if (displayName) return displayName;
+                        if (prof && typeof prof === 'object') {
+                          const categoryIds = prof.categoryIds || [];
+                          const catNames = categoryIds.map((cid: string) => allArmorCategories.find(c => c.id === cid)?.name).filter(Boolean);
                         
-                        if (choiceNames.length > 0) {
-                          if (requirementPart) requirementPart += " and ";
-                          requirementPart += choiceNames.join(" or ");
+                          const fixed = (prof.fixedIds || [])
+                            .filter((id: string) => {
+                              const item = allArmor.find(i => i.id === id);
+                              return !categoryIds.includes(item?.categoryId);
+                            })
+                            .map((id: string) => allArmor.find(i => i.id === id)?.name)
+                            .filter(Boolean);
+
+                          let parts = [];
+                          if (catNames.length > 0) parts.push(catNames.join(', '));
+                          if (fixed.length > 0) parts.push(fixed.join(', '));
+                          return parts.length > 0 ? parts.join(', ') : 'None';
                         }
+                        return 'None';
+                      })()}
+                    </p>
+                    <p className="text-ink/80">
+                      <strong>Weapons:</strong> {(() => {
+                        const prof = classData.proficiencies?.weapons;
+                        const displayName = classData.proficiencies?.weaponsDisplayName;
+                        if (typeof prof === 'string') return prof;
+                        if (displayName) return displayName;
+                        if (prof && typeof prof === 'object') {
+                          const categoryIds = prof.categoryIds || [];
+                          const catNames = categoryIds.map((cid: string) => allWeaponCategories.find(c => c.id === cid)?.name).filter(Boolean);
+                        
+                          const fixed = (prof.fixedIds || [])
+                            .filter((id: string) => {
+                              const item = allWeapons.find(i => i.id === id);
+                              return !categoryIds.includes(item?.categoryId);
+                            })
+                            .map((id: string) => allWeapons.find(i => i.id === id)?.name)
+                            .filter(Boolean);
 
-                        if (classData.multiclassing && classData.multiclassing.trim() !== '') {
-                          return <BBCodeRenderer content={classData.multiclassing} />;
+                          let parts = [];
+                          if (catNames.length > 0) parts.push(catNames.join(', '));
+                          if (fixed.length > 0) parts.push(fixed.join(', '));
+                          return parts.length > 0 ? parts.join(', ') : 'None';
                         }
-
-                        if (!requirementPart) return null;
-
-                        return (
-                          <div className="text-sm">
-                            You must have a {requirementPart} score of 13 or higher in order to multiclass in or out of this class.
-                          </div>
-                        );
+                        return 'None';
+                      })()}
+                    </p>
+                    <div className="text-ink/80">
+                      <strong>Tools:</strong> {(() => {
+                        const tools = classData.proficiencies?.tools;
+                        const displayName = classData.proficiencies?.toolsDisplayName;
+                        if (!tools || typeof tools === 'string') return tools || 'None';
+                        if (displayName) return displayName;
+                      
+                        const categoryIds = tools.categoryIds || [];
+                        const catNames = categoryIds.map((cid: string) => allToolCategories.find(c => c.id === cid)?.name).filter(Boolean);
+                      
+                        const fixed = (tools.fixedIds || [])
+                          .filter((id: string) => {
+                            const tool = allTools.find(t => t.id === id);
+                            return !categoryIds.includes(tool?.categoryId);
+                          })
+                          .map((id: string) => allTools.find(t => t.id === id)?.name)
+                          .filter(Boolean);
+                        const options = (tools.optionIds || []).map((id: string) => allTools.find(t => t.id === id)?.name).filter(Boolean);
+                      
+                        let parts = [];
+                        if (catNames.length > 0) parts.push(catNames.join(', '));
+                        if (fixed.length > 0) parts.push(fixed.join(', '));
+                        if (tools.choiceCount > 0 && options.length > 0) {
+                          parts.push(`Choose ${tools.choiceCount} from: ${options.join(', ')}`);
+                        }
+                      
+                        return parts.length > 0 ? parts.join('; ') : 'None';
+                      })()}
+                    </div>
+                    <div className="text-ink/80">
+                      <strong>Skills:</strong> {(() => {
+                        const skills = classData.proficiencies?.skills;
+                        if (!skills || typeof skills === 'string') return skills || 'None';
+                      
+                        const fixed = (skills.fixedIds || []).map((id: string) => allSkills.find(s => s.id === id)?.name).filter(Boolean);
+                        const options = (skills.optionIds || []).map((id: string) => allSkills.find(s => s.id === id)?.name).filter(Boolean);
+                      
+                        let parts = [];
+                        if (fixed.length > 0) parts.push(fixed.join(', '));
+                        if (skills.choiceCount > 0 && options.length > 0) {
+                          parts.push(`Choose ${skills.choiceCount} from: ${options.join(', ')}`);
+                        }
+                      
+                        return parts.length > 0 ? parts.join('; ') : 'None';
                       })()}
                     </div>
                   </div>
-                )}
 
-                <div className="space-y-1">
-                  <p className="uppercase font-bold tracking-widest text-ink/45">Tags</p>
-                  <div className="flex flex-wrap gap-1">
-                    {tagGroups.map(group => {
-                      const groupTags = allTags.filter(t => t.groupId === group.id && (classData.tagIds || []).includes(t.id));
-                      if (groupTags.length === 0) return null;
-                      return groupTags.map(tag => (
-                        <div 
-                          key={tag.id} 
-                          className="px-1.5 py-0.5 border rounded text-[8px] font-bold uppercase tracking-wider bg-gold/5 border-gold/25 text-gold/65"
-                        >
-                          {tag.name}
-                        </div>
-                      ));
-                    })}
-                    {(!classData.tagIds || classData.tagIds.length === 0) && <span className="text-xs text-ink/45 italic">None</span>}
-                  </div>
-                </div>
+                  {((classData.primaryAbility?.length || 0) > 0 || (classData.primaryAbilityChoice?.length || 0) > 0 || classData.multiclassing) && (
+                    <div className="space-y-1">
+                      <p className="uppercase font-bold tracking-widest text-ink/40">Multiclassing Requirements</p>
+                      <div className="prose-sm italic text-xs text-ink/80">
+                        {(() => {
+                          const fixedNames = (classData.primaryAbility || []).map((id: string) => {
+                            const attr = allAttributes.find(a => (a.identifier || a.id).toUpperCase() === id.toUpperCase());
+                            return attr ? attr.name : id.toUpperCase();
+                          });
+                          const choiceNames = (classData.primaryAbilityChoice || []).map((id: string) => {
+                            const attr = allAttributes.find(a => (a.identifier || a.id).toUpperCase() === id.toUpperCase());
+                            return attr ? attr.name : id.toUpperCase();
+                          });
 
-                {(classData.spellcasting?.hasSpellcasting || classData.spellcasting?.isRitualCaster) && (
-                  <div className="space-y-1">
-                    <p className="uppercase font-bold tracking-widest text-ink/45">Spellcasting</p>
-                    {classData.spellcasting?.hasSpellcasting && (
-                      <>
-                        <p className="text-ink/85"><strong>Ability:</strong> {(() => {
-                          const id = (classData.spellcasting.ability || '').toUpperCase();
-                          const attr = allAttributes.find(a => ((a.identifier || a.id).toUpperCase() === id));
-                          return attr ? attr.name : id;
-                        })()}</p>
-                        <p className="text-ink/85"><strong>Type:</strong> {classData.spellcasting.type ? classData.spellcasting.type.charAt(0).toUpperCase() + classData.spellcasting.type.slice(1) : ''}</p>
-                        <p className="text-ink/85"><strong>Level Gained:</strong> {classData.spellcasting.level}</p>
-                        {classData.spellcasting.spellsKnownFormula && (
-                          <p className="text-ink/85"><strong>Spells Known:</strong> {classData.spellcasting.spellsKnownFormula}</p>
-                        )}
-                      </>
-                    )}
-                    {classData.spellcasting?.isRitualCaster && (
-                      <div className="flex items-center gap-2 pt-1">
-                        <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all bg-gold border-gold`}>
-                          <Check className="w-3 h-3 text-[var(--primary-foreground)]" />
-                        </div>
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-ink/45">Ritual Caster</span>
+                          if (fixedNames.length === 0 && choiceNames.length === 0) {
+                            return classData.multiclassing ? <BBCodeRenderer content={classData.multiclassing} /> : null;
+                          }
+
+                          let requirementPart = "";
+                          if (fixedNames.length > 0) {
+                            requirementPart = fixedNames.join(" and ");
+                          }
+                        
+                          if (choiceNames.length > 0) {
+                            if (requirementPart) requirementPart += " and ";
+                            requirementPart += choiceNames.join(" or ");
+                          }
+
+                          if (classData.multiclassing && classData.multiclassing.trim() !== '') {
+                            return <BBCodeRenderer content={classData.multiclassing} />;
+                          }
+
+                          if (!requirementPart) return null;
+
+                          return (
+                            <div className="text-sm">
+                              You must have a {requirementPart} score of 13 or higher in order to multiclass in or out of this class.
+                            </div>
+                          );
+                        })()}
                       </div>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  )}
 
-                <div className="space-y-1">
-                  <p className="uppercase font-bold tracking-widest text-ink/45">Equipment</p>
-                  <BBCodeRenderer content={classData.startingEquipment || 'Standard starting equipment.'} className="prose-sm italic" />
+                  <div className="space-y-1">
+                    <p className="uppercase font-bold tracking-widest text-ink/40">Tags</p>
+                    <div className="flex flex-wrap gap-1">
+                      {tagGroups.map(group => {
+                        const groupTags = allTags.filter(t => t.groupId === group.id && (classData.tagIds || []).includes(t.id));
+                        if (groupTags.length === 0) return null;
+                        return groupTags.map(tag => (
+                          <div 
+                            key={tag.id} 
+                            className="px-1.5 py-0.5 border rounded text-[8px] font-bold uppercase tracking-wider bg-gold/5 border-gold/20 text-gold/60"
+                          >
+                            {tag.name}
+                          </div>
+                        ));
+                      })}
+                      {(!classData.tagIds || classData.tagIds.length === 0) && <span className="text-xs text-ink/40 italic">None</span>}
+                    </div>
+                  </div>
+
+                  {(classData.spellcasting?.hasSpellcasting || classData.spellcasting?.isRitualCaster) && (
+                    <div className="space-y-1">
+                      <p className="uppercase font-bold tracking-widest text-ink/40">Spellcasting</p>
+                      {classData.spellcasting?.hasSpellcasting && (
+                        <>
+                          <p className="text-ink/80"><strong>Ability:</strong> {(() => {
+                            const id = (classData.spellcasting.ability || '').toUpperCase();
+                            const attr = allAttributes.find(a => ((a.identifier || a.id).toUpperCase() === id));
+                            return attr ? attr.name : id;
+                          })()}</p>
+                          <p className="text-ink/80"><strong>Type:</strong> {classData.spellcasting.type ? classData.spellcasting.type.charAt(0).toUpperCase() + classData.spellcasting.type.slice(1) : ''}</p>
+                          <p className="text-ink/80"><strong>Level Gained:</strong> {classData.spellcasting.level}</p>
+                          {classData.spellcasting.spellsKnownFormula && (
+                            <p className="text-ink/80"><strong>Spells Known:</strong> {classData.spellcasting.spellsKnownFormula}</p>
+                          )}
+                        </>
+                      )}
+                      {classData.spellcasting?.isRitualCaster && (
+                        <div className="flex items-center gap-2 pt-1">
+                          <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all bg-gold border-gold`}>
+                            <Check className="w-3 h-3 text-white" />
+                          </div>
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Ritual Caster</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="space-y-1">
+                    <p className="uppercase font-bold tracking-widest text-ink/40">Equipment</p>
+                    <BBCodeRenderer content={classData.startingEquipment || 'Standard starting equipment.'} className="prose-sm italic" />
+                  </div>
                 </div>
               </div>
             </div>
+            )}
           </div>
-          )}
-        </div>
+        </Tabs>
       </div>
     </div>
   );
@@ -1607,10 +1718,10 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
 function TraitItem({ label, value, icon: Icon }: { label: string, value: string, icon: any }) {
   return (
     <div className="flex gap-3">
-      <Icon className="w-4 h-4 text-ink/25 shrink-0 mt-1" />
+      <Icon className="w-4 h-4 text-ink/20 shrink-0 mt-1" />
       <div>
-        <p className="font-bold text-ink/45 uppercase tracking-widest">{label}</p>
-        <p className="text-ink/85 leading-tight">{value || 'None'}</p>
+        <p className="font-bold text-ink/40 uppercase tracking-widest">{label}</p>
+        <p className="text-ink/80 leading-tight">{value || 'None'}</p>
       </div>
     </div>
   );
@@ -1764,16 +1875,16 @@ function ClassSpellListTab({
 
   if (rows.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 gap-4 text-center border border-dashed border-gold/25 rounded-lg">
-        <p className="font-bold uppercase tracking-widest text-gold/45 text-sm">No spells yet</p>
-        <p className="text-ink/45 text-xs max-w-xs">
+      <div className="flex flex-col items-center justify-center py-24 gap-4 text-center border border-dashed border-gold/20 rounded-lg">
+        <p className="font-bold uppercase tracking-widest text-gold/40 text-sm">No spells yet</p>
+        <p className="text-ink/40 text-xs max-w-xs">
           This class doesn't have any spells on its master list.
           {isAdmin && classId ? ' Use the Spell List Manager to add them.' : ''}
         </p>
         {isAdmin && classId ? (
           <Link
             to={`/compendium/spell-lists?class=${classId}`}
-            className="text-[10px] font-bold uppercase tracking-widest text-gold/75 hover:text-gold underline-offset-4 hover:underline"
+            className="text-[10px] font-bold uppercase tracking-widest text-gold/70 hover:text-gold underline-offset-4 hover:underline"
           >
             Open Spell List Manager →
           </Link>
@@ -1785,9 +1896,9 @@ function ClassSpellListTab({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <p className="text-xs text-ink/55">
+        <p className="text-xs text-ink/50">
           <span className="text-gold font-bold">{filteredEntries.length}</span>
-          {filteredEntries.length !== rows.length ? <> of <span className="text-gold/75">{rows.length}</span></> : null}
+          {filteredEntries.length !== rows.length ? <> of <span className="text-gold/70">{rows.length}</span></> : null}
           {' '}spell{rows.length === 1 ? '' : 's'} on this class's list
         </p>
         <div className="flex items-center gap-3">
@@ -1803,7 +1914,7 @@ function ClassSpellListTab({
           {classId ? (
             <Link
               to={`/compendium/spells?class=${classId}`}
-              className="text-[10px] font-bold uppercase tracking-widest text-gold/75 hover:text-gold underline-offset-4 hover:underline"
+              className="text-[10px] font-bold uppercase tracking-widest text-gold/70 hover:text-gold underline-offset-4 hover:underline"
               title="Open the full Spell List browser with this class's spells pre-filtered."
             >
               Browse in Compendium →
@@ -1812,7 +1923,7 @@ function ClassSpellListTab({
           {isAdmin && classId ? (
             <Link
               to={`/compendium/spell-lists?class=${classId}`}
-              className="text-[10px] font-bold uppercase tracking-widest text-gold/75 hover:text-gold underline-offset-4 hover:underline"
+              className="text-[10px] font-bold uppercase tracking-widest text-gold/70 hover:text-gold underline-offset-4 hover:underline"
             >
               Manage →
             </Link>
@@ -1832,7 +1943,7 @@ function ClassSpellListTab({
             the rows; the row list itself scrolls inside a max-height
             so the page never grows past the viewport when the class
             has hundreds of spells. */}
-        <Card className="border-gold/15 bg-card/50 overflow-hidden">
+        <Card className="border-gold/10 bg-card/50 overflow-hidden">
           <CardContent className="p-0">
             {filteredEntries.length === 0 ? (
               <div className="px-8 py-20 text-center text-ink/45">
@@ -1840,9 +1951,9 @@ function ClassSpellListTab({
               </div>
             ) : (
               <>
-                <div className="border-b border-gold/15 bg-background/35">
+                <div className="border-b border-gold/10 bg-background/35">
                   <div
-                    className="grid gap-2 px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.18em] text-gold/75 items-center"
+                    className="grid gap-2 px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.18em] text-gold/70 items-center"
                     style={{ gridTemplateColumns: gridTemplate }}
                   >
                     {SPELL_LIST_COLS.map(col => {
@@ -1856,7 +1967,7 @@ function ClassSpellListTab({
                           className={cn(
                             'flex items-center gap-1 transition-colors',
                             isName ? 'justify-start' : 'justify-center',
-                            isActive ? 'text-gold' : 'hover:text-gold/95',
+                            isActive ? 'text-gold' : 'hover:text-gold/90',
                           )}
                           title={`Sort by ${SPELL_LIST_COL_LABELS[col]}${isActive ? ` (${sortDir})` : ''}`}
                         >
@@ -1919,7 +2030,7 @@ function ClassSpellListTab({
                         <div className="text-xs text-ink/75 text-center truncate" title={rangeLabel}>
                           {rangeLabel}
                         </div>
-                        <div className="text-xs font-bold text-gold/85 text-center truncate">
+                        <div className="text-xs font-bold text-gold/80 text-center truncate">
                           {sourceLabel}
                         </div>
                       </button>
@@ -1931,7 +2042,7 @@ function ClassSpellListTab({
           </CardContent>
         </Card>
 
-        <Card className="border-gold/25 bg-card/50 overflow-hidden self-start">
+        <Card className="border-gold/20 bg-card/50 overflow-hidden self-start">
           <CardContent className="p-0">
             <SpellDetailPanel
               spellId={previewSpellId}

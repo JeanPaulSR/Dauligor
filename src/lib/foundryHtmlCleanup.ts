@@ -33,6 +33,9 @@
  *   - `@TYPE[name|src|display]`   → `display`
  *   - `@UUID[uuid]{display}`      → `display`
  *   - `@UUID[uuid]`               → `uuid`
+ *   - `slug{Display}`            → `Display` (brace-label artifact left behind
+ *                                  when a `@type[…]{Display}` / `&Reference[…]{Display}`
+ *                                  enricher's brackets are consumed above)
  *   - Sanitise data-* and class= attrs except ref-* cross-references
  *   - Drop empty `<p>` wrappers
  *
@@ -102,6 +105,31 @@ export function cleanFoundryHtml(html: string, opts: FoundryCleanupOptions = {})
     if (parts.length >= 3) return parts[parts.length - 1];
     return parts[0];
   });
+
+  // 5etools / plutonium `&Reference[key=Value]` cross-reference enricher
+  // (and any `&Word[…]` form). Arrives HTML-escaped as `&amp;Reference[…]`.
+  // Resolve to the value after `=` (or the whole bracket content), first
+  // pipe-segment only — so `&amp;Reference[skill=History]` → `History`,
+  // `&amp;Reference[condition=frightened]` → `frightened`. Without this the
+  // raw token leaks as literal text; it's pervasive in imported 5etools
+  // backgrounds / species (and harmless no-op for content that lacks it).
+  out = out.replace(/&(?:amp;)?[a-zA-Z][a-zA-Z0-9]*\[([^\]]+)\]/giu, (_match, content) => {
+    const raw = String(content).trim();
+    const eq = raw.indexOf('=');
+    const val = (eq >= 0 ? raw.slice(eq + 1) : raw).trim();
+    return val.split('|')[0].trim();
+  });
+
+  // Residual `slug{Display}` artifact. The reference enrichers above carry
+  // their human label in trailing braces (`@skill[…]{Sleight of Hand}`,
+  // `&Reference[skill=sleightOfHand]{Sleight of Hand}`), but those passes
+  // consume only the bracketed part and leave the braces glued to the slug:
+  // `sleightOfHand{Sleight of Hand}`. Collapse to the brace text — the label
+  // is the readable bit. Requires a word character immediately before `{`, so
+  // it can't touch a real Dauligor `…]{display}` reference (those become <a>
+  // via bbcodeToHtml before this runs on the display path) or a `{{handlebars}}`
+  // / `[[/r {dice}]]` form (no word glued to the brace).
+  out = out.replace(/[A-Za-z][A-Za-z0-9]*\{([^{}]+)\}/gu, '$1');
 
   // Strip Foundry's noise attributes but preserve Dauligor's own
   // cross-reference markers (data-ref-* and class names containing

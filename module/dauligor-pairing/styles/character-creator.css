@@ -1,0 +1,601 @@
+/* ============================================================================
+ * dauligor-pairing — character-creator
+ * Split-style per-window block. See docs/styles-guide.md for the
+ * component → file map. Load order is fixed in module.json.
+ *
+ * Follows the house conventions:
+ *   - Window model (docs/styles-guide.md "Window model"): the shell is
+ *     height:100% + min-height:0 and fills the fixed-height, flex-column
+ *     content box; the tab bar/footer are flex:0 0 auto, the body is
+ *     flex:1 1 auto + min-height:0 + overflow:auto, and the section/picker
+ *     columns scroll via the same min-height:0 chain.
+ *   - UI is a radial hub: a "Create" tab with a wheel (center = Ability
+ *     Scores; wedges = SECTIONS) + a "Character" review tab. Clicking a
+ *     wedge opens that section as a panel (back-to-hub). See the app's
+ *     _renderHub / _renderSection.
+ *   - Button APPEARANCE is the canonical button in base.css
+ *     (`.dauligor-character-creator__button` is listed there); only the
+ *     icon+label LAYOUT and the --primary/--ghost variants live here.
+ *   - The bg/race/class preview reuses the shared `.dauligor-detail`
+ *     component (base.css) — this file adds nothing for it.
+ *   - Inputs/selects: square corners, panel bg, token border (matches the
+ *     import wizard). Rows: square, hover rgba-white .04, selected via the
+ *     `inset 3px` accent stripe the wizard/class-browser/spell-manager rows
+ *     all use. Colors via tokens / the `rgba(var(--…-tint), α)` pattern.
+ * ========================================================================== */
+
+.dauligor-character-creator__shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  color: var(--dauligor-text);
+}
+
+/* ── Tab bar ──────────────────────────────────────────────────────── */
+
+.dauligor-character-creator__tabbar {
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--dauligor-border);
+  padding: 8px 10px 0;
+}
+.dauligor-character-creator__tabs { display: flex; gap: 4px; }
+.dauligor-character-creator__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border: 1px solid var(--dauligor-btn-border);
+  border-bottom: none;
+  border-radius: 0;
+  background: var(--dauligor-btn-bg);
+  color: var(--dauligor-text-muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.dauligor-character-creator__tab i { opacity: 0.7; }
+.dauligor-character-creator__tab:hover { background: var(--dauligor-btn-hover-bg); color: var(--dauligor-text); }
+.dauligor-character-creator__tab--active {
+  color: var(--dauligor-text);
+  background: var(--dauligor-panel-alt);
+  border-color: var(--dauligor-btn-border-hover);
+  box-shadow: inset 0 2px 0 var(--dauligor-accent);
+}
+
+/* ── Section panel (a chosen wheel section, with Back-to-hub) ──────── */
+
+.dauligor-character-creator__section {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.dauligor-character-creator__section-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.dauligor-character-creator__section-title {
+  margin: 0;
+  font-size: 18px;
+  color: var(--dauligor-accent-strong);
+}
+.dauligor-character-creator__section-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* ── Radial hub (the wheel) ───────────────────────────────────────── */
+
+.dauligor-character-creator__hub {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  padding: 8px;
+}
+.dauligor-character-creator__wheel {
+  position: relative;
+  width: min(520px, 68vh);
+  aspect-ratio: 1 / 1;
+}
+.dauligor-character-creator__wheel-svg { display: block; width: 100%; height: 100%; }
+
+.dauligor-character-creator__wedge {
+  fill: var(--dauligor-panel-alt);
+  stroke: var(--dauligor-border);
+  stroke-width: 2;
+  cursor: pointer;
+  transition: fill 0.12s ease;
+}
+.dauligor-character-creator__wedge:hover { fill: var(--dauligor-panel-soft); }
+.dauligor-character-creator__wedge--done {
+  fill: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.22);
+  stroke: var(--dauligor-btn-border-hover);
+}
+.dauligor-character-creator__wedge--done:hover { fill: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.32); }
+
+.dauligor-character-creator__wedge-label,
+.dauligor-character-creator__wedge-choice {
+  pointer-events: none;
+  fill: var(--dauligor-text);
+}
+.dauligor-character-creator__wedge-label { font-size: 15px; font-weight: 600; }
+.dauligor-character-creator__wedge-choice { font-size: 12px; fill: var(--dauligor-accent-strong); }
+
+.dauligor-character-creator__wheel-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 34%;
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+  border: 2px solid var(--dauligor-btn-border-hover);
+  background: var(--dauligor-panel);
+  color: var(--dauligor-text);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.dauligor-character-creator__wheel-center:hover { background: var(--dauligor-btn-hover-bg); }
+.dauligor-character-creator__wheel-center.is-done { border-color: var(--dauligor-success); }
+.dauligor-character-creator__wheel-center-title {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--dauligor-accent-strong);
+}
+.dauligor-character-creator__wheel-center-sub { font-size: 11px; color: var(--dauligor-text-muted); }
+.dauligor-character-creator__wheel-center.is-done .dauligor-character-creator__wheel-center-sub { color: var(--dauligor-success); }
+
+/* ── Body ─────────────────────────────────────────────────────────── */
+
+.dauligor-character-creator__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 18px;
+}
+
+.dauligor-character-creator__hint { color: var(--dauligor-text-muted); font-size: 12px; margin: 10px 0 0; }
+.dauligor-character-creator__warn { color: var(--dauligor-danger); font-style: normal; }
+.dauligor-character-creator__empty,
+.dauligor-character-creator__loading {
+  color: var(--dauligor-text-muted);
+  padding: 18px;
+  text-align: center;
+  font-size: 13px;
+}
+.dauligor-character-creator__loading i { margin-right: 6px; }
+
+/* ── Buttons (appearance from base.css; only layout + variants here) ── */
+
+.dauligor-character-creator__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.dauligor-character-creator__button--primary {
+  background: var(--dauligor-btn-hover-bg);
+  border-color: var(--dauligor-btn-border-hover);
+}
+.dauligor-character-creator__button--ghost { background: transparent; }
+
+/* ── Ability step ─────────────────────────────────────────────────── */
+
+.dauligor-character-creator__mode-tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+.dauligor-character-creator__mode-tab {
+  flex: 1 1 0;
+  min-height: 36px;
+  border: 1px solid var(--dauligor-btn-border);
+  border-radius: 0;
+  background: var(--dauligor-btn-bg);
+  color: var(--dauligor-text-muted);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+.dauligor-character-creator__mode-tab i { margin-right: 6px; opacity: 0.7; }
+.dauligor-character-creator__mode-tab:hover {
+  border-color: var(--dauligor-btn-border-hover);
+  background: var(--dauligor-btn-hover-bg);
+}
+.dauligor-character-creator__mode-tab--active {
+  color: var(--dauligor-text);
+  border-color: var(--dauligor-btn-border-hover);
+  background: var(--dauligor-btn-hover-bg);
+  box-shadow: inset 0 -2px 0 var(--dauligor-accent);
+}
+
+.dauligor-character-creator__budget {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px;
+  border: 1px solid var(--dauligor-border);
+  border-radius: 8px;
+  background: var(--dauligor-panel-alt);
+  margin-bottom: 12px;
+}
+.dauligor-character-creator__budget--over { border-color: var(--dauligor-danger); }
+.dauligor-character-creator__budget-num { font-size: 22px; font-weight: 700; color: var(--dauligor-accent-strong); }
+.dauligor-character-creator__budget--over .dauligor-character-creator__budget-num { color: var(--dauligor-danger); }
+.dauligor-character-creator__budget-label { font-size: 12px; color: var(--dauligor-text-muted); }
+
+.dauligor-character-creator__ability-grid,
+.dauligor-character-creator__assign-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dauligor-character-creator__assign-grid h4 { margin: 6px 0; color: var(--dauligor-accent-strong); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
+
+.dauligor-character-creator__ability-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--dauligor-border);
+  border-radius: 0;
+  background: var(--dauligor-panel-alt);
+}
+.dauligor-character-creator__ability-label { flex: 1 1 auto; font-weight: 600; }
+.dauligor-character-creator__ability-label small { color: var(--dauligor-text-muted); font-weight: 400; margin-left: 4px; }
+.dauligor-character-creator__ability-value { min-width: 26px; text-align: center; font-size: 17px; font-weight: 700; }
+.dauligor-character-creator__ability-cost { min-width: 48px; text-align: right; color: var(--dauligor-text-muted); font-size: 12px; }
+
+.dauligor-character-creator__spin-group { display: inline-flex; align-items: center; gap: 8px; }
+.dauligor-character-creator__spin {
+  width: 26px; height: 26px;
+  border: 1px solid var(--dauligor-btn-border);
+  border-radius: 0;
+  background: var(--dauligor-btn-bg);
+  color: var(--dauligor-text);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.dauligor-character-creator__spin:hover:not(:disabled) {
+  border-color: var(--dauligor-btn-border-hover);
+  background: var(--dauligor-btn-hover-bg);
+}
+.dauligor-character-creator__spin:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.dauligor-character-creator__assign-select,
+.dauligor-character-creator__search,
+.dauligor-character-creator__manual-row input {
+  height: 28px;
+  border: 1px solid var(--dauligor-border);
+  border-radius: 0;
+  background: var(--dauligor-panel);
+  color: var(--dauligor-text);
+  padding: 0 8px;
+  font-size: 12px;
+}
+.dauligor-character-creator__assign-select { min-width: 70px; }
+
+/* roll pool */
+.dauligor-character-creator__rollpool-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+.dauligor-character-creator__manual { flex: 1 1 320px; }
+.dauligor-character-creator__manual label { display: block; font-size: 12px; color: var(--dauligor-text-muted); margin-bottom: 4px; }
+.dauligor-character-creator__manual-row { display: flex; gap: 6px; }
+.dauligor-character-creator__manual-row input { flex: 1 1 auto; }
+
+.dauligor-character-creator__rollpool-sets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.dauligor-character-creator__rollset {
+  position: relative;
+  border: 1px solid var(--dauligor-border);
+  border-left: 3px solid transparent;
+  border-radius: 0;
+  background: var(--dauligor-panel-alt);
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.dauligor-character-creator__rollset:hover { background: rgba(255, 255, 255, 0.04); }
+.dauligor-character-creator__rollset--selected {
+  border-left-color: var(--dauligor-accent);
+  background: rgba(255, 255, 255, 0.08);
+}
+.dauligor-character-creator__rollset-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.dauligor-character-creator__rollset-owner { font-size: 11px; color: var(--dauligor-text-muted); }
+.dauligor-character-creator__rollset-total { font-size: 16px; font-weight: 700; color: var(--dauligor-accent-strong); }
+.dauligor-character-creator__rollset-dice { display: flex; flex-wrap: wrap; gap: 4px; }
+.dauligor-character-creator__die {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px; height: 24px;
+  border: 1px solid var(--dauligor-border);
+  background: var(--dauligor-panel);
+  font-size: 13px;
+  font-weight: 600;
+}
+.dauligor-character-creator__rollset-remove {
+  position: absolute;
+  top: 4px; right: 4px;
+  width: 18px; height: 18px;
+  border: none;
+  background: transparent;
+  color: var(--dauligor-text-muted);
+  cursor: pointer;
+  font-size: 11px;
+}
+.dauligor-character-creator__rollset-remove:hover { color: var(--dauligor-danger); }
+
+/* ── Picker (background / race / class) ───────────────────────────── */
+
+.dauligor-character-creator__picker {
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) 1fr;
+  gap: 14px;
+  height: 100%;
+  min-height: 0;
+}
+.dauligor-character-creator__picker-list-col { display: flex; flex-direction: column; min-height: 0; }
+.dauligor-character-creator__search { margin-bottom: 8px; }
+.dauligor-character-creator__picker-list {
+  flex: 1 1 auto;
+  overflow: auto;
+  border: 1px solid var(--dauligor-border);
+  border-radius: 8px;
+  background: var(--dauligor-panel-alt);
+}
+
+.dauligor-character-creator__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.08);
+  border-left: 3px solid transparent;
+  color: var(--dauligor-text);
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.1s ease, border-color 0.1s ease;
+}
+.dauligor-character-creator__row:hover { background: rgba(255, 255, 255, 0.04); }
+.dauligor-character-creator__row--selected {
+  background: rgba(255, 255, 255, 0.08);
+  border-left-color: var(--dauligor-accent);
+}
+.dauligor-character-creator__row-img,
+.dauligor-character-creator__row-noimg {
+  width: 28px; height: 28px;
+  flex: 0 0 auto;
+  object-fit: cover;
+  border: 1px solid var(--dauligor-border);
+  background: rgba(0, 0, 0, 0.3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dauligor-text-muted);
+}
+.dauligor-character-creator__row-name { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dauligor-character-creator__row-tag {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--dauligor-text-muted);
+  border: 1px solid var(--dauligor-border);
+  padding: 1px 5px;
+}
+.dauligor-character-creator__picker-detail { min-height: 0; overflow: auto; }
+
+/* ── Class preview (module-themed port of the app's ClassPreviewPane) ── */
+
+.dauligor-character-creator__cp { display: flex; flex-direction: column; gap: 14px; }
+
+.dauligor-character-creator__cp-header {
+  position: relative;
+  border: 1px solid var(--dauligor-border);
+  border-radius: 8px;
+  background-color: var(--dauligor-panel-alt);
+  background-size: cover;
+  background-position: center 25%;
+  padding: 14px 16px;
+  min-height: 84px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.dauligor-character-creator__cp-heading { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.dauligor-character-creator__cp-name { margin: 0; font-size: 24px; color: #f0e8d8; }
+.dauligor-character-creator__cp-source { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dauligor-text-muted); }
+.dauligor-character-creator__cp-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+.dauligor-character-creator__cp-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--dauligor-accent-strong);
+  border: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.5);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.16);
+  padding: 2px 8px;
+}
+
+.dauligor-character-creator__cp-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(170px, 220px);
+  gap: 16px;
+  align-items: start;
+}
+.dauligor-character-creator__cp-main { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+.dauligor-character-creator__cp-aside { display: flex; flex-direction: column; gap: 12px; }
+
+.dauligor-character-creator__cp-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--dauligor-border);
+  border-radius: 8px;
+  background: var(--dauligor-panel-alt);
+}
+.dauligor-character-creator__cp-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.dauligor-character-creator__cp-table th {
+  position: sticky;
+  top: 0;
+  background: #2b2b2b;
+  color: var(--dauligor-accent-strong);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-style: italic;
+  text-align: center;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--dauligor-border);
+  border-right: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.12);
+  white-space: nowrap;
+}
+.dauligor-character-creator__cp-table th:nth-child(3) { text-align: left; }
+.dauligor-character-creator__cp-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.08);
+  border-right: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.06);
+}
+.dauligor-character-creator__cp-table tr:hover td { background: rgba(255, 255, 255, 0.03); }
+.dauligor-character-creator__cp-num {
+  text-align: center;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  color: var(--dauligor-text-muted);
+  white-space: nowrap;
+}
+.dauligor-character-creator__cp-feats { color: var(--dauligor-accent-strong); font-weight: 600; }
+.dauligor-character-creator__cp-dash { color: var(--dauligor-text-muted); opacity: 0.4; font-weight: 400; }
+
+.dauligor-character-creator__cp-section p { margin: 4px 0 0; font-size: 12.5px; line-height: 1.55; color: var(--dauligor-text); }
+
+.dauligor-character-creator__cp-side {
+  border: 1px solid var(--dauligor-border);
+  border-radius: 8px;
+  background: var(--dauligor-panel-alt);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dauligor-character-creator__cp-side-title {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--dauligor-accent-strong);
+  border-bottom: 1px solid var(--dauligor-border);
+  padding-bottom: 5px;
+}
+.dauligor-character-creator__cp-prof { display: flex; flex-direction: column; gap: 1px; font-size: 12px; }
+.dauligor-character-creator__cp-prof-key { font-size: 10px; text-transform: uppercase; font-weight: 700; color: var(--dauligor-text-muted); }
+.dauligor-character-creator__cp-prof span:last-child { color: var(--dauligor-text); }
+
+.dauligor-character-creator__cp-subs,
+.dauligor-character-creator__cp-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.dauligor-character-creator__cp-sub,
+.dauligor-character-creator__cp-tag {
+  font-size: 11px;
+  border: 1px solid var(--dauligor-border);
+  background: var(--dauligor-panel);
+  padding: 1px 7px;
+  color: var(--dauligor-text);
+}
+.dauligor-character-creator__cp-tag { color: var(--dauligor-text-muted); }
+
+/* ── Stub (items) ─────────────────────────────────────────────────── */
+
+.dauligor-character-creator__stub {
+  max-width: 560px;
+  margin: 24px auto;
+  text-align: center;
+  color: var(--dauligor-text-muted);
+}
+.dauligor-character-creator__stub > i { font-size: 40px; opacity: 0.4; }
+.dauligor-character-creator__stub h3 { color: var(--dauligor-text); margin: 12px 0 8px; }
+
+/* ── Review ───────────────────────────────────────────────────────── */
+
+.dauligor-character-creator__review { display: flex; flex-direction: column; gap: 10px; max-width: 680px; margin: 0 auto; }
+.dauligor-character-creator__review-target {
+  color: var(--dauligor-text-muted);
+  padding: 8px 12px;
+  border: 1px dashed var(--dauligor-border);
+  border-radius: 8px;
+}
+.dauligor-character-creator__review-card {
+  border: 1px solid var(--dauligor-border);
+  border-left: 3px solid var(--dauligor-border);
+  border-radius: 8px;
+  background: var(--dauligor-panel-alt);
+  padding: 10px 14px;
+}
+.dauligor-character-creator__review-card--ok { border-left-color: var(--dauligor-success); }
+.dauligor-character-creator__review-card--missing { border-left-color: var(--dauligor-warning); }
+.dauligor-character-creator__review-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.dauligor-character-creator__editlink {
+  background: none;
+  border: none;
+  color: var(--dauligor-text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+.dauligor-character-creator__editlink:hover { color: var(--dauligor-accent-strong); }
+.dauligor-character-creator__scorepills { display: flex; flex-wrap: wrap; gap: 6px; }
+.dauligor-character-creator__scorepill {
+  border: 1px solid var(--dauligor-border);
+  padding: 2px 8px;
+  font-weight: 600;
+  font-size: 13px;
+  background: var(--dauligor-panel);
+}
+
+/* ── Footer ───────────────────────────────────────────────────────── */
+
+.dauligor-character-creator__footer {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--dauligor-border);
+  padding: 10px 14px;
+}
+.dauligor-character-creator__footer-actions { display: flex; gap: 8px; }
+.dauligor-character-creator__status { font-size: 12px; color: var(--dauligor-text-muted); }
+.dauligor-character-creator__status--success { color: var(--dauligor-success); }
+.dauligor-character-creator__status--danger { color: var(--dauligor-danger); }
+.dauligor-character-creator__status--info { color: var(--dauligor-text-muted); }

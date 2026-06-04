@@ -26,7 +26,9 @@ CSS cascade depends on load order, so the `styles[]` array order is deliberate:
 12. `character-sheet.css`
 13. `directory-tools.css`
 14. `gm-console.css`
-15. `responsive.css` — **all `@media` blocks, loaded last** so they override
+15. `character-creator.css`
+16. `launcher.css`
+17. `responsive.css` — **all `@media` blocks, loaded last** so they override
 
 Components 3–14 are BEM-isolated (`.dauligor-<block>__element`), so their order
 relative to each other rarely matters. `tokens`/`base` first and `responsive`
@@ -50,7 +52,14 @@ last are the load-order rules that *do* matter.
 | `character-sheet`, `class-prepare-button`, `pairing` | `character-sheet.css` | the alt character sheet + the neutral Prepare button |
 | `directory-tools`, `spell-tab-tools` | `directory-tools.css` | injected sidebar / sheet-tab buttons |
 | `gm-console` | `gm-console.css` | the GM console window |
+| `character-creator` | `character-creator.css` | the Character Creator walkthrough wizard |
+| `launcher` | `launcher.css` | the Dauligor Options / Actor Tools hub window (tile menu) |
 | all `@media` | `responsive.css` | responsive overrides for every window |
+
+> New blocks must also be added to the **token roots** in `tokens.css` (the
+> vars-only list) so `var(--dauligor-…)` resolves on a standalone window —
+> `character-creator` + `launcher` are registered there. Forgetting this is
+> why a new window can render with the right markup but no theme.
 
 **Fast lookup:** to find a class, `grep -rn "dauligor-<block>__" styles/`. The
 block prefix maps to a file via the table above.
@@ -106,6 +115,47 @@ available to standalone windows). Reference with `var(--dauligor-…)`.
   `.dauligor-asi__toolbar .dauligor-class-browser__subtitle`) live in the file
   of the **containing** (leftmost) block. Keep it that way so the override stays
   predictable.
+
+## Window model (AppV2 sizing + layout) — follow this for every new window
+
+All Dauligor windows use one model. Diverging from it is what caused the
+launcher's content to collapse/overlap before it was rebuilt to match. New
+windows MUST follow it:
+
+1. **Fixed numeric height.** `position: { width: <n>, height: <n> }` — both
+   numbers. `height: "auto"` is **not** honoured by this AppV2 setup (the
+   `applyCenteredPositionToFrame` helper bails on a non-finite height, and the
+   frame never grows to content). If a window should size to its content,
+   compute a numeric height up front (see `launcher-app.js` `launcherHeight()`),
+   don't rely on auto. Stamp it on the frame in a `_renderFrame` override with
+   `applyCenteredPositionToFrame` (copy from feat-browser / launcher).
+
+2. **Standard content classes.** `classes: ["dauligor-importer-app", "<block>"]`
+   and `contentClasses: ["dauligor-importer-window", …]`. Together these make
+   `.window-content` a `display:flex; flex-direction:column; overflow:hidden;
+   padding:0; min-height:0` box (rules live in importer-wizard.css). Don't omit
+   them and hand-roll the content box — that's the trap the launcher fell into.
+
+3. **Shell fills, regions scroll — the `min-height:0` chain.** The template's
+   root shell is `height:100%; display:flex (or grid); min-height:0` so it fills
+   the fixed-height content box. Fixed bits (toolbars, footers, intros) are
+   `flex:0 0 auto`; the area that should scroll is `flex:1 1 auto; min-height:0;
+   overflow:auto`. **`min-height:0` on every flex/grid ancestor of a scroll
+   region is mandatory** — without it the region can't shrink, so it either
+   overflows the frame or compresses its children (text overlap). Grid rows that
+   must shrink use `minmax(0, 1fr)`, not `1fr`.
+
+4. **Background surface is painted on the shared content box.** The combined
+   `.application.dauligor-importer-app .window-content, .dauligor-importer-window`
+   rule (importer-wizard.css) sets `background: var(--dauligor-panel)`, so every
+   window that uses the standard content classes gets a consistent opaque
+   surface — you do NOT need each shell to repaint it, and a shell that forgets
+   won't let dnd5e's themed window default bleed through (which showed as a
+   two-tone background on the character creator before this was centralized).
+
+Reference implementations: `.dauligor-importer` (importer-wizard.css),
+`.dauligor-spell-manager` (spell-manager.css), `.dauligor-character-creator__shell`
+(character-creator.css), `.dauligor-launcher__shell` (launcher.css).
 
 ## Caveat after the split
 

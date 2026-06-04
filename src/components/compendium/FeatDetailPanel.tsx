@@ -379,13 +379,13 @@ export default function FeatDetailPanel({
         />
       </div>
 
-      {/* Show Tags disclosure pinned to the bottom of the panel via
-          mt-auto, matching SpellDetailPanel. Nothing else lives in
-          this footer band — sources, identifiers, activities, and
-          effects all moved out of the public view. */}
-      <div className="mt-auto px-6 py-4 space-y-3">
+      {/* Footer pinned to the bottom of the panel via mt-auto. Holds the
+          Show Tags disclosure (matching SpellDetailPanel) and — at the very
+          bottom — a full source citation, mirroring the species/background
+          view pages. */}
+      <div className="mt-auto">
         {groupedTags.length > 0 && (
-          <>
+          <div className="px-6 py-4 space-y-3">
             <button
               type="button"
               onClick={() => setShowTags((s) => !s)}
@@ -419,8 +419,24 @@ export default function FeatDetailPanel({
                 ))}
               </div>
             )}
-          </>
+          </div>
         )}
+
+        {/* Source citation — the entry's book + page, at the very bottom. */}
+        <div className="border-t border-gold/10 px-6 py-3 text-[11px] text-ink/55">
+          <span className="font-bold uppercase tracking-widest text-[10px] text-gold/70 mr-2">Source</span>
+          {feat.sourceId ? (
+            <Link
+              to={`/sources/view/${feat.sourceId}`}
+              className="hover:text-gold underline-offset-2 hover:underline transition-colors"
+            >
+              {String(sourceRecord?.name || sourceRecord?.shortName || sourceAbbrev || 'Unknown')}
+            </Link>
+          ) : (
+            <span className="italic text-ink/40">Homebrew / unset</span>
+          )}
+          {feat.page ? <span className="text-ink/45">, p. {feat.page}</span> : null}
+        </div>
       </div>
     </div>
   );

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Species Options — Design</title>
+<style>
+  :root {
+    --ink: #2b2117; --gold: #9c7a3c; --gold-soft: #c8a55e;
+    --parch: #f4ecd9; --parch2: #efe6cf; --line: #d8c9a6; --blood: #7c2d2d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 2.4rem clamp(1rem, 4vw, 4rem);
+    background: #efe6cf;
+    background-image: radial-gradient(circle at 20% 0%, #f7f0dd, #e7dcc1);
+    color: #2b2117;
+    font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    line-height: 1.6; max-width: 60rem; margin-inline: auto;
+  }
+  h1, h2, h3 { font-family: inherit; color: #6f561f; letter-spacing: .01em; }
+  h1 { font-size: 2.2rem; margin: 0 0 .2rem; border-bottom: 3px double #c8a55e; padding-bottom: .5rem; }
+  .sub { color: #8a7a52; font-style: italic; margin: 0 0 1.6rem; }
+  h2 { font-size: 1.35rem; margin: 2rem 0 .6rem; border-bottom: 1px solid #d8c9a6; padding-bottom: .25rem; }
+  h3 { font-size: 1.05rem; margin: 1.3rem 0 .35rem; color: #7c5e26; }
+  code, .mono { font-family: "SF Mono", "Consolas", monospace; font-size: .86em; background: #e4d8b8; padding: .08em .35em; border-radius: 4px; color: #5a4420; }
+  pre { background: #2b2117; color: #f0e6cd; padding: 1rem 1.1rem; border-radius: 8px; overflow-x: auto; font-size: .82rem; line-height: 1.5; border-left: 4px solid #9c7a3c; }
+  pre code { background: none; color: inherit; padding: 0; }
+  .card { background: #f7f1e1; border: 1px solid #d8c9a6; border-radius: 10px; padding: 1rem 1.2rem; margin: .8rem 0; box-shadow: 0 1px 0 #fff inset, 0 2px 8px rgba(120,90,40,.08); }
+  .pill { display: inline-block; background: #9c7a3c; color: #fff; font-size: .68rem; text-transform: uppercase; letter-spacing: .12em; padding: .18em .6em; border-radius: 999px; vertical-align: middle; }
+  .ok { color: #3f6f3f; font-weight: 700; }
+  .todo { color: #7c2d2d; font-weight: 700; }
+  ul, ol { margin: .4rem 0 .8rem; padding-left: 1.4rem; }
+  li { margin: .25rem 0; }
+  table { border-collapse: collapse; width: 100%; margin: .6rem 0; font-size: .9rem; }
+  th, td { border: 1px solid #d8c9a6; padding: .45rem .6rem; text-align: left; vertical-align: top; }
+  th { background: #e7dcc1; color: #6f561f; }
+  .lede { font-size: 1.05rem; }
+  .phase { display: flex; gap: .6rem; align-items: baseline; }
+  .phase .n { background: #2b2117; color: #f0e6cd; border-radius: 50%; width: 1.6rem; height: 1.6rem; display: inline-flex; align-items: center; justify-content: center; font-size: .8rem; flex: 0 0 auto; }
+</style>
+</head>
+<body>
+  <h1>Species Options <span class="pill">design</span></h1>
+  <p class="sub">A reusable, modular library of racial traits — authored once, attached to many species. 2026-06-03 · branch <code>compendium-editors</code></p>
+
+  <p class="lede">Today every racial trait (Darkvision, Powerful Build, Fey Ancestry…) is re-created per species. <strong>Species Options</strong> make each trait a reusable building block: author "Darkvision 60" once, then attach it to every species that has it.</p>
+
+  <h2>Confirmed decisions</h2>
+  <div class="card">
+    <p><strong>Model — reusable trait → granted feature.</strong> Each option is a named, feat-shaped trait (description + optional advancements / activities / effects). Attaching it to a species <em>grants</em> it as a feature: an <code>ItemGrant</code> advancement on the species, with the full feature item embedded in the species export bundle's <code>features[]</code>. One uniform model covers Darkvision, Powerful Build, Fey Ancestry, etc. — and it reuses the proven background-features grant path.</p>
+    <p><strong>Storage — the <code>species_options</code> type (now the single mechanism).</strong> A dedicated reusable-options table + manager. <strong>Update (2026-06-03):</strong> the earlier <code>species_features</code> table was <strong>consolidated into this</strong> — its grant-to-species path was never finished and the column set is identical, so species options are now the one place a species's granted features live (innate stat-block traits stay on the Traits tab). Both authoring and attaching now live in the species editor's <strong>Options tab</strong> (the standalone manager was folded in — see <code>SpeciesOptionsTab</code>); data migration <code>20260603-1900</code> copies any <code>species_features</code> rows over.</p>
+  </div>
+
+  <h2>Data model</h2>
+  <h3>New table — <code>species_options</code></h3>
+  <p>Feat-shaped + camelCase (the same shape the retired <code>species_features</code> used). JSON columns are already in <code>queryD1</code>'s auto-parse list.</p>
+<pre><code>species_options(
+  id, name, identifier, sourceId→sources(id), page, description,
+  advancements[], activities[], effects[], uses, tags[],   -- JSON
+  imageUrl, contentHash, createdAt, updatedAt
+)
+-- source-scoped unique identifier (same pattern as feats/species)</code></pre>
+
+  <h3>Attaching options to a species</h3>
+  <p>A new JSON column on <code>species</code> — a portable id array, consistent with the camelCase compendium tables (no junction table):</p>
+<pre><code>ALTER TABLE species ADD COLUMN speciesOptionIds TEXT DEFAULT '[]';
+-- ["opt-darkvision-60", "opt-powerful-build", …]</code></pre>
+  <p>Deleting an option just leaves a dangling id that the export skips — no cascade needed. (Added to <code>d1.ts</code> <code>jsonFields</code> so it round-trips parsed.)</p>
+
+  <h2>Foundry export</h2>
+  <p>When building the species (<code>race</code>) bundle, expand each attached option:</p>
+  <ul>
+    <li>Fetch each <code>species_options</code> row in <code>species.speciesOptionIds</code>.</li>
+    <li>Build a <code>feat</code>-type item per option (<code>system.type.value = "race"</code>) — a new <code>_speciesOptionExport.ts</code>, parallel to <code>_backgroundFeatureExport.ts</code>.</li>
+    <li>Emit one <code>ItemGrant</code> advancement per option on <code>system.advancement</code> (pool keyed by the option's <code>flags.dauligor-pairing.sourceId</code>).</li>
+    <li>Embed the full items in the bundle's new <code>features[]</code> so the module imports + grants them without a second fetch (exactly like backgrounds).</li>
+  </ul>
+  <p>Also adds a standalone live endpoint <code>/api/module/species-options/&lt;id&gt;.json</code>. The Foundry-module side consuming these is its own follow-up (the export is self-describing — same shape it already handles for background features).</p>
+
+  <h2>Editing surfaces</h2>
+  <table>
+    <tr><th>Surface</th><th>What</th></tr>
+    <tr><td>Species editor → <strong>Options tab</strong></td><td>The single home (the standalone manager was folded in): a searchable list of all <code>species_options</code> with an attach-checkbox per row (writes <code>speciesOptionIds</code>) + inline create / edit / delete. Creating an option writes to the shared table, so it appears for every species and auto-attaches to the current one. Component: <code>SpeciesOptionsTab</code>.</td></tr>
+    <tr><td>Species view</td><td>Show the attached options in the detail panel (name + description), like a trait list.</td></tr>
+  </table>
+
+  <h2>Build phases</h2>
+  <div class="card">
+    <div class="phase"><span class="n">1</span><div><strong>Schema + plumbing</strong> <span class="ok">(this pass)</span> — migration (<code>species_options</code> + <code>species.speciesOptionIds</code>), local apply, <code>d1Tables</code> + <code>d1.ts</code> registration.</div></div>
+    <div class="phase"><span class="n">2</span><div><strong>Options manager</strong> — the reusable-library CRUD editor + route + sidebar entry.</div></div>
+    <div class="phase"><span class="n">3</span><div><strong>Species editor picker</strong> — an "Options" sub-tab; load all options, multi-select → <code>speciesOptionIds</code>; preview shows the attached set.</div></div>
+    <div class="phase"><span class="n">4</span><div><strong>Foundry export</strong> — <code>_speciesOptionExport.ts</code> + <code>_raceExport.ts</code> emits <code>ItemGrant</code>s + <code>features[]</code>; module route arm.</div></div>
+    <div class="phase"><span class="n">5</span><div><strong>View page</strong> — render attached options on the species detail panel.</div></div>
+  </div>
+
+  <h2>Notes / deferred</h2>
+  <ul>
+    <li><span class="todo">Overlap:</span> Darkvision can also be set on the species' <em>Senses</em> field (Traits tab). With this model a "Darkvision" option is a granted feature instead — both can coexist; authors pick whichever fits. (A future "typed" option kind could set <code>senses</code> directly if desired.)</li>
+    <li>Authoring rich mechanics (advancements/effects) on an option reuses the existing AdvancementManager / effects editors — wired in phase 2+ as needed; v1 can ship name + description + image.</li>
+    <li>Module-side import of the species <code>features[]</code> / <code>ItemGrant</code>s is the <code>foundry-module</code> branch's job (mirrors background features).</li>
+  </ul>
+</body>
+</html>

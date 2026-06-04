@@ -15,6 +15,7 @@
 //   /api/module/feats/<dbId>.json                      (live, no R2)
 //   /api/module/<source>/feats.json                    (live, no R2)
 //   /api/module/tags/catalog.json                      (live, no R2)
+//   /api/module/spellcasting/multiclass-chart.json     (live, no R2)
 //
 // Write endpoints (staff-only, POST):
 //   /api/module/queue-rebake     — queue a rebake (60-minute scheduled-for)
@@ -38,9 +39,12 @@ import { buildSpellItemBundle } from "../../../api/_lib/_spellExport.js";
 import { buildSourceFeatListBundle } from "../../../api/_lib/_sourceFeatList.js";
 import { buildFeatItemBundle } from "../../../api/_lib/_featExport.js";
 import { buildBackgroundItemBundle } from "../../../api/_lib/_backgroundExport.js";
+import { buildBackgroundFeatureItemBundle } from "../../../api/_lib/_backgroundFeatureExport.js";
 import { buildRaceItemBundle } from "../../../api/_lib/_raceExport.js";
+import { buildSpeciesOptionItemBundle } from "../../../api/_lib/_speciesOptionExport.js";
 import { buildItemBundle } from "../../../api/_lib/_itemExport.js";
 import { buildTagCatalog } from "../../../api/_lib/_tagCatalog.js";
+import { buildSpellcastingChartBundle } from "../../../api/_lib/_spellcastingChart.js";
 import { SERVER_EXPORT_FETCHERS } from "../../../api/_lib/d1-fetchers-server.js";
 import {
   classBundleKey,
@@ -387,6 +391,22 @@ export const onRequest = async (context: any): Promise<Response> => {
       // Fall through to 404 if no background row matched.
     }
 
+    // Per-background-feature full item — live read-through. URL:
+    //   /api/module/background-features/<dbId>.json
+    // A background's granted feature (the 2014 "Feature: …" block) exported as
+    // a Foundry feat item (system.type.value="background"). Also embedded
+    // inline in the owning background's bundle `features[]`.
+    else if (
+      pathParts.length === 2
+      && pathParts[0] === "background-features"
+      && pathParts[1].endsWith(".json")
+    ) {
+      const dbId = pathParts[1].replace(".json", "");
+      const result = await buildBackgroundFeatureItemBundle(dbId, SERVER_EXPORT_FETCHERS);
+      if (result) return serveLive(result);
+      // Fall through to 404 if no feature row matched.
+    }
+
     // Per-race full item — live read-through. URL:
     //   /api/module/races/<dbId>.json
     // Races live in the `feats` table (feat_type='race') but export as
@@ -401,6 +421,22 @@ export const onRequest = async (context: any): Promise<Response> => {
       const result = await buildRaceItemBundle(dbId, SERVER_EXPORT_FETCHERS);
       if (result) return serveLive(result);
       // Fall through to 404 if no race row matched.
+    }
+
+    // Per-species-option full item — live read-through. URL:
+    //   /api/module/species-options/<dbId>.json
+    // A reusable racial trait (Darkvision, Powerful Build, …) exported as a
+    // Foundry feat item (system.type.value="race"). Also embedded inline in a
+    // species (race) bundle's features[] and granted via ItemGrant.
+    else if (
+      pathParts.length === 2
+      && pathParts[0] === "species-options"
+      && pathParts[1].endsWith(".json")
+    ) {
+      const dbId = pathParts[1].replace(".json", "");
+      const result = await buildSpeciesOptionItemBundle(dbId, SERVER_EXPORT_FETCHERS);
+      if (result) return serveLive(result);
+      // Fall through to 404 if no option row matched.
     }
 
     // Per-item full document — live read-through, no R2 cache. URL:
@@ -450,6 +486,22 @@ export const onRequest = async (context: any): Promise<Response> => {
       && pathParts[1] === "catalog.json"
     ) {
       const result = await buildTagCatalog();
+      if (result) return serveLive(result);
+    }
+
+    // Master multiclass spell-slot chart — live read, no R2. URL:
+    //   /api/module/spellcasting/multiclass-chart.json
+    // The Foundry character-creator class preview fetches this once and
+    // derives a class's slot table by scaling character level through the
+    // class bundle's `spellcasting.progressionFormula` (the app's
+    // calculateEffectiveCastingLevel + getSpellSlotsForLevel flow). Cantrips /
+    // spells-known + pact slots already ride inside each class bundle.
+    else if (
+      pathParts.length === 2
+      && pathParts[0] === "spellcasting"
+      && pathParts[1] === "multiclass-chart.json"
+    ) {
+      const result = await buildSpellcastingChartBundle();
       if (result) return serveLive(result);
     }
   } catch (error) {

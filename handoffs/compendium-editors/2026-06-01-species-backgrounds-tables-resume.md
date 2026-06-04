@@ -13,6 +13,41 @@ thin `FeatsEditor` wrappers). We were blocked waiting on Foundry data shapes —
 are analyzed. Two product decisions are locked (below). Next actionable work is **table design +
 migration**, then exporter wiring, then editors.
 
+## ✅ Shipped this session (2026-06-01) — tables + editors + exporters
+
+User chose **"tables + editors first, import after."** Steps 1–4 + docs are DONE and verified;
+**the bulk importer (step 5) is the only thing left.**
+
+- **Migration** `worker/migrations/20260601-1200_backgrounds_species_tables.sql` — `species` +
+  `backgrounds` tables (camelCase cols, source-scoped unique index, `contentHash`). **Applied to
+  LOCAL D1 only** — remote NOT run (needs explicit, migration-specific go-ahead).
+- **Plumbing** — `D1_TABLE_MAP` (`src/lib/d1Tables.ts`) + `PERSISTENT_TABLES` + `queryD1` jsonFields
+  (`startingEquipment`/`movement`/`senses`/`creatureType`) in `src/lib/d1.ts`.
+- **Editor** — `src/pages/compendium/SpeciesBackgroundEditor.tsx`: one Pattern E editor (`kind` prop)
+  on `CompendiumEditorShell`; `RaceEditor`/`BackgroundEditor` now pass `kind`. **Direct camelCase
+  read/write via `upsertDocument`/`fetchDocument` — NO normalize/denormalize.** Movement/senses/
+  creature-type tab for species; wealth/starting-equipment for backgrounds; shared identity /
+  description / advancement / scaling / tags. Admin + content-creator direct-write.
+- **Exporters** — `_raceExport`/`_backgroundExport` read the new tables via the new
+  `api/_lib/_speciesBackgroundShared.ts` → `buildSpeciesBackgroundItem`. **Verified end-to-end**
+  (local stack, HTTP 200: a seeded Mountain Dwarf exported with `movement {walk:25}`, `senses
+  {darkvision:60}`, `type {value:humanoid,subtype:dwarf}`, advancement map, resolved source; a
+  seeded Soldier with `wealth:"50"` + `startingEquipment:[]`).
+- **Naming + docs** — sidebar + list pages say "Species"; `docs/features/compendium-races-backgrounds.md`
+  rewritten to the shipped state. `tsc` clean (baseline 6 pre-existing errors, 0 new). Tables start EMPTY.
+
+**Deferred follow-ups:** proposal-mode for these entity types (needs a `proposals` CHECK migration —
+they're admin/content-creator direct-write today); Foundry-Import workbench mode in the editor;
+structured `startingEquipment` tree editor; full public list pages (still placeholders); the
+`/compendium/races` route URL still says "races" (sidebar/heading say "Species").
+
+**NEXT — the importer (step 5):** read `E:\DnD\Professional\Foundry Export` (152 backgrounds + 280
+species) → upsert into the new tables (camelCase payloads, same shape `upsertDocument` writes). The
+export was deliberately built first to reveal needed columns; if import surfaces a missing one (e.g.
+top-level `effects`), add it via a follow-up `ALTER TABLE` then. Apply any such migration LOCAL-first.
+
+---
+
 ## Git state (read with `git -C "<worktree>"` — Bash CWD resets each call)
 
 - **HEAD = `fff679b`**, **in sync with origin/main (0 ahead / 0 behind).** Everything from the prior
@@ -93,12 +128,12 @@ the `feats` table lacks the columns:
 - Current local `feats` table has **0** rows with `feat_type IN ('race','background')` — so the new
   tables start empty; content comes from the Foundry export (if an importer is built) or hand-authoring.
 
-## OPEN QUESTION to resolve with the user before coding
+## OPEN QUESTION — ✅ ANSWERED (2026-06-01)
 
-**Scope / import path** (asked, not yet answered): is this export purely the **schema reference** for
-the editor side, OR do we also build an **importer** that ingests these JSON files (152 bg + 280
-species) into the new tables? This decides whether the next deliverable is "tables + editors" or
-"tables + editors + import script." **Confirm before starting the migration.**
+**Scope / import path:** the user chose **"tables + editors first, importer after."** So the export
+was treated as the schema reference for the editor side this session; the bulk importer (152 bg +
+280 species) is a deliberate follow-up (step 5 above) — built after the schema + editors are proven,
+to de-risk schema churn before loading 432 rows.
 
 ## Suggested sequence (once scope is confirmed)
 

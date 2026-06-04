@@ -372,6 +372,8 @@ async function startServer() {
     { mount: "/api/spell-favorites", modulePath: "./functions/api/spell-favorites.ts" },
     { mount: "/api/feat-favorites", modulePath: "./functions/api/feat-favorites.ts" },
     { mount: "/api/item-favorites", modulePath: "./functions/api/item-favorites.ts" },
+    { mount: "/api/species-favorites", modulePath: "./functions/api/species-favorites.ts" },
+    { mount: "/api/background-favorites", modulePath: "./functions/api/background-favorites.ts" },
     // Public profile read (`/api/profiles/<username>`). A single dynamic
     // segment (`[username].ts`), so it's mounted with an Express `:username`
     // param — wrapPagesFunction forwards req.params through to
