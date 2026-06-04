@@ -101,6 +101,22 @@ export function contrastRatio(a: string, b: string): number {
   return (hi + 0.05) / (lo + 0.05);
 }
 
+/**
+ * Nudge `fg` toward black or white (whichever raises contrast against `bg`)
+ * until it clears `target`, in 10% steps. Returns the first passing shade, or
+ * the closest pole if even that can't reach the target. Used by the builder's
+ * "nudge to readable" guard-rail.
+ */
+export function nudgeToContrast(fg: string, bg: string, target = 4.5): string {
+  if (!normHex(fg) || !normHex(bg) || contrastRatio(fg, bg) >= target) return fg;
+  const pole = relLuminance(bg) < 0.5 ? "#ffffff" : "#1a1a1a";
+  for (let t = 0.1; t <= 1.0001; t += 0.1) {
+    const candidate = mix(fg, pole, t);
+    if (contrastRatio(candidate, bg) >= target) return candidate;
+  }
+  return pole;
+}
+
 /* --------------------------- resolution ----------------------------------- */
 
 /**

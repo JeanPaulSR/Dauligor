@@ -1,25 +1,38 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { fetchCollection, upsertDocument, queryD1 } from '../../lib/d1';
 import { useWikiPreview } from '../../lib/wikiPreviewContext';
 import { Button } from '../../components/ui/button';
 
 import { Input } from '../../components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
-import { Separator } from '../../components/ui/separator';
 import { ImageUpload } from '../../components/ui/ImageUpload';
-import { User, Shield, Key, Palette, UserCircle, Save, CheckCircle2, AlertCircle, CheckCircle2 as CheckCircle, Palette as PaletteIcon, Key as KeyIcon, UserCircle as UserIcon, Save as SaveIcon, AlertCircle as AlertIcon, Wrench, AlertTriangle, Trash2, RefreshCw } from 'lucide-react';
+import { User, Shield, Key, Palette, UserCircle, Save, CheckCircle2, AlertCircle, CheckCircle2 as CheckCircle, Palette as PaletteIcon, Key as KeyIcon, UserCircle as UserIcon, Save as SaveIcon, AlertCircle as AlertIcon, Wrench, AlertTriangle, Trash2, RefreshCw, Search } from 'lucide-react';
 import { getIdentity, getSessionToken } from "../../lib/auth";
+import { AppearanceBuilder } from '../../components/appearance/AppearanceBuilder';
+import { FavoriteCharacters } from '../../components/profile/FavoriteCharacters';
+
+type SectionKey = 'profile' | 'appearance' | 'security' | 'maintenance';
+
+// Master list for the searchable settings rail. `keywords` power the search so
+// typing "password", "highlight", "purge" etc. surfaces the right section even
+// though the term isn't in the section label.
+const SETTINGS_SECTIONS: { key: SectionKey; label: string; icon: React.ReactNode; adminOnly?: boolean; keywords: string[] }[] = [
+  { key: 'profile', label: 'Public Profile', icon: <UserCircle className="w-4 h-4" />, keywords: ['display name', 'avatar', 'username', 'discord', 'pronouns', 'bio', 'public', 'private profile', 'hide username'] },
+  { key: 'appearance', label: 'Appearance', icon: <Palette className="w-4 h-4" />, keywords: ['theme', 'color', 'colour', 'highlight', 'accent', 'background', 'card', 'text', 'secondary text', 'dark', 'light', 'parchment', 'preview', 'opacity', 'contrast'] },
+  { key: 'security', label: 'Security', icon: <Key className="w-4 h-4" />, keywords: ['password', 'change password', 'recovery email', 'privacy', 'login', 'account'] },
+  { key: 'maintenance', label: 'Maintenance', icon: <Wrench className="w-4 h-4" />, adminOnly: true, keywords: ['purge', 'reset', 'cache', 'danger', 'delete data', 'prune', 'cleanup'] },
+];
 
 export default function Settings({ user, userProfile }: { user: any, userProfile: any }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
   const { refreshProfile } = useWikiPreview();
   
-  const [activeSection, setActiveSection] = useState<'profile' | 'security' | 'appearance' | 'maintenance'>(
+  const [activeSection, setActiveSection] = useState<SectionKey>(
     (tabParam === 'maintenance' && userProfile?.role === 'admin') ? 'maintenance' : 'profile'
   );
+  const [query, setQuery] = useState('');
   const [displayName, setDisplayName] = useState(userProfile?.display_name || '');
   const [pronouns, setPronouns] = useState(userProfile?.pronouns || '');
   const [bio, setBio] = useState(userProfile?.bio || '');
@@ -186,439 +199,364 @@ export default function Settings({ user, userProfile }: { user: any, userProfile
     }
   };
 
+  // Searchable section list: gate admin-only, then match label + keywords.
+  const q = query.trim().toLowerCase();
+  const visibleSections = SETTINGS_SECTIONS
+    .filter((s) => !s.adminOnly || isAdmin)
+    .map((s) => {
+      if (!q) return { ...s, hint: undefined as string | undefined };
+      const inLabel = s.label.toLowerCase().includes(q);
+      const kw = s.keywords.find((k) => k.includes(q));
+      return inLabel || kw ? { ...s, hint: inLabel ? undefined : kw } : null;
+    })
+    .filter(Boolean) as { key: SectionKey; label: string; icon: React.ReactNode; hint?: string }[];
+
+  // When a search hides the active section, jump to the top match.
+  useEffect(() => {
+    if (q && visibleSections.length && !visibleSections.some((s) => s.key === activeSection)) {
+      setActiveSection(visibleSections[0].key);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q]);
+
+  // Viewport-bounded shell: measure the shell's top and fill down to the
+  // viewport bottom so the PAGE never scrolls — only the detail pane scrolls
+  // internally when a section is tall. Resize-only (never on scroll) to avoid
+  // the feedback loop the preview frame had. Mirrors ThemePreview's approach.
+  const shellRef = useRef<HTMLDivElement>(null);
+  const [shellHeight, setShellHeight] = useState<number>(640);
+  useLayoutEffect(() => {
+    const el = shellRef.current;
+    if (!el) return;
+    const measure = () => {
+      const top = el.getBoundingClientRect().top;
+      setShellHeight(Math.max(420, Math.round(window.innerHeight - top - 12)));
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
+
   if (!user || !userProfile) {
     return <div className="text-center py-20 font-serif italic">Please log in to access settings.</div>;
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 pb-20">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
-          <h1 className="h1-title">Settings</h1>
-        </div>
-        <div className="flex flex-col items-start md:items-end gap-1">
-          <span className="label-text text-ink/45">Current Role</span>
-          <Badge variant="outline" className={`capitalize ${(userProfile.role === 'admin' || userProfile.role === 'co-dm') ? 'border-gold text-gold bg-gold/5' : 'border-ink/25 text-ink/45'}`}>
-            <Shield className="w-3 h-3 mr-1.5" />
-            {userProfile.role.replace('-', ' ')}
-          </Badge>
-        </div>
-      </div>
-
-      <div className="grid md:grid-cols-4 gap-8">
-        {/* Sidebar Navigation */}
-        <div className="space-y-1">
-          <SettingsNavButton 
-            active={activeSection === 'profile'} 
-            onClick={() => setActiveSection('profile')}
-            icon={<UserCircle className="w-4 h-4" />} 
-            label="Public Profile" 
-          />
-          <SettingsNavButton 
-            active={activeSection === 'appearance'} 
-            onClick={() => setActiveSection('appearance')}
-            icon={<Palette className="w-4 h-4" />} 
-            label="Appearance" 
-          />
-          <SettingsNavButton 
-            active={activeSection === 'security'} 
-            onClick={() => setActiveSection('security')}
-            icon={<Key className="w-4 h-4" />} 
-            label="Security" 
-          />
-          {isAdmin && (
-            <SettingsNavButton 
-              active={activeSection === 'maintenance'} 
-              onClick={() => setActiveSection('maintenance')}
-              icon={<Wrench className="w-4 h-4" />} 
-              label="Maintenance" 
+    <div ref={shellRef} className="w-full flex flex-col overflow-hidden" style={{ height: shellHeight }}>
+      <div className="grid md:grid-cols-[240px_1fr] gap-8 flex-1 min-h-0">
+        {/* Master — title, role, and the searchable settings list */}
+        <div className="flex flex-col min-h-0">
+          <div className="mb-5 shrink-0">
+            <h1 className="h2-title leading-none">Settings</h1>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="label-text text-ink/45">Role</span>
+              <Badge variant="outline" className={`capitalize text-[10px] px-2 py-0 ${(userProfile.role === 'admin' || userProfile.role === 'co-dm') ? 'border-gold text-gold bg-gold/5' : 'border-ink/25 text-ink/45'}`}>
+                <Shield className="w-3 h-3 mr-1" />
+                {userProfile.role.replace('-', ' ')}
+              </Badge>
+            </div>
+          </div>
+          <div className="relative mb-3 shrink-0">
+            <Search className="w-4 h-4 text-ink/35 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search settings…"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+              className="pl-9 h-10 bg-background border-gold/25 focus:border-gold text-sm text-ink"
             />
-          )}
+          </div>
+          <nav className="space-y-1 overflow-y-auto custom-scrollbar -mr-1 pr-1">
+            {visibleSections.map((s) => (
+              <SettingsNavButton
+                key={s.key}
+                active={activeSection === s.key}
+                onClick={() => setActiveSection(s.key)}
+                icon={s.icon}
+                label={s.label}
+                hint={s.hint}
+              />
+            ))}
+            {visibleSections.length === 0 && (
+              <p className="text-xs text-ink/45 italic px-3 py-2">No settings match “{query}”.</p>
+            )}
+          </nav>
         </div>
 
-        <div className="md:col-span-3 space-y-8">
+        {/* Detail pane — scrolls internally so the page itself never scrolls */}
+        <div className="min-w-0 h-full overflow-y-auto custom-scrollbar pb-10 -mr-2 pr-2">
           {activeSection === 'profile' && (
-            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <Card className="border-gold/25 bg-card shadow-xl relative overflow-hidden">
-                {/* Parchment texture overlay */}
-                <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/paper-fibers.png')]" />
-                
-                <CardHeader className="border-b border-gold/15 pb-6">
-                  <CardTitle className="h2-title flex items-center gap-3">
-                    <UserCircle className="text-gold w-8 h-8" /> Public Profile
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-8">
-                  <form onSubmit={handleUpdateProfile} className="space-y-8">
-                    <div className="grid md:grid-cols-2 gap-8">
-                      <div className="space-y-6">
-                        <div className="space-y-2">
-                          <label className="label-text text-ink/65">Display Name</label>
-                          <Input 
-                            className="bg-background/50 border-gold/25 focus:border-gold h-12 text-lg font-serif text-ink"
-                            value={displayName} 
-                            onChange={e => setDisplayName(e.target.value)} 
-                            placeholder="e.g. Elara the Wise" 
-                          />
-                        </div>
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-3xl mx-auto">
+              {/* Slim header — consistent with Appearance; no heavy Card chrome. */}
+              <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gold/15">
+                <UserCircle className="text-gold w-7 h-7 shrink-0" />
+                <div className="min-w-0">
+                  <h2 className="h2-title leading-none">Public Profile</h2>
+                  <p className="text-xs text-ink/55 mt-1">How you appear to other players in the archive.</p>
+                </div>
+              </div>
 
-                        <div className="space-y-2">
-                          <label className="label-text text-ink/65">Pronouns</label>
-                          <Input 
-                            className="bg-background/50 border-gold/25 focus:border-gold h-12 text-ink"
-                            value={pronouns} 
-                            onChange={e => setPronouns(e.target.value)} 
-                            placeholder="e.g. they/them" 
-                          />
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <label className="label-text text-ink/65">Avatar</label>
-                          <ImageUpload
-                            currentImageUrl={avatarUrl}
-                            storagePath={`images/users/${userProfile?.id || 'avatar'}/`}
-                            onUpload={(url) => setAvatarUrl(url)}
-                          />
-                          <p className="muted-text italic">Provide a direct link to an image or upload one. Leave empty for no avatar.</p>
-                        </div>
-
-                        <div className="space-y-2">
-                          <label className="label-text text-ink/65">Username (Discord Name)</label>
-                          <Input 
-                            className="bg-background/50 border-gold/25 focus:border-gold h-12 text-ink"
-                            value={username} 
-                            onChange={e => setUsername(e.target.value)} 
-                            placeholder="e.g. user#1234" 
-                          />
-                          <p className="muted-text italic">Changing this will require you to log in again.</p>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col items-center justify-center p-6 bg-gold/5 rounded-2xl border border-gold/15">
-                        <p className="label-text text-gold mb-4">Preview</p>
-                        <div className="relative">
-                          <div className="w-32 h-32 rounded-full border-4 border-gold/35 overflow-hidden shadow-inner bg-background flex items-center justify-center">
-                            {avatarUrl ? (
-                              <img 
-                                src={avatarUrl} 
-                                alt="Preview" 
-                                className="w-full h-full object-cover"
-                                referrerPolicy="no-referrer"
-                              />
-                            ) : (
-                              <UserCircle className="w-20 h-20 text-gold/25" />
-                            )}
-                          </div>
-                          <div className="absolute -bottom-2 -right-2 bg-gold text-[var(--primary-foreground)] p-2 rounded-full shadow-lg">
-                            <CheckCircle2 className="w-4 h-4" />
-                          </div>
-                        </div>
-                        <p className="mt-4 h3-title">{displayName || userProfile.username}</p>
-                        {pronouns && <p className="description-text text-xs text-ink/65">{pronouns}</p>}
-                      </div>
+              <form onSubmit={handleUpdateProfile} className="space-y-6">
+                {/* Identity row — avatar preview beside the fields. Stacks on
+                    narrow screens (flex-col) so it stays usable on mobile. */}
+                <div className="flex flex-col sm:flex-row gap-6">
+                  {/* Avatar preview — solid surface + a person glyph (no nested
+                      circle / translucent badge), so nothing overlaps oddly. */}
+                  <div className="flex flex-col items-center gap-2 shrink-0">
+                    <div className="w-28 h-28 rounded-full overflow-hidden border-2 border-gold/30 bg-gold/10 flex items-center justify-center">
+                      {avatarUrl ? (
+                        <img src={avatarUrl} alt="Avatar preview" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                      ) : (
+                        <User className="w-11 h-11 text-gold/45" />
+                      )}
                     </div>
+                    <span className="label-text text-ink/45">Preview</span>
+                  </div>
 
-                    <div className="space-y-2">
-                      <label className="label-text text-ink/65">Biography</label>
-                      <textarea 
-                        className="w-full min-h-[150px] p-4 rounded-xl border border-gold/25 bg-background/50 focus:border-gold focus:ring-1 focus:ring-gold outline-none body-text text-lg"
-                        value={bio}
-                        onChange={e => setBio(e.target.value)}
-                        placeholder="Share a brief introduction about yourself..."
+                  <div className="flex-1 min-w-0 space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="label-text text-ink/65">Display Name</label>
+                      <Input
+                        className="bg-background/50 border-gold/25 focus:border-gold h-10 font-serif text-ink"
+                        value={displayName}
+                        onChange={e => setDisplayName(e.target.value)}
+                        placeholder="e.g. Elara the Wise"
                       />
                     </div>
-
-                    <div className="grid sm:grid-cols-2 gap-6 p-6 bg-background/50 border border-gold/15 rounded-xl">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-bold text-ink">Hide Username</p>
-                          <p className="text-xs text-ink/65">Do not show your username publicly.</p>
-                        </div>
-                        <input 
-                          type="checkbox" 
-                          checked={hideUsername} 
-                          onChange={e => setHideUsername(e.target.checked)}
-                          className="w-5 h-5 accent-gold"
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="label-text text-ink/65">Pronouns</label>
+                        <Input
+                          className="bg-background/50 border-gold/25 focus:border-gold h-10 text-ink"
+                          value={pronouns}
+                          onChange={e => setPronouns(e.target.value)}
+                          placeholder="e.g. they/them"
                         />
                       </div>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-bold text-ink">Private Profile</p>
-                          <p className="text-xs text-ink/65">Hide your profile details from other players.</p>
-                        </div>
-                        <input 
-                          type="checkbox" 
-                          checked={isPrivate} 
-                          onChange={e => setIsPrivate(e.target.checked)}
-                          className="w-5 h-5 accent-gold"
+                      <div className="space-y-1.5">
+                        <label className="label-text text-ink/65">Username (Discord)</label>
+                        <Input
+                          className="bg-background/50 border-gold/25 focus:border-gold h-10 text-ink"
+                          value={username}
+                          onChange={e => setUsername(e.target.value)}
+                          placeholder="e.g. user#1234"
                         />
                       </div>
                     </div>
-
-                    <div className="flex justify-end pt-4">
-                      <Button type="submit" disabled={loading} className="btn-gold-solid gap-2 px-8 h-12 shadow-lg shadow-gold/25">
-                        <Save className="w-4 h-4" /> Save
-                      </Button>
+                    <div className="space-y-1.5">
+                      <label className="label-text text-ink/65">Avatar image</label>
+                      <ImageUpload
+                        currentImageUrl={avatarUrl}
+                        storagePath={`images/users/${userProfile?.id || 'avatar'}/`}
+                        onUpload={(url) => setAvatarUrl(url)}
+                      />
+                      <p className="text-[11px] text-ink/45 italic">Paste a direct image link or upload one. Leave empty for no avatar. Changing your username requires re-login.</p>
                     </div>
-                  </form>
-                </CardContent>
-              </Card>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="label-text text-ink/65">Biography</label>
+                  <textarea
+                    className="w-full min-h-[110px] p-3 border border-gold/25 bg-background/50 focus:border-gold focus:ring-1 focus:ring-gold outline-none body-text text-sm text-ink"
+                    value={bio}
+                    onChange={e => setBio(e.target.value)}
+                    placeholder="Share a brief introduction about yourself..."
+                  />
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <label className="flex items-center justify-between gap-3 p-3 border border-gold/15 bg-background/40 cursor-pointer">
+                    <span className="min-w-0">
+                      <span className="block font-bold text-sm text-ink">Hide Username</span>
+                      <span className="block text-[11px] text-ink/55">Don't show your username publicly.</span>
+                    </span>
+                    <input type="checkbox" checked={hideUsername} onChange={e => setHideUsername(e.target.checked)} className="w-5 h-5 accent-gold shrink-0" />
+                  </label>
+                  <label className="flex items-center justify-between gap-3 p-3 border border-gold/15 bg-background/40 cursor-pointer">
+                    <span className="min-w-0">
+                      <span className="block font-bold text-sm text-ink">Private Profile</span>
+                      <span className="block text-[11px] text-ink/55">Hide your profile from other players.</span>
+                    </span>
+                    <input type="checkbox" checked={isPrivate} onChange={e => setIsPrivate(e.target.checked)} className="w-5 h-5 accent-gold shrink-0" />
+                  </label>
+                </div>
+
+                <div className="flex justify-end pt-1">
+                  <Button type="submit" disabled={loading} className="btn-gold-solid gap-2 px-6 h-10">
+                    <Save className="w-4 h-4" /> Save
+                  </Button>
+                </div>
+              </form>
+
+              {/* Featured characters — self-saving, so it lives outside the
+                  profile <form> (its own PUT endpoint, not the profile PATCH). */}
+              <div className="mt-8 pt-6 border-t border-gold/15">
+                <FavoriteCharacters />
+              </div>
             </div>
           )}
 
           {activeSection === 'appearance' && (
-            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <Card className="border-gold/25 bg-card shadow-xl relative overflow-hidden">
-                <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/paper-fibers.png')]" />
-                
-                <CardHeader className="border-b border-gold/15 pb-6">
-                  <CardTitle className="h2-title flex items-center gap-3">
-                    <Palette className="text-gold w-8 h-8" /> Appearance
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-8 space-y-12">
-                  <div className="space-y-6">
-                    <h3 className="label-text text-ink/65">Theme Selection</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                      <ThemeOption 
-                        active={theme === 'parchment'} 
-                        onClick={() => handleThemeChange('parchment')}
-                        label="Parchment" 
-                        description=""
-                        className="bg-[#f5f5f0] border-gold/25 text-[#1a1a1a]" 
-                      />
-                      <ThemeOption 
-                        active={theme === 'light'} 
-                        onClick={() => handleThemeChange('light')}
-                        label="Light" 
-                        description=""
-                        className="bg-[#ffffff] border-black/10 text-[#1a1a1a]" 
-                      />
-                      <ThemeOption 
-                        active={theme === 'dark'} 
-                        onClick={() => handleThemeChange('dark')}
-                        label="Dark" 
-                        description=""
-                        className="bg-[#1a1a1e] border-white/10 text-[#e2e2e8]" 
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-6">
-                    <h3 className="label-text text-ink/65">Highlight Color</h3>
-                    <div className="flex flex-wrap gap-4 items-center">
-                      {['#c5a059', '#3b82f6', '#8b0000', '#10b981', '#8b5cf6', '#f59e0b'].map(color => (
-                        <button
-                          type="button"
-                          key={color}
-                          onClick={() => handleAccentChange(color)}
-                          className={`w-12 h-12 rounded-full border-4 transition-all ${accentColor === color ? 'border-ink scale-110 shadow-lg' : 'border-transparent hover:scale-105'}`}
-                          style={{ backgroundColor: color }}
-                        />
-                      ))}
-                      <div className="relative w-12 h-12">
-                        <input
-                          type="color"
-                          value={accentColor}
-                          onChange={(e) => handleAccentChange(e.target.value)}
-                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                        />
-                        <div 
-                          className="w-12 h-12 rounded-full border-4 border-ink/25 flex items-center justify-center transition-all hover:scale-105 pointer-events-none shadow-sm bg-gradient-to-br from-red-500 via-green-500 to-blue-500"
-                        >
-                          <div 
-                            className="w-8 h-8 rounded-full border-2 border-white/50" 
-                            style={{ backgroundColor: accentColor }} 
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="mt-12 p-6 bg-gold/5 rounded-2xl border border-dashed border-gold/35 text-center">
-                    <p className="description-text text-sm text-ink/65">Your preferences will be remembered across all your devices.</p>
-                    <Button onClick={handleUpdateProfile} disabled={loading} className="mt-4 bg-gold/15 text-gold hover:bg-gold/25 border border-gold/25">
-                      Save All Preferences
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+              {/* No Card wrapper — the builder owns its own two-column studio
+                  layout (controls + sticky live preview) and needs the full
+                  width to breathe, so we give it a slim header and let it run. */}
+              <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gold/15">
+                <Palette className="text-gold w-7 h-7 shrink-0" />
+                <div className="min-w-0">
+                  <h2 className="h2-title leading-none">Appearance</h2>
+                  <p className="text-xs text-ink/55 mt-1">Personalize your colors over a base theme — changes stay in the preview until you save.</p>
+                </div>
+              </div>
+              <AppearanceBuilder userProfile={userProfile} onSaved={refreshProfile} />
             </div>
           )}
 
           {activeSection === 'security' && (
-            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <Card className="border-gold/25 bg-card shadow-xl relative overflow-hidden">
-                <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/paper-fibers.png')]" />
-                
-                <CardHeader className="border-b border-gold/15 pb-6">
-                  <CardTitle className="h2-title flex items-center gap-3">
-                    <Key className="text-gold w-8 h-8" /> Security
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-8">
-                  <form onSubmit={handleUpdatePassword} className="space-y-6">
-                    <div className="space-y-2">
-                      <label className="label-text text-ink/65">Current Password</label>
-                      <Input
-                        type="password"
-                        autoComplete="current-password"
-                        className="bg-background/50 border-gold/25 focus:border-gold h-12 text-ink"
-                        value={currentPassword}
-                        onChange={e => setCurrentPassword(e.target.value)}
-                        placeholder="••••••••"
-                      />
-                    </div>
-                    <div className="grid sm:grid-cols-2 gap-6">
-                      <div className="space-y-2">
-                        <label className="label-text text-ink/65">New Password</label>
-                        <Input 
-                          type="password" 
-                          className="bg-background/50 border-gold/25 focus:border-gold h-12 text-ink"
-                          value={newPassword} 
-                          onChange={e => setNewPassword(e.target.value)} 
-                          placeholder="••••••••" 
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="label-text text-ink/65">Confirm Password</label>
-                        <Input 
-                          type="password" 
-                          className="bg-background/50 border-gold/25 focus:border-gold h-12 text-ink"
-                          value={confirmPassword} 
-                          onChange={e => setConfirmPassword(e.target.value)} 
-                          placeholder="••••••••" 
-                        />
-                      </div>
-                    </div>
-                    <div className="flex justify-end">
-                      <Button type="submit" disabled={loading || !currentPassword || !newPassword} className="bg-primary text-primary-foreground gap-2 px-8 h-12">
-                        Update Password
-                      </Button>
-                    </div>
-                  </form>
-                  
-                  <Separator className="my-8 bg-gold/15" />
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-3xl mx-auto space-y-8">
+              {/* Slim header — matches Profile/Appearance; no heavy Card chrome. */}
+              <div className="flex items-center gap-3 pb-4 border-b border-gold/15">
+                <Key className="text-gold w-7 h-7 shrink-0" />
+                <div className="min-w-0">
+                  <h2 className="h2-title leading-none">Security</h2>
+                  <p className="text-xs text-ink/55 mt-1">Password, recovery, and account safety.</p>
+                </div>
+              </div>
 
-                  <form onSubmit={handleUpdateProfile} className="space-y-6">
-                    <div className="space-y-2">
-                      <label className="label-text text-ink/65">Recovery Email</label>
-                      <p className="description-text text-xs text-ink/65 mb-2">Save an email address here. If you forget your password, your GM can use this to send you a password reset link.</p>
-                      <Input 
-                        type="email" 
-                        className="bg-background/50 border-gold/25 focus:border-gold h-12 text-ink"
-                        value={recoveryEmail} 
-                        onChange={e => setRecoveryEmail(e.target.value)} 
-                        placeholder="e.g. your.email@example.com" 
-                      />
-                    </div>
-                    <div className="flex justify-end">
-                      <Button type="submit" disabled={loading} className="btn-gold-solid gap-2 px-8 h-12">
-                        Save Recovery Email
-                      </Button>
-                    </div>
-                  </form>
-                </CardContent>
-              </Card>
-
-              <Card className="border-blood/20 bg-blood/5">
-                <CardHeader>
-                  <CardTitle className="h3-title text-blood flex items-center gap-2">
-                    <AlertCircle /> Danger Zone
-                  </CardTitle>
-                  <CardDescription className="muted-text text-blood/60">Irreversible actions for your account.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-col sm:flex-row items-center justify-between p-6 border border-blood/20 rounded-xl bg-card/50 gap-4">
-                    <div>
-                      <p className="font-bold text-blood">Delete Profile</p>
-                      <p className="text-xs text-ink/65">This will remove your profile data from the archive. Your login will remain active until a GM removes it.</p>
-                    </div>
-                    <Button variant="ghost" className="btn-danger border border-blood/20 w-full sm:w-auto">
-                      Delete Profile
-                    </Button>
+              <form onSubmit={handleUpdatePassword} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="label-text text-ink/65">Current Password</label>
+                  <Input
+                    type="password"
+                    autoComplete="current-password"
+                    className="bg-background/50 border-gold/25 focus:border-gold h-10 text-ink"
+                    value={currentPassword}
+                    onChange={e => setCurrentPassword(e.target.value)}
+                    placeholder="••••••••"
+                  />
+                </div>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="label-text text-ink/65">New Password</label>
+                    <Input type="password" className="bg-background/50 border-gold/25 focus:border-gold h-10 text-ink"
+                      value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="••••••••" />
                   </div>
-                </CardContent>
-              </Card>
+                  <div className="space-y-1.5">
+                    <label className="label-text text-ink/65">Confirm Password</label>
+                    <Input type="password" className="bg-background/50 border-gold/25 focus:border-gold h-10 text-ink"
+                      value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="••••••••" />
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <Button type="submit" disabled={loading || !currentPassword || !newPassword} className="btn-gold-solid gap-2 px-6 h-10">
+                    Update Password
+                  </Button>
+                </div>
+              </form>
+
+              <form onSubmit={handleUpdateProfile} className="space-y-3 pt-6 border-t border-gold/15">
+                <div className="space-y-1.5">
+                  <label className="label-text text-ink/65">Recovery Email</label>
+                  <p className="text-[11px] text-ink/45 italic">If you forget your password, your GM can use this address to send you a reset link.</p>
+                  <Input type="email" className="bg-background/50 border-gold/25 focus:border-gold h-10 text-ink"
+                    value={recoveryEmail} onChange={e => setRecoveryEmail(e.target.value)} placeholder="e.g. your.email@example.com" />
+                </div>
+                <div className="flex justify-end">
+                  <Button type="submit" disabled={loading} className="btn-gold-solid gap-2 px-6 h-10">
+                    Save Recovery Email
+                  </Button>
+                </div>
+              </form>
+
+              {/* Danger zone — compact inline panel, not a full Card. */}
+              <div className="border border-blood/30 bg-blood/5 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertCircle className="w-4 h-4 text-blood" />
+                  <span className="label-text text-blood">Danger Zone</span>
+                </div>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-bold text-sm text-blood">Delete Profile</p>
+                    <p className="text-[11px] text-ink/55">Removes your profile data from the archive. Your login stays active until a GM removes it.</p>
+                  </div>
+                  <Button variant="ghost" className="btn-danger border border-blood/20 w-full sm:w-auto h-9 text-xs shrink-0">
+                    Delete Profile
+                  </Button>
+                </div>
+              </div>
             </div>
           )}
           
           {activeSection === 'maintenance' && isAdmin && (
-            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <Card className="border-gold/25 bg-card shadow-xl relative overflow-hidden">
-                <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/paper-fibers.png')]" />
-                
-                <CardHeader className="border-b border-gold/15 pb-6">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="h2-title flex items-center gap-3">
-                      <Wrench className="text-gold w-8 h-8" /> Maintenance
-                    </CardTitle>
-                    <Badge variant="outline" className="border-blood text-blood bg-blood/5 gap-1.5 px-3 py-1">
-                      <AlertTriangle className="w-3.5 h-3.5" />
-                      Admin Only
-                    </Badge>
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-3xl mx-auto space-y-6">
+              {/* Slim header with the Admin-Only marker. */}
+              <div className="flex items-center justify-between gap-3 pb-4 border-b border-gold/15">
+                <div className="flex items-center gap-3 min-w-0">
+                  <Wrench className="text-gold w-7 h-7 shrink-0" />
+                  <div className="min-w-0">
+                    <h2 className="h2-title leading-none">Maintenance</h2>
+                    <p className="text-xs text-ink/55 mt-1">Destructive admin data tools.</p>
                   </div>
-                </CardHeader>
-                <CardContent className="pt-8 space-y-8">
-                  <div className="bg-blood/5 border border-blood/20 p-6 rounded-2xl space-y-4">
-                    <div className="flex items-start gap-4">
-                      <div className="bg-blood/10 p-3 rounded-full">
-                        <AlertTriangle className="text-blood w-6 h-6" />
-                      </div>
-                      <div className="space-y-1">
-                        <h3 className="font-serif text-xl font-bold text-blood">Danger Zone Safety Lock</h3>
-                        <p className="text-sm text-ink/65 italic">These actions are irreversible and will permanently delete data from the archive. You must type <strong>PURGE</strong> to unlock the tools below.</p>
-                      </div>
-                    </div>
-                    
-                    <div className="max-w-xs">
-                      <Input 
-                        value={safetyLock}
-                        onChange={e => setSafetyLock(e.target.value)}
-                        placeholder="Type PURGE to unlock"
-                        className={`h-12 text-center font-mono font-black tracking-[0.5em] transition-all ${safetyLock === 'PURGE' ? 'border-blood bg-blood/10 text-blood' : 'border-gold/15 bg-background/50'}`}
-                      />
-                    </div>
-                  </div>
+                </div>
+                <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-bold text-blood border border-blood/40 bg-blood/5 px-2 py-1 shrink-0">
+                  <AlertTriangle className="w-3.5 h-3.5" /> Admin Only
+                </span>
+              </div>
 
-                  <div className="grid md:grid-cols-2 gap-6">
-                    <MaintenanceCard
-                      title="Spells"
-                      description="Deletes all spell records. Use this before a full spell re-import."
-                      onPurge={() => handlePurge('spells', ['spells'])}
-                      disabled={safetyLock !== 'PURGE' || isPurging}
-                    />
-                    <MaintenanceCard 
-                      title="Tags & Taxonomy" 
-                      description="Deletes all tags and tag groups. This will disconnect tags from all existing items."
-                      onPurge={() => handlePurge('tags', ['tags', 'tagGroups'])}
-                      disabled={safetyLock !== 'PURGE' || isPurging}
-                    />
-                    <MaintenanceCard 
-                      title="Classes & Subclasses" 
-                      description="Deletes all class and subclass data. Linked features will be orphaned."
-                      onPurge={() => handlePurge('classes', ['classes', 'features', 'scalingColumns'])}
-                      disabled={safetyLock !== 'PURGE' || isPurging}
-                    />
-                    <MaintenanceCard 
-                      title="Sources & Documents" 
-                      description="Deletes all source metadata and book entries. This is the nuclear option."
-                      onPurge={() => handlePurge('sources', ['sources'])}
-                      disabled={safetyLock !== 'PURGE' || isPurging}
-                    />
-                  </div>
+              {/* Safety lock — compact inline panel. */}
+              <div className="border border-blood/25 bg-blood/5 p-4 space-y-3">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="text-blood w-5 h-5 shrink-0 mt-0.5" />
+                  <p className="text-xs text-ink/65 italic">These actions are irreversible and permanently delete data from the archive. Type <strong className="text-blood not-italic">PURGE</strong> to unlock the tools below.</p>
+                </div>
+                <Input
+                  value={safetyLock}
+                  onChange={e => setSafetyLock(e.target.value)}
+                  placeholder="Type PURGE to unlock"
+                  className={`h-10 max-w-xs text-center font-mono font-black tracking-[0.4em] transition-all ${safetyLock === 'PURGE' ? 'border-blood bg-blood/10 text-blood' : 'border-gold/15 bg-background/50'}`}
+                />
+              </div>
 
-                  {isPurging && (
-                    <div className="p-6 bg-gold/5 border border-gold/25 rounded-2xl flex flex-col items-center gap-4 animate-pulse">
-                      <RefreshCw className="w-8 h-8 text-gold animate-spin" />
-                      <div className="text-center">
-                        <p className="font-bold text-gold">Purge in Progress...</p>
-                        <p className="text-xs text-ink/65 mt-1">{purgeStatus}</p>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <MaintenanceCard
+                  title="Spells"
+                  description="Deletes all spell records. Use before a full spell re-import."
+                  onPurge={() => handlePurge('spells', ['spells'])}
+                  disabled={safetyLock !== 'PURGE' || isPurging}
+                />
+                <MaintenanceCard
+                  title="Tags & Taxonomy"
+                  description="Deletes all tags and tag groups. Disconnects tags from every item."
+                  onPurge={() => handlePurge('tags', ['tags', 'tagGroups'])}
+                  disabled={safetyLock !== 'PURGE' || isPurging}
+                />
+                <MaintenanceCard
+                  title="Classes & Subclasses"
+                  description="Deletes all class and subclass data. Linked features are orphaned."
+                  onPurge={() => handlePurge('classes', ['classes', 'features', 'scalingColumns'])}
+                  disabled={safetyLock !== 'PURGE' || isPurging}
+                />
+                <MaintenanceCard
+                  title="Sources & Documents"
+                  description="Deletes all source metadata and book entries. The nuclear option."
+                  onPurge={() => handlePurge('sources', ['sources'])}
+                  disabled={safetyLock !== 'PURGE' || isPurging}
+                />
+              </div>
+
+              {isPurging && (
+                <div className="p-4 bg-gold/5 border border-gold/25 flex items-center gap-3 animate-pulse">
+                  <RefreshCw className="w-5 h-5 text-gold animate-spin shrink-0" />
+                  <div className="min-w-0">
+                    <p className="font-bold text-sm text-gold">Purge in progress…</p>
+                    <p className="text-[11px] text-ink/65">{purgeStatus}</p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -671,32 +609,39 @@ export default function Settings({ user, userProfile }: { user: any, userProfile
 
 function MaintenanceCard({ title, description, onPurge, disabled }: { title: string, description: string, onPurge: () => void, disabled: boolean }) {
   return (
-    <div className={`p-6 rounded-2xl border transition-all ${disabled ? 'opacity-50 grayscale border-gold/5 bg-card/20' : 'border-gold/15 bg-card hover:border-blood/30'}`}>
-      <h4 className="font-serif text-lg font-bold text-ink mb-2">{title}</h4>
-      <p className="text-xs text-ink/65 mb-6 leading-relaxed italic">{description}</p>
-      <Button 
-        onClick={onPurge} 
+    <div className={`p-4 border transition-all ${disabled ? 'opacity-50 grayscale border-gold/5 bg-card/20' : 'border-gold/15 bg-card hover:border-blood/30'}`}>
+      <h4 className="font-serif text-base font-bold text-ink mb-1">{title}</h4>
+      <p className="text-[11px] text-ink/60 mb-3 leading-relaxed italic">{description}</p>
+      <Button
+        onClick={onPurge}
         disabled={disabled}
-        className="w-full btn-danger gap-2 h-10 border border-blood/20"
+        className="w-full btn-danger gap-2 h-9 text-xs border border-blood/20"
       >
-        <Trash2 className="w-4 h-4" /> Purge Collection
+        <Trash2 className="w-3.5 h-3.5" /> Purge Collection
       </Button>
     </div>
   );
 }
 
-function SettingsNavButton({ icon, label, active = false, onClick }: { icon: React.ReactNode, label: string, active?: boolean, onClick: () => void }) {
+function SettingsNavButton({ icon, label, active = false, onClick, hint }: { icon: React.ReactNode, label: string, active?: boolean, onClick: () => void, hint?: string }) {
   return (
-    <button 
+    <button
       onClick={onClick}
-      className={`w-full flex items-center gap-3 px-6 py-4 rounded-xl text-sm font-bold uppercase tracking-widest transition-all ${
-        active 
-        ? 'bg-gold text-[var(--primary-foreground)] shadow-lg shadow-gold/25 scale-[1.02]'
-        : 'text-ink/65 hover:bg-gold/5 hover:text-gold'
+      className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left rounded-md text-xs font-bold uppercase tracking-wider transition-colors ${
+        active
+          ? 'bg-gold text-[var(--primary-foreground)]'
+          : 'text-ink/65 hover:bg-gold/10 hover:text-gold'
       }`}
     >
-      {icon}
-      {label}
+      <span className="shrink-0">{icon}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate">{label}</span>
+        {hint && (
+          <span className={`block text-[9px] font-normal normal-case tracking-normal truncate ${active ? 'text-[var(--primary-foreground)]/80' : 'text-ink/45'}`}>
+            matches “{hint}”
+          </span>
+        )}
+      </span>
     </button>
   );
 }

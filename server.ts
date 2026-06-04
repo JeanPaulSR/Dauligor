@@ -372,6 +372,12 @@ async function startServer() {
     { mount: "/api/spell-favorites", modulePath: "./functions/api/spell-favorites.ts" },
     { mount: "/api/feat-favorites", modulePath: "./functions/api/feat-favorites.ts" },
     { mount: "/api/item-favorites", modulePath: "./functions/api/item-favorites.ts" },
+    // Public profile read (`/api/profiles/<username>`). A single dynamic
+    // segment (`[username].ts`), so it's mounted with an Express `:username`
+    // param — wrapPagesFunction forwards req.params through to
+    // `context.params.username`. Without this mount the request falls through
+    // to the SPA and the profile page chokes on `Unexpected token '<'`.
+    { mount: "/api/profiles/:username", modulePath: "./functions/api/profiles/[username].ts" },
     { mount: "/api/proposals", modulePath: "./functions/api/proposals/[[path]].ts" },
     { mount: "/api/lore", modulePath: "./functions/api/lore/[[path]].ts" },
     { mount: "/api/campaigns", modulePath: "./functions/api/campaigns/[[path]].ts" },

@@ -126,7 +126,22 @@ export const onRequest = async (context: any): Promise<Response> => {
       campaigns = Array.isArray(campaignsResult?.results) ? campaignsResult.results : [];
     }
 
-    return Response.json({ profile, campaigns });
+    // Featured characters — the user's chosen showcase. Public-safe fields only
+    // (id, name, image, level); joined through user_favorite_characters in the
+    // user's chosen order. Visible to anyone who can see the full profile (the
+    // sealed/private branch returned earlier, so we never reach here for it).
+    const favResult = await executeD1QueryInternal({
+      sql: `SELECT c.id, c.name, c.image_url, c.level
+              FROM user_favorite_characters f
+              JOIN characters c ON c.id = f.character_id
+             WHERE f.user_id = ?
+             ORDER BY f.position ASC`,
+      params: [row.id],
+    });
+    const featuredCharacters = (Array.isArray(favResult?.results) ? favResult.results : [])
+      .map((c: any) => ({ id: c.id, name: c.name, image_url: c.image_url ?? null, level: c.level ?? null }));
+
+    return Response.json({ profile, campaigns, featured_characters: featuredCharacters });
   } catch (error: any) {
     const credentialMessage = getCredentialErrorMessage(error);
     if (credentialMessage) {

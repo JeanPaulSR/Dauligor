@@ -3,9 +3,8 @@ import { useParams, Link } from 'react-router-dom';
 import { Avatar, AvatarFallback, AvatarImage } from '../../components/ui/avatar';
 
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
-import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
-import { UserCircle, MapPin, Calendar, Shield, Book, Bookmark, ChevronLeft, Users, Lock } from 'lucide-react';
+import { UserCircle, Calendar, Shield, Book, ChevronLeft, Users, Lock } from 'lucide-react';
 import { motion } from 'motion/react';
 import { getSessionToken } from "../../lib/auth";
 
@@ -16,7 +15,8 @@ export default function Profile({ viewerProfile }: { viewerProfile?: any }) {
   const [error, setError] = useState('');
 
   const [campaigns, setCampaigns] = useState<any[]>([]);
- 
+  const [featuredCharacters, setFeaturedCharacters] = useState<any[]>([]);
+
   useEffect(() => {
     const fetchProfileData = async () => {
       if (!username) return;
@@ -47,6 +47,7 @@ export default function Profile({ viewerProfile }: { viewerProfile?: any }) {
         }
         setProfile(body.profile);
         setCampaigns(Array.isArray(body?.campaigns) ? body.campaigns : []);
+        setFeaturedCharacters(Array.isArray(body?.featured_characters) ? body.featured_characters : []);
       } catch (err: any) {
         console.error(err);
         setError('Failed to retrieve profile.');
@@ -100,21 +101,21 @@ export default function Profile({ viewerProfile }: { viewerProfile?: any }) {
   }
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="max-w-4xl mx-auto space-y-8 pb-20"
+      className="w-full max-w-4xl mx-auto space-y-6 pb-16"
     >
       <Button variant="ghost" className="text-ink/45 hover:text-gold -ml-4" nativeButton={false} render={<Link to="/"><ChevronLeft className="w-4 h-4 mr-1" /> Back</Link>} />
 
       <div className="relative">
         {/* Profile Header Card */}
         <Card className="border-gold/25 bg-card/80 backdrop-blur-sm shadow-2xl overflow-hidden">
-          <div className="h-32 bg-gold/15 relative">
+          <div className="h-24 bg-gold/15 relative">
             <div className="absolute inset-0 opacity-[0.05] bg-[url('https://www.transparenttextures.com/patterns/paper-fibers.png')]" />
           </div>
-          <CardContent className="relative pt-0 pb-8 px-8">
-            <div className="flex flex-col md:flex-row gap-8 items-start md:items-end -mt-16">
+          <CardContent className="relative pt-0 pb-6 px-6 sm:px-8">
+            <div className="flex flex-col md:flex-row gap-6 items-start md:items-end -mt-12">
               <div className="relative">
                 <Avatar className="w-32 h-32 border-4 border-card shadow-xl">
                   <AvatarImage src={profile.avatar_url} referrerPolicy="no-referrer" />
@@ -122,11 +123,6 @@ export default function Profile({ viewerProfile }: { viewerProfile?: any }) {
                     {profile.display_name?.[0] || profile.username?.[0]}
                   </AvatarFallback>
                 </Avatar>
-                {profile.role === 'admin' && (
-                  <div className="absolute -bottom-2 -right-2 bg-gold text-[var(--primary-foreground)] p-1.5 rounded-full shadow-lg border-2 border-card">
-                    <Shield className="w-4 h-4" />
-                  </div>
-                )}
               </div>
               
               <div className="flex-grow space-y-2">
@@ -135,9 +131,6 @@ export default function Profile({ viewerProfile }: { viewerProfile?: any }) {
                   {profile.pronouns && (
                     <span className="text-sm text-ink/45 italic mt-2">({profile.pronouns})</span>
                   )}
-                  <Badge variant="outline" className="border-gold text-gold bg-gold/5 uppercase tracking-widest text-[10px]">
-                    {profile.role === 'admin' ? 'Grand Archivist' : 'Seeker'}
-                  </Badge>
                 </div>
                 {!profile.hide_username && (
                   <p className="text-ink/45 font-medium">@{profile.username}</p>
@@ -145,14 +138,14 @@ export default function Profile({ viewerProfile }: { viewerProfile?: any }) {
               </div>
             </div>
 
-            <div className="mt-12 grid md:grid-cols-3 gap-8">
+            <div className="mt-8 grid md:grid-cols-3 gap-6">
               <div className="md:col-span-2 space-y-6">
                 <div className="space-y-2">
                   <h3 className="text-sm font-bold uppercase tracking-widest text-ink/45 flex items-center gap-2">
                     <Book className="w-4 h-4" /> Biography
                   </h3>
                   <p className="text-ink/85 font-serif text-lg leading-relaxed italic">
-                    {profile.bio || "This archivist has not yet recorded their journey in the annals of history."}
+                    {profile.bio || "No biography recorded"}
                   </p>
                 </div>
               </div>
@@ -162,7 +155,6 @@ export default function Profile({ viewerProfile }: { viewerProfile?: any }) {
                   <h3 className="text-sm font-bold uppercase tracking-widest text-ink/45">Archive Stats</h3>
                   <div className="space-y-3">
                     <StatItem icon={<Calendar className="w-4 h-4" />} label="Joined" value={profile.created_at ? new Date(profile.created_at).toLocaleDateString() : "The Early Ages"} />
-                    <StatItem icon={<MapPin className="w-4 h-4" />} label="Location" value="The Great Library" />
                   </div>
                 </div>
               </div>
@@ -175,13 +167,32 @@ export default function Profile({ viewerProfile }: { viewerProfile?: any }) {
         <Card className="border-gold/15 bg-card/50">
           <CardHeader>
             <CardTitle className="font-serif text-xl flex items-center gap-2">
-              <Bookmark className="w-5 h-5 text-gold" /> Recent Discoveries
+              <UserCircle className="w-5 h-5 text-gold" /> Featured Characters
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-ink/45 italic text-center py-8">
-              No public bookmarks shared by this archivist.
-            </p>
+            {featuredCharacters.length === 0 ? (
+              <p className="text-sm text-ink/45 italic text-center py-8">
+                No featured characters
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {featuredCharacters.map((c) => (
+                  <div key={c.id} className="flex items-center gap-3 p-3 border border-gold/15 rounded">
+                    <Avatar className="w-10 h-10 border border-gold/25">
+                      <AvatarImage src={c.image_url || undefined} referrerPolicy="no-referrer" />
+                      <AvatarFallback className="bg-gold/15 text-gold text-sm font-serif">
+                        {String(c.name || '?')[0]}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="flex-1 min-w-0 truncate font-serif font-bold text-ink">{c.name}</span>
+                    {c.level != null && (
+                      <span className="text-[10px] font-bold uppercase tracking-wide text-gold/80 shrink-0">Lv {c.level}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 

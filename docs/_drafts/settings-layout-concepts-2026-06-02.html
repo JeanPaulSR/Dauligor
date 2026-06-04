@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Settings — 5 Layout Concepts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1a1a1a; --gold:#c5a059; --blood:#8b0000;
+    --bg:#f5f5f0; --card:#ffffff;
+    --serif:"Cormorant Garamond", Georgia, serif;
+    --sans:"Inter", ui-sans-serif, system-ui, sans-serif;
+    --g05:rgba(197,160,89,.05); --g10:rgba(197,160,89,.10); --g15:rgba(197,160,89,.15);
+    --g25:rgba(197,160,89,.25); --g35:rgba(197,160,89,.35); --g45:rgba(197,160,89,.45);
+    --i10:rgba(26,26,26,.10); --i35:rgba(26,26,26,.35); --i45:rgba(26,26,26,.45);
+    --i65:rgba(26,26,26,.65); --i85:rgba(26,26,26,.85);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14.5px;line-height:1.6;}
+  .wrap{max-width:1180px;margin:0 auto;padding:30px 22px 90px;}
+  svg{display:block;}
+
+  .h1{font-family:var(--serif);font-weight:700;font-size:46px;margin:0;letter-spacing:-.01em;}
+  .h2{font-family:var(--serif);font-weight:700;font-size:25px;margin:0;}
+  .sub{font-family:var(--serif);font-style:italic;color:var(--i65);font-size:17px;}
+  .eyebrow{font-size:11px;letter-spacing:.4em;text-transform:uppercase;color:#8a6f2f;font-family:ui-monospace,Menlo,monospace;}
+  header.top{text-align:center;border-bottom:3px double var(--g35);padding-bottom:18px;margin-bottom:22px;}
+  .meta{font-size:11px;color:var(--i45);margin-top:9px;font-family:ui-monospace,Menlo,monospace;}
+  p{margin:9px 0;} code{font-family:ui-monospace,Menlo,monospace;font-size:.88em;background:var(--g10);padding:1px 5px;border:1px solid var(--g15);color:#7a5f23;}
+  .label{font-size:10px;text-transform:uppercase;font-weight:800;letter-spacing:.16em;color:var(--gold);}
+
+  .callout{border-left:3px solid var(--gold);background:var(--g05);padding:12px 16px;margin:16px 0;}
+  .rec{border-left-color:#2f6f3f;background:rgba(60,130,80,.06);}
+  .pill{display:inline-block;font-family:ui-monospace,Menlo,monospace;font-size:10px;letter-spacing:.05em;text-transform:uppercase;padding:2px 8px;background:var(--g10);color:#8a6f2f;border:1px solid var(--g25);}
+  .pill.best{background:rgba(60,130,80,.12);color:#2f6f3f;border-color:rgba(60,130,80,.3);}
+  .pill.warn{background:rgba(139,0,0,.08);color:var(--blood);border-color:rgba(139,0,0,.25);}
+
+  .concept{border:1px solid var(--g25);background:var(--card);margin:26px 0;overflow:hidden;}
+  .concept > .hd{display:flex;align-items:baseline;gap:12px;padding:14px 18px;border-bottom:1px solid var(--g15);background:var(--g05);}
+  .concept > .hd .n{font-family:var(--serif);font-weight:700;font-size:30px;color:var(--gold);line-height:1;width:34px;}
+  .concept > .hd .t{font-family:var(--serif);font-weight:700;font-size:22px;}
+  .concept > .hd .d{color:var(--i65);font-size:13px;font-style:italic;}
+  .concept > .bd{display:grid;grid-template-columns:1fr 300px;gap:20px;padding:18px;}
+  @media(max-width:860px){.concept > .bd{grid-template-columns:1fr;}}
+  .pc{font-size:12.5px;}
+  .pc ul{margin:4px 0 12px;padding-left:18px;} .pc li{margin:3px 0;}
+  .pc .good::before{content:"✓ ";color:#2f6f3f;font-weight:800;}
+  .pc .bad::before{content:"✕ ";color:var(--blood);font-weight:800;}
+  .fit{font-size:11.5px;border-top:1px dashed var(--g25);padding-top:8px;margin-top:4px;color:var(--i65);}
+
+  /* ---------- faux-UI kit (parchment, square corners) ---------- */
+  .ui{border:1px solid var(--i10);background:var(--bg);font-size:9px;line-height:1.35;height:230px;display:flex;flex-direction:column;overflow:hidden;}
+  .ui .bar{display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--i10);background:var(--card);}
+  .ui .brand{font-family:var(--serif);font-weight:700;font-size:13px;}
+  .ui .role{margin-left:auto;font-size:7px;color:var(--gold);border:1px solid var(--g35);padding:1px 4px;}
+  .ui .body{flex:1;display:flex;min-height:0;}
+  .rail{width:84px;border-right:1px solid var(--i10);background:var(--card);padding:6px;display:flex;flex-direction:column;gap:3px;flex:0 0 auto;}
+  .nav{padding:4px 6px;color:var(--i65);border:1px solid transparent;white-space:nowrap;}
+  .nav.on{background:var(--gold);color:#fff;font-weight:800;}
+  .nav.on.alt{background:var(--g15);color:#7a5f23;border-color:var(--g25);}
+  .content{flex:1;padding:8px;overflow:hidden;min-width:0;}
+  .tabbar{display:flex;gap:0;border:1px solid var(--i10);width:max-content;margin-bottom:7px;}
+  .tab{padding:3px 8px;border-right:1px solid var(--i10);color:var(--i65);}
+  .tab:last-child{border-right:none;} .tab.on{background:var(--gold);color:#fff;font-weight:800;}
+  .card{border:1px solid var(--g25);background:var(--card);padding:6px;margin-bottom:6px;}
+  .ln{height:5px;background:var(--i10);border-radius:1px;margin:3px 0;}
+  .ln.s{width:40%;} .ln.m{width:65%;} .ln.g{background:var(--g25);width:30%;}
+  .sw{display:inline-block;width:10px;height:10px;border:1px solid var(--i35);vertical-align:middle;}
+  .twocol{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+  .prev{border:1px solid var(--g25);background:var(--card);padding:5px;}
+  .btn{display:inline-block;background:var(--gold);color:#fff;font-weight:800;padding:2px 7px;font-size:8px;}
+  .grid4{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+  .tile{border:1px solid var(--g25);background:var(--card);padding:7px;}
+  .tile .ic{width:14px;height:14px;background:var(--g15);border:1px solid var(--g25);margin-bottom:4px;}
+  .anchor{width:70px;border-left:1px solid var(--i10);padding:6px;flex:0 0 auto;background:var(--card);}
+  .anchor .a{padding:2px 0;color:var(--i45);} .anchor .a.on{color:var(--gold);font-weight:800;border-left:2px solid var(--gold);padding-left:4px;}
+  .search{border:1px solid var(--i35);background:var(--bg);padding:3px 5px;color:var(--i45);margin-bottom:5px;}
+  .scrollcol{flex:1;overflow:hidden;padding:8px;}
+  .sectlabel{font-size:8px;text-transform:uppercase;letter-spacing:.12em;color:var(--gold);font-weight:800;margin:5px 0 3px;}
+
+  table.cmp{border-collapse:collapse;width:100%;margin:14px 0;font-size:13px;}
+  table.cmp th,table.cmp td{border:1px solid var(--g25);padding:7px 10px;text-align:left;}
+  table.cmp th{background:var(--g10);text-transform:uppercase;font-size:10px;letter-spacing:.1em;color:#7a5f23;}
+  table.cmp td:first-child{font-weight:700;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <div class="eyebrow">Design Options · Settings</div>
+  <h1 class="h1">Settings — 5 Layout Concepts</h1>
+  <div class="sub">The shell was a placeholder; the wide Appearance builder broke it. Five ways forward.</div>
+  <div class="meta">docs/_drafts · branch: settings-pages</div>
+</header>
+
+<div class="callout">
+  <span class="label">The driving constraint</span>
+  Most sections (Profile, Security, Maintenance) are <strong>narrow forms</strong>. <strong>Appearance is wide</strong> — a controls column <em>plus</em> a live preview pane. The current single narrow content column can't hold both, so it reads cramped. A good layout has to serve <em>both</em> shapes without feeling lopsided. Each concept below is rated on that "Appearance fit".
+</div>
+
+<!-- 1 -->
+<div class="concept">
+  <div class="hd"><span class="n">1</span><div><div class="t">Polished sidebar</div> <span class="d">evolve what's there — same nav, fixed proportions</span></div><span class="pill" style="margin-left:auto">lowest risk</span></div>
+  <div class="bd">
+    <div class="ui">
+      <div class="bar"><span class="brand">Settings</span><span class="role">Admin</span></div>
+      <div class="body">
+        <div class="rail"><span class="nav">Profile</span><span class="nav on">Appearance</span><span class="nav">Security</span><span class="nav">Maint.</span></div>
+        <div class="content">
+          <div class="twocol">
+            <div><div class="label" style="font-size:7px">Controls</div><div class="ln g"></div><div class="ln m"></div><div class="ln s"></div><div class="ln m"></div></div>
+            <div class="prev"><div class="label" style="font-size:7px">Preview</div><div class="ln m"></div><div class="ln s"></div><span class="btn">Save</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="pc">
+      <ul>
+        <li class="good">Minimal change; ships fastest</li>
+        <li class="good">Familiar left-nav pattern</li>
+        <li class="bad">Sidebar steals width the wide builder wants</li>
+        <li class="bad">Narrow sections look lost in a big pane</li>
+      </ul>
+      <div class="fit"><strong>Appearance fit:</strong> ⚠ tight — builder + preview compete for the remaining width.</div>
+    </div>
+  </div>
+</div>
+
+<!-- 2 -->
+<div class="concept">
+  <div class="hd"><span class="n">2</span><div><div class="t">Horizontal tabs, full-width</div> <span class="d">title + tab strip on top, content spans the page</span></div><span class="pill best" style="margin-left:auto">recommended</span></div>
+  <div class="bd">
+    <div class="ui">
+      <div class="bar"><span class="brand">Settings</span><span class="role">Admin</span></div>
+      <div class="content" style="padding:8px 10px">
+        <div class="tabbar"><span class="tab">Profile</span><span class="tab on">Appearance</span><span class="tab">Security</span><span class="tab">Maintenance</span></div>
+        <div class="twocol" style="grid-template-columns:1fr 1.3fr">
+          <div><div class="ln g"></div><div class="ln m"></div><div class="ln s"></div><div class="ln m"></div><div class="ln s"></div><span class="btn">Save &amp; apply</span></div>
+          <div class="prev"><div class="label" style="font-size:7px">Live preview</div><div class="ln m"></div><div class="ln s"></div><div class="ln m"></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="pc">
+      <ul>
+        <li class="good">Content gets the <strong>full page width</strong> — ideal for the two-pane builder</li>
+        <li class="good">Narrow forms simply center in the same width</li>
+        <li class="good">Modern, app-like; scales to more tabs</li>
+        <li class="bad">Tab labels need to stay short</li>
+      </ul>
+      <div class="fit"><strong>Appearance fit:</strong> ✓ excellent — builder and preview both breathe.</div>
+    </div>
+  </div>
+</div>
+
+<!-- 3 -->
+<div class="concept">
+  <div class="hd"><span class="n">3</span><div><div class="t">Single scroll + anchor rail</div> <span class="d">every section stacked; a slim rail tracks where you are</span></div></div>
+  <div class="bd">
+    <div class="ui">
+      <div class="bar"><span class="brand">Settings</span><span class="role">Admin</span></div>
+      <div class="body">
+        <div class="scrollcol">
+          <div class="sectlabel">Profile</div><div class="card"><div class="ln m"></div><div class="ln s"></div></div>
+          <div class="sectlabel">Appearance</div><div class="card"><div class="ln g"></div><div class="ln m"></div></div>
+        </div>
+        <div class="anchor"><div class="a">Profile</div><div class="a on">Appearance</div><div class="a">Security</div><div class="a">Maint.</div></div>
+      </div>
+    </div>
+    <div class="pc">
+      <ul>
+        <li class="good">See &amp; edit everything without clicking tabs</li>
+        <li class="good">Great for "set it all up once"</li>
+        <li class="bad">Long page; Appearance's tall preview dominates the scroll</li>
+        <li class="bad">Maintenance (admin/destructive) sits in the same flow</li>
+      </ul>
+      <div class="fit"><strong>Appearance fit:</strong> ◐ ok — full width, but the big preview makes scrolling past it awkward.</div>
+    </div>
+  </div>
+</div>
+
+<!-- 4 -->
+<div class="concept">
+  <div class="hd"><span class="n">4</span><div><div class="t">Settings hub (launcher)</div> <span class="d">a tile per area → opens a focused full-width editor</span></div></div>
+  <div class="bd">
+    <div class="ui">
+      <div class="bar"><span class="brand">Settings</span><span class="role">Admin</span></div>
+      <div class="content">
+        <div class="grid4">
+          <div class="tile"><div class="ic"></div><div class="ln s"></div><div class="ln m" style="height:3px"></div></div>
+          <div class="tile" style="border-color:var(--g45)"><div class="ic" style="background:var(--g25)"></div><div class="ln g"></div><div class="ln m" style="height:3px"></div></div>
+          <div class="tile"><div class="ic"></div><div class="ln s"></div><div class="ln m" style="height:3px"></div></div>
+          <div class="tile"><div class="ic"></div><div class="ln s"></div><div class="ln m" style="height:3px"></div></div>
+        </div>
+        <div style="text-align:center;color:var(--i35);margin-top:6px;font-size:8px">click a tile → full-width editor</div>
+      </div>
+    </div>
+    <div class="pc">
+      <ul>
+        <li class="good">Calm overview; each editor gets the whole width on drill-in</li>
+        <li class="good">Room to show summaries ("Theme: Midnight Amber")</li>
+        <li class="bad">Extra click to reach any setting</li>
+        <li class="bad">Heavier to build (hub + routed sub-pages)</li>
+      </ul>
+      <div class="fit"><strong>Appearance fit:</strong> ✓ great on drill-in — full width, focused. Costs a click to get there.</div>
+    </div>
+  </div>
+</div>
+
+<!-- 5 -->
+<div class="concept">
+  <div class="hd"><span class="n">5</span><div><div class="t">Master–detail + search</div> <span class="d">persistent list with search, detail fills the rest (macOS-style)</span></div><span class="pill" style="margin-left:auto">most scalable</span></div>
+  <div class="bd">
+    <div class="ui">
+      <div class="bar"><span class="brand">Settings</span><span class="role">Admin</span></div>
+      <div class="body">
+        <div class="rail" style="width:92px"><div class="search">search…</div><span class="nav">Profile</span><span class="nav on alt">Appearance</span><span class="nav">Security</span><span class="nav">Maint.</span></div>
+        <div class="content">
+          <div class="twocol" style="grid-template-columns:1fr 1.2fr">
+            <div><div class="ln g"></div><div class="ln m"></div><div class="ln s"></div><span class="btn">Save</span></div>
+            <div class="prev"><div class="ln m"></div><div class="ln s"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="pc">
+      <ul>
+        <li class="good">Scales to many settings; search jumps anywhere</li>
+        <li class="good">Professional, dense, "real product" feel</li>
+        <li class="bad">Two-pane list+detail <em>plus</em> the builder's own two panes = pane-heavy</li>
+        <li class="bad">Most design/build effort of the five</li>
+      </ul>
+      <div class="fit"><strong>Appearance fit:</strong> ◐ good but busy — a list rail next to the builder's controls+preview is a lot of columns.</div>
+    </div>
+  </div>
+</div>
+
+<h2 class="h2" style="margin-top:34px">At a glance</h2>
+<table class="cmp">
+  <tr><th>Concept</th><th>Appearance fit</th><th>Effort</th><th>Best when…</th></tr>
+  <tr><td>1 · Polished sidebar</td><td>⚠ tight</td><td>Low</td><td>you want it shipped today</td></tr>
+  <tr><td>2 · Horizontal tabs</td><td>✓ excellent</td><td>Low–Med</td><td>Appearance is the priority (it is)</td></tr>
+  <tr><td>3 · Single scroll</td><td>◐ ok</td><td>Medium</td><td>users set everything in one pass</td></tr>
+  <tr><td>4 · Settings hub</td><td>✓ great (drill-in)</td><td>Med–High</td><td>settings will keep growing</td></tr>
+  <tr><td>5 · Master–detail + search</td><td>◐ good, busy</td><td>High</td><td>many dozens of settings someday</td></tr>
+</table>
+
+<div class="callout rec">
+  <span class="label">My lean</span>
+  <strong>Concept 2 (horizontal tabs, full-width)</strong> — it directly fixes the actual problem (Appearance needs width), is low effort, and keeps the simple forms clean by centering them in the same canvas. <strong>Concept 4 (hub)</strong> is the better long-term bet if Settings will keep growing. Tell me which to build (or mix — e.g. 2's full-width content with 4's summary tiles), and I'll implement it.
+</div>
+
+</div>
+</body>
+</html>

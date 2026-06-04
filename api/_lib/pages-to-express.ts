@@ -81,6 +81,12 @@ export function wrapPagesFunction(handler: PagesOnRequest) {
       });
 
       const params: Record<string, string | string[]> = {
+        // Express route params first (e.g. `/api/profiles/:username` →
+        // `username`), so single-dynamic-segment Pages Functions like
+        // `[username].ts` receive `context.params.username` exactly as they
+        // do under the real Pages runtime. `path` is set last so the
+        // `[[path]]` catch-all value is always authoritative for those mounts.
+        ...(req.params as Record<string, string>),
         path: splitSubPath(req.url),
       };
 

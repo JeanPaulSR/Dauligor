@@ -4,7 +4,7 @@
  */
 
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { onAuthChange, getSessionToken, type Identity } from './lib/auth';
 import { resolveThemeVars, THEME_VAR_NAMES, type ActiveTheme } from './lib/theme';
 import { WikiPreviewContext, type WikiPreviewCampaign } from './lib/wikiPreviewContext';
@@ -30,7 +30,6 @@ import StatusesEditor from './pages/admin/StatusesEditor';
 import ImageManager from './pages/admin/ImageManager';
 import ImageViewer from './pages/admin/ImageViewer';
 import Settings from './pages/core/Settings';
-import AppearanceLab from './pages/core/AppearanceLab'; // TEMP: Phase-2 preview harness
 import Profile from './pages/core/Profile';
 import Construction from './pages/core/Construction';
 import Sources from './pages/sources/Sources';
@@ -87,11 +86,18 @@ import ReferenceHoverCard from './components/reference/ReferenceHoverCard';
 import { Toaster } from 'sonner';
 
 // Global OGL/copyright footer — suppressed on system pages (/system/*) so those
-// reference glossaries read clean. Lives inside <Router> so it can read the route.
+// reference glossaries read clean, and on the Settings surfaces (which own the
+// full viewport with their own master-detail + height-adaptive preview chrome;
+// the copyright band just steals vertical space there). Lives inside <Router>
+// so it can read the route.
 function RouteAwareFooter() {
   const location = useLocation();
   const p = location.pathname;
-  if (p.startsWith('/system/') || p.startsWith('/compendium/system-pages')) return null;
+  if (
+    p.startsWith('/system/') ||
+    p.startsWith('/compendium/system-pages') ||
+    p === '/settings'
+  ) return null;
   return (
     <footer className="bg-card border-t border-gold/15 text-ink py-8 mt-auto">
       <div className="container mx-auto px-4 text-center opacity-70">
@@ -99,6 +105,23 @@ function RouteAwareFooter() {
         <p className="text-xs mt-2">© 2026 Dauligor: Compendium and Lore Manager</p>
       </div>
     </footer>
+  );
+}
+
+// Most routes read better in a centered container; a few (Settings' wide
+// master–detail layout) want to fill the content column. Route-aware so we
+// don't force every page full-width.
+function RouteAwareMain({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation();
+  const wide = pathname === '/settings';
+  // Settings owns a viewport-bounded master-detail shell (its detail pane
+  // scrolls internally), so it gets full width + a slim top pad and NO bottom
+  // pad — the bottom padding would otherwise add a sliver of page scroll below
+  // the height-locked shell.
+  return (
+    <main className={`flex-grow relative ${wide ? 'w-full px-4 sm:px-6 lg:px-8 pt-6' : 'container mx-auto px-4 py-8'}`}>
+      {children}
+    </main>
   );
 }
 
@@ -279,7 +302,7 @@ export default function App() {
             }
           }}
         />
-        <main className="flex-grow container mx-auto px-4 py-8 relative">
+        <RouteAwareMain>
           <ErrorBoundary>
             <div className="animate-in fade-in duration-500">
               <ProposalReviewProvider>
@@ -482,7 +505,6 @@ export default function App() {
                       can sit alongside. */}
                   <Route path="/dev/bbcode" element={<AdminOnly userProfile={effectiveProfile}><BBCodeTester userProfile={effectiveProfile} /></AdminOnly>} />
                   <Route path="/settings" element={<Settings user={user} userProfile={effectiveProfile} />} />
-                  <Route path="/appearance-lab" element={<AppearanceLab />} /> {/* TEMP: Phase-2 preview harness */}
                   <Route path="/profile/:username" element={<Profile viewerProfile={effectiveProfile} />} />
                   <Route path="/construction" element={<Construction />} />
                   <Route path="/characters" element={<CharacterList userProfile={effectiveProfile} />} />
@@ -506,7 +528,7 @@ export default function App() {
               </ProposalReviewProvider>
             </div>
           </ErrorBoundary>
-        </main>
+        </RouteAwareMain>
           <RouteAwareFooter />
             {effectiveProfile?.role === 'admin' && <DebugConsole />}
             <ReferenceHoverCard />

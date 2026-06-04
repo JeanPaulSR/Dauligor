@@ -1,158 +1,306 @@
-// Static, representative mock-ups of the app's main surfaces, used by the
-// Appearance theme preview. They render real semantic classes / theme utilities
-// (text-ink, bg-card, text-gold, .h1-title, .data-table, …) so they respond to
-// the active theme variables exactly like the real pages — but with hard-coded
-// sample data, so the preview is instant and needs no network.
-//
-// Each surface deliberately stresses a different part of the token set:
-//   compendium → dense cards + gold metadata tags
-//   wiki       → long-form prose + headings + links
-//   sheet      → tabular contrast + stat cells
-//   home       → navbar chrome + buttons + dashboard cards
+// Preview surfaces for the Appearance theme preview — faithful SIMULATIONS of
+// the app's real pages (Article, Compendium, Class view) plus a generic
+// component gallery and the opacity ladder. They mirror the actual pages'
+// structure and classes (and use the real BBCodeRenderer for prose), so the
+// preview looks like the real thing — but they're static (no router/fetch), so
+// they render instantly inside the scoped theme wrapper and re-theme live.
 
 import type { FC, ReactNode } from "react";
+import { Search, SlidersHorizontal, Star, Settings as SettingsIcon } from "lucide-react";
+import BBCodeRenderer from "../BBCodeRenderer";
+import SpellDetailPanel from "../compendium/SpellDetailPanel";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
+import { Badge } from "../ui/badge";
 
-/* ----------------------------- Compendium -------------------------------- */
+/* ------------------------------ Article page ----------------------------- */
+// Mirrors LoreArticle: card panel, centred gold title + italic subtitle, then a
+// prose body (real renderer) with an "on this page" sidebar.
 
-const CompendiumMock: FC = () => (
-  <div className="grid grid-cols-[150px_1fr] gap-3">
-    <div className="border border-border bg-card">
-      {["Fireball", "Cloak of Elvenkind", "Counterspell", "Longsword +1"].map((n, i) => (
-        <div
-          key={n}
-          className={`px-3 py-2 border-b border-border last:border-b-0 ${i === 0 ? "bg-gold/15" : ""}`}
-        >
-          <div className="text-sm text-ink leading-tight">{n}</div>
-          <div className="text-[10px] uppercase tracking-widest text-gold font-bold">
-            {["Spell", "Item", "Spell", "Item"][i]}
+const ARTICLE_BODY = `[h2]The Drowning[/h2]
+Beneath the tideless sea lies [b]Vol[/b], once the jewel of the Amber Coast. Its towers stand intact in the green dark, lit by lanterns that no living hand has tended in three hundred years.
+
+[i]"We do not bring the cold. We merely walk ahead of it."[/i]
+
+[h2]The Lantern Wardens[/h2]
+What the Magisters promised in exchange for a single warm season is recorded nowhere that survives — the archives end mid-sentence.
+
+[quote]Better one winter under their terms than ten under none.[/quote]
+
+[h2]What Remains[/h2]
+The towers of Vol are not empty. Lights move behind their windows on the nights when the tide pulls farthest out, and those who have rowed close enough to listen say the city still keeps its calendars — bells tolling hours that belong to no clock above the waves.
+
+Salvagers who take from Vol are not punished so much as [b]remembered[/b]. A name spoken in the deep is a debt, and the Pale Court has never once forgiven one.
+
+[h2]The Amber Coast Today[/h2]
+Three towns still light harbour-lanterns against the old promise. Whether the gesture wards anything — or merely flatters something that was never listening — the Magisters will not say.`;
+
+const ArticlePage: FC = () => (
+  <div className="w-full">
+    <div className="bg-card border border-gold/15 rounded-xl overflow-hidden">
+      <div className="h-28 bg-gradient-to-b from-gold/15 to-transparent border-b border-gold/15 flex items-end justify-center pb-3">
+        <span className="label-text text-gold text-[10px] uppercase tracking-widest">Lore · Geography</span>
+      </div>
+      <div className="text-center py-6 px-6 border-b border-gold/15">
+        <h1 className="text-4xl md:text-5xl font-serif font-bold tracking-wide text-gold/95">The Sunken City of Vol</h1>
+        <p className="text-lg font-serif italic text-ink/75 max-w-2xl mx-auto leading-relaxed border-t border-b border-gold/15 py-3 mt-4">
+          Where the tide forgot to return, and the lamps still burn.
+        </p>
+      </div>
+      <div className="grid lg:grid-cols-3 gap-8 p-6">
+        <div className="lg:col-span-2">
+          <BBCodeRenderer content={ARTICLE_BODY} />
+        </div>
+        <aside className="space-y-4">
+          <div className="border border-gold/15 bg-gold/5 p-4">
+            <div className="label-text text-gold mb-2">On this page</div>
+            <ul className="space-y-1.5 text-sm text-ink/65">
+              <li className="hover:text-gold cursor-pointer">The Drowning</li>
+              <li className="hover:text-gold cursor-pointer">The Lantern Wardens</li>
+              <li className="hover:text-gold cursor-pointer">What Remains</li>
+            </ul>
           </div>
-        </div>
-      ))}
+          <div className="border border-gold/15 bg-card p-4">
+            <div className="label-text text-gold mb-2">Linked</div>
+            <p className="text-xs text-ink/55">The Amber Coast · The Pale Court · Magister Vael</p>
+          </div>
+        </aside>
+      </div>
     </div>
-    <div className="border border-border bg-card p-4">
-      <div className="text-[10px] uppercase tracking-widest text-gold font-bold">Level 3 · Evocation</div>
-      <h3 className="h3-title text-ink mt-0.5">Fireball</h3>
-      <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
-        A bright streak flashes from your pointing finger to a point you choose, then blossoms with a
-        low roar into an explosion of flame.
-      </p>
-      <div className="flex flex-wrap gap-1.5 mt-3">
-        {["Range 150 ft", "V S M", "8d6 fire"].map((t) => (
-          <span key={t} className="text-[11px] px-2 py-0.5 bg-gold/15 text-gold border border-gold/35">
-            {t}
+  </div>
+);
+
+/* ---------------------------- Compendium page ---------------------------- */
+// The REAL compendium content view — the same `SpellDetailPanel` the live
+// /compendium/spells browser renders in its right pane. It accepts a raw-row
+// `spellData` prop (the proposal editor's escape hatch) so it renders the
+// authentic header, stat block, and prose body from a static payload — no
+// fetch, no selection plumbing — and re-themes live like every other surface.
+
+// Raw spell row (snake_case, as stored in D1). `mapRawSpellRow` parses
+// `foundry_data` into the foundryShell the stat-block rows read, so Casting
+// Time / Range / Components / Duration render real, formatted values.
+const SAMPLE_SPELL_ROW = {
+  id: "preview-fireball",
+  name: "Fireball",
+  level: 3,
+  school: "evo",
+  description: `A bright streak flashes from your pointing finger to a point you choose within range, then blossoms with a low roar into an explosion of flame. Each creature in a 20-foot-radius sphere centered on that point must make a Dexterity saving throw, taking [b]8d6 fire damage[/b] on a failed save, or half as much damage on a successful one.
+
+The fire spreads around corners. It ignites flammable objects in the area that aren't being worn or carried.
+
+[b]At Higher Levels.[/b] When you cast this spell using a spell slot of 4th level or higher, the damage increases by 1d6 for each slot level above 3rd.`,
+  tags: [],
+  foundry_data: {
+    activation: { type: "action", value: 1 },
+    range: { value: "150", units: "feet" },
+    duration: { units: "inst" },
+    properties: ["vocal", "somatic", "material"],
+    materials: { value: "a tiny ball of bat guano and sulfur" },
+  },
+};
+
+// Static stand-ins for the list table + favorites pane — pure navigation
+// chrome (the real shell owns viewport-lock + virtualization, which would
+// hijack the page and blow out of the preview frame). The DETAIL pane is the
+// real component; everything left of it is a faithful silhouette.
+const SAMPLE_LIST: { name: string; lv: string; time: string; school: string; range: string; src: string }[] = [
+  { name: "Aganazzar's Scorcher", lv: "2", time: "1 action", school: "Evoc.", range: "30 ft", src: "XGE" },
+  { name: "Burning Hands", lv: "1", time: "1 action", school: "Evoc.", range: "Self", src: "PHB" },
+  { name: "Counterspell", lv: "3", time: "1 reaction", school: "Abju.", range: "60 ft", src: "PHB" },
+  { name: "Delayed Blast Fireball", lv: "7", time: "1 action", school: "Evoc.", range: "150 ft", src: "PHB" },
+  { name: "Fireball", lv: "3", time: "1 action", school: "Evoc.", range: "150 ft", src: "PHB" },
+  { name: "Fire Bolt", lv: "C", time: "1 action", school: "Evoc.", range: "120 ft", src: "PHB" },
+  { name: "Fire Shield", lv: "4", time: "1 action", school: "Evoc.", range: "Self", src: "PHB" },
+  { name: "Flame Strike", lv: "5", time: "1 action", school: "Evoc.", range: "60 ft", src: "PHB" },
+  { name: "Hellish Rebuke", lv: "1", time: "1 reaction", school: "Evoc.", range: "60 ft", src: "PHB" },
+  { name: "Meteor Swarm", lv: "9", time: "1 action", school: "Evoc.", range: "1 mile", src: "PHB" },
+  { name: "Scorching Ray", lv: "2", time: "1 action", school: "Evoc.", range: "120 ft", src: "PHB" },
+  { name: "Wall of Fire", lv: "4", time: "1 action", school: "Evoc.", range: "120 ft", src: "PHB" },
+];
+
+const SAMPLE_FAVORITES: { name: string; meta: string; src: string }[] = [
+  { name: "Counterspell", meta: "Lv 3 · Abjuration", src: "PHB" },
+  { name: "Misty Step", meta: "Lv 2 · Conjuration", src: "PHB" },
+];
+
+const CompendiumPage: FC = () => (
+  <div className="flex h-full flex-col gap-2 text-ink">
+    {/* Filter bar — search + Filters + Reset + count + Settings */}
+    <div className="shrink-0 flex items-center gap-2">
+      <div className="flex-1 flex items-center gap-2 h-9 px-3 border border-gold/25 bg-background/50 text-ink/40 text-sm min-w-0">
+        <Search className="w-3.5 h-3.5 shrink-0" />
+        <span className="truncate">Search spell name, source, or identifier</span>
+      </div>
+      <span className="inline-flex items-center gap-1.5 h-9 px-3 border border-gold/25 text-gold text-[11px] font-bold uppercase tracking-wide shrink-0">
+        <SlidersHorizontal className="w-3.5 h-3.5" /> Filters <span className="text-[10px] bg-gold/20 px-1.5 rounded-sm">54</span>
+      </span>
+      <span className="hidden sm:inline-flex items-center h-9 px-3 border border-gold/25 text-ink/55 text-[11px] uppercase tracking-wide shrink-0">Reset</span>
+      <span className="hidden md:inline text-[11px] font-mono text-ink/55 shrink-0 px-1">542 / 542</span>
+      <span className="inline-flex items-center gap-1.5 h-9 px-3 border border-gold/25 text-gold text-[11px] font-bold uppercase tracking-wide shrink-0">
+        <SettingsIcon className="w-3.5 h-3.5" /> <span className="hidden lg:inline">Settings</span>
+      </span>
+    </div>
+
+    {/* Three panes — favorites | list | detail */}
+    <div className="flex-1 min-h-0 flex gap-3">
+      {/* Favorites pane */}
+      <div className="hidden lg:flex w-[190px] flex-none flex-col border border-gold/15 bg-card/50 overflow-hidden">
+        <div className="flex items-center justify-between gap-2 border-b border-gold/15 bg-background/35 px-3 py-2.5 shrink-0">
+          <span className="flex items-center gap-1.5">
+            <Star className="w-3.5 h-3.5 text-gold/85 fill-gold/45" />
+            <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold/75">Favorites</span>
           </span>
-        ))}
-      </div>
-      <button className="btn-gold-solid mt-4">Add to spellbook</button>
-    </div>
-  </div>
-);
-
-/* -------------------------------- Wiki ----------------------------------- */
-
-const WikiMock: FC = () => (
-  <article className="max-w-[60ch]">
-    <div className="text-[10px] uppercase tracking-widest text-gold font-bold">Lore · Geography</div>
-    <h1 className="h1-title text-ink mt-1">The Sunken City of Vol</h1>
-    <p className="description-text mt-1">Where the tide forgot to return, and the lamps still burn.</p>
-    <p className="text-foreground mt-4 leading-relaxed text-sm">
-      Beneath the tideless sea lies <a className="text-gold underline underline-offset-2">Vol</a>, once the
-      jewel of the Amber Coast. Its towers stand intact in the green dark, lit by lanterns that no living
-      hand has tended in three hundred years.
-    </p>
-    <h2 className="h2-title text-ink mt-5">History</h2>
-    <p className="text-foreground mt-1.5 leading-relaxed text-sm">
-      The Drowning was not a disaster but a bargain — struck between the Magister Council and something
-      that answered from below. What was promised in return is recorded nowhere that survives.
-    </p>
-  </article>
-);
-
-/* ----------------------------- Character sheet --------------------------- */
-
-const SheetMock: FC = () => (
-  <div>
-    <div className="grid grid-cols-3 gap-2 mb-4">
-      {[
-        ["STR", "16", "+3"],
-        ["DEX", "14", "+2"],
-        ["CON", "15", "+2"],
-      ].map(([ab, score, mod]) => (
-        <div key={ab} className="border border-border bg-card text-center py-2">
-          <div className="text-[10px] uppercase tracking-widest text-gold font-bold">{ab}</div>
-          <div className="text-2xl font-serif text-ink leading-none mt-1">{mod}</div>
-          <div className="text-[11px] text-muted-foreground mt-0.5">{score}</div>
+          <span className="text-[10px] text-ink/45">{SAMPLE_FAVORITES.length}</span>
         </div>
-      ))}
-    </div>
-    <table className="w-full text-sm border border-border">
-      <thead>
-        <tr className="bg-gold/15">
-          <th className="text-left px-3 py-1.5 text-[10px] uppercase tracking-widest text-gold font-bold">Skill</th>
-          <th className="text-right px-3 py-1.5 text-[10px] uppercase tracking-widest text-gold font-bold">Mod</th>
-        </tr>
-      </thead>
-      <tbody>
-        {[["Athletics", "+5"], ["Perception", "+4"], ["Stealth", "+2"]].map(([s, m]) => (
-          <tr key={s} className="border-t border-border">
-            <td className="px-3 py-1.5 text-ink">{s}</td>
-            <td className="px-3 py-1.5 text-right text-foreground">{m}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-    <div className="mt-4">
-      <div className="flex justify-between text-[11px] text-muted-foreground mb-1">
-        <span className="uppercase tracking-widest text-gold font-bold">Hit Points</span>
-        <span>27 / 38</span>
+        <div className="px-2 py-2 border-b border-gold/10">
+          <div className="h-7 flex items-center px-2 border border-gold/20 bg-background/40 text-[11px] text-ink/55">Universal Favorite</div>
+        </div>
+        <div className="divide-y divide-gold/5 overflow-y-auto custom-scrollbar">
+          {SAMPLE_FAVORITES.map((f) => (
+            <div key={f.name} className="px-3 py-2 hover:bg-gold/5">
+              <div className="flex items-center justify-between gap-1">
+                <span className="truncate text-sm text-ink">{f.name}</span>
+                <Star className="w-3 h-3 text-gold/80 fill-gold/40 shrink-0" />
+              </div>
+              <div className="text-[9px] uppercase tracking-wide text-ink/45 mt-0.5">{f.meta}</div>
+            </div>
+          ))}
+        </div>
       </div>
-      <div className="h-2 bg-secondary border border-border">
-        <div className="h-full bg-gold" style={{ width: "71%" }} />
+
+      {/* List pane */}
+      <div className="hidden md:flex w-[300px] flex-none flex-col border border-gold/15 bg-card/50 overflow-hidden">
+        <div className="grid gap-2 px-3 py-2.5 border-b border-gold/15 bg-background/35 text-[10px] font-bold uppercase tracking-[0.16em] text-gold/75"
+          style={{ gridTemplateColumns: "minmax(0,1fr) 1.4rem 2.4rem 2.6rem" }}>
+          <span>Name</span><span className="justify-self-center">Lv</span><span className="justify-self-center">Sch</span><span className="justify-self-end">Src</span>
+        </div>
+        <div className="divide-y divide-gold/5 overflow-y-auto custom-scrollbar">
+          {SAMPLE_LIST.map((s) => {
+            const selected = s.name === "Fireball";
+            return (
+              <div key={s.name}
+                className={`grid gap-2 items-center px-3 h-9 cursor-pointer transition-colors ${selected ? "bg-gold/15" : "hover:bg-gold/5"}`}
+                style={{ gridTemplateColumns: "minmax(0,1fr) 1.4rem 2.4rem 2.6rem" }}>
+                <span className="truncate text-[12px] font-semibold text-ink">{s.name}</span>
+                <span className="justify-self-center text-[11px] text-ink/65">{s.lv}</span>
+                <span className="justify-self-center text-[11px] text-ink/65">{s.school}</span>
+                <span className="justify-self-end text-[11px] font-bold text-gold/80">{s.src}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Detail pane — the REAL SpellDetailPanel */}
+      <div className="flex-1 min-w-0 flex flex-col border border-gold/15 bg-card/50 overflow-hidden">
+        <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+          <SpellDetailPanel spellId={SAMPLE_SPELL_ROW.id} spellData={SAMPLE_SPELL_ROW} />
+        </div>
       </div>
     </div>
   </div>
 );
 
-/* -------------------------------- Home ----------------------------------- */
+/* ----------------------------- Class view page --------------------------- */
+// Mirrors ClassView: image-banner hero with gold title, tab strip, feature list.
 
-const HomeMock: FC = () => (
-  <div>
-    <div className="flex items-center gap-4 border-b border-border bg-card px-3 py-2.5 -m-4 mb-4">
-      <span className="font-serif text-gold font-bold text-lg">The Archive</span>
-      <nav className="flex gap-3 text-sm text-muted-foreground">
-        <span className="text-ink">Compendium</span>
-        <span>Lore</span>
-        <span>Characters</span>
-      </nav>
-      <button className="btn-gold-solid ml-auto">New entry</button>
+const CLASS_FEATURES = [
+  { level: 1, name: "Frozen Resolve", desc: "You ignore the first level of exhaustion from cold, and gain resistance to the bite of the marches." },
+  { level: 2, name: "Wardenʼs Mark", desc: "Mark a foe as your charge; your strikes against it deal additional cold damage equal to your proficiency bonus." },
+  { level: 3, name: "Rime Subclass", desc: "Choose a Warden Oath that shapes the frost you carry — the Still Lake, the Breaking Floe, or the Long Dark." },
+];
+
+const ClassViewPage: FC = () => (
+  <div className="w-full space-y-6">
+    <div className="bg-card border border-gold/15 rounded-xl overflow-hidden">
+      <div className="h-44 relative flex items-end p-6"
+        style={{ background: "linear-gradient(to top, color-mix(in oklab, var(--card) 92%, black), color-mix(in oklab, var(--gold) 12%, transparent))" }}>
+        <div>
+          <span className="label-text text-gold text-xs">Long Winter</span>
+          <h1 className="font-serif text-5xl font-bold text-gold/95 drop-shadow-sm leading-none mt-1">Frostwarden</h1>
+        </div>
+      </div>
+      <div className="p-6 border-t border-gold/15">
+        <p className="description-text text-ink/75 max-w-2xl">Sentinels sworn to the frozen marches, who trade warmth for unbreakable resolve and stand where the cold itself would falter.</p>
+        <div className="flex flex-wrap gap-2 mt-4">
+          {["d10 Hit Die", "Str / Con", "Martial weapons", "Heavy armor"].map((t) => (
+            <span key={t} className="text-[11px] px-2 py-0.5 bg-gold/15 text-gold border border-gold/35 uppercase tracking-wide font-bold">{t}</span>
+          ))}
+        </div>
+      </div>
     </div>
-    <div className="grid grid-cols-2 gap-3">
-      {[
-        ["Active Campaign", "The Amber Coast", "4 players · Session 12"],
-        ["Recent Lore", "The Sunken City of Vol", "edited 2 days ago"],
-      ].map(([tag, title, meta]) => (
-        <div key={tag} className="border border-border bg-card p-3">
-          <div className="text-[10px] uppercase tracking-widest text-gold font-bold">{tag}</div>
-          <h3 className="h3-title text-ink mt-0.5">{title}</h3>
-          <div className="text-[11px] text-muted-foreground mt-1">{meta}</div>
+
+    <div className="flex gap-1 border-b border-gold/20">
+      {["Features", "Subclasses", "Spell list"].map((t, i) => (
+        <span key={t} className={`px-5 py-2.5 text-xs font-bold uppercase tracking-widest border-b-2 -mb-px ${i === 0 ? "border-gold text-gold" : "border-transparent text-ink/55"}`}>{t}</span>
+      ))}
+    </div>
+
+    <div className="space-y-3">
+      {CLASS_FEATURES.map((f) => (
+        <div key={f.name} className="border border-gold/15 bg-card/40 p-4">
+          <div className="flex items-baseline gap-3">
+            <span className="label-text text-gold shrink-0">Level {f.level}</span>
+            <h3 className="h3-title text-ink">{f.name}</h3>
+          </div>
+          <p className="text-sm text-ink/65 mt-1.5 leading-relaxed">{f.desc}</p>
         </div>
       ))}
+    </div>
+  </div>
+);
+
+/* --------------------------- Component gallery --------------------------- */
+
+const ComponentsPage: FC = () => (
+  <div className="max-w-3xl mx-auto px-4 space-y-7">
+    <div>
+      <div className="label-text text-gold mb-3">Buttons</div>
+      <div className="flex flex-wrap gap-3 items-center">
+        <Button>Primary</Button>
+        <Button variant="outline" className="border-gold/35 text-gold">Outline</Button>
+        <Button variant="ghost">Ghost</Button>
+        <button className="btn-gold-solid px-4 py-2">Gold solid</button>
+        <Button variant="destructive">Delete</Button>
+      </div>
+    </div>
+    <div>
+      <div className="label-text text-gold mb-3">Tags &amp; badges</div>
+      <div className="flex flex-wrap gap-2 items-center">
+        <Badge variant="outline" className="border-gold text-gold">Trusted player</Badge>
+        <span className="px-2 py-0.5 text-[11px] border border-gold/35 text-gold uppercase tracking-wide font-bold">Evocation</span>
+        <span className="px-2 py-0.5 text-[11px] bg-gold/15 text-gold border border-gold/35">Range 150 ft</span>
+        <span className="px-2 py-0.5 text-[11px] bg-blood/10 text-blood border border-blood/35">Danger</span>
+      </div>
+    </div>
+    <div>
+      <div className="label-text text-gold mb-3">Form field</div>
+      <div className="max-w-md space-y-1.5">
+        <label className="field-label">Display name</label>
+        <Input placeholder="e.g. Elara the Wise" className="bg-background border-gold/25" />
+        <p className="text-[11px] text-ink/45 italic">Shown on your public profile.</p>
+      </div>
+    </div>
+    <div>
+      <div className="label-text text-gold mb-3">Cards</div>
+      <div className="grid sm:grid-cols-2 gap-4">
+        {[["Active campaign", "The Amber Coast", "4 players · Session 12"], ["Recent lore", "The Sunken City of Vol", "edited 2 days ago"]].map(([tag, title, meta]) => (
+          <div key={tag} className="bg-card border border-gold/25 p-5">
+            <div className="label-text text-gold">{tag}</div>
+            <h3 className="h3-title text-ink mt-1">{title}</h3>
+            <p className="text-sm text-ink/55 mt-1">{meta}</p>
+          </div>
+        ))}
+      </div>
     </div>
   </div>
 );
 
 /* --------------------------- Opacity ladder ------------------------------ */
-// The canonical 10-step opacity ramp ({5,15,…,95}) rendered live against the
-// active Text and Highlight colours, so a user can vet every tier with their
-// own palette. Each row is annotated with a real use-site in the app, and uses
-// `color-mix(var(--ink|--gold) N%, transparent)` — exactly what `text-ink/N`
-// and `border-gold/N` compile to — so it tracks the scoped theme precisely.
 
 const mix = (v: "--ink" | "--gold", n: number) => `color-mix(in oklab, var(${v}) ${n}%, transparent)`;
 
-// Each rung is a CONCRETE fragment of real app UI rendered at that exact
-// opacity, so a user sees what the step actually controls — not an abstract
-// swatch. `ink` = text hierarchy; `gold` = accent borders / fills / labels.
 const INK_ROWS: { n: number; note: string; el: ReactNode }[] = [
   { n: 5, note: "divider rule", el: (
     <span className="inline-flex flex-col text-[11px] leading-tight" style={{ color: mix("--ink", 85) }}>
@@ -200,19 +348,22 @@ const TierColumn: FC<{ title: string; rows: { n: number; note: string; el: React
   </div>
 );
 
-const OpacityTiersMock: FC = () => (
+const OpacityTiersPage: FC = () => (
   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
     <TierColumn title="Text (ink)" rows={INK_ROWS} />
     <TierColumn title="Highlight (gold)" rows={GOLD_ROWS} />
   </div>
 );
 
-export type SurfaceKey = "compendium" | "wiki" | "sheet" | "home" | "tiers";
+export type SurfaceKey = "article" | "compendium" | "class";
 
+// User-facing surfaces are the real pages only. ComponentsPage / OpacityTiersPage
+// stay defined (handy for our own design checks) but aren't shown to users —
+// there's no reason to expose a component/opacity catalogue in the picker.
 export const PREVIEW_SURFACES: { key: SurfaceKey; label: string; Component: FC }[] = [
-  { key: "compendium", label: "Compendium", Component: CompendiumMock },
-  { key: "wiki", label: "Wiki", Component: WikiMock },
-  { key: "sheet", label: "Sheet", Component: SheetMock },
-  { key: "home", label: "Home", Component: HomeMock },
-  { key: "tiers", label: "Tiers", Component: OpacityTiersMock },
+  { key: "class", label: "Class view", Component: ClassViewPage },
+  { key: "article", label: "Article", Component: ArticlePage },
+  { key: "compendium", label: "Compendium", Component: CompendiumPage },
 ];
+
+void ComponentsPage; void OpacityTiersPage;

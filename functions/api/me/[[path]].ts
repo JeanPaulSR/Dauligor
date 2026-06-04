@@ -68,9 +68,47 @@ const ALLOWED_PATCH_FIELDS = new Set([
   "is_private",
   "recovery_email",
   "active_campaign_id",
+  "active_theme_id",
 ]);
 
 const BOOLEAN_PATCH_FIELDS = new Set(["hide_username", "is_private"]);
+
+/* ---- custom theme (user_themes) validation ------------------------------- */
+const VALID_PRESETS = new Set(["parchment", "light", "dark"]);
+const THEME_TOKEN_KEYS = new Set(["background", "card", "text", "textMuted", "accent"]);
+const HEX_RE = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
+
+function sanitizeThemeName(v: any): string {
+  const s = typeof v === "string" ? v.trim() : "";
+  return s ? s.slice(0, 60) : "My theme";
+}
+function sanitizeThemePreset(v: any): string {
+  return typeof v === "string" && VALID_PRESETS.has(v) ? v : "parchment";
+}
+/** Keep only known token keys with valid hex values — never trust the client blob. */
+function sanitizeThemeTokens(v: any): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (v && typeof v === "object") {
+    for (const k of Object.keys(v)) {
+      const val = typeof v[k] === "string" ? v[k].trim() : "";
+      if (THEME_TOKEN_KEYS.has(k) && HEX_RE.test(val)) out[k] = val;
+    }
+  }
+  return out;
+}
+
+async function loadThemeForUser(id: string, uid: string): Promise<any | null> {
+  const r = await executeD1QueryInternal({
+    sql: "SELECT id, name, base_preset, tokens FROM user_themes WHERE id = ? AND user_id = ? LIMIT 1",
+    params: [id, uid],
+  });
+  const rows = Array.isArray(r?.results) ? r.results : [];
+  const t = rows[0] as any;
+  if (!t) return null;
+  let tokens: Record<string, unknown> = {};
+  try { tokens = typeof t.tokens === "string" ? JSON.parse(t.tokens) : (t.tokens || {}); } catch { tokens = {}; }
+  return { id: t.id, name: t.name, base_preset: t.base_preset, tokens };
+}
 
 async function pickInitialActiveCampaign(uid: string): Promise<string | null> {
   const result = await executeD1QueryInternal({
@@ -252,6 +290,13 @@ async function handlePatchMe(request: Request, decoded: any): Promise<Response> 
     updates.username = newUsername;
   }
 
+  // Setting an active theme: only allow one the caller actually owns (or null,
+  // which reverts to the built-in preset). Prevents pointing at someone else's.
+  if ("active_theme_id" in updates && updates.active_theme_id !== null) {
+    const owned = await loadThemeForUser(String(updates.active_theme_id), uid);
+    if (!owned) throw new HttpError(400, "Unknown theme.");
+  }
+
   const setClauses: string[] = [];
   const params: any[] = [];
   for (const [key, value] of Object.entries(updates)) {
@@ -406,6 +451,157 @@ async function handleGetFoundationUpdate(): Promise<Response> {
 }
 
 /* -------------------------------------------------------------------------- */
+/* /api/me/themes — the caller's custom colour themes                          */
+/* -------------------------------------------------------------------------- */
+
+async function handleListThemes(decoded: any): Promise<Response> {
+  const uid = decoded.uid;
+  const r = await executeD1QueryInternal({
+    sql: "SELECT id, name, base_preset, tokens FROM user_themes WHERE user_id = ? ORDER BY updated_at DESC",
+    params: [uid],
+  });
+  const rows = Array.isArray(r?.results) ? r.results : [];
+  const themes = rows.map((t: any) => {
+    let tokens: Record<string, unknown> = {};
+    try { tokens = typeof t.tokens === "string" ? JSON.parse(t.tokens) : (t.tokens || {}); } catch { tokens = {}; }
+    return { id: t.id, name: t.name, base_preset: t.base_preset, tokens };
+  });
+  return Response.json({ themes });
+}
+
+async function handleCreateTheme(request: Request, decoded: any): Promise<Response> {
+  const uid = decoded.uid;
+  if (!uid) throw new HttpError(401, "Missing uid in token.");
+  const body = (await request.json().catch(() => ({}))) as any;
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  await executeD1QueryInternal({
+    sql: `INSERT INTO user_themes (id, user_id, name, base_preset, tokens, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    params: [id, uid, sanitizeThemeName(body.name), sanitizeThemePreset(body.base_preset),
+             JSON.stringify(sanitizeThemeTokens(body.tokens)), now, now],
+  });
+  // A freshly-created theme activates immediately — that's the builder's
+  // "Save" path (user just authored it and wants to see it live).
+  await executeD1QueryInternal({
+    sql: "UPDATE users SET active_theme_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+    params: [id, uid],
+  });
+  return Response.json({ theme: await loadThemeForUser(id, uid) }, { status: 201 });
+}
+
+async function handleUpdateTheme(request: Request, decoded: any, id: string): Promise<Response> {
+  const uid = decoded.uid;
+  const existing = await loadThemeForUser(id, uid);
+  if (!existing) throw new HttpError(404, "Theme not found.");
+  const body = (await request.json().catch(() => ({}))) as any;
+  const name = body.name !== undefined ? sanitizeThemeName(body.name) : existing.name;
+  const preset = body.base_preset !== undefined ? sanitizeThemePreset(body.base_preset) : existing.base_preset;
+  const tokens = body.tokens !== undefined ? sanitizeThemeTokens(body.tokens) : existing.tokens;
+  await executeD1QueryInternal({
+    sql: `UPDATE user_themes SET name = ?, base_preset = ?, tokens = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ? AND user_id = ?`,
+    params: [name, preset, JSON.stringify(tokens), id, uid],
+  });
+  return Response.json({ theme: await loadThemeForUser(id, uid) });
+}
+
+async function handleDeleteTheme(decoded: any, id: string): Promise<Response> {
+  const uid = decoded.uid;
+  // users.active_theme_id auto-nulls via ON DELETE SET NULL.
+  await executeD1QueryInternal({
+    sql: "DELETE FROM user_themes WHERE id = ? AND user_id = ?",
+    params: [id, uid],
+  });
+  return Response.json({ deleted: true });
+}
+
+/* ---- favorite characters (user_favorite_characters) ---------------------- */
+// A small ordered showcase of the user's OWN characters, surfaced on their
+// public profile. Stored in its own join table; ownership is enforced here on
+// write (you can only feature characters whose user_id is you).
+
+const MAX_FAVORITE_CHARACTERS = 8;
+
+/** Public-safe favorite-character rows for a user, in display order. Only the
+ *  showcase fields (id, name, image, level) — never private character data. */
+async function loadFavoriteCharacters(userId: string): Promise<any[]> {
+  const r = await executeD1QueryInternal({
+    sql: `SELECT c.id, c.name, c.image_url, c.level
+            FROM user_favorite_characters f
+            JOIN characters c ON c.id = f.character_id
+           WHERE f.user_id = ?
+           ORDER BY f.position ASC`,
+    params: [userId],
+  });
+  const rows = Array.isArray(r?.results) ? r.results : [];
+  return rows.map((c: any) => ({
+    id: c.id,
+    name: c.name,
+    image_url: c.image_url ?? null,
+    level: c.level ?? null,
+  }));
+}
+
+async function handleListFavoriteCharacters(decoded: any): Promise<Response> {
+  const uid = decoded.uid;
+  if (!uid) throw new HttpError(401, "Missing uid in token.");
+  return Response.json({ characters: await loadFavoriteCharacters(uid) });
+}
+
+/** Replace the full ordered favorites set. Body: { character_ids: string[] }.
+ *  Each id must belong to the caller; unknown/foreign ids are rejected so a
+ *  user can't feature someone else's character. */
+async function handleSetFavoriteCharacters(request: Request, decoded: any): Promise<Response> {
+  const uid = decoded.uid;
+  if (!uid) throw new HttpError(401, "Missing uid in token.");
+  const body = (await request.json().catch(() => ({}))) as any;
+  const rawIds = Array.isArray(body?.character_ids) ? body.character_ids : null;
+  if (!rawIds) throw new HttpError(400, "Body must include a `character_ids` array.");
+
+  // De-dupe (preserve order) + cap.
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  for (const v of rawIds) {
+    const id = String(v ?? "").trim();
+    if (id && !seen.has(id)) { seen.add(id); ids.push(id); }
+  }
+  if (ids.length > MAX_FAVORITE_CHARACTERS) {
+    throw new HttpError(400, `You can feature at most ${MAX_FAVORITE_CHARACTERS} characters.`);
+  }
+
+  // Ownership gate: every id must be a character this user owns.
+  if (ids.length > 0) {
+    const placeholders = ids.map(() => "?").join(", ");
+    const owned = await executeD1QueryInternal({
+      sql: `SELECT id FROM characters WHERE user_id = ? AND id IN (${placeholders})`,
+      params: [uid, ...ids],
+    });
+    const ownedIds = new Set(
+      (Array.isArray(owned?.results) ? owned.results : []).map((r: any) => String(r.id)),
+    );
+    for (const id of ids) {
+      if (!ownedIds.has(id)) throw new HttpError(400, "Can only feature your own characters.");
+    }
+  }
+
+  // Replace the set: clear then re-insert with positions. (D1 has no
+  // multi-statement transaction over HTTP, but this delete+insert pair is
+  // idempotent and self-correcting on the next save.)
+  await executeD1QueryInternal({
+    sql: "DELETE FROM user_favorite_characters WHERE user_id = ?",
+    params: [uid],
+  });
+  for (let i = 0; i < ids.length; i++) {
+    await executeD1QueryInternal({
+      sql: "INSERT INTO user_favorite_characters (user_id, character_id, position) VALUES (?, ?, ?)",
+      params: [uid, ids[i], i],
+    });
+  }
+  return Response.json({ characters: await loadFavoriteCharacters(uid) });
+}
+
+/* -------------------------------------------------------------------------- */
 /* Dispatcher                                                                  */
 /* -------------------------------------------------------------------------- */
 
@@ -458,6 +654,24 @@ export const onRequest = async (context: any): Promise<Response> => {
         { error: `Method ${request.method} not allowed.` },
         { status: 405 },
       );
+    }
+
+    if (path.length === 1 && path[0] === "themes") {
+      if (request.method === "GET") return await handleListThemes(decoded);
+      if (request.method === "POST") return await handleCreateTheme(request, decoded);
+      return Response.json({ error: `Method ${request.method} not allowed.` }, { status: 405 });
+    }
+
+    if (path.length === 2 && path[0] === "themes") {
+      if (request.method === "PATCH") return await handleUpdateTheme(request, decoded, path[1]);
+      if (request.method === "DELETE") return await handleDeleteTheme(decoded, path[1]);
+      return Response.json({ error: `Method ${request.method} not allowed.` }, { status: 405 });
+    }
+
+    if (path.length === 1 && path[0] === "favorite-characters") {
+      if (request.method === "GET") return await handleListFavoriteCharacters(decoded);
+      if (request.method === "PUT") return await handleSetFavoriteCharacters(request, decoded);
+      return Response.json({ error: `Method ${request.method} not allowed.` }, { status: 405 });
     }
 
     return Response.json(

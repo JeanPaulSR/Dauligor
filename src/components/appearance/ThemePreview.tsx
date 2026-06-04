@@ -24,7 +24,7 @@ interface ThemePreviewProps {
 }
 
 export function ThemePreview({ theme, surface, onSurfaceChange, className }: ThemePreviewProps) {
-  const [internal, setInternal] = useState<SurfaceKey>("compendium");
+  const [internal, setInternal] = useState<SurfaceKey>("class");
   const active = surface ?? internal;
   const setActive = (s: SurfaceKey) => (onSurfaceChange ? onSurfaceChange(s) : setInternal(s));
 
@@ -36,10 +36,15 @@ export function ThemePreview({ theme, surface, onSurfaceChange, className }: The
   // not statically allow arbitrary `--*` keys (it passes them through at runtime).
   const vars = resolveThemeVars(theme) as unknown as CSSProperties;
 
+  // Fill-the-container layout (no JS height measuring): the component is a flex
+  // column, the scoped frame is `flex-1`, and the frame scrolls internally. The
+  // caller gives it a height (here: a grid column stretched to match the
+  // controls column), so the preview simply fills whatever space it's handed —
+  // stable, never re-measured, never jumpy.
   return (
-    <div className={className}>
+    <div className={`flex flex-col min-h-0 ${className ?? ""}`}>
       {/* Surface switcher */}
-      <div className="inline-flex border border-border mb-2 text-xs">
+      <div className="inline-flex border border-border mb-2 text-xs shrink-0">
         {PREVIEW_SURFACES.map((s) => (
           <button
             key={s.key}
@@ -57,8 +62,8 @@ export function ThemePreview({ theme, surface, onSurfaceChange, className }: The
       </div>
 
       {/* Scoped theme container: base-preset class + injected overrides. */}
-      <div className={theme.base_preset} style={vars}>
-        <div className="bg-background text-ink p-4 border border-border overflow-auto max-h-[460px]">
+      <div className={`flex-1 min-h-0 ${theme.base_preset}`} style={vars}>
+        <div className="h-full bg-background text-ink p-4 border border-border overflow-auto custom-scrollbar">
           <Surface />
         </div>
       </div>
