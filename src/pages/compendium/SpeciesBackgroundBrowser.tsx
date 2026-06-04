@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ImageOff, Star } from 'lucide-react';
+import { ChevronRight, CornerLeftUp, ImageOff, Star } from 'lucide-react';
 import { getIdentity, onAuthChange } from '../../lib/auth';
 import { fetchCollection } from '../../lib/d1';
 import { bbcodeToHtml } from '../../lib/bbcode';
@@ -168,6 +168,9 @@ export default function SpeciesBackgroundBrowser({
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows.filter((r) => {
+      // Subspecies are listed under their parent in the detail pane, not at
+      // the top level — hide children from the main list.
+      if (kind === 'species' && r.parentSpeciesId) return false;
       if (q) {
         const hit = String(r.name ?? '').toLowerCase().includes(q)
           || String(r.identifier ?? '').toLowerCase().includes(q)
@@ -308,6 +311,8 @@ export default function SpeciesBackgroundBrowser({
           vocab={displayVocab}
           isFavorite={selectedRow ? isFavorite(selectedRow.id) : false}
           onToggleFavorite={toggleFavorite}
+          allRows={rows}
+          onSelect={setSelectedId}
         />
       )}
       emptyMessage={`No ${cfg.plural.toLowerCase()} yet${isAdmin ? ` — import some from the ${cfg.singular} Manager.` : '.'}`}
@@ -392,6 +397,8 @@ function SBDetail({
   vocab,
   isFavorite,
   onToggleFavorite,
+  allRows,
+  onSelect,
 }: {
   row: Row | null;
   kind: SpeciesBackgroundBrowserKind;
@@ -399,6 +406,8 @@ function SBDetail({
   vocab: ProficiencyVocab;
   isFavorite: boolean;
   onToggleFavorite: (id: string) => void;
+  allRows: Row[];
+  onSelect: (id: string) => void;
 }) {
   if (!row) {
     return (
@@ -426,6 +435,15 @@ function SBDetail({
   // BBCode, then mop up any residual Foundry/5etools enricher artifacts.
   const descHtml = bodyBbcode ? cleanFoundryHtml(bbcodeToHtml(bodyBbcode)) : '';
   const advancements = !isBackground && Array.isArray(row.advancements) ? row.advancements : [];
+
+  // Subspecies relationships (species only, one level deep): a base species
+  // lists its children; a child links back to its parent.
+  const childSubspecies = (!isBackground && !row.parentSpeciesId)
+    ? allRows.filter((r) => String(r.parentSpeciesId ?? '') === String(row.id))
+    : [];
+  const parentSpecies = (!isBackground && row.parentSpeciesId)
+    ? (allRows.find((r) => String(r.id) === String(row.parentSpeciesId)) || null)
+    : null;
 
   // Species keep their stat-block facts; backgrounds surface everything via
   // the proficiency section instead.
@@ -467,6 +485,16 @@ function SBDetail({
             ) : null}
             {row.identifier ? (
               <p className="font-mono text-[11px] text-ink/45">{row.identifier}</p>
+            ) : null}
+            {parentSpecies ? (
+              <button
+                type="button"
+                onClick={() => onSelect(parentSpecies.id)}
+                className="inline-flex items-center gap-1 text-[11px] text-gold/80 hover:text-gold hover:underline underline-offset-2"
+                title={`View ${parentSpecies.name || 'parent species'}`}
+              >
+                <CornerLeftUp className="w-3 h-3" /> Subspecies of {parentSpecies.name || 'parent species'}
+              </button>
             ) : null}
           </div>
           <div className="flex flex-col items-end gap-2 shrink-0">
@@ -532,6 +560,30 @@ function SBDetail({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Subspecies of this species */}
+      {childSubspecies.length > 0 && (
+        <div className="border-b border-gold/10 px-6 py-4 space-y-2">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-gold/70">
+            Subspecies <span className="text-ink/40">({childSubspecies.length})</span>
+          </div>
+          <div className="flex flex-col gap-1">
+            {childSubspecies.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => onSelect(c.id)}
+                className="flex items-center gap-2 rounded-md border border-gold/10 bg-gold/5 px-2.5 py-1.5 text-left hover:bg-gold/10 transition-colors"
+                title={`View ${c.name || 'subspecies'}`}
+              >
+                <Thumb src={c.imageUrl} />
+                <span className="text-[12px] font-semibold text-ink truncate flex-1">{c.name || 'Untitled'}</span>
+                <ChevronRight className="w-3.5 h-3.5 text-gold/60 shrink-0" />
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
