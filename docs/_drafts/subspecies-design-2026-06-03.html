@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Subspecies — Design</title>
+<style>
+  :root {
+    --ink: #2b2117; --gold: #9c7a3c; --gold-soft: #c8a55e;
+    --parch: #f4ecd9; --parch2: #efe6cf; --line: #d8c9a6; --blood: #7c2d2d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 2.4rem clamp(1rem, 4vw, 4rem);
+    background: #efe6cf;
+    background-image: radial-gradient(circle at 20% 0%, #f7f0dd, #e7dcc1);
+    color: #2b2117;
+    font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    line-height: 1.6; max-width: 60rem; margin-inline: auto;
+  }
+  h1, h2, h3 { font-family: inherit; color: #6f561f; letter-spacing: .01em; }
+  h1 { font-size: 2.2rem; margin: 0 0 .2rem; border-bottom: 3px double #c8a55e; padding-bottom: .5rem; }
+  .sub { color: #8a7a52; font-style: italic; margin: 0 0 1.6rem; }
+  h2 { font-size: 1.35rem; margin: 2rem 0 .6rem; border-bottom: 1px solid #d8c9a6; padding-bottom: .25rem; }
+  h3 { font-size: 1.05rem; margin: 1.3rem 0 .35rem; color: #7c5e26; }
+  code, .mono { font-family: "SF Mono", "Consolas", monospace; font-size: .86em; background: #e4d8b8; padding: .08em .35em; border-radius: 4px; color: #5a4420; }
+  pre { background: #2b2117; color: #f0e6cd; padding: 1rem 1.1rem; border-radius: 8px; overflow-x: auto; font-size: .82rem; line-height: 1.5; border-left: 4px solid #9c7a3c; }
+  pre code { background: none; color: inherit; padding: 0; }
+  .card { background: #f7f1e1; border: 1px solid #d8c9a6; border-radius: 10px; padding: 1rem 1.2rem; margin: .8rem 0; box-shadow: 0 1px 0 #fff inset, 0 2px 8px rgba(120,90,40,.08); }
+  .pill { display: inline-block; background: #9c7a3c; color: #fff; font-size: .68rem; text-transform: uppercase; letter-spacing: .12em; padding: .18em .6em; border-radius: 999px; vertical-align: middle; }
+  .ok { color: #3f6f3f; font-weight: 700; }
+  .todo { color: #7c2d2d; font-weight: 700; }
+  .muted { color: #8a7a52; }
+  ul, ol { margin: .4rem 0 .8rem; padding-left: 1.4rem; }
+  li { margin: .25rem 0; }
+  table { border-collapse: collapse; width: 100%; margin: .6rem 0; font-size: .9rem; }
+  th, td { border: 1px solid #d8c9a6; padding: .45rem .6rem; text-align: left; vertical-align: top; }
+  th { background: #e7dcc1; color: #6f561f; }
+  .lede { font-size: 1.05rem; }
+  .phase { display: flex; gap: .6rem; align-items: baseline; }
+  .phase .n { background: #2b2117; color: #f0e6cd; border-radius: 50%; width: 1.6rem; height: 1.6rem; display: inline-flex; align-items: center; justify-content: center; font-size: .8rem; flex: 0 0 auto; }
+  .tree { font-family: "SF Mono", "Consolas", monospace; font-size: .85rem; background: #f7f1e1; border: 1px solid #d8c9a6; border-radius: 8px; padding: .8rem 1rem; }
+</style>
+</head>
+<body>
+  <h1>Subspecies <span class="pill">design</span></h1>
+  <p class="sub">Add child species under a parent — Elf → High Elf / Wood Elf / Drow — reusing the whole species pipeline. 2026-06-03 · branch <code>compendium-editors</code></p>
+
+  <p class="lede">A <strong>subspecies</strong> is a variant of a parent species with its own traits, options, and features. We model it as a <em>complete species that names a parent</em> — so it reuses the species editor, the Foundry race export, and the live module route with no new plumbing on either side.</p>
+
+  <h2>Confirmed decisions</h2>
+  <div class="card">
+    <p><strong>1 · Export model — stand-alone <code>race</code> item.</strong> Each subspecies is a <em>complete</em> species and exports as its own Foundry <code>race</code> item, exactly like a base species (so "High Elf" is a full race). This matches dnd5e&nbsp;v5's atomic-race model (there is <em>no</em> subrace item type; the 2024 PHB folds old subraces into one species + a lineage <em>choice</em>) and the <code>dauligor-pairing</code> module's current contract — which has no parent/child concept. Net module-side work: <strong>zero</strong>. The parent link exists for grouping &amp; authoring convenience, not for an export-time merge.</p>
+    <p><strong>2 · Storage — reuse the <code>species</code> table.</strong> Add a self-referential <code>parentSpeciesId</code> column. A subspecies <em>is</em> a <code>species</code> row → it reuses the editor, <code>_raceExport.ts</code>, the browser, and <code>/api/module/races/&lt;id&gt;.json</code> unchanged. (A self-FK is a <em>hierarchy</em>, not a discriminator — so the "new table for new functionality" rule doesn't pull against it here: the shape and export are identical to a species.)</p>
+    <p><strong>3 · Authoring UI — a "Subspecies" sub-tab</strong> on the species editor (species-only), listing &amp; creating the children owned by the open parent — mirroring the background <code>Features</code> tab. The browser groups subspecies under their parent.</p>
+  </div>
+
+  <h2>Data model</h2>
+  <h3>One new column on <code>species</code></h3>
+  <p>No new table. <code>parentSpeciesId</code> is a plain id (not JSON), so it round-trips through the editor's <code>...row</code> spread automatically — <strong>no <code>jsonFields</code> / <code>d1Tables</code> change needed.</p>
+<pre><code>ALTER TABLE species ADD COLUMN parentSpeciesId TEXT
+    REFERENCES species(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_species_parent ON species(parentSpeciesId);
+-- NULL parentSpeciesId  = base species
+-- non-NULL              = subspecies of that parent</code></pre>
+  <div class="card">
+    <p><strong>Delete semantics — <code>ON DELETE SET NULL</code> (chosen default).</strong> Deleting a parent species <em>promotes</em> its subspecies to base species (non-destructive, recoverable by re-parenting). The alternative <code>ON DELETE CASCADE</code> would delete the children too — destructive, so not the default. <span class="muted">Flag if you'd prefer CASCADE.</span></p>
+    <p><strong>One level deep.</strong> A subspecies cannot itself have subspecies (no grandchildren). Enforced in the UI: the Subspecies tab and the parent picker are hidden/disabled for a row that already has a <code>parentSpeciesId</code>.</p>
+  </div>
+
+  <h3>Shape — identical to a species</h3>
+  <p>A subspecies carries the full species field set (it's the same row type):</p>
+<pre><code>species(
+  id, name, identifier, sourceId→sources(id), page, description,
+  advancements[], movement{}, senses{}, creatureType{}, tags[],   -- JSON
+  speciesOptionIds[],                                              -- JSON (20260603-1600)
+  imageUrl, contentHash, createdAt, updatedAt,
+  parentSpeciesId→species(id)                                      -- NEW (this design)
+)</code></pre>
+
+  <h2>Authoring flow</h2>
+  <p>Subspecies reuse the <em>entire</em> species editor — the Subspecies tab is just a parent-scoped list + a doorway into the same editor:</p>
+  <div class="tree">
+Edit "Elf" (base species)
+ ├─ Basics
+ ├─ Traits
+ ├─ Options            ← (Species Options, phase 3 of that feature)
+ ├─ <strong>Subspecies</strong>   ← NEW tab (base species only)
+ │    ├─ High Elf   [Edit] [Delete]
+ │    ├─ Wood Elf   [Edit] [Delete]
+ │    └─ [ + New subspecies ]   ← creates a child row, pre-filled from Elf
+ └─ Advancement
+
+Edit "High Elf" (subspecies)   ← same editor, banner: "Subspecies of Elf · ← Back"
+ ├─ Basics   (no parent picker shown; it's already a child)
+ ├─ Traits
+ ├─ Options
+ └─ Advancement              (no Subspecies tab — one level deep)
+  </div>
+  <ul>
+    <li><strong>Create</strong> "+ New subspecies" inserts a <code>species</code> row with <code>parentSpeciesId = parent.id</code>, then switches the editor to that child (<code>setEditingId(childId)</code>).</li>
+    <li><strong>Pre-fill from parent.</strong> A new subspecies copies the parent's <code>movement / senses / creatureType / advancements / speciesOptionIds / tags / sourceId</code> as a starting point (the author then edits the deltas). Because export is stand-alone, the child needs the full trait set — pre-fill saves re-entry. <span class="muted">Pre-fill is a one-time copy at create, not a live link.</span></li>
+    <li><strong>Editing a child</strong> uses the same tabs; a banner shows "Subspecies of &lt;parent&gt;" with a "← Back to &lt;parent&gt;" affordance (sets <code>editingId</code> back to the parent). The Subspecies tab and parent picker are suppressed for children.</li>
+  </ul>
+
+  <h2>Foundry export</h2>
+  <div class="card">
+    <p><strong>Nothing required.</strong> Subspecies are <code>species</code> rows, so they already export through <code>buildRaceItemBundle(dbId)</code> at <code>/api/module/races/&lt;id&gt;.json</code> as ordinary <code>race</code> items. They appear in the catalog as normal races, importable independently.</p>
+    <p><strong>Optional (nice-to-have): an audit flag.</strong> Stamp <code>flags.dauligor-pairing.parentRaceId = &lt;parent.identifier&gt;</code> in the race export (<code>_raceExport.ts</code> / <code>_speciesBackgroundShared.ts</code>) so the module <em>could</em> later group a parent + its subspecies in the browser. The module ignores unknown flags today, so this is additive and safe; actual consumption is the <code>foundry-module</code> branch's job.</p>
+  </div>
+
+  <h2>Browser / view</h2>
+  <p><code>SpeciesBackgroundBrowser.tsx</code>: the top-level species list shows <strong>base species only</strong> (filter <code>parentSpeciesId == null</code>); a parent's detail panel lists its subspecies (each linking to its own detail, since each is a full species). <span class="muted">Exact rendering nailed during the build after reading the browser's species branch.</span></p>
+
+  <h2>Build phases</h2>
+  <div class="card">
+    <div class="phase"><span class="n">1</span><div><strong>Schema + plumbing</strong> — migration (<code>parentSpeciesId</code> column + index), local apply. No <code>d1Tables</code>/<code>d1.ts</code> change (plain id column).</div></div>
+    <div class="phase"><span class="n">2</span><div><strong>Editor parent field</strong> — add <code>parentSpeciesId</code> to <code>SBFormData</code>, hydrate on load, write it in <code>handleSave</code>'s species branch.</div></div>
+    <div class="phase"><span class="n">3</span><div><strong>Subspecies tab</strong> — new <code>SubspeciesTab</code> (parent-scoped list + create-with-parent + pre-fill + jump-to-child); wire into <code>editorSubTabs</code> for base species only; child banner + "← Back"; suppress tab/picker for children.</div></div>
+    <div class="phase"><span class="n">4</span><div><strong>Browser grouping</strong> — base list filters out children; parent detail lists its subspecies.</div></div>
+    <div class="phase"><span class="n">5</span><div><strong>(Optional) Export audit flag</strong> — <code>flags.dauligor-pairing.parentRaceId</code> for future module-side grouping.</div></div>
+  </div>
+
+  <h2>Relationship to Species Options</h2>
+  <p>Independent but complementary. Species Options (the reusable trait library) and Subspecies both attach to a species via existing machinery: a subspecies, being a full species, can carry its own <code>speciesOptionIds</code> (e.g. High Elf includes the "Darkvision&nbsp;60" option). Build order is flexible — Species Options phases 2–5 and Subspecies phases 1–4 don't block each other.</p>
+
+  <h2>Why not the alternatives</h2>
+  <table>
+    <tr><th>Rejected</th><th>Why</th></tr>
+    <tr><td>Inherit + merge (base + subrace both apply)</td><td>Needs export-time merge logic <em>and</em> the Foundry module to understand parent/child — neither exists; dnd5e v5 has no subrace item type. Stand-alone is the native, shippable model.</td></tr>
+    <tr><td>Dedicated <code>subspecies</code> table</td><td>A subspecies has the <em>identical</em> shape and export to a species (unlike subclasses, which are leaner than classes). A separate table would duplicate the editor / export / browser / route for no shape difference.</td></tr>
+  </table>
+
+  <h2>Key files</h2>
+  <table>
+    <tr><th>Concern</th><th>File</th></tr>
+    <tr><td>Migration (new column)</td><td><code>worker/migrations/&lt;ts&gt;_species_subspecies.sql</code> (new)</td></tr>
+    <tr><td>Editor (parent field + Subspecies tab)</td><td><code>src/pages/compendium/SpeciesBackgroundEditor.tsx</code></td></tr>
+    <tr><td>Browser (grouping)</td><td><code>src/pages/compendium/SpeciesBackgroundBrowser.tsx</code></td></tr>
+    <tr><td>Export (optional audit flag)</td><td><code>api/_lib/_raceExport.ts</code> + <code>api/_lib/_speciesBackgroundShared.ts</code></td></tr>
+    <tr><td>Owned-child tab template</td><td><code>src/components/compendium/BackgroundFeaturesTab.tsx</code></td></tr>
+  </table>
+</body>
+</html>

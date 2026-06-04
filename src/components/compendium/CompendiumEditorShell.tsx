@@ -193,6 +193,10 @@ export type CompendiumEditorShellProps<TRow> = {
   /** Italic subtitle after the source chip — e.g. "Lvl 1 Abjuration"
    *  or "Feat · General · Repeatable". */
   identitySubtitle?: React.ReactNode;
+  /** Optional banner (pre-rendered ReactNode) rendered above the identity
+   *  row — a generic context slot (e.g. a "Subspecies of X · ← Back"
+   *  banner). Distinct from `cascadeBanner`, which is proposal-specific. */
+  contextBanner?: React.ReactNode;
 
   // ─── Save lifecycle ───────────────────────────────────────────
   onSave: (e?: React.FormEvent) => void | Promise<void>;
@@ -275,6 +279,7 @@ export function CompendiumEditorShell<TRow>(props: CompendiumEditorShellProps<TR
     identitySourceAbbrev,
     identitySourceFullName,
     identitySubtitle,
+    contextBanner,
     onSave,
     onDelete,
     onReset,
@@ -340,6 +345,17 @@ export function CompendiumEditorShell<TRow>(props: CompendiumEditorShellProps<TR
   const [editorView, setEditorView] = useState<'editor' | 'tags'>('editor');
   const [editorSubTab, setEditorSubTab] = useState<string>(firstEditorSubTabKey);
   const [tagsSubTab, setTagsSubTab] = useState<string>(firstTagsSubTabKey);
+
+  // Defensive: if the active editor sub-tab disappears from `editorSubTabs`
+  // (e.g. switching from a base species — which has a "Subspecies" tab — to a
+  // subspecies child, which doesn't), fall back to the first tab so the body
+  // never goes blank. No-op for editors whose tab set is stable (spells/feats):
+  // same-value setState bails, so this can't loop.
+  useEffect(() => {
+    if (editorSubTabs.length > 0 && !editorSubTabs.some((t) => t.key === editorSubTab)) {
+      setEditorSubTab(editorSubTabs[0].key);
+    }
+  }, [editorSubTabs, editorSubTab]);
 
   // ─── Mode tabs default ────────────────────────────────────────
   // Prefer the consumer's `defaultModeKey`; fall back to the first
@@ -636,6 +652,7 @@ export function CompendiumEditorShell<TRow>(props: CompendiumEditorShellProps<TR
                 then super-tab strip. */}
             <div className="border-b border-gold/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.02),transparent)] px-4 py-2 space-y-1.5">
               {cascadeBanner}
+              {contextBanner}
               {isReadOnly ? (readonlyBanner ?? defaultReadonlyBanner) : null}
 
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 justify-between">

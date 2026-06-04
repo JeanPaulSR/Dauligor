@@ -15,6 +15,7 @@ import BackgroundProficiencies from '../../components/compendium/BackgroundProfi
 import ProficienciesEditor from '../../components/compendium/ProficienciesEditor';
 import RequirementsEditor from '../../components/compendium/RequirementsEditor';
 import BackgroundFeaturesTab from '../../components/compendium/BackgroundFeaturesTab';
+import SubspeciesTab from '../../components/compendium/SubspeciesTab';
 import {
   emptyProficiencies, normalizeProficiencies, resolveBackgroundDisplay,
   type BackgroundProficiencies as BackgroundProficienciesData, type ProficiencyVocab,
@@ -42,7 +43,8 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Checkbox } from '../../components/ui/checkbox';
 import SingleSelectSearch from '../../components/ui/SingleSelectSearch';
-import { Footprints, Eye, Dna } from 'lucide-react';
+import { Button } from '../../components/ui/button';
+import { Footprints, Eye, Dna, ChevronLeft } from 'lucide-react';
 
 /**
  * SpeciesBackgroundEditor
@@ -174,6 +176,8 @@ type SBFormData = {
   movement: MovementShape;
   senses: SensesShape;
   creatureType: CreatureTypeShape;
+  // Species-only — subspecies parent ('' = base species; an id = subspecies of that species)
+  parentSpeciesId: string;
   // Bookkeeping
   createdAt?: string;
   updatedAt?: string;
@@ -208,6 +212,7 @@ function makeInitialForm(sources: any[] = []): SBFormData {
     movement: { ...DEFAULT_MOVEMENT },
     senses: { ...DEFAULT_SENSES },
     creatureType: { ...DEFAULT_CREATURE_TYPE },
+    parentSpeciesId: '',
   };
 }
 
@@ -500,6 +505,7 @@ export default function SpeciesBackgroundEditor({
         creatureType: row.creatureType && typeof row.creatureType === 'object'
           ? { ...DEFAULT_CREATURE_TYPE, ...row.creatureType }
           : { ...DEFAULT_CREATURE_TYPE },
+        parentSpeciesId: row.parentSpeciesId || '',
       };
       setFormData(loaded);
       lastLoadedFormRef.current = JSON.stringify(loaded);
@@ -583,6 +589,7 @@ export default function SpeciesBackgroundEditor({
         payload.movement = formData.movement;
         payload.senses = formData.senses;
         payload.creatureType = formData.creatureType;
+        payload.parentSpeciesId = formData.parentSpeciesId || null;
       }
 
       const wasCreate = !editingId;
@@ -626,6 +633,9 @@ export default function SpeciesBackgroundEditor({
   const filteredEntries = useMemo(() => {
     const lowered = search.trim().toLowerCase();
     return entries.filter((entry) => {
+      // Subspecies are reached via their parent's "Subspecies" tab, not the
+      // flat list — hide children here.
+      if (kind === 'species' && entry.parentSpeciesId) return false;
       if (lowered) {
         const abbrev = String(sourceAbbrevById[entry.sourceId] || '').toLowerCase();
         const hit = String(entry.name || '').toLowerCase().includes(lowered)
@@ -636,7 +646,7 @@ export default function SpeciesBackgroundEditor({
       if (!matchesSingleAxisFilter(String(entry.sourceId ?? ''), axisFilters.source)) return false;
       return true;
     });
-  }, [entries, search, sourceAbbrevById, axisFilters]);
+  }, [entries, search, sourceAbbrevById, axisFilters, kind]);
 
   const filterAxes = useMemo<FilterSection[]>(() => ([
     {
@@ -663,6 +673,14 @@ export default function SpeciesBackgroundEditor({
     if (formData.wealth) parts.push(`Wealth ${formData.wealth}`);
     return parts.join(' · ');
   }, [kind, formData.creatureType, formData.movement, formData.wealth]);
+
+  // Parent species name for the subspecies context banner (looked up from the
+  // full entries list, which includes base species + children).
+  const parentSpeciesName = useMemo(() => {
+    if (kind !== 'species' || !formData.parentSpeciesId) return '';
+    const p = entries.find((e) => String(e.id) === String(formData.parentSpeciesId));
+    return p?.name || 'parent species';
+  }, [kind, formData.parentSpeciesId, entries]);
 
   // ── Editor sub-tabs ───────────────────────────────────────────
   const editorSubTabs: EditorSubTab[] = useMemo(() => {
@@ -691,6 +709,23 @@ export default function SpeciesBackgroundEditor({
         layout: 'scroll',
         render: () => <SpeciesTraitsFields formData={formData} setFormData={setFormData} />,
       });
+      // Subspecies tab — only for a SAVED base species (not itself a child;
+      // one level deep). Children are authored as full species via this tab.
+      if (editingId && !formData.parentSpeciesId) {
+        tabs.push({
+          key: 'subspecies',
+          label: 'Subspecies',
+          layout: 'scroll',
+          render: () => (
+            <SubspeciesTab
+              parentSpeciesId={editingId}
+              parentForm={formData}
+              onEditChild={(childId) => setEditingId(childId)}
+              onChanged={() => { void refreshEntries(); }}
+            />
+          ),
+        });
+      }
     } else {
       tabs.push({
         key: 'details',
@@ -927,6 +962,25 @@ export default function SpeciesBackgroundEditor({
       identitySourceAbbrev={formData.sourceId ? String(sourceAbbrevById[formData.sourceId] || formData.sourceId) : undefined}
       identitySourceFullName={formData.sourceId ? String(sourceNameById[formData.sourceId] || formData.sourceId) : undefined}
       identitySubtitle={identitySubtitle}
+      contextBanner={
+        kind === 'species' && formData.parentSpeciesId ? (
+          <div className="flex items-center justify-between gap-2 rounded-md border border-gold/30 bg-gold/5 px-3 py-1.5">
+            <span className="text-xs text-ink/75">
+              <span className="font-semibold text-gold">Subspecies</span>
+              {parentSpeciesName ? <> of <span className="font-semibold">{parentSpeciesName}</span></> : null}
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => { if (formData.parentSpeciesId) setEditingId(formData.parentSpeciesId); }}
+              className="h-7 gap-1 text-gold hover:bg-gold/10 text-xs"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" /> Back to {parentSpeciesName || 'parent'}
+            </Button>
+          </div>
+        ) : undefined
+      }
       onSave={(e) => void handleSave(e)}
       onDelete={editingId ? handleDelete : undefined}
       onReset={resetForm}
