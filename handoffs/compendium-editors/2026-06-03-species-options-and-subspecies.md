@@ -1,148 +1,71 @@
-# Handoff — `compendium-editors`: Subspecies (BUILT, unpushed) + Species Options (phases 2–5)
+# Archived — `compendium-editors`: Subspecies + Species Options (SHIPPED to main, 2026-06-03)
 
-> **Date:** 2026-06-03 (updated) · **Branch:** `compendium-editors` · **Worktree:**
-> `E:\DnD\Professional\Dev\Dauligor\.claude\worktrees\nostalgic-lamport-76d78d`
-> **Purpose:** resume the Species work cold after a compaction. Read top-to-bottom.
+> **Archival record** (not a resume doc). Everything below shipped and deployed on
+> 2026-06-03. `origin/main` @ `939b2fb`; Cloudflare Pages auto-deployed; the 3 remote
+> D1 migrations were applied first (schema before code, so species saves never broke).
 
-## Git state (at handoff)
+## What shipped (10 commits, `80096b2..939b2fb`)
 
-- `compendium-editors`: **3 ahead / 0 behind** `origin/main` (`origin/main` tops at `80096b2`).
-- **Queued (unpushed) — the Subspecies feature:**
-  - `8ca27bd` subspecies — schema + editor parent field + authoring tab (phases 1–3)
-  - `3dc1651` subspecies — group under parent in the browser (phase 4)
-  - `70ba1db` subspecies — parentRaceId export flag (phase 5, optional)
-- **Already LIVE on main** (pushed earlier today): `80096b2` (this handoff's prior version) ·
-  `863d569` species-options phase 1 · `256a2a3` traits-tab polish · plus the morning's batch
-  (`63842ed` doc sync · `55a58e3` class dirty-check · `e9e0c26` import FK + source picker ·
-  `7f4a96a` scrollbar + editor height · `8b35cd5` caret-jump · `3314fec` toolbar-on-click ·
-  `64d926c` Backgrounds).
-- **Working tree:** only `.claude/scheduled_tasks.lock` (` D` — NEVER stage/commit) + 3
-  pre-existing `docs/_drafts/*.html` drafts (`background-features-design`, `bg-species-data-shapes`,
-  `species-backgrounds-status` — not ours, leave untracked). Otherwise clean.
-- `npx tsc --noEmit` = **6 errors (pre-existing baseline)**; `npx vite build` clean.
+### Subspecies — child species under a parent (Elf → High Elf)
+- **Model:** a subspecies is a *complete* species that names a parent and exports as its own
+  stand-alone Foundry `race` item (dnd5e has no subrace item type). Reuses the species editor,
+  `_raceExport`, browser, and `/api/module/races/<id>.json` unchanged.
+- **Schema:** `species.parentSpeciesId` self-FK `ON DELETE SET NULL` (deleting a parent promotes
+  children to base species — verified empirically) + `idx_species_parent`.
+- **Editor:** a base-species-only **Subspecies tab** (`SubspeciesTab`) lists children, "New
+  Subspecies" creates a child pre-filled from the parent then opens it in the same editor (with a
+  "Subspecies of X · ← Back" banner), plus edit/delete. One level deep. Children hidden from the
+  flat list. Shell gained a generic `contextBanner` slot + a defensive active-sub-tab guard.
+- **Browser:** children grouped under their parent (hidden from the top list; listed on the parent
+  detail; back-link from a child).
+- **Export:** optional `flags.dauligor-pairing.parentRaceId` = parent dbId (metadata for future
+  module grouping).
 
-## Push / credentials — RESOLVED (with a gotcha)
+### Import-workbench fixes
+- Themed the source pickers (`SingleSelectSearch`, replacing raw `<select>`s).
+- Fixed the `species_source_identifier_uniq` crash on batch import: resolve each candidate's target
+  row by its EFFECTIVE (possibly overridden) natural key (source + identifier) and dedupe the batch,
+  so re-imports / source-overrides UPDATE in place instead of inserting a colliding new uuid.
 
-The earlier credential block cleared. **`git fetch` works** (the repo is public, so fetch is
-anonymous — a successful fetch does **not** prove push creds). **`git push` works** too, but
-**only with an interactive popup allowed**: run a plain `git push origin HEAD:main` and complete
-the GitHub popup. **Do NOT** push with `GCM_INTERACTIVE=Never GIT_TERMINAL_PROMPT=0` — that fast-
-fail combo makes push exit 128 (it's only for a non-hanging *probe*).
+### Species Options — `species_features` consolidated into one mechanism
+- **`species_features` retired** → `species_options` (20260603-1600) is the single mechanism for a
+  species's granted features. Identical column shape; the old grant path was never finished.
+- **Authoring + attaching folded into the species editor's "Options" tab** (`SpeciesOptionsTab`):
+  one searchable list of all options with an attach-checkbox per row (writes `speciesOptionIds`) +
+  inline create / edit / delete. Creating an option writes to the shared table → it appears for
+  every species and auto-attaches to the current one. The standalone manager was removed (route +
+  Species-browser "Options" button gone; `CompendiumFeatureEditor` is back to background-only).
+- **Foundry export:** `api/_lib/_speciesOptionExport.ts` (a `feat` item, `system.type.value="race"`,
+  `flags.entityKind="species-option"`); `_raceExport` reads `speciesOptionIds` → `ItemGrant`
+  advancements + embeds the items in `RaceItemBundle.features[]`; live route
+  `/api/module/species-options/<id>.json`.
+- **View:** the species detail page shows attached options as a "Traits & Options" section.
+- **Data migration** `20260603-1900` copied any `species_features` rows into `species_options`
+  (0 rows on prod). `species_features` remains as an orphaned tombstone — no destructive DROP.
 
----
+## Remote D1 migrations applied (2026-06-03)
+`20260603-1600` (species_options + `speciesOptionIds`), `20260603-1800` (subspecies
+`parentSpeciesId`), `20260603-1900` (species_features → species_options copy). Verified on remote:
+both columns present, `species_options` table exists, `parentSpeciesId` FK = SET NULL.
 
-## 🛑 Subspecies deploy is GATED on an ordering constraint
+## Open follow-ups (NOT done)
+- **🔌 Module handshake (`foundry-module` branch):** the `dauligor-pairing` module must learn to
+  consume `/api/module/species-options/<id>.json` + the race bundle's `features[]` (mirrors how it
+  imports background features), and optionally group subspecies under a parent via `parentRaceId`.
+  App side is self-describing; module side is unimplemented.
+- **Inline option editor is lean** (name / identifier / source / page / image / description). The
+  other `species_options` columns (`advancements` / `activities` / `effects` / `tags`) are preserved
+  across edits but not yet editable in the tab — add if richer options are needed.
 
-The user chose to **hold** (keep local) — subspecies is built + committed but **not** pushed and
-its migration is **not** applied to remote. When deploying later, the order is **non-negotiable**:
-
-1. **Apply the remote migration FIRST** (needs a fresh, migration-specific go-ahead per AGENTS.md
-   rule 7): from `worker/`,
-   `npx wrangler d1 execute dauligor-db --remote --file=migrations/20260603-1800_species_subspecies.sql`
-   (PRAGMA-check first).
-2. **THEN** `git push origin HEAD:main` (popup-allowed) to deploy the 3 commits.
-
-**Why order matters:** unlike species-options phase 1 (inert), the subspecies editor **writes
-`parentSpeciesId` on every species save**. If the code deploys before the column exists, *all*
-species saves in prod fail with `no such column: parentSpeciesId`. The migration is additive/
-backward-compatible, so applying it to remote ahead of the push is harmless to currently-live prod.
-
-### Remote-pending migrations
-- `worker/migrations/20260603-1800_species_subspecies.sql` — **applied LOCAL only.** Adds
-  `species.parentSpeciesId TEXT REFERENCES species(id) ON DELETE SET NULL` + `idx_species_parent`.
-  **Required before any subspecies push** (see above).
-- `worker/migrations/20260603-1600_species_options.sql` — **applied LOCAL only.** Creates
-  `species_options` + `species.speciesOptionIds`. **Not** required yet (species-options phase 1 is
-  inert; phases 2+ aren't built). Apply before species-options phase 2+ deploys.
-
-⚠️ **Local-testing note:** both migrations were applied to the **worktree's** local D1, not the
-running dev stack's (that's the *main repo's* — don't disturb it). To click through subspecies on
-`localhost`, the main repo's local D1 needs `20260603-1800` too (or run the worktree's stack).
-
----
-
-## #1 Subspecies — ✅ BUILT (phases 1–5), committed, UNPUSHED
-**Design doc:** [`docs/_drafts/subspecies-design-2026-06-03.html`](../../docs/_drafts/subspecies-design-2026-06-03.html).
-
-**Confirmed model (via the user):** a subspecies is a **complete species that names a parent** —
-**stand-alone `race` export**, **reuse the `species` table** (self-FK), **a "Subspecies" sub-tab**
-on the species editor. (Rejected: parent+child merge — needs nonexistent module support; a
-dedicated table — identical shape to species, so pure duplication.)
-
-What shipped:
-- **Schema (`8ca27bd`):** `species.parentSpeciesId` self-FK (`ON DELETE SET NULL` → deleting a
-  parent *promotes* children to base species; verified empirically on local D1) + index. No
-  `d1Tables`/`d1.ts` change (plain id column, round-trips via the editor's `...row` spread).
-- **Editor (`8ca27bd`):** `parentSpeciesId` in `SBFormData`, hydrated on load, written in
-  `handleSave`'s species branch (`payload.parentSpeciesId = formData.parentSpeciesId || null`).
-- **Subspecies tab (`8ca27bd`)** — `src/components/compendium/SubspeciesTab.tsx`: shown only for a
-  **saved base species** (`editingId && !parentSpeciesId`). Lists children
-  (`species WHERE parentSpeciesId = ?`); "New Subspecies" writes a child pre-filled from the
-  parent's traits (movement/senses/creatureType/advancements/speciesOptionIds/tags/source) then
-  `onEditChild(childId)` → `setEditingId` opens it in the same editor; edit/delete. Editing a child
-  shows a "Subspecies of X · ← Back" banner; children are hidden from the flat editor list. One
-  level deep (no grandchildren).
-- **Shell support (`8ca27bd`)** — `CompendiumEditorShell.tsx`: new generic `contextBanner` prop
-  (renders above the identity row) + a defensive effect that resets the active sub-tab if its key
-  vanishes from `editorSubTabs` (so switching parent↔child never blanks the body). Both are generic
-  improvements; no-ops for stable editors (spells/feats).
-- **Browser (`3dc1651`)** — `SpeciesBackgroundBrowser.tsx`: children hidden from the top-level
-  list; a base species' detail lists its subspecies (click → view); a child's detail links back to
-  its parent. `selectedRow` falls back to the full row set, so a list-hidden child still renders.
-- **Export (`70ba1db`, optional)** — `_raceExport.ts`: stamps
-  `flags.dauligor-pairing.parentRaceId = <parent dbId>` (additive, no extra fetch; matches the
-  parent bundle's own `dbId`). Each subspecies still exports as a stand-alone `race` item. Module-
-  side grouping is the `foundry-module` branch's job.
-
-**Open follow-ups (optional):** subspecies could carry `speciesOptionIds` once the species-options
-picker (its phase 3) lands — already pre-filled from the parent; no extra work needed.
-
-## #2 Species Options — phases 2–5 STILL PENDING (phase 1 LIVE on main, inert)
-**Design doc:** [`docs/_drafts/species-options-design-2026-06-03.html`](../../docs/_drafts/species-options-design-2026-06-03.html).
-Phase 1 (schema + `d1Tables`/`d1.ts` registration) is `863d569`, live on main but inert (nothing
-reads `species_options` / `speciesOptionIds` yet). Remaining:
-- **Phase 2 — Options MANAGER.** CRUD editor for the reusable library. Route
-  `/compendium/species-options/manage` (+ `src/App.tsx` + `src/components/Sidebar.tsx`). Lean
-  fields first (name / identifier / source / image / description). Pattern off
-  `CompendiumFeatureEditor.tsx` / `BackgroundFeaturesTab.tsx`; collection key `'speciesOptions'`.
-- **Phase 3 — Species editor PICKER.** A new **"Options" sub-tab** on `SpeciesBackgroundEditor`
-  (species-only). Load all `species_options`; multi-select writes `formData.speciesOptionIds`; add
-  `payload.speciesOptionIds` in `handleSave`'s species branch. (NOTE: `handleSave` does NOT yet
-  write `speciesOptionIds` — it's preserved on update by the partial-upsert, but the picker must
-  add it to the payload to persist edits.)
-- **Phase 4 — Foundry EXPORT.** New `api/_lib/_speciesOptionExport.ts` (parallel to
-  `_backgroundFeatureExport.ts`). In `_raceExport.ts`: read `row.speciesOptionIds`, build each as a
-  `feat` item → `ItemGrant` advancement on `system.advancement` + push into a new `features[]` on
-  `RaceItemBundle` (copy the owned-features block from `_backgroundExport.ts`). Add a
-  `species-options/<id>.json` route arm in `functions/api/module/[[path]].ts` (append-only file).
-- **Phase 5 — VIEW page.** `SpeciesBackgroundBrowser` `SBDetail` species branch renders the
-  attached options as a trait list.
-
----
-
-## Constraints (preserve verbatim)
-- **main = production**; push only with an explicit in-session ask **and** popup-allowed creds;
-  ALWAYS `git fetch origin` before asserting status.
-- D1 migrations: **local first**; remote ONLY with an explicit, **migration-specific** go-ahead
-  (rule 7 — a prior go-ahead never transfers). `20260603-1600` and `20260603-1800` are local-only.
-- Never `INSERT OR REPLACE` (use `ON CONFLICT(id) DO UPDATE` — `upsertDocument` already does, and
-  only updates the columns in the payload). Never commit `.claude/scheduled_tasks.lock`.
-- Commit footer: `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`.
-- Present specs/designs as parchment/gold **HTML** in `docs/_drafts/` (not chat prose).
-- Never npm install in a worktree; don't disturb the running localhost:3000/8787 stack (main repo's).
-- MarkdownEditor fixes already shipped (caret-jump, toolbar-on-selection, table-tools-when-in-table)
-  — don't regress them.
-
-## Key file / component map
+## Key files
 | Concern | File |
 |---|---|
-| Species + background editor (tabs / traits / Subspecies tab / future Options sub-tab) | `src/pages/compendium/SpeciesBackgroundEditor.tsx` |
-| Subspecies authoring tab | `src/components/compendium/SubspeciesTab.tsx` |
+| Species/background editor (tabs: Basics · Traits · Options · Subspecies · Advancement · Scaling) | `src/pages/compendium/SpeciesBackgroundEditor.tsx` |
+| Species Options tab (library + attach + inline CRUD) | `src/components/compendium/SpeciesOptionsTab.tsx` |
+| Subspecies tab | `src/components/compendium/SubspeciesTab.tsx` |
+| Public view (subspecies grouping + attached options) | `src/pages/compendium/SpeciesBackgroundBrowser.tsx` |
 | Editor shell (`contextBanner`, sub-tab guard) | `src/components/compendium/CompendiumEditorShell.tsx` |
-| Species + background public view (subspecies grouping) | `src/pages/compendium/SpeciesBackgroundBrowser.tsx` |
-| Species (race) Foundry export (parentRaceId flag) | `api/_lib/_raceExport.ts` + `api/_lib/_speciesBackgroundShared.ts` |
-| Subspecies migration (local-only) | `worker/migrations/20260603-1800_species_subspecies.sql` |
-| Species-options migration (local-only) | `worker/migrations/20260603-1600_species_options.sql` |
-| **Template** for options export (ItemGrant + `features[]`) | `api/_lib/_backgroundFeatureExport.ts` + `api/_lib/_backgroundExport.ts` |
-| Module route (append `species-options/<id>.json` arm) | `functions/api/module/[[path]].ts` |
-| Table registry / JSON auto-parse | `src/lib/d1Tables.ts` · `src/lib/d1.ts` |
+| Species (race) export + option export | `api/_lib/_raceExport.ts` · `api/_lib/_speciesOptionExport.ts` · `api/_lib/_speciesBackgroundShared.ts` |
+| Module route (`species-options/<id>.json`) | `functions/api/module/[[path]].ts` |
+| Migrations | `worker/migrations/20260603-1600_species_options.sql` · `…-1800_species_subspecies.sql` · `…-1900_species_features_to_options.sql` |
+| Design doc | `docs/_drafts/species-options-design-2026-06-03.html` · feature doc `docs/features/compendium-races-backgrounds.md` |
