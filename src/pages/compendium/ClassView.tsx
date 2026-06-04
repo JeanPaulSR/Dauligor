@@ -730,7 +730,7 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
         ref={(el) => { featureRefs.current[feature.id] = el; }}
         data-feature-id={feature.id}
         className={`scroll-mt-24 rounded-lg border transition-colors ${
-          isSubclass ? 'border-amber-500/30 bg-amber-500/5' : 'border-gold/10 bg-transparent'
+          isSubclass ? 'border-gold/30 bg-gold/5' : 'border-gold/10 bg-transparent'
         }`}
       >
         {/* Feature header — always visible, click to collapse */}
@@ -741,7 +741,7 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
         >
           <div className="flex items-center gap-3">
             {isSubclass && (
-              <span className="text-[8px] font-black uppercase tracking-widest text-amber-400/80 border border-amber-500/30 px-1.5 py-0.5 rounded shrink-0">
+              <span className="text-[8px] font-black uppercase tracking-widest text-gold/90 border border-gold/40 bg-gold/10 px-1.5 py-0.5 rounded shrink-0">
                 Subclass
               </span>
             )}
@@ -891,28 +891,40 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
     }
     return (
       <div className="flex gap-6 items-start">
-        <nav className="hidden lg:block w-44 shrink-0 sticky top-24 max-h-[calc(100vh-8rem)] overflow-y-auto custom-scrollbar pr-1">
+        <nav className="hidden lg:block w-48 shrink-0 sticky top-24 max-h-[calc(100vh-8rem)] overflow-y-auto custom-scrollbar pr-1">
+          <button
+            type="button"
+            onClick={() => scrollToFeature(list[0].id)}
+            className="mb-3 block w-full text-left label-text text-ink/40 hover:text-gold transition-colors"
+          >
+            Back to top
+          </button>
           <div className="space-y-3">
-            {levelGroups.map((g) => (
-              <div key={g.level} className="space-y-1">
-                <div className={`label-text transition-colors ${activeLevel === g.level ? 'text-gold' : 'text-ink/40'}`}>
-                  Level {g.level}
+            {levelGroups.map((g) => {
+              const isActive = activeLevel === g.level;
+              return (
+                <div key={g.level} className={`pl-2 border-l-2 transition-colors ${isActive ? 'border-gold' : 'border-transparent'}`}>
+                  <div className={`flex items-baseline gap-1.5 transition-colors ${isActive ? 'text-gold' : 'text-ink/40'}`}>
+                    <span className="font-mono text-xs font-bold tabular-nums">{g.level}</span>
+                    <span className="label-text">Level {g.level}</span>
+                  </div>
+                  <div className="mt-1 space-y-px">
+                    {g.features.map((f: any) => (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => { setCollapsedFeatures(prev => ({ ...prev, [f.id]: false })); scrollToFeature(f.id); }}
+                        title={f.name}
+                        className={`flex items-center gap-1.5 w-full text-left text-[11px] leading-snug rounded px-1 py-0.5 transition-colors hover:bg-gold/10 ${f.isFromSubclass ? 'text-gold/80 hover:text-gold' : 'text-ink/55 hover:text-gold'}`}
+                      >
+                        <span className={`w-1 h-1 rounded-[1px] shrink-0 ${f.isFromSubclass ? 'bg-gold/70' : 'bg-ink/30'}`} />
+                        <span className="truncate">{f.name}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <div className="space-y-0.5 border-l border-gold/10 pl-2">
-                  {g.features.map((f: any) => (
-                    <button
-                      key={f.id}
-                      type="button"
-                      onClick={() => { setCollapsedFeatures(prev => ({ ...prev, [f.id]: false })); scrollToFeature(f.id); }}
-                      title={f.name}
-                      className="block w-full text-left text-[11px] leading-snug truncate text-ink/50 hover:text-gold transition-colors"
-                    >
-                      {f.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </nav>
         <div className="space-y-3 flex-1 min-w-0">
@@ -1213,12 +1225,13 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
             class-meta sidebar so the spell content (browser-style
             row layout) gets the full content-area width. The grid
             collapses to a single column. */}
-        <div className={cn(
-          'grid gap-12 pt-8',
-          activeTab === 'spells' ? 'lg:grid-cols-1' : 'lg:grid-cols-4'
-        )}>
-          {/* Features / Tabs - Left (Large) */}
-          <div className={activeTab === 'spells' ? '' : 'lg:col-span-3'}>
+        <div className="grid gap-12 pt-8">
+          {/* Tabs use the full content width on every tab (the spell-list
+              layout): the Class Features jump rail needs the horizontal room,
+              and a right-hand class-meta column otherwise collides with the
+              subclass picker in the tab row. Core Traits stacks full-width
+              below instead (non-spell tabs). */}
+          <div>
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               {/* ── Tab row: chevron tab bar (left) + Subclass picker
                   (right). The subclass picker shares the row so the
@@ -1340,9 +1353,8 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
 
               {/* ── Features Tab ─────────────────────────────────────── */}
               <TabsContent value="features" className="space-y-8">
-                {selectedSubclass && renderSubclassBanner()}
-
-                {/* Filter toggle — only when a subclass is active */}
+                {/* Filter toggle — only when a subclass is active. The subclass
+                    banner/description lives only on the Subclass tab. */}
                 {selectedSubclass && (
                   <div className="flex items-center gap-2">
                     {(['all', 'class', 'subclass'] as const).map((f) => (
