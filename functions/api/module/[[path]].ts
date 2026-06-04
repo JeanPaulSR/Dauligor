@@ -41,6 +41,7 @@ import { buildFeatItemBundle } from "../../../api/_lib/_featExport.js";
 import { buildBackgroundItemBundle } from "../../../api/_lib/_backgroundExport.js";
 import { buildBackgroundFeatureItemBundle } from "../../../api/_lib/_backgroundFeatureExport.js";
 import { buildRaceItemBundle } from "../../../api/_lib/_raceExport.js";
+import { buildSpeciesOptionItemBundle } from "../../../api/_lib/_speciesOptionExport.js";
 import { buildItemBundle } from "../../../api/_lib/_itemExport.js";
 import { buildTagCatalog } from "../../../api/_lib/_tagCatalog.js";
 import { buildSpellcastingChartBundle } from "../../../api/_lib/_spellcastingChart.js";
@@ -420,6 +421,22 @@ export const onRequest = async (context: any): Promise<Response> => {
       const result = await buildRaceItemBundle(dbId, SERVER_EXPORT_FETCHERS);
       if (result) return serveLive(result);
       // Fall through to 404 if no race row matched.
+    }
+
+    // Per-species-option full item — live read-through. URL:
+    //   /api/module/species-options/<dbId>.json
+    // A reusable racial trait (Darkvision, Powerful Build, …) exported as a
+    // Foundry feat item (system.type.value="race"). Also embedded inline in a
+    // species (race) bundle's features[] and granted via ItemGrant.
+    else if (
+      pathParts.length === 2
+      && pathParts[0] === "species-options"
+      && pathParts[1].endsWith(".json")
+    ) {
+      const dbId = pathParts[1].replace(".json", "");
+      const result = await buildSpeciesOptionItemBundle(dbId, SERVER_EXPORT_FETCHERS);
+      if (result) return serveLive(result);
+      // Fall through to 404 if no option row matched.
     }
 
     // Per-item full document — live read-through, no R2 cache. URL:

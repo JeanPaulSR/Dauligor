@@ -26,6 +26,7 @@
 
 import type { ExportFetchers } from "./_classExport.js";
 import { buildSpeciesBackgroundItem, parseJsonField } from "./_speciesBackgroundShared.js";
+import { buildSpeciesOptionItem, type SpeciesOptionItem } from "./_speciesOptionExport.js";
 
 export interface RaceItemBundle {
   kind: "dauligor.race-item.v1";
@@ -40,7 +41,18 @@ export interface RaceItemBundle {
     effects: unknown[];
     flags: Record<string, any>;
   };
+  /** Full option items this species grants (referenced by the ItemGrant
+   *  advancements on `race.system.advancement`, matched by
+   *  `flags.dauligor-pairing.sourceId`). Empty when none are attached. */
+  features: SpeciesOptionItem[];
   generatedAt: number;
+}
+
+// Deterministic 16-char advancement id from a seed (mirrors _backgroundExport's
+// advId; "spo" = species option).
+function advId(seed: string): string {
+  const base = ("spo" + seed).replace(/[^a-zA-Z0-9]/g, "");
+  return (base + "0000000000000000").slice(0, 16);
 }
 
 const RACE_MOVEMENT_DEFAULTS = {
@@ -111,12 +123,48 @@ export async function buildRaceItemBundle(
     ? { ...RACE_TYPE_DEFAULTS, ...creatureType }
     : { ...RACE_TYPE_DEFAULTS };
 
+  // Attached species options (the reusable racial-trait library) → an ItemGrant
+  // advancement each (pool references the option's sourceId) plus the full option
+  // items embedded in `features[]`, so the module imports + grants them without a
+  // second fetch. Mirrors the background owned-features path. A dangling id (an
+  // option deleted after attachment) is simply skipped.
+  const features: SpeciesOptionItem[] = [];
+  const optionIds = parseJsonField(row.speciesOptionIds, []) || [];
+  if (Array.isArray(optionIds)) {
+    for (const optId of optionIds) {
+      try {
+        const builtOption = await buildSpeciesOptionItem(String(optId), fetchers);
+        if (!builtOption) continue;
+        features.push(builtOption.item);
+        const grant = {
+          _id: advId(`opt-${builtOption.sourceId}`),
+          type: "ItemGrant",
+          level: 0,
+          title: "",
+          configuration: {
+            choiceType: "feature",
+            count: 0,
+            pool: [builtOption.sourceId],
+            optionalPool: [],
+            optional: false,
+          },
+          value: {},
+        };
+        system.advancement = system.advancement && typeof system.advancement === "object"
+          ? system.advancement
+          : {};
+        system.advancement[grant._id] = grant;
+      } catch { /* skip a dangling / broken option id */ }
+    }
+  }
+
   return {
     kind: "dauligor.race-item.v1",
     schemaVersion: 1,
     dbId: String(row.id),
     sourceId,
     race: { ...item, type: "race" },
+    features,
     generatedAt: Date.now(),
   };
 }
