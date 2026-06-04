@@ -68,6 +68,19 @@ export async function buildRaceItemBundle(
   const { row, item, sourceId } = built;
   const system = item.system;
 
+  // Subspecies (migration 20260603-1800): stamp the parent species' dbId onto
+  // the pairing flags so the Foundry module can group a parent species with its
+  // children. Additive + dbId-based — it matches the parent bundle's
+  // `flags.dauligor-pairing.dbId`, needs no extra fetch, and consumers that
+  // don't read it are unaffected. Each subspecies still exports as its own
+  // stand-alone `race` item; this is metadata only.
+  if (row.parentSpeciesId) {
+    const pairing = (item.flags as any)?.["dauligor-pairing"];
+    if (pairing && typeof pairing === "object") {
+      pairing.parentRaceId = String(row.parentSpeciesId);
+    }
+  }
+
   // Race-only fields, read from the dedicated table's JSON columns. Overlay
   // stored values onto the dnd5e schema skeleton so every expected key is
   // present (a partial stored object still validates).
