@@ -28,7 +28,7 @@ const PERSISTENT_TABLES = [
   // Backgrounds + Species graduated from the `feats` table into their own
   // tables (migration 20260601-1200). Read-heavy compendium catalogue that
   // changes rarely — same caching rationale as items / feats / spells.
-  'backgrounds', 'species', 'background_features', 'species_features'
+  'backgrounds', 'species', 'background_features', 'species_features', 'species_options'
 ];
 
 /**
@@ -339,6 +339,9 @@ export async function queryD1<T>(sql: string, params: any[] = [], options: { noC
         // denormalize, so queryD1 is the only parse hook — without these the
         // editor reads them as raw JSON strings. (tags + advancements above.)
         'startingEquipment', 'movement', 'senses', 'creatureType', 'prerequisiteTree',
+        // species.speciesOptionIds — JSON id array of attached species_options
+        // (migration 20260603-1600).
+        'speciesOptionIds',
       ];
       const parsedResults = (data.results || []).map((row: any) => {
         const parsed: any = { ...row };
