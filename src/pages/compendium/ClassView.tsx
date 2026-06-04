@@ -99,6 +99,7 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
   // In-page feature navigation: id → card node (for jump + scroll-spy), and the
   // level the jump-bar currently highlights as you scroll.
   const featureRefs = useRef<Record<string, HTMLElement | null>>({});
+  const tabsTopRef = useRef<HTMLDivElement | null>(null);
   const [activeLevel, setActiveLevel] = useState<number | null>(null);
   const [classSpellList, setClassSpellList] = useState<ClassSpellListSummary[]>([]);
   const [classSpellListLoading, setClassSpellListLoading] = useState(false);
@@ -894,7 +895,7 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
         <nav className="hidden lg:block w-48 shrink-0 sticky top-24 max-h-[calc(100vh-8rem)] overflow-y-auto custom-scrollbar pr-1">
           <button
             type="button"
-            onClick={() => scrollToFeature(list[0].id)}
+            onClick={() => tabsTopRef.current?.scrollIntoView({ block: 'start' })}
             className="mb-3 block w-full text-left label-text text-ink/40 hover:text-gold transition-colors"
           >
             Back to top
@@ -1225,22 +1226,17 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
             class-meta sidebar so the spell content (browser-style
             row layout) gets the full content-area width. The grid
             collapses to a single column. */}
-        <div className={cn(
-          'grid gap-12 pt-8',
-          activeTab === 'spells' ? 'lg:grid-cols-1' : 'lg:grid-cols-4'
-        )}>
-          {/* Features / Tabs — left (col-span-3); Core Traits sidebar on the
-              right (col-span-1). Spell List goes full-width (no sidebar). The
-              tab row wraps so the subclass picker drops below the tabs instead
-              of colliding with the Core Traits column when the row is wide. */}
-          <div className={activeTab === 'spells' ? '' : 'lg:col-span-3'}>
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-              {/* ── Tab row: chevron tab bar (left) + Subclass picker
-                  (right). The subclass picker shares the row so the
-                  class-meta sidebar no longer needs to host it — see
-                  the bottom-of-page sidebar where the old Subclass
-                  section used to live. */}
-              <div className="flex items-end justify-between gap-4 mb-8 border-b border-gold/20">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <div className={cn(
+            'grid gap-x-12 pt-8',
+            activeTab === 'spells' ? 'lg:grid-cols-1' : 'lg:grid-cols-4'
+          )}>
+            {/* ── Tab row spans the FULL content width (col-span-4): chevron
+                tabs on the left, the subclass selector at the far right. Core
+                Traits begins in the row below it — mirrors how the Spell List
+                tab renders, so the selector never crowds the sidebar. */}
+            <div className={activeTab === 'spells' ? '' : 'lg:col-span-4'}>
+              <div ref={tabsTopRef} className="flex items-end justify-between gap-4 mb-8 border-b border-gold/20 scroll-mt-24">
                 <TabsList className="flex bg-transparent rounded-none p-0 h-auto gap-0 overflow-visible">
                   {(() => {
                     const tabs = [
@@ -1352,6 +1348,8 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                   </div>
                 )}
               </div>
+            </div>
+            <div className={activeTab === 'spells' ? '' : 'lg:col-span-3'}>
 
               {/* ── Features Tab ─────────────────────────────────────── */}
               <TabsContent value="features" className="space-y-8">
@@ -1437,281 +1435,281 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                   <p className="text-ink/40 text-xs max-w-xs">Flavor recommendations and roleplaying guidance will appear here.</p>
                 </div>
               </TabsContent>
-            </Tabs>
-          </div>
+            </div>
 
-          {/* Sidebar - Right (Small).
-              Hidden on the Spell List tab because the spell content
-              uses a wider browser-row layout that benefits from the
-              full content-area width. Subclass picker lives in the
-              tab row above (see TabsList sibling) so it's reachable
-              from every tab, including this one. */}
-          {activeTab !== 'spells' && (
-          <div className="space-y-8">
-            {/* Core Traits */}
-            <div className="space-y-4">
-              <h2 className="font-bold uppercase tracking-[0.2em] text-gold border-b border-gold/10 pb-2">Core Traits</h2>
-              <div className="space-y-6">
-                <div className="space-y-1">
-                  <p className="uppercase font-bold tracking-widest text-ink/40">Hit Points</p>
-                  <p className="text-ink/80"><strong>Hit Die:</strong> D{classData.hitDie || 8} per level</p>
-                  <p className="text-ink/80"><strong>HP at 1st Level:</strong> {classData.hitDie || 8} + Con Modifier</p>
-                  <p className="text-ink/80"><strong>HP at Higher Levels:</strong> 1D{classData.hitDie || 8} (or {(classData.hitDie || 8) / 2 + 1}) + Con Modifier</p>
-                </div>
-
-                <div className="space-y-1">
-                  <p className="uppercase font-bold tracking-widest text-ink/40">Proficiencies</p>
-                  <p className="text-ink/80"><strong>Saving Throws:</strong> {(() => {
-                    const st = classData.proficiencies?.savingThrows;
-                    
-                    let fixedIds = (st?.fixedIds || []);
-                    if (!Array.isArray(fixedIds)) fixedIds = [];
-                    // Fallback for legacy class structures
-                    if (fixedIds.length === 0 && Array.isArray(classData.savingThrows)) {
-                      fixedIds = classData.savingThrows.map((id: string) => id.toUpperCase());
-                    } else {
-                      fixedIds = fixedIds.map((id: string) => id.toUpperCase());
-                    }
-                    
-                    // Fixed attributes
-                    let fixedNames = allAttributes
-                      .filter(a => fixedIds.includes((a.identifier || a.id).toUpperCase()))
-                      .map(a => a.name);
-
-                    if (fixedNames.length < fixedIds.length) {
-                      fixedNames = fixedIds.map((id: string) => {
-                        const found = allAttributes.find(a => (a.identifier || a.id).toUpperCase() === id.toUpperCase());
-                        return found ? found.name : id.charAt(0) + id.slice(1).toLowerCase();
-                      });
-                    }
-
-                    // Choice attribute
-                    let choiceStr = "";
-                    if (st?.choiceCount > 0 && st?.optionIds?.length > 0) {
-                      const options = st.optionIds.map((id: string) => {
-                        const attr = allAttributes.find(a => (a.identifier || a.id).toUpperCase() === id.toUpperCase());
-                        return attr ? attr.name : id;
-                      }).filter(Boolean);
-                      
-                      if (options.length > 0) {
-                        if (st.choiceCount === 1 && options.length === 2) {
-                          choiceStr = options.join(' or ');
-                        } else {
-                          const last = options.pop();
-                          choiceStr = `Choose ${st.choiceCount} from ${options.join(', ')}${options.length > 0 ? ', or ' : ''}${last}`;
-                        }
-                      }
-                    }
-
-                    const allParts = [...fixedNames];
-                    if (choiceStr) allParts.push(choiceStr);
-                    
-                    if (allParts.length > 1) {
-                      const last = allParts.pop();
-                      return allParts.join(', ') + ' and ' + last;
-                    }
-                    return allParts[0] || 'None';
-                  })()}</p>
-                  <p className="text-ink/80">
-                    <strong>Armor:</strong> {(() => {
-                      const prof = classData.proficiencies?.armor;
-                      const displayName = classData.proficiencies?.armorDisplayName;
-                      if (typeof prof === 'string') return prof;
-                      if (displayName) return displayName;
-                      if (prof && typeof prof === 'object') {
-                        const categoryIds = prof.categoryIds || [];
-                        const catNames = categoryIds.map((cid: string) => allArmorCategories.find(c => c.id === cid)?.name).filter(Boolean);
-                        
-                        const fixed = (prof.fixedIds || [])
-                          .filter((id: string) => {
-                            const item = allArmor.find(i => i.id === id);
-                            return !categoryIds.includes(item?.categoryId);
-                          })
-                          .map((id: string) => allArmor.find(i => i.id === id)?.name)
-                          .filter(Boolean);
-
-                        let parts = [];
-                        if (catNames.length > 0) parts.push(catNames.join(', '));
-                        if (fixed.length > 0) parts.push(fixed.join(', '));
-                        return parts.length > 0 ? parts.join(', ') : 'None';
-                      }
-                      return 'None';
-                    })()}
-                  </p>
-                  <p className="text-ink/80">
-                    <strong>Weapons:</strong> {(() => {
-                      const prof = classData.proficiencies?.weapons;
-                      const displayName = classData.proficiencies?.weaponsDisplayName;
-                      if (typeof prof === 'string') return prof;
-                      if (displayName) return displayName;
-                      if (prof && typeof prof === 'object') {
-                        const categoryIds = prof.categoryIds || [];
-                        const catNames = categoryIds.map((cid: string) => allWeaponCategories.find(c => c.id === cid)?.name).filter(Boolean);
-                        
-                        const fixed = (prof.fixedIds || [])
-                          .filter((id: string) => {
-                            const item = allWeapons.find(i => i.id === id);
-                            return !categoryIds.includes(item?.categoryId);
-                          })
-                          .map((id: string) => allWeapons.find(i => i.id === id)?.name)
-                          .filter(Boolean);
-
-                        let parts = [];
-                        if (catNames.length > 0) parts.push(catNames.join(', '));
-                        if (fixed.length > 0) parts.push(fixed.join(', '));
-                        return parts.length > 0 ? parts.join(', ') : 'None';
-                      }
-                      return 'None';
-                    })()}
-                  </p>
-                  <div className="text-ink/80">
-                    <strong>Tools:</strong> {(() => {
-                      const tools = classData.proficiencies?.tools;
-                      const displayName = classData.proficiencies?.toolsDisplayName;
-                      if (!tools || typeof tools === 'string') return tools || 'None';
-                      if (displayName) return displayName;
-                      
-                      const categoryIds = tools.categoryIds || [];
-                      const catNames = categoryIds.map((cid: string) => allToolCategories.find(c => c.id === cid)?.name).filter(Boolean);
-                      
-                      const fixed = (tools.fixedIds || [])
-                        .filter((id: string) => {
-                          const tool = allTools.find(t => t.id === id);
-                          return !categoryIds.includes(tool?.categoryId);
-                        })
-                        .map((id: string) => allTools.find(t => t.id === id)?.name)
-                        .filter(Boolean);
-                      const options = (tools.optionIds || []).map((id: string) => allTools.find(t => t.id === id)?.name).filter(Boolean);
-                      
-                      let parts = [];
-                      if (catNames.length > 0) parts.push(catNames.join(', '));
-                      if (fixed.length > 0) parts.push(fixed.join(', '));
-                      if (tools.choiceCount > 0 && options.length > 0) {
-                        parts.push(`Choose ${tools.choiceCount} from: ${options.join(', ')}`);
-                      }
-                      
-                      return parts.length > 0 ? parts.join('; ') : 'None';
-                    })()}
-                  </div>
-                  <div className="text-ink/80">
-                    <strong>Skills:</strong> {(() => {
-                      const skills = classData.proficiencies?.skills;
-                      if (!skills || typeof skills === 'string') return skills || 'None';
-                      
-                      const fixed = (skills.fixedIds || []).map((id: string) => allSkills.find(s => s.id === id)?.name).filter(Boolean);
-                      const options = (skills.optionIds || []).map((id: string) => allSkills.find(s => s.id === id)?.name).filter(Boolean);
-                      
-                      let parts = [];
-                      if (fixed.length > 0) parts.push(fixed.join(', '));
-                      if (skills.choiceCount > 0 && options.length > 0) {
-                        parts.push(`Choose ${skills.choiceCount} from: ${options.join(', ')}`);
-                      }
-                      
-                      return parts.length > 0 ? parts.join('; ') : 'None';
-                    })()}
-                  </div>
-                </div>
-
-                {((classData.primaryAbility?.length || 0) > 0 || (classData.primaryAbilityChoice?.length || 0) > 0 || classData.multiclassing) && (
+            {/* Sidebar - Right (Small).
+                Hidden on the Spell List tab because the spell content
+                uses a wider browser-row layout that benefits from the
+                full content-area width. Subclass picker lives in the
+                tab row above (see TabsList sibling) so it's reachable
+                from every tab, including this one. */}
+            {activeTab !== 'spells' && (
+            <div className="space-y-8">
+              {/* Core Traits */}
+              <div className="space-y-4">
+                <h2 className="font-bold uppercase tracking-[0.2em] text-gold border-b border-gold/10 pb-2">Core Traits</h2>
+                <div className="space-y-6">
                   <div className="space-y-1">
-                    <p className="uppercase font-bold tracking-widest text-ink/40">Multiclassing Requirements</p>
-                    <div className="prose-sm italic text-xs text-ink/80">
-                      {(() => {
-                        const fixedNames = (classData.primaryAbility || []).map((id: string) => {
-                          const attr = allAttributes.find(a => (a.identifier || a.id).toUpperCase() === id.toUpperCase());
-                          return attr ? attr.name : id.toUpperCase();
-                        });
-                        const choiceNames = (classData.primaryAbilityChoice || []).map((id: string) => {
-                          const attr = allAttributes.find(a => (a.identifier || a.id).toUpperCase() === id.toUpperCase());
-                          return attr ? attr.name : id.toUpperCase();
-                        });
+                    <p className="uppercase font-bold tracking-widest text-ink/40">Hit Points</p>
+                    <p className="text-ink/80"><strong>Hit Die:</strong> D{classData.hitDie || 8} per level</p>
+                    <p className="text-ink/80"><strong>HP at 1st Level:</strong> {classData.hitDie || 8} + Con Modifier</p>
+                    <p className="text-ink/80"><strong>HP at Higher Levels:</strong> 1D{classData.hitDie || 8} (or {(classData.hitDie || 8) / 2 + 1}) + Con Modifier</p>
+                  </div>
 
-                        if (fixedNames.length === 0 && choiceNames.length === 0) {
-                          return classData.multiclassing ? <BBCodeRenderer content={classData.multiclassing} /> : null;
-                        }
+                  <div className="space-y-1">
+                    <p className="uppercase font-bold tracking-widest text-ink/40">Proficiencies</p>
+                    <p className="text-ink/80"><strong>Saving Throws:</strong> {(() => {
+                      const st = classData.proficiencies?.savingThrows;
+                    
+                      let fixedIds = (st?.fixedIds || []);
+                      if (!Array.isArray(fixedIds)) fixedIds = [];
+                      // Fallback for legacy class structures
+                      if (fixedIds.length === 0 && Array.isArray(classData.savingThrows)) {
+                        fixedIds = classData.savingThrows.map((id: string) => id.toUpperCase());
+                      } else {
+                        fixedIds = fixedIds.map((id: string) => id.toUpperCase());
+                      }
+                    
+                      // Fixed attributes
+                      let fixedNames = allAttributes
+                        .filter(a => fixedIds.includes((a.identifier || a.id).toUpperCase()))
+                        .map(a => a.name);
 
-                        let requirementPart = "";
-                        if (fixedNames.length > 0) {
-                          requirementPart = fixedNames.join(" and ");
+                      if (fixedNames.length < fixedIds.length) {
+                        fixedNames = fixedIds.map((id: string) => {
+                          const found = allAttributes.find(a => (a.identifier || a.id).toUpperCase() === id.toUpperCase());
+                          return found ? found.name : id.charAt(0) + id.slice(1).toLowerCase();
+                        });
+                      }
+
+                      // Choice attribute
+                      let choiceStr = "";
+                      if (st?.choiceCount > 0 && st?.optionIds?.length > 0) {
+                        const options = st.optionIds.map((id: string) => {
+                          const attr = allAttributes.find(a => (a.identifier || a.id).toUpperCase() === id.toUpperCase());
+                          return attr ? attr.name : id;
+                        }).filter(Boolean);
+                      
+                        if (options.length > 0) {
+                          if (st.choiceCount === 1 && options.length === 2) {
+                            choiceStr = options.join(' or ');
+                          } else {
+                            const last = options.pop();
+                            choiceStr = `Choose ${st.choiceCount} from ${options.join(', ')}${options.length > 0 ? ', or ' : ''}${last}`;
+                          }
                         }
+                      }
+
+                      const allParts = [...fixedNames];
+                      if (choiceStr) allParts.push(choiceStr);
+                    
+                      if (allParts.length > 1) {
+                        const last = allParts.pop();
+                        return allParts.join(', ') + ' and ' + last;
+                      }
+                      return allParts[0] || 'None';
+                    })()}</p>
+                    <p className="text-ink/80">
+                      <strong>Armor:</strong> {(() => {
+                        const prof = classData.proficiencies?.armor;
+                        const displayName = classData.proficiencies?.armorDisplayName;
+                        if (typeof prof === 'string') return prof;
+                        if (displayName) return displayName;
+                        if (prof && typeof prof === 'object') {
+                          const categoryIds = prof.categoryIds || [];
+                          const catNames = categoryIds.map((cid: string) => allArmorCategories.find(c => c.id === cid)?.name).filter(Boolean);
                         
-                        if (choiceNames.length > 0) {
-                          if (requirementPart) requirementPart += " and ";
-                          requirementPart += choiceNames.join(" or ");
+                          const fixed = (prof.fixedIds || [])
+                            .filter((id: string) => {
+                              const item = allArmor.find(i => i.id === id);
+                              return !categoryIds.includes(item?.categoryId);
+                            })
+                            .map((id: string) => allArmor.find(i => i.id === id)?.name)
+                            .filter(Boolean);
+
+                          let parts = [];
+                          if (catNames.length > 0) parts.push(catNames.join(', '));
+                          if (fixed.length > 0) parts.push(fixed.join(', '));
+                          return parts.length > 0 ? parts.join(', ') : 'None';
                         }
+                        return 'None';
+                      })()}
+                    </p>
+                    <p className="text-ink/80">
+                      <strong>Weapons:</strong> {(() => {
+                        const prof = classData.proficiencies?.weapons;
+                        const displayName = classData.proficiencies?.weaponsDisplayName;
+                        if (typeof prof === 'string') return prof;
+                        if (displayName) return displayName;
+                        if (prof && typeof prof === 'object') {
+                          const categoryIds = prof.categoryIds || [];
+                          const catNames = categoryIds.map((cid: string) => allWeaponCategories.find(c => c.id === cid)?.name).filter(Boolean);
+                        
+                          const fixed = (prof.fixedIds || [])
+                            .filter((id: string) => {
+                              const item = allWeapons.find(i => i.id === id);
+                              return !categoryIds.includes(item?.categoryId);
+                            })
+                            .map((id: string) => allWeapons.find(i => i.id === id)?.name)
+                            .filter(Boolean);
 
-                        if (classData.multiclassing && classData.multiclassing.trim() !== '') {
-                          return <BBCodeRenderer content={classData.multiclassing} />;
+                          let parts = [];
+                          if (catNames.length > 0) parts.push(catNames.join(', '));
+                          if (fixed.length > 0) parts.push(fixed.join(', '));
+                          return parts.length > 0 ? parts.join(', ') : 'None';
                         }
-
-                        if (!requirementPart) return null;
-
-                        return (
-                          <div className="text-sm">
-                            You must have a {requirementPart} score of 13 or higher in order to multiclass in or out of this class.
-                          </div>
-                        );
+                        return 'None';
+                      })()}
+                    </p>
+                    <div className="text-ink/80">
+                      <strong>Tools:</strong> {(() => {
+                        const tools = classData.proficiencies?.tools;
+                        const displayName = classData.proficiencies?.toolsDisplayName;
+                        if (!tools || typeof tools === 'string') return tools || 'None';
+                        if (displayName) return displayName;
+                      
+                        const categoryIds = tools.categoryIds || [];
+                        const catNames = categoryIds.map((cid: string) => allToolCategories.find(c => c.id === cid)?.name).filter(Boolean);
+                      
+                        const fixed = (tools.fixedIds || [])
+                          .filter((id: string) => {
+                            const tool = allTools.find(t => t.id === id);
+                            return !categoryIds.includes(tool?.categoryId);
+                          })
+                          .map((id: string) => allTools.find(t => t.id === id)?.name)
+                          .filter(Boolean);
+                        const options = (tools.optionIds || []).map((id: string) => allTools.find(t => t.id === id)?.name).filter(Boolean);
+                      
+                        let parts = [];
+                        if (catNames.length > 0) parts.push(catNames.join(', '));
+                        if (fixed.length > 0) parts.push(fixed.join(', '));
+                        if (tools.choiceCount > 0 && options.length > 0) {
+                          parts.push(`Choose ${tools.choiceCount} from: ${options.join(', ')}`);
+                        }
+                      
+                        return parts.length > 0 ? parts.join('; ') : 'None';
+                      })()}
+                    </div>
+                    <div className="text-ink/80">
+                      <strong>Skills:</strong> {(() => {
+                        const skills = classData.proficiencies?.skills;
+                        if (!skills || typeof skills === 'string') return skills || 'None';
+                      
+                        const fixed = (skills.fixedIds || []).map((id: string) => allSkills.find(s => s.id === id)?.name).filter(Boolean);
+                        const options = (skills.optionIds || []).map((id: string) => allSkills.find(s => s.id === id)?.name).filter(Boolean);
+                      
+                        let parts = [];
+                        if (fixed.length > 0) parts.push(fixed.join(', '));
+                        if (skills.choiceCount > 0 && options.length > 0) {
+                          parts.push(`Choose ${skills.choiceCount} from: ${options.join(', ')}`);
+                        }
+                      
+                        return parts.length > 0 ? parts.join('; ') : 'None';
                       })()}
                     </div>
                   </div>
-                )}
 
-                <div className="space-y-1">
-                  <p className="uppercase font-bold tracking-widest text-ink/40">Tags</p>
-                  <div className="flex flex-wrap gap-1">
-                    {tagGroups.map(group => {
-                      const groupTags = allTags.filter(t => t.groupId === group.id && (classData.tagIds || []).includes(t.id));
-                      if (groupTags.length === 0) return null;
-                      return groupTags.map(tag => (
-                        <div 
-                          key={tag.id} 
-                          className="px-1.5 py-0.5 border rounded text-[8px] font-bold uppercase tracking-wider bg-gold/5 border-gold/20 text-gold/60"
-                        >
-                          {tag.name}
-                        </div>
-                      ));
-                    })}
-                    {(!classData.tagIds || classData.tagIds.length === 0) && <span className="text-xs text-ink/40 italic">None</span>}
-                  </div>
-                </div>
+                  {((classData.primaryAbility?.length || 0) > 0 || (classData.primaryAbilityChoice?.length || 0) > 0 || classData.multiclassing) && (
+                    <div className="space-y-1">
+                      <p className="uppercase font-bold tracking-widest text-ink/40">Multiclassing Requirements</p>
+                      <div className="prose-sm italic text-xs text-ink/80">
+                        {(() => {
+                          const fixedNames = (classData.primaryAbility || []).map((id: string) => {
+                            const attr = allAttributes.find(a => (a.identifier || a.id).toUpperCase() === id.toUpperCase());
+                            return attr ? attr.name : id.toUpperCase();
+                          });
+                          const choiceNames = (classData.primaryAbilityChoice || []).map((id: string) => {
+                            const attr = allAttributes.find(a => (a.identifier || a.id).toUpperCase() === id.toUpperCase());
+                            return attr ? attr.name : id.toUpperCase();
+                          });
 
-                {(classData.spellcasting?.hasSpellcasting || classData.spellcasting?.isRitualCaster) && (
-                  <div className="space-y-1">
-                    <p className="uppercase font-bold tracking-widest text-ink/40">Spellcasting</p>
-                    {classData.spellcasting?.hasSpellcasting && (
-                      <>
-                        <p className="text-ink/80"><strong>Ability:</strong> {(() => {
-                          const id = (classData.spellcasting.ability || '').toUpperCase();
-                          const attr = allAttributes.find(a => ((a.identifier || a.id).toUpperCase() === id));
-                          return attr ? attr.name : id;
-                        })()}</p>
-                        <p className="text-ink/80"><strong>Type:</strong> {classData.spellcasting.type ? classData.spellcasting.type.charAt(0).toUpperCase() + classData.spellcasting.type.slice(1) : ''}</p>
-                        <p className="text-ink/80"><strong>Level Gained:</strong> {classData.spellcasting.level}</p>
-                        {classData.spellcasting.spellsKnownFormula && (
-                          <p className="text-ink/80"><strong>Spells Known:</strong> {classData.spellcasting.spellsKnownFormula}</p>
-                        )}
-                      </>
-                    )}
-                    {classData.spellcasting?.isRitualCaster && (
-                      <div className="flex items-center gap-2 pt-1">
-                        <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all bg-gold border-gold`}>
-                          <Check className="w-3 h-3 text-white" />
-                        </div>
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Ritual Caster</span>
+                          if (fixedNames.length === 0 && choiceNames.length === 0) {
+                            return classData.multiclassing ? <BBCodeRenderer content={classData.multiclassing} /> : null;
+                          }
+
+                          let requirementPart = "";
+                          if (fixedNames.length > 0) {
+                            requirementPart = fixedNames.join(" and ");
+                          }
+                        
+                          if (choiceNames.length > 0) {
+                            if (requirementPart) requirementPart += " and ";
+                            requirementPart += choiceNames.join(" or ");
+                          }
+
+                          if (classData.multiclassing && classData.multiclassing.trim() !== '') {
+                            return <BBCodeRenderer content={classData.multiclassing} />;
+                          }
+
+                          if (!requirementPart) return null;
+
+                          return (
+                            <div className="text-sm">
+                              You must have a {requirementPart} score of 13 or higher in order to multiclass in or out of this class.
+                            </div>
+                          );
+                        })()}
                       </div>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  )}
 
-                <div className="space-y-1">
-                  <p className="uppercase font-bold tracking-widest text-ink/40">Equipment</p>
-                  <BBCodeRenderer content={classData.startingEquipment || 'Standard starting equipment.'} className="prose-sm italic" />
+                  <div className="space-y-1">
+                    <p className="uppercase font-bold tracking-widest text-ink/40">Tags</p>
+                    <div className="flex flex-wrap gap-1">
+                      {tagGroups.map(group => {
+                        const groupTags = allTags.filter(t => t.groupId === group.id && (classData.tagIds || []).includes(t.id));
+                        if (groupTags.length === 0) return null;
+                        return groupTags.map(tag => (
+                          <div 
+                            key={tag.id} 
+                            className="px-1.5 py-0.5 border rounded text-[8px] font-bold uppercase tracking-wider bg-gold/5 border-gold/20 text-gold/60"
+                          >
+                            {tag.name}
+                          </div>
+                        ));
+                      })}
+                      {(!classData.tagIds || classData.tagIds.length === 0) && <span className="text-xs text-ink/40 italic">None</span>}
+                    </div>
+                  </div>
+
+                  {(classData.spellcasting?.hasSpellcasting || classData.spellcasting?.isRitualCaster) && (
+                    <div className="space-y-1">
+                      <p className="uppercase font-bold tracking-widest text-ink/40">Spellcasting</p>
+                      {classData.spellcasting?.hasSpellcasting && (
+                        <>
+                          <p className="text-ink/80"><strong>Ability:</strong> {(() => {
+                            const id = (classData.spellcasting.ability || '').toUpperCase();
+                            const attr = allAttributes.find(a => ((a.identifier || a.id).toUpperCase() === id));
+                            return attr ? attr.name : id;
+                          })()}</p>
+                          <p className="text-ink/80"><strong>Type:</strong> {classData.spellcasting.type ? classData.spellcasting.type.charAt(0).toUpperCase() + classData.spellcasting.type.slice(1) : ''}</p>
+                          <p className="text-ink/80"><strong>Level Gained:</strong> {classData.spellcasting.level}</p>
+                          {classData.spellcasting.spellsKnownFormula && (
+                            <p className="text-ink/80"><strong>Spells Known:</strong> {classData.spellcasting.spellsKnownFormula}</p>
+                          )}
+                        </>
+                      )}
+                      {classData.spellcasting?.isRitualCaster && (
+                        <div className="flex items-center gap-2 pt-1">
+                          <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all bg-gold border-gold`}>
+                            <Check className="w-3 h-3 text-white" />
+                          </div>
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Ritual Caster</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="space-y-1">
+                    <p className="uppercase font-bold tracking-widest text-ink/40">Equipment</p>
+                    <BBCodeRenderer content={classData.startingEquipment || 'Standard starting equipment.'} className="prose-sm italic" />
+                  </div>
                 </div>
               </div>
             </div>
+            )}
           </div>
-          )}
-        </div>
+        </Tabs>
       </div>
     </div>
   );
