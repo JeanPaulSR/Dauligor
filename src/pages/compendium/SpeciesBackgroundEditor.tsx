@@ -42,6 +42,7 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Checkbox } from '../../components/ui/checkbox';
 import SingleSelectSearch from '../../components/ui/SingleSelectSearch';
+import { Footprints, Eye, Dna } from 'lucide-react';
 
 /**
  * SpeciesBackgroundEditor
@@ -1044,6 +1045,51 @@ function BasicsFields({
 
 // ─── Species traits fields (movement / senses / creature type) ──────
 
+function TraitCard({
+  icon: Icon, title, hint, children,
+}: { icon: any; title: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-xl border border-gold/15 bg-card/40 overflow-hidden flex flex-col">
+      <div className="flex items-center gap-2 border-b border-gold/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent)] px-4 py-2.5">
+        <Icon className="h-4 w-4 text-gold/70 shrink-0" />
+        <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">{title}</h3>
+        {hint ? <span className="ml-auto text-[10px] italic text-ink/35 hidden sm:block">{hint}</span> : null}
+      </div>
+      <div className="p-4 space-y-3 flex-1">{children}</div>
+    </section>
+  );
+}
+
+// A number field with a unit suffix shown inside the box (and no spinner arrows).
+function StatNumberField({
+  label, value, unit, onChange,
+}: { label: string; value: number | null; unit?: string; onChange: (n: number | null) => void }) {
+  const numOrNull = (raw: string): number | null => {
+    const t = raw.trim();
+    if (t === '') return null;
+    const n = Number(t);
+    return Number.isFinite(n) ? n : null;
+  };
+  return (
+    <div className="space-y-0.5">
+      <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">{label}</Label>
+      <div className="relative">
+        <Input
+          type="number"
+          min={0}
+          value={value ?? ''}
+          onChange={(e) => onChange(numOrNull(e.target.value))}
+          className="no-number-spin h-8 bg-background/50 border-gold/10 focus:border-gold text-sm pr-8"
+          placeholder="—"
+        />
+        {unit ? (
+          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[9px] uppercase tracking-wider text-ink/30">{unit}</span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function SpeciesTraitsFields({
   formData,
   setFormData,
@@ -1051,110 +1097,94 @@ function SpeciesTraitsFields({
   formData: SBFormData;
   setFormData: React.Dispatch<React.SetStateAction<SBFormData>>;
 }) {
-  const numOrNull = (raw: string): number | null => {
-    const t = raw.trim();
-    if (t === '') return null;
-    const n = Number(t);
-    return Number.isFinite(n) ? n : null;
-  };
+  const setMovement = (patch: any) => setFormData((prev) => ({ ...prev, movement: { ...prev.movement, ...patch } }));
+  const setSenses = (patch: any) => setFormData((prev) => ({ ...prev, senses: { ...prev.senses, ...patch } }));
+  const setCreatureType = (patch: any) => setFormData((prev) => ({ ...prev, creatureType: { ...prev.creatureType, ...patch } }));
+  const moveUnit = formData.movement.units || 'ft';
+  const senseUnit = formData.senses.units || 'ft';
 
   return (
-    <div className="space-y-5 pt-4 border-t border-gold/10">
-      {/* Movement */}
-      <section className="space-y-2">
-        <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Movement</h3>
-        <div className="grid gap-3 grid-cols-2 md:grid-cols-5">
-          {MOVEMENT_SPEEDS.map(([key, label]) => (
-            <div key={key} className="space-y-0.5">
-              <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">{label}</Label>
-              <Input
-                type="number"
-                min={0}
-                value={(formData.movement as any)[key] ?? ''}
-                onChange={(e) => setFormData((prev) => ({
-                  ...prev,
-                  movement: { ...prev.movement, [key]: numOrNull(e.target.value) },
-                }))}
-                className="h-8 bg-background/50 border-gold/10 focus:border-gold text-sm"
-                placeholder="—"
+    <div className="space-y-4 pt-4 border-t border-gold/10">
+      <div className="grid gap-4 lg:grid-cols-2 items-start">
+        {/* Movement */}
+        <TraitCard icon={Footprints} title="Movement" hint="Blank = none">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {MOVEMENT_SPEEDS.map(([key, label]) => (
+              <StatNumberField
+                key={key}
+                label={label}
+                unit={moveUnit}
+                value={(formData.movement as any)[key] ?? null}
+                onChange={(n) => setMovement({ [key]: n })}
+              />
+            ))}
+          </div>
+          <div className="flex flex-wrap items-end gap-4 border-t border-gold/5 pt-3">
+            <div className="space-y-0.5">
+              <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Units</Label>
+              <SingleSelectSearch
+                value={moveUnit}
+                onChange={(val) => setMovement({ units: val })}
+                options={DISTANCE_UNITS.map(([v, l]) => ({ id: v, name: l }))}
+                triggerClassName="w-28"
+                allowClear={false}
               />
             </div>
-          ))}
-        </div>
-        <div className="flex flex-wrap items-end gap-4">
-          <div className="space-y-0.5">
-            <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Units</Label>
-            <SingleSelectSearch
-              value={formData.movement.units || 'ft'}
-              onChange={(val) => setFormData((prev) => ({ ...prev, movement: { ...prev.movement, units: val } }))}
-              options={DISTANCE_UNITS.map(([v, l]) => ({ id: v, name: l }))}
-              triggerClassName="w-28"
-              allowClear={false}
-            />
+            <label className="flex items-center gap-2 pb-1.5 cursor-pointer">
+              <Checkbox
+                checked={!!formData.movement.hover}
+                onCheckedChange={(checked) => setMovement({ hover: !!checked })}
+              />
+              <span className="text-xs text-ink/70">Hover</span>
+            </label>
           </div>
-          <label className="flex items-center gap-2 pb-1.5">
-            <Checkbox
-              checked={!!formData.movement.hover}
-              onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, movement: { ...prev.movement, hover: !!checked } }))}
-            />
-            <span className="text-xs text-ink/70">Hover</span>
-          </label>
-        </div>
-      </section>
+        </TraitCard>
 
-      {/* Senses */}
-      <section className="space-y-2">
-        <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Senses</h3>
-        <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
-          {SENSE_RANGES.map(([key, label]) => (
-            <div key={key} className="space-y-0.5">
-              <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">{label}</Label>
-              <Input
-                type="number"
-                min={0}
-                value={(formData.senses as any)[key] ?? ''}
-                onChange={(e) => setFormData((prev) => ({
-                  ...prev,
-                  senses: { ...prev.senses, [key]: numOrNull(e.target.value) },
-                }))}
-                className="h-8 bg-background/50 border-gold/10 focus:border-gold text-sm"
-                placeholder="—"
+        {/* Senses */}
+        <TraitCard icon={Eye} title="Senses" hint="Blank = none">
+          <div className="grid grid-cols-2 gap-3">
+            {SENSE_RANGES.map(([key, label]) => (
+              <StatNumberField
+                key={key}
+                label={label}
+                unit={senseUnit}
+                value={(formData.senses as any)[key] ?? null}
+                onChange={(n) => setSenses({ [key]: n })}
+              />
+            ))}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-[7rem_minmax(0,1fr)] border-t border-gold/5 pt-3">
+            <div className="space-y-0.5">
+              <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Units</Label>
+              <SingleSelectSearch
+                value={senseUnit}
+                onChange={(val) => setSenses({ units: val })}
+                options={DISTANCE_UNITS.map(([v, l]) => ({ id: v, name: l }))}
+                triggerClassName="w-28"
+                allowClear={false}
               />
             </div>
-          ))}
-        </div>
-        <div className="grid gap-3 md:grid-cols-[7rem_minmax(0,1fr)]">
-          <div className="space-y-0.5">
-            <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Units</Label>
-            <SingleSelectSearch
-              value={formData.senses.units || 'ft'}
-              onChange={(val) => setFormData((prev) => ({ ...prev, senses: { ...prev.senses, units: val } }))}
-              options={DISTANCE_UNITS.map(([v, l]) => ({ id: v, name: l }))}
-              triggerClassName="w-28"
-              allowClear={false}
-            />
+            <div className="space-y-0.5">
+              <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Special senses</Label>
+              <Input
+                value={formData.senses.special}
+                onChange={(e) => setSenses({ special: e.target.value })}
+                className="h-8 bg-background/50 border-gold/10 focus:border-gold text-sm"
+                placeholder="e.g. can't be blinded"
+              />
+            </div>
           </div>
-          <div className="space-y-0.5">
-            <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Special senses</Label>
-            <Input
-              value={formData.senses.special}
-              onChange={(e) => setFormData((prev) => ({ ...prev, senses: { ...prev.senses, special: e.target.value } }))}
-              className="h-8 bg-background/50 border-gold/10 focus:border-gold text-sm"
-              placeholder="e.g. can't be blinded"
-            />
-          </div>
-        </div>
-      </section>
+        </TraitCard>
+      </div>
 
       {/* Creature type */}
-      <section className="space-y-2">
-        <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Creature Type</h3>
+      <TraitCard icon={Dna} title="Creature Type" hint="What the species counts as">
         <div className="grid gap-3 md:grid-cols-3">
           <div className="space-y-0.5">
             <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Type</Label>
             <SingleSelectSearch
               value={formData.creatureType.value || 'humanoid'}
-              onChange={(val) => setFormData((prev) => ({ ...prev, creatureType: { ...prev.creatureType, value: val } }))}
+              onChange={(val) => setCreatureType({ value: val })}
               options={CREATURE_TYPES.map(([v, l]) => ({ id: v, name: l }))}
               triggerClassName="w-full"
               allowClear={false}
@@ -1164,7 +1194,7 @@ function SpeciesTraitsFields({
             <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Subtype</Label>
             <Input
               value={formData.creatureType.subtype}
-              onChange={(e) => setFormData((prev) => ({ ...prev, creatureType: { ...prev.creatureType, subtype: e.target.value } }))}
+              onChange={(e) => setCreatureType({ subtype: e.target.value })}
               className="h-8 bg-background/50 border-gold/10 focus:border-gold text-sm"
               placeholder="e.g. elf, dwarf"
             />
@@ -1173,13 +1203,13 @@ function SpeciesTraitsFields({
             <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Custom</Label>
             <Input
               value={formData.creatureType.custom}
-              onChange={(e) => setFormData((prev) => ({ ...prev, creatureType: { ...prev.creatureType, custom: e.target.value } }))}
+              onChange={(e) => setCreatureType({ custom: e.target.value })}
               className="h-8 bg-background/50 border-gold/10 focus:border-gold text-sm"
               placeholder="override label"
             />
           </div>
         </div>
-      </section>
+      </TraitCard>
     </div>
   );
 }
