@@ -1240,7 +1240,7 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                   class-meta sidebar no longer needs to host it — see
                   the bottom-of-page sidebar where the old Subclass
                   section used to live. */}
-              <div className="flex flex-wrap items-end justify-between gap-4 mb-8 border-b border-gold/20">
+              <div className="flex items-end justify-between gap-4 mb-8 border-b border-gold/20">
                 <TabsList className="flex bg-transparent rounded-none p-0 h-auto gap-0 overflow-visible">
                   {(() => {
                     const tabs = [
@@ -1263,7 +1263,7 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                         }}
                         className={`
                           relative flex-none rounded-none border-none h-auto
-                          min-w-[160px] py-3 px-8 text-[10px] font-black uppercase tracking-[0.12em] text-center whitespace-nowrap
+                          py-3 px-7 text-[10px] font-black uppercase tracking-[0.12em] text-center whitespace-nowrap
                           transition-colors duration-150
                           bg-gold/10 text-gold/50 hover:bg-gold/20 hover:text-gold/70
                           data-active:bg-gold data-active:text-black data-active:z-10
