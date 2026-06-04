@@ -17,29 +17,27 @@ import { Badge } from "../ui/badge";
 // Mirrors LoreArticle: card panel, centred gold title + italic subtitle, then a
 // prose body (real renderer) with an "on this page" sidebar.
 
-// Real content — the "Magic" lore article from the compendium (the Maliath +
-// the six traditions), so the preview reflects actual prose the app renders.
-const ARTICLE_BODY = `Magic is the fundamental energy found in every reality and in all things — from the spark of thought, to a spell once cast, to the fuel of distant stars. It is neither good nor evil. It simply is, and it infuses everything. The force that drives a spell, a healing prayer, or a feat of impossible endurance all draw from the same well; the only difference is how a practitioner accesses it.
+// Real content — the "Magic" lore article from the compendium, VERBATIM (cut
+// cleanly after the Arcane section; nothing reworded). Headings + section names
+// are the article's own.
+const ARTICLE_BODY = `Magic is the fundamental energy found in every reality and in all things, from the spark of thought, a spell once cast or the fuel of distant stars. It is neither good nor evil. It simply is, and it infuses everything. The force that drives a spell, a healing prayer, or a feat of impossible endurance all draw from the same well, the only difference is how a practitioner accesses it. The scholars of the present age call this well the Inheritance, a last gift from a primordial entity. In common speech it is named simply the Maliath, and it is the source from which every working of magic, in every tradition, is ultimately drawn.
 
-[i]"None of the traditions are wrong. Each is simply shaped by the philosophy, discipline, or relationship that grants its followers access."[/i]
+[h1]Traditions[/h1]
 
-[h2]The Maliath[/h2]
-The scholars of the present age call this well the Inheritance — a last gift from a primordial entity. In common speech it is named simply the [b]Maliath[/b], the source from which every working of magic, in every tradition, is ultimately drawn.
+The sheer breadth of the Maliath has given rise to countless ideas about what magic is and how it ought to be used. Over time, these ideas settled into six broad traditions of practice. None of them are wrong. Each is simply shaped by the philosophy, discipline, or relationship that grants its followers access to it. A tradition is not a kind of magic, only a path toward using it. Two casters reaching the same effect through different traditions will look, feel, and cost something entirely different, yet at the core they are touching the same thing.
 
-[h2]Traditions[/h2]
-The sheer breadth of the Maliath has given rise to countless ideas about what magic is and how it ought to be used. Over time these settled into six broad traditions of practice. A tradition is not a kind of magic, only a path toward using it — two casters reaching the same effect through different traditions will look, feel, and cost something entirely different, yet at their core they are touching the same well.`;
+[h2]Arcane[/h2]
+
+The arcane tradition is the study of the rules of magic. It begins from a single line of reasoning: what can be observed can be understood, what is understood can be modified, and what can be modified can, in turn, be controlled. Every arcane discipline of the present age descends from that thought. Arcane practitioners, through runes drawn in a precise sequence, words spoken in the correct tone and order or gestures shaped to correct measurements, have learned to instruct magic.`;
 
 const ArticlePage: FC = () => (
   <div className="w-full">
     <div className="bg-card border border-gold/15 rounded-xl overflow-hidden">
       <div className="h-28 bg-gradient-to-b from-gold/15 to-transparent border-b border-gold/15 flex items-end justify-center pb-3">
-        <span className="label-text text-gold text-[10px] uppercase tracking-widest">Lore · Cosmology</span>
+        <span className="label-text text-gold text-[10px] uppercase tracking-widest">Lore</span>
       </div>
       <div className="text-center py-6 px-6 border-b border-gold/15">
         <h1 className="text-4xl md:text-5xl font-serif font-bold tracking-wide text-gold/95">Magic</h1>
-        <p className="text-lg font-serif italic text-ink/75 max-w-2xl mx-auto leading-relaxed border-t border-b border-gold/15 py-3 mt-4">
-          The Maliath, and the six traditions that draw from it.
-        </p>
       </div>
       <div className="grid lg:grid-cols-3 gap-8 p-6">
         <div className="lg:col-span-2">
@@ -48,14 +46,12 @@ const ArticlePage: FC = () => (
         <aside className="space-y-4">
           <div className="border border-gold/15 bg-gold/5 p-4">
             <div className="label-text text-gold mb-2">On this page</div>
+            {/* The article's real top-level sections. */}
             <ul className="space-y-1.5 text-sm text-ink/65">
-              <li className="hover:text-gold cursor-pointer">The Maliath</li>
               <li className="hover:text-gold cursor-pointer">Traditions</li>
+              <li className="hover:text-gold cursor-pointer">The Schools of Magic</li>
+              <li className="hover:text-gold cursor-pointer">Branches</li>
             </ul>
-          </div>
-          <div className="border border-gold/15 bg-card p-4">
-            <div className="label-text text-gold mb-2">Linked</div>
-            <p className="text-xs text-ink/55">The Inheritance · Spellcasting · Spell Lists</p>
           </div>
         </aside>
       </div>
@@ -200,19 +196,29 @@ const CompendiumPage: FC = () => (
 // strip, a feature list with level badges, and an in-page jump rail. Populated
 // with the REAL Artificer class + its actual features from the compendium.
 
+// Real Artificer fields (verbatim). Core Traits are limited to values that are
+// actually stored on the class record — hit die, saving throws, spellcasting,
+// ASI levels — rather than invented proficiency names (those are stored as
+// unresolved ID refs the static preview can't expand).
+const ARTIFICER_PREVIEW = "Artificers are magical inventors that use arcane knowledge and engineering to infuse tools, weapons and constructs with enchantments.";
+const ARTIFICER_DESCRIPTION = `Artificers are arcane casters who channel their magic through a specific tool and are defined by their ability to infuse mundane items with magic, effectively turning equipment into customizable, semi-permanent magical gear. They are also capable of overcoming unique challenges thanks to their ability to attune to more than three items, as well as their talent for finding solutions to problems through their Flash of Genius.
+
+Each artificer specialization reflects a distinct approach to invention, centered around particular tools and techniques. Some brew potent elixirs with alchemist's supplies, others inscribe powerful sigils using calligrapher's tools, while more mechanically inclined artificers construct intricate devices or deploy magical constructs using tinker's tools.`;
+
 const CLASS_TRAITS = [
   { k: "Hit Die", v: "d8" },
-  { k: "Primary", v: "Intelligence" },
-  { k: "Saves", v: "CON · INT" },
-  { k: "Armor", v: "Light · Medium · Shields" },
-  { k: "Tools", v: "Thieves' · Tinker's · Artisan" },
+  { k: "Saving Throws", v: "CON · INT" },
+  { k: "Spellcasting", v: "Yes" },
+  { k: "ASI Levels", v: "4 · 8 · 12 · 16 · 19" },
 ];
 
+// Real Artificer features — names, levels, and the opening of each feature's
+// description, VERBATIM (cut at a sentence boundary; nothing reworded).
 const CLASS_FEATURES = [
-  { level: 1, name: "Magical Tinkering", desc: "With thieves' or artisan's tools in hand, invest a spark of magic into a Tiny nonmagical object, giving it a minor, useful property." },
-  { level: 2, name: "Infuse Item", desc: "Imbue mundane items with magical infusions, turning ordinary objects into customizable magic items you can swap as you advance." },
-  { level: 3, name: "The Right Tool for the Job", desc: "Magically conjure exactly the set of artisan's tools you need, ready in an unoccupied space within reach." },
-  { level: 7, name: "Flash of Genius", desc: "When you or an ally you can see within 30 feet makes an ability check or save, add your Intelligence modifier to the roll." },
+  { level: 1, name: "Magical Tinkering", desc: "At 1st level, you've learned how to invest a spark of magic into mundane objects. To use this ability, you must have thieves' tools or artisan's tools in hand." },
+  { level: 2, name: "Infuse Item", desc: "At 2nd level, you've gained the ability to imbue mundane items with certain magical infusions, turning those objects into magic items." },
+  { level: 3, name: "The Right Tool for the Job", desc: "At 3rd level, you've learned how to produce exactly the tool you need: with thieves' tools or artisan's tools in hand, you can magically create one set of artisan's tools in an unoccupied space within 5 feet of you." },
+  { level: 7, name: "Flash of Genius", desc: "At 7th level, you've gained the ability to come up with solutions under pressure. When you or another creature you can see within 30 feet of you makes an ability check or a saving throw, you can use your reaction to add your Intelligence modifier to the roll." },
 ];
 
 const ClassViewPage: FC = () => (
@@ -221,14 +227,16 @@ const ClassViewPage: FC = () => (
       <div className="h-44 relative flex items-end p-6"
         style={{ background: "linear-gradient(to top, color-mix(in oklab, var(--card) 92%, black), color-mix(in oklab, var(--gold) 12%, transparent))" }}>
         <div>
-          <span className="label-text text-gold text-xs">Arcane Invention</span>
-          <h1 className="font-serif text-5xl font-bold text-gold/95 drop-shadow-sm leading-none mt-1">Artificer</h1>
+          <h1 className="font-serif text-5xl font-bold text-gold/95 drop-shadow-sm leading-none">Alternate Artificer</h1>
+          <p className="text-sm italic text-ink/75 mt-2 max-w-2xl">{ARTIFICER_PREVIEW}</p>
         </div>
       </div>
       <div className="p-6 border-t border-gold/15">
-        <p className="description-text text-ink/75 max-w-3xl">Arcane casters who channel magic through a chosen tool, infusing mundane equipment into customizable, semi-permanent magic gear — and bending unique problems to clever solutions.</p>
-        {/* Core Traits */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-px mt-5 border border-gold/15 bg-gold/15">
+        <div className="description-text text-ink/80 max-w-3xl">
+          <BBCodeRenderer content={ARTIFICER_DESCRIPTION} />
+        </div>
+        {/* Core Traits — only values actually on the class record. */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-px mt-5 border border-gold/15 bg-gold/15">
           {CLASS_TRAITS.map((t) => (
             <div key={t.k} className="bg-card px-3 py-2">
               <div className="text-[9px] uppercase tracking-widest text-gold/70 font-bold">{t.k}</div>
