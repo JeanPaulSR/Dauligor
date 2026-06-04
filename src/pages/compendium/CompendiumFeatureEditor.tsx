@@ -30,21 +30,20 @@ import { Label } from '../../components/ui/label';
 /**
  * CompendiumFeatureEditor
  * ───────────────────────
- * Admin editor for the dedicated content types attached to backgrounds +
- * species. The `background` kind authors `background_features` (migration
- * 20260601-1400) — a background's granted feature(s). The `species` kind
- * authors `species_options` (20260603-1600) — the reusable racial-trait
- * library (Darkvision, Powerful Build, …) attached to a species via its
- * Options picker; the old `species_features` table was consolidated into it.
- * One component, keyed by `kind`, mirroring SpeciesBackgroundEditor. Pattern E
- * shell; camelCase columns → direct upsertDocument / fetchDocument (no
- * normalize/denormalize); only tags (column) ↔ tagIds (form) is renamed inline.
+ * Admin editor for `background_features` (migration 20260601-1400) — the
+ * special feature(s) a background grants. Pattern E shell; camelCase columns →
+ * direct upsertDocument / fetchDocument (no normalize/denormalize); only tags
+ * (column) ↔ tagIds (form) is renamed inline.
  *
- * Routes: /compendium/background-features/manage,
- *         /compendium/species-options/manage  (admin / content-creator).
+ * (Species options — the species-side equivalent — were folded into the species
+ * editor's Options tab, see src/components/compendium/SpeciesOptionsTab.tsx, so
+ * this editor stays background-only. It keeps the `kind` shape in case another
+ * owned-feature content type is added later.)
+ *
+ * Route: /compendium/background-features/manage  (admin / content-creator).
  */
 
-export type FeatureKind = 'background' | 'species';
+export type FeatureKind = 'background';
 
 const KIND_CFG = {
   background: {
@@ -53,16 +52,6 @@ const KIND_CFG = {
     backPath: '/compendium/backgrounds', backLabel: 'Back To Backgrounds',
     formId: 'background-feature-editor-form', storageFolder: 'background-features',
     owner: 'background', placeholderName: 'e.g. Shelter of the Faithful', placeholderPage: 'e.g. 127',
-  },
-  // Consolidated onto `species_options` (the reusable racial-trait library):
-  // species_features was retired, so this kind now authors species OPTIONS,
-  // attached to a species via its Options picker + granted on export.
-  species: {
-    collection: 'speciesOptions',
-    singular: 'Species Option', plural: 'Species Options',
-    backPath: '/compendium/races', backLabel: 'Back To Species',
-    formId: 'species-option-editor-form', storageFolder: 'species-options',
-    owner: 'species', placeholderName: 'e.g. Darkvision 60 / Powerful Build', placeholderPage: 'e.g. 35',
   },
 } as const;
 

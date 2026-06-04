@@ -314,7 +314,6 @@ export default function App() {
                   <Route path="/compendium/backgrounds" element={<BackgroundsList userProfile={effectiveProfile} />} />
                   <Route path="/compendium/backgrounds/manage" element={<BackgroundEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/background-features/manage" element={<CompendiumFeatureEditor userProfile={effectiveProfile} kind="background" />} />
-                  <Route path="/compendium/species-options/manage" element={<CompendiumFeatureEditor userProfile={effectiveProfile} kind="species" />} />
                   <Route path="/compendium/scaling/new" element={<ScalingEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/scaling/edit/:id" element={<ScalingEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/spellcasting-scaling/new" element={<SpellcastingScalingEditor userProfile={effectiveProfile} />} />

@@ -49,7 +49,7 @@
   <h2>Confirmed decisions</h2>
   <div class="card">
     <p><strong>Model — reusable trait → granted feature.</strong> Each option is a named, feat-shaped trait (description + optional advancements / activities / effects). Attaching it to a species <em>grants</em> it as a feature: an <code>ItemGrant</code> advancement on the species, with the full feature item embedded in the species export bundle's <code>features[]</code>. One uniform model covers Darkvision, Powerful Build, Fey Ancestry, etc. — and it reuses the proven background-features grant path.</p>
-    <p><strong>Storage — the <code>species_options</code> type (now the single mechanism).</strong> A dedicated reusable-options table + manager. <strong>Update (2026-06-03):</strong> the earlier <code>species_features</code> table was <strong>consolidated into this</strong> — its grant-to-species path was never finished and the column set is identical, so species options are now the one place a species's granted features live (innate stat-block traits stay on the Traits tab). The old species-features manager was repointed here; data migration <code>20260603-1900</code> copies any rows over.</p>
+    <p><strong>Storage — the <code>species_options</code> type (now the single mechanism).</strong> A dedicated reusable-options table + manager. <strong>Update (2026-06-03):</strong> the earlier <code>species_features</code> table was <strong>consolidated into this</strong> — its grant-to-species path was never finished and the column set is identical, so species options are now the one place a species's granted features live (innate stat-block traits stay on the Traits tab). Both authoring and attaching now live in the species editor's <strong>Options tab</strong> (the standalone manager was folded in — see <code>SpeciesOptionsTab</code>); data migration <code>20260603-1900</code> copies any <code>species_features</code> rows over.</p>
   </div>
 
   <h2>Data model</h2>
@@ -81,8 +81,7 @@
   <h2>Editing surfaces</h2>
   <table>
     <tr><th>Surface</th><th>What</th></tr>
-    <tr><td>Species Options manager</td><td>A CRUD editor (route under <code>/compendium/species-options/manage</code>) to author the reusable library — name / identifier / source / image / description (+ advancements/effects later). Lean, like <code>BackgroundFeaturesTab</code> / <code>CompendiumFeatureEditor</code>.</td></tr>
-    <tr><td>Species editor → Options</td><td>A picker (multi-select with search) listing all <code>species_options</code>; checking them writes <code>speciesOptionIds</code>. Lives as its own sub-tab on the species editor.</td></tr>
+    <tr><td>Species editor → <strong>Options tab</strong></td><td>The single home (the standalone manager was folded in): a searchable list of all <code>species_options</code> with an attach-checkbox per row (writes <code>speciesOptionIds</code>) + inline create / edit / delete. Creating an option writes to the shared table, so it appears for every species and auto-attaches to the current one. Component: <code>SpeciesOptionsTab</code>.</td></tr>
     <tr><td>Species view</td><td>Show the attached options in the detail panel (name + description), like a trait list.</td></tr>
   </table>
 
