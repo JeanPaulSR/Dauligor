@@ -30,18 +30,18 @@ import { Label } from '../../components/ui/label';
 /**
  * CompendiumFeatureEditor
  * ───────────────────────
- * Admin editor for the dedicated feature content types granted by
- * backgrounds + species — `background_features` (migration 20260601-1400)
- * and `species_features` (20260601-1500). One component, keyed by `kind`,
- * mirroring SpeciesBackgroundEditor. These are first-class content of
- * their own (e.g. "Shelter of the Faithful", "Breath Weapon"); a
- * background/species references them via ItemGrant (wired later).
- * Pattern E shell; camelCase columns → direct upsertDocument /
- * fetchDocument (no normalize/denormalize); only tags (column) ↔ tagIds
- * (form) is renamed inline. 2014-style features are hand-authored here.
+ * Admin editor for the dedicated content types attached to backgrounds +
+ * species. The `background` kind authors `background_features` (migration
+ * 20260601-1400) — a background's granted feature(s). The `species` kind
+ * authors `species_options` (20260603-1600) — the reusable racial-trait
+ * library (Darkvision, Powerful Build, …) attached to a species via its
+ * Options picker; the old `species_features` table was consolidated into it.
+ * One component, keyed by `kind`, mirroring SpeciesBackgroundEditor. Pattern E
+ * shell; camelCase columns → direct upsertDocument / fetchDocument (no
+ * normalize/denormalize); only tags (column) ↔ tagIds (form) is renamed inline.
  *
  * Routes: /compendium/background-features/manage,
- *         /compendium/species-features/manage  (admin / content-creator).
+ *         /compendium/species-options/manage  (admin / content-creator).
  */
 
 export type FeatureKind = 'background' | 'species';
@@ -54,12 +54,15 @@ const KIND_CFG = {
     formId: 'background-feature-editor-form', storageFolder: 'background-features',
     owner: 'background', placeholderName: 'e.g. Shelter of the Faithful', placeholderPage: 'e.g. 127',
   },
+  // Consolidated onto `species_options` (the reusable racial-trait library):
+  // species_features was retired, so this kind now authors species OPTIONS,
+  // attached to a species via its Options picker + granted on export.
   species: {
-    collection: 'speciesFeatures',
-    singular: 'Species Feature', plural: 'Species Features',
+    collection: 'speciesOptions',
+    singular: 'Species Option', plural: 'Species Options',
     backPath: '/compendium/races', backLabel: 'Back To Species',
-    formId: 'species-feature-editor-form', storageFolder: 'species-features',
-    owner: 'species', placeholderName: 'e.g. Breath Weapon', placeholderPage: 'e.g. 35',
+    formId: 'species-option-editor-form', storageFolder: 'species-options',
+    owner: 'species', placeholderName: 'e.g. Darkvision 60 / Powerful Build', placeholderPage: 'e.g. 35',
   },
 } as const;
 

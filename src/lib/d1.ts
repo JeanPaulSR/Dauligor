@@ -28,7 +28,7 @@ const PERSISTENT_TABLES = [
   // Backgrounds + Species graduated from the `feats` table into their own
   // tables (migration 20260601-1200). Read-heavy compendium catalogue that
   // changes rarely — same caching rationale as items / feats / spells.
-  'backgrounds', 'species', 'background_features', 'species_features', 'species_options'
+  'backgrounds', 'species', 'background_features', 'species_options'
 ];
 
 /**

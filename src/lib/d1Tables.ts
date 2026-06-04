@@ -46,7 +46,7 @@ export const D1_TABLE_MAP: Record<string, string> = {
   // Background features — the special feature(s) a background grants
   // (migration 20260601-1400). Dedicated content type, granted via ItemGrant.
   backgroundFeatures: 'background_features',
-  speciesFeatures: 'species_features',
+  // speciesFeatures (species_features) retired — consolidated into species_options.
   // Species options — a reusable racial-trait library (Darkvision, Powerful
   // Build, …) attached to species via species.speciesOptionIds and granted as
   // features on export (migration 20260603-1600).

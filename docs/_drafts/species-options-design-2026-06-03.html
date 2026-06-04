@@ -49,12 +49,12 @@
   <h2>Confirmed decisions</h2>
   <div class="card">
     <p><strong>Model — reusable trait → granted feature.</strong> Each option is a named, feat-shaped trait (description + optional advancements / activities / effects). Attaching it to a species <em>grants</em> it as a feature: an <code>ItemGrant</code> advancement on the species, with the full feature item embedded in the species export bundle's <code>features[]</code>. One uniform model covers Darkvision, Powerful Build, Fey Ancestry, etc. — and it reuses the proven background-features grant path.</p>
-    <p><strong>Storage — a new <code>species_options</code> type.</strong> A dedicated reusable-options table + manager, separate from the existing <code>species_features</code> (which stays for a species's own bespoke features). Matches the "new table for new functionality" principle.</p>
+    <p><strong>Storage — the <code>species_options</code> type (now the single mechanism).</strong> A dedicated reusable-options table + manager. <strong>Update (2026-06-03):</strong> the earlier <code>species_features</code> table was <strong>consolidated into this</strong> — its grant-to-species path was never finished and the column set is identical, so species options are now the one place a species's granted features live (innate stat-block traits stay on the Traits tab). The old species-features manager was repointed here; data migration <code>20260603-1900</code> copies any rows over.</p>
   </div>
 
   <h2>Data model</h2>
   <h3>New table — <code>species_options</code></h3>
-  <p>Feat-shaped + camelCase (mirrors <code>species_features</code>). JSON columns are already in <code>queryD1</code>'s auto-parse list.</p>
+  <p>Feat-shaped + camelCase (the same shape the retired <code>species_features</code> used). JSON columns are already in <code>queryD1</code>'s auto-parse list.</p>
 <pre><code>species_options(
   id, name, identifier, sourceId→sources(id), page, description,
   advancements[], activities[], effects[], uses, tags[],   -- JSON
