@@ -29,7 +29,7 @@
 import { CHARACTER_CREATOR_TEMPLATE, MODULE_ID, SETTINGS } from "./constants.js";
 import { log, notifyInfo, notifyWarn } from "./utils.js";
 import { openDauligorImporter } from "./importer-app.js";
-import { getClassFeatureLabelsByLevel } from "./class-import-service.js";
+import { getClassFeatureLabelsByLevel, fetchClassSpellList } from "./class-import-service.js";
 import { baseClassHandler, formatFoundryLabel } from "./importer-base-features.js";
 import {
   POINT_BUY,
@@ -78,6 +78,18 @@ const PB_BY_LEVEL = (lvl) => 2 + Math.floor((Math.max(1, Math.min(20, Number(lvl
 
 function prettifySlug(s) {
   return String(s ?? "").replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()).trim();
+}
+
+// Render BBCode/markdown-ish description text to safe paragraph HTML: strip
+// [tags] and <tags>, collapse whitespace, split on blank lines into <p>s.
+function bbToParagraphs(s) {
+  const plain = String(s ?? "")
+    .replace(/\[\/?[^\]]+\]/g, "")       // BBCode [b]…[/b]
+    .replace(/<[^>]*>/g, "")              // stray HTML
+    .replace(/\r/g, "");
+  const blocks = plain.split(/\n{2,}/).map((b) => b.trim()).filter(Boolean);
+  if (!blocks.length) return "";
+  return blocks.map((b) => `<p>${escapeHtml(b).replace(/\n/g, "<br>")}</p>`).join("");
 }
 
 function ordinal(n) {
@@ -229,6 +241,11 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     // → the preview simply omits the slot columns.
     this._spellChart = null;
     this._spellChartFetched = false;
+    // ClassView-style preview UI state (reset on each class pick).
+    this._cvTab = "features";        // features | subclass | spells | info | flavor
+    this._cvSubclassId = null;        // selected subclass sourceId
+    this._cvExpanded = new Set();     // expanded feature keys
+    this._cvSpells = new Map();       // bundleUrl → { status, spells } (class spell list)
 
     // Ephemeral per-step UI state.
     this._ui = {
@@ -897,8 +914,7 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
   // alternativeSpellcastingScalings), then the main spell-slot table for
   // full/half casters (master chart + the class's progressionFormula). Each
   // returned col is { header, value(level) }.
-  _buildCasterColumns(bundle) {
-    const sc = (bundle.class || {}).spellcasting || {};
+  _buildCasterColumns(bundle, sc = (bundle.class || {}).spellcasting || {}) {
     const cols = [];
 
     const sk = sc.spellsKnownSourceId ? bundle.spellsKnownScalings?.[sc.spellsKnownSourceId] : null;
@@ -936,49 +952,50 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     return cols;
   }
 
-  // Rich class preview — a module-themed port of the web app's
-  // ClassPreviewPane (src/components/compendium/ClassPreviewPane.tsx). The
-  // module's export bundle is shaped differently from the app's DB, so the
-  // level table's Features column is derived from `class.advancements`
-  // (granted/chosen features per level) rather than a features table, and
-  // spell-slot columns are deferred (they need the 5e slot tables recomputed).
-  _renderClassPreview(chosen, bundle) {
-    const sourceTag = escapeHtml((chosen.sourceSlug || "").toUpperCase());
-    if (!bundle) {
-      return `
-        <div class="dauligor-detail">
-          <div class="dauligor-detail__pane">
-            <header class="dauligor-detail__header">
-              <h3 class="dauligor-detail__name">${escapeHtml(chosen.name)}</h3>
-              <div class="dauligor-detail__meta">Class · ${sourceTag}</div>
-            </header>
-            <div class="dauligor-detail__body"><p class="dauligor-character-creator__loading"><i class="fas fa-spinner fa-spin"></i> Loading class details…</p></div>
-          </div>
-        </div>`;
-    }
+  // The effective spellcasting for the table: the class's if it casts, else
+  // the selected subclass's (e.g. Eldritch Knight / Arcane Trickster).
+  _effectiveSpellcasting(c, selSub) {
+    const cs = c.spellcasting || {};
+    if (cs.hasSpellcasting || cs.ability) return cs;
+    const ss = selSub?.spellcasting || {};
+    if (ss.hasSpellcasting || ss.ability) return ss;
+    return null;
+  }
 
+  // Features per level for the table: class features (from advancements, via
+  // the importer service) + the selected subclass's features by level.
+  _cvFeaturesByLevelMerged(bundle, selSub) {
+    const byLevel = {};
+    const base = getClassFeatureLabelsByLevel(bundle.class || {});
+    for (const [lvl, names] of Object.entries(base)) byLevel[lvl] = [...names];
+    if (selSub) {
+      for (const f of (bundle.features || []).filter((x) => x.parentSourceId === selSub.sourceId)) {
+        const lvl = String(Number(f.level) || 1);
+        (byLevel[lvl] ||= []).push(f.name);
+      }
+    }
+    for (const lvl of Object.keys(byLevel)) byLevel[lvl] = [...new Set(byLevel[lvl])];
+    return byLevel;
+  }
+
+  // The class progression table (Level / PB / Features / scaling + caster
+  // columns), with the selected subclass's features/scaling/spellcasting
+  // merged in when one is chosen.
+  _cvTable(bundle, selSub) {
     const c = bundle.class || {};
     const classSourceId = c.classSourceId ?? c.sourceId ?? null;
-    const img = c.previewImageUrl || c.imageUrl || c.cardImageUrl || chosen.img || "";
-    const hitDie = c.hitDie ? `d${c.hitDie}` : "—";
-    const isCaster = !!(c.spellcasting && (c.spellcasting.hasSpellcasting || c.spellcasting.ability));
-    const casterAbility = c.spellcasting?.ability ? formatFoundryLabel(String(c.spellcasting.ability)) : "";
-
-    // Features per level — parsed by the importer service (single home for
-    // class-advancement interpretation; no duplicate parse in the UI).
-    const featsByLevel = getClassFeatureLabelsByLevel(c);
-
-    // Columns after Features: class-level scaling columns, then caster columns
-    // (cantrips / spells-known / pact from the bundle + the main spell-slot
-    // table derived from the master chart). Each col is either a scaling
-    // (`scaling`) or a computed caster column (`value(level)`).
-    const scalings = (Array.isArray(bundle.scalingColumns) ? bundle.scalingColumns : [])
-      .filter((col) => !classSourceId || col.parentSourceId === classSourceId);
+    const featsByLevel = this._cvFeaturesByLevelMerged(bundle, selSub);
+    let scalings = (Array.isArray(bundle.scalingColumns) ? bundle.scalingColumns : [])
+      .filter((col) => col.parentSourceId === classSourceId);
+    if (selSub) {
+      scalings = scalings.concat((bundle.scalingColumns || []).filter((col) => col.parentSourceId === selSub.sourceId));
+    }
+    const eff = this._effectiveSpellcasting(c, selSub);
+    const casterCols = eff ? this._buildCasterColumns(bundle, eff) : [];
     const allCols = [
       ...scalings.map((col) => ({ header: col.name || prettifySlug(col.identifier), scaling: col })),
-      ...this._buildCasterColumns(bundle),
+      ...casterCols,
     ];
-
     const headCols = allCols.map((col) => `<th>${escapeHtml(col.header)}</th>`).join("");
     const rows = Array.from({ length: 20 }, (_, i) => i + 1).map((lvl) => {
       const feats = featsByLevel[lvl] || [];
@@ -993,25 +1010,14 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
         }
         return `<td class="dauligor-character-creator__cp-num">${escapeHtml(String(v))}</td>`;
       }).join("");
-      return `<tr>
-        <td class="dauligor-character-creator__cp-num">${lvl}</td>
-        <td class="dauligor-character-creator__cp-num">+${PB_BY_LEVEL(lvl)}</td>
-        <td class="dauligor-character-creator__cp-feats">${featCell}</td>
-        ${cells}
-      </tr>`;
+      return `<tr><td class="dauligor-character-creator__cp-num">${lvl}</td><td class="dauligor-character-creator__cp-num">+${PB_BY_LEVEL(lvl)}</td><td class="dauligor-character-creator__cp-feats">${featCell}</td>${cells}</tr>`;
     }).join("");
-    const table = `
-      <div class="dauligor-character-creator__cp-table-wrap">
-        <table class="dauligor-character-creator__cp-table">
-          <thead><tr><th>Lvl</th><th>PB</th><th>Features</th>${headCols}</tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>`;
+    return `<div class="dauligor-character-creator__cp-table-wrap"><table class="dauligor-character-creator__cp-table"><thead><tr><th>Lvl</th><th>PB</th><th>Features</th>${headCols}</tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
 
-    // Proficiencies — reuse the importer's advancement parser (baseClassHandler)
-    // + label formatter (formatFoundryLabel) instead of a parallel parse. No
-    // actor in the workflow → the primary (non-multiclass) profile, and the
-    // same category-vs-fixed display the import overview uses.
+  // Core Traits sidebar — hit points + proficiencies (proficiencies reuse the
+  // importer's baseClassHandler + formatFoundryLabel; no parallel parse).
+  _cvCoreTraits(c) {
     const baseRows = baseClassHandler({ payload: { class: c } })?.advancements || [];
     const byId = Object.fromEntries(baseRows.map((r) => [r.id, r]));
     const profValue = (row) => {
@@ -1025,61 +1031,197 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
       return guaranteed.join(", ");
     };
     const primary = (c.primaryAbility || []).map((a) => formatFoundryLabel(String(a)));
-    const profLine = (label, value) => value
+    const hd = Number(c.hitDie) || 8;
+    const line = (label, value) => value
       ? `<div class="dauligor-character-creator__cp-prof"><span class="dauligor-character-creator__cp-prof-key">${escapeHtml(label)}</span><span>${escapeHtml(value)}</span></div>`
       : "";
-    const profBox = `
+    return `
       <div class="dauligor-character-creator__cp-side">
-        <h4 class="dauligor-character-creator__cp-side-title">Proficiencies</h4>
-        ${profLine("Armor", profValue(byId["base-armor"]) || "None")}
-        ${profLine("Weapons", profValue(byId["base-weapons"]) || "None")}
-        ${profLine("Tools", profValue(byId["base-tools"]))}
-        ${profLine("Saves", profValue(byId["base-saves"]))}
-        ${profLine("Skills", profValue(byId["base-skills"]))}
-        ${primary.length ? profLine("Multiclass", `${primary.join(" or ")} 13+`) : ""}
+        <h4 class="dauligor-character-creator__cp-side-title">Core Traits</h4>
+        ${line("Hit Die", `d${hd} per level`)}
+        ${line("HP at 1st", `${hd} + CON`)}
+        ${line("HP / Level", `${Math.floor(hd / 2) + 1} (avg) + CON`)}
+        ${line("Saves", profValue(byId["base-saves"]))}
+        ${line("Armor", profValue(byId["base-armor"]) || "None")}
+        ${line("Weapons", profValue(byId["base-weapons"]) || "None")}
+        ${line("Tools", profValue(byId["base-tools"]))}
+        ${line("Skills", profValue(byId["base-skills"]))}
+        ${primary.length ? line("Multiclass", `${primary.join(" or ")} 13+`) : ""}
       </div>`;
+  }
 
-    // Subclasses + tags.
-    const subs = (Array.isArray(bundle.subclasses) ? bundle.subclasses : []).map((s) => escapeHtml(s.name || "")).filter(Boolean);
-    const subBox = subs.length
-      ? `<div class="dauligor-character-creator__cp-side">
-           <h4 class="dauligor-character-creator__cp-side-title">Subclasses (${subs.length})</h4>
-           <div class="dauligor-character-creator__cp-subs">${subs.map((n) => `<span class="dauligor-character-creator__cp-sub">${n}</span>`).join("")}</div>
-         </div>`
+  // One collapsible feature card (name + level + description on expand).
+  _cvFeatureCard(f, isSub) {
+    const key = String(f.sourceId || `${f.name}-${f.level}`);
+    const expanded = this._cvExpanded.has(key);
+    const body = expanded
+      ? `<div class="dauligor-character-creator__cv-feature-body">${bbToParagraphs(f.description) || "<p><em>No description.</em></p>"}</div>`
       : "";
+    return `
+      <div class="dauligor-character-creator__cv-feature ${isSub ? "dauligor-character-creator__cv-feature--sub" : ""}">
+        <button type="button" class="dauligor-character-creator__cv-feature-head" data-action="cv-feature-toggle" data-key="${escapeHtml(key)}">
+          <span class="dauligor-character-creator__cv-feature-name">${isSub ? `<span class="dauligor-character-creator__cv-feature-badge">Subclass</span> ` : ""}${escapeHtml(f.name || "")}</span>
+          <span class="dauligor-character-creator__cv-feature-lvl">Lvl ${Number(f.level) || 1} <i class="fas fa-chevron-${expanded ? "up" : "down"}"></i></span>
+        </button>
+        ${body}
+      </div>`;
+  }
+
+  // Feature list for the Features / Subclass tabs.
+  _cvFeatureList(bundle, selSub, onlySub = false) {
+    const classFeats = onlySub ? [] : (bundle.features || []).filter((f) => f.featureKind === "classFeature");
+    const subFeats = selSub ? (bundle.features || []).filter((f) => f.parentSourceId === selSub.sourceId) : [];
+    const all = [
+      ...classFeats.map((f) => ({ f, sub: false })),
+      ...subFeats.map((f) => ({ f, sub: true })),
+    ].sort((a, b) => (Number(a.f.level) || 0) - (Number(b.f.level) || 0));
+    if (!all.length) {
+      return onlySub
+        ? `<div class="dauligor-character-creator__empty">No features authored for this subclass yet.</div>`
+        : `<div class="dauligor-character-creator__empty">Feature details aren't authored for this class yet — the level table above lists the features by level.</div>`;
+    }
+    return `<div class="dauligor-character-creator__cv-features">${all.map(({ f, sub }) => this._cvFeatureCard(f, sub)).join("")}</div>`;
+  }
+
+  // Spell List tab — fetched lazily from the class spell-list endpoint.
+  _cvFetchSpells(chosen) {
+    if (!chosen?.bundleUrl || this._cvSpells.has(chosen.bundleUrl)) return;
+    this._cvSpells.set(chosen.bundleUrl, { status: "loading", spells: [] });
+    fetchClassSpellList(chosen.bundleUrl)
+      .then((spells) => {
+        this._cvSpells.set(chosen.bundleUrl, { status: "ready", spells: Array.isArray(spells) ? spells : [] });
+        if (this._tab === "create" && this._view === "class" && this._cvTab === "spells" && this._choices.class?.bundleUrl === chosen.bundleUrl) {
+          this._renderBody();
+        }
+      })
+      .catch((err) => {
+        log("character-creator: class spell list fetch failed", err);
+        this._cvSpells.set(chosen.bundleUrl, { status: "error", spells: [] });
+      });
+  }
+
+  _cvSpellsTab(chosen) {
+    const entry = this._cvSpells.get(chosen.bundleUrl);
+    if (!entry || entry.status === "loading") {
+      this._cvFetchSpells(chosen);
+      return `<div class="dauligor-character-creator__loading"><i class="fas fa-spinner fa-spin"></i> Loading spell list…</div>`;
+    }
+    if (entry.status === "error") return `<div class="dauligor-character-creator__empty">Could not load the spell list.</div>`;
+    const spells = entry.spells || [];
+    if (!spells.length) return `<div class="dauligor-character-creator__empty">No curated spell list for this class.</div>`;
+    const byLevel = {};
+    for (const sp of spells) {
+      const f = sp.flags?.[MODULE_ID] ?? {};
+      const lvl = Number(f.level ?? sp.system?.level ?? 0) || 0;
+      (byLevel[lvl] ||= []).push(sp);
+    }
+    const levels = Object.keys(byLevel).map(Number).sort((a, b) => a - b);
+    return `<div class="dauligor-character-creator__cv-spells">${levels.map((lvl) => {
+      const list = byLevel[lvl].slice().sort((a, b) => String(a.name).localeCompare(String(b.name)));
+      const heading = lvl === 0 ? "Cantrips" : `Level ${lvl}`;
+      return `<div class="dauligor-character-creator__cv-spell-group">
+        <div class="dauligor-character-creator__cv-spell-heading">${heading} <span>(${list.length})</span></div>
+        <div class="dauligor-character-creator__cv-spell-rows">${list.map((sp) => `<span class="dauligor-character-creator__cv-spell">${escapeHtml(String(sp.name || ""))}</span>`).join("")}</div>
+      </div>`;
+    }).join("")}</div>`;
+  }
+
+  _cvHeader(chosen, c) {
+    const sourceTag = escapeHtml((chosen.sourceSlug || "").toUpperCase());
+    const img = c.previewImageUrl || c.imageUrl || c.cardImageUrl || chosen.img || "";
+    const hitDie = c.hitDie ? `d${c.hitDie}` : "—";
+    const isCaster = !!(c.spellcasting && (c.spellcasting.hasSpellcasting || c.spellcasting.ability));
+    const ability = c.spellcasting?.ability ? formatFoundryLabel(String(c.spellcasting.ability)) : "";
     const tags = (c.tagIds || []).map(prettifySlug).filter(Boolean);
-    const tagBox = tags.length
-      ? `<div class="dauligor-character-creator__cp-tags">${tags.map((t) => `<span class="dauligor-character-creator__cp-tag">${escapeHtml(t)}</span>`).join("")}</div>`
-      : "";
-    // Descriptions are BBCode ([b]…[/b]); strip those tags too (truncate's
-    // stripHtml only handles <…>).
-    const desc = c.description ? truncate(String(c.description).replace(/\[\/?[^\]]+\]/g, " "), 600) : "";
     const headerStyle = img
       ? ` style="background-image: linear-gradient(to top, var(--dauligor-panel) 35%, rgba(0,0,0,0.25)), url('${escapeHtml(img)}')"`
       : "";
-
     return `
-      <div class="dauligor-character-creator__cp">
-        <header class="dauligor-character-creator__cp-header"${headerStyle}>
-          <div class="dauligor-character-creator__cp-heading">
-            <h3 class="dauligor-character-creator__cp-name">${escapeHtml(chosen.name)}</h3>
-            <span class="dauligor-character-creator__cp-source">${sourceTag}</span>
+      <header class="dauligor-character-creator__cp-header"${headerStyle}>
+        <div class="dauligor-character-creator__cp-heading">
+          <h3 class="dauligor-character-creator__cp-name">${escapeHtml(chosen.name)}</h3>
+          <span class="dauligor-character-creator__cp-source">${sourceTag}</span>
+        </div>
+        <div class="dauligor-character-creator__cp-badges">
+          <span class="dauligor-character-creator__cp-badge">Hit Die ${hitDie}</span>
+          ${isCaster ? `<span class="dauligor-character-creator__cp-badge">Caster${ability ? ` · ${ability}` : ""}</span>` : ""}
+        </div>
+        ${tags.length ? `<div class="dauligor-character-creator__cp-tags">${tags.map((t) => `<span class="dauligor-character-creator__cp-tag">${escapeHtml(t)}</span>`).join("")}</div>` : ""}
+      </header>`;
+  }
+
+  // Rich class view — a module-themed port of the web app's class VIEW page
+  // (src/pages/compendium/ClassView.tsx): header + progression table + a
+  // tabbed bottom (Features / Subclass / Spell List / Info / Flavor) with a
+  // Core Traits sidebar and a subclass picker. Feature descriptions come from
+  // the bundle's `features[]` where authored (degrades to the table otherwise).
+  _renderClassPreview(chosen, bundle) {
+    if (!bundle) {
+      const sourceTag = escapeHtml((chosen.sourceSlug || "").toUpperCase());
+      return `
+        <div class="dauligor-detail">
+          <div class="dauligor-detail__pane">
+            <header class="dauligor-detail__header">
+              <h3 class="dauligor-detail__name">${escapeHtml(chosen.name)}</h3>
+              <div class="dauligor-detail__meta">Class · ${sourceTag}</div>
+            </header>
+            <div class="dauligor-detail__body"><p class="dauligor-character-creator__loading"><i class="fas fa-spinner fa-spin"></i> Loading class details…</p></div>
           </div>
-          <div class="dauligor-character-creator__cp-badges">
-            <span class="dauligor-character-creator__cp-badge">Hit Die ${hitDie}</span>
-            ${isCaster ? `<span class="dauligor-character-creator__cp-badge">Caster${casterAbility ? ` · ${casterAbility}` : ""}</span>` : ""}
-          </div>
-        </header>
-        <div class="dauligor-character-creator__cp-grid">
-          <div class="dauligor-character-creator__cp-main">
-            ${table}
-            ${desc ? `<div class="dauligor-character-creator__cp-section"><h4 class="dauligor-character-creator__cp-side-title">Description</h4><p>${escapeHtml(desc)}</p></div>` : ""}
-            ${tagBox}
-          </div>
-          <aside class="dauligor-character-creator__cp-aside">
-            ${profBox}
-            ${subBox}
-          </aside>
+        </div>`;
+    }
+
+    const c = bundle.class || {};
+    const subclasses = Array.isArray(bundle.subclasses) ? bundle.subclasses : [];
+    const selSub = subclasses.find((s) => s.sourceId === this._cvSubclassId) || null;
+    const tab = this._cvTab || "features";
+
+    const tabDefs = [
+      { id: "features", label: "Features" },
+      ...(selSub ? [{ id: "subclass", label: "Subclass" }] : []),
+      { id: "spells", label: "Spell List" },
+      { id: "info", label: "Info" },
+      { id: "flavor", label: "Flavor" },
+    ];
+    const tabBtns = tabDefs.map((t) =>
+      `<button type="button" class="dauligor-character-creator__cv-tab ${t.id === tab ? "dauligor-character-creator__cv-tab--active" : ""}" data-action="cv-tab" data-tab="${t.id}">${escapeHtml(t.label)}</button>`
+    ).join("");
+
+    const subPicker = subclasses.length
+      ? `<select class="dauligor-character-creator__cv-subpicker" data-action="cv-subclass">
+           <option value="">${escapeHtml(c.subclassTitle || "Subclass")}…</option>
+           ${subclasses.map((s) => `<option value="${escapeHtml(s.sourceId)}" ${s.sourceId === this._cvSubclassId ? "selected" : ""}>${escapeHtml(s.name || "")}</option>`).join("")}
+         </select>`
+      : "";
+
+    let content = "";
+    if (tab === "features") {
+      content = this._cvFeatureList(bundle, selSub);
+    } else if (tab === "subclass") {
+      content = selSub
+        ? `${selSub.description ? `<div class="dauligor-character-creator__cv-prose">${bbToParagraphs(selSub.description)}</div>` : ""}${this._cvFeatureList(bundle, selSub, true)}`
+        : `<div class="dauligor-character-creator__empty">Pick a subclass above to view its features.</div>`;
+    } else if (tab === "spells") {
+      content = this._cvSpellsTab(chosen);
+    } else if (tab === "info") {
+      const desc = c.description ? `<h4 class="dauligor-character-creator__cp-side-title">Class Description</h4><div class="dauligor-character-creator__cv-prose">${bbToParagraphs(c.description)}</div>` : "";
+      const lore = c.lore ? `<h4 class="dauligor-character-creator__cp-side-title">Class Lore</h4><div class="dauligor-character-creator__cv-prose">${bbToParagraphs(c.lore)}</div>` : "";
+      content = (desc || lore) ? `${desc}${lore}` : `<div class="dauligor-character-creator__empty">No description or lore written yet.</div>`;
+    } else if (tab === "flavor") {
+      content = `<div class="dauligor-character-creator__empty">Flavor &amp; roleplaying guidance — coming soon.</div>`;
+    }
+
+    const showSidebar = tab !== "spells";
+    return `
+      <div class="dauligor-character-creator__cv">
+        ${this._cvHeader(chosen, c)}
+        ${this._cvTable(bundle, selSub)}
+        <div class="dauligor-character-creator__cv-tabsrow">
+          <div class="dauligor-character-creator__cv-tabs">${tabBtns}</div>
+          ${subPicker}
+        </div>
+        <div class="dauligor-character-creator__cv-bottom ${showSidebar ? "" : "dauligor-character-creator__cv-bottom--full"}">
+          <div class="dauligor-character-creator__cv-content">${content}</div>
+          ${showSidebar ? `<aside class="dauligor-character-creator__cv-sidecol">${this._cvCoreTraits(c)}</aside>` : ""}
         </div>
         <p class="dauligor-character-creator__hint">On <strong>Build Character</strong>, the class builder opens pre-set to <strong>${escapeHtml(chosen.name)}</strong> at level 1 for skill / option / feature choices.</p>
       </div>`;
@@ -1182,6 +1324,20 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     // class
     on(`[data-action="class-search"]`, "input", (e) => { this._ui.classSearch = e.currentTarget.value; this._renderBody(); });
     on(`[data-action="pick-class"]`, "click", (e) => this._pickClass(e.currentTarget.dataset.entry, e.currentTarget.dataset.source));
+
+    // class view: tabs, subclass picker, collapsible feature cards
+    on(`[data-action="cv-tab"]`, "click", (e) => { this._cvTab = e.currentTarget.dataset.tab; this._renderBody(); });
+    on(`[data-action="cv-subclass"]`, "change", (e) => {
+      this._cvSubclassId = e.currentTarget.value || null;
+      // If we left the Subclass tab's context, fall back to Features.
+      if (!this._cvSubclassId && this._cvTab === "subclass") this._cvTab = "features";
+      this._renderBody();
+    });
+    on(`[data-action="cv-feature-toggle"]`, "click", (e) => {
+      const key = e.currentTarget.dataset.key;
+      if (this._cvExpanded.has(key)) this._cvExpanded.delete(key); else this._cvExpanded.add(key);
+      this._renderBody();
+    });
   }
 
   _adjustPointBuy(key, delta) {
@@ -1251,6 +1407,10 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
       entryId: entry.entryId, sourceSlug: entry.sourceSlug, sourceId: entry.sourceId,
       name: entry.name, img: entry.img, summary: entry.summary, bundleUrl: entry.bundleUrl,
     };
+    // Reset the ClassView-style preview state for the new class.
+    this._cvTab = "features";
+    this._cvSubclassId = null;
+    this._cvExpanded = new Set();
     this._renderBody();
     this._renderFooter();
     // Lazy-load the full bundle + the spell chart for the rich preview;

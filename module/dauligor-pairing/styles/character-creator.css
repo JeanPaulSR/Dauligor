@@ -529,6 +529,139 @@
 }
 .dauligor-character-creator__cp-tag { color: var(--dauligor-text-muted); }
 
+/* ── Class view (tabbed; port of the app's ClassView page) ─────────── */
+
+.dauligor-character-creator__cv { display: flex; flex-direction: column; gap: 12px; }
+
+.dauligor-character-creator__cv-tabsrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--dauligor-border);
+}
+.dauligor-character-creator__cv-tabs { display: flex; gap: 2px; flex-wrap: wrap; }
+.dauligor-character-creator__cv-tab {
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 0;
+  color: var(--dauligor-text-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.dauligor-character-creator__cv-tab:hover { color: var(--dauligor-text); }
+.dauligor-character-creator__cv-tab--active {
+  color: var(--dauligor-accent-strong);
+  border-color: var(--dauligor-border);
+  background: var(--dauligor-panel-alt);
+  box-shadow: inset 0 2px 0 var(--dauligor-accent);
+}
+.dauligor-character-creator__cv-subpicker {
+  height: 26px;
+  border: 1px solid var(--dauligor-border);
+  border-radius: 0;
+  background: var(--dauligor-panel);
+  color: var(--dauligor-text);
+  font-size: 12px;
+  padding: 0 6px;
+  max-width: 210px;
+}
+
+.dauligor-character-creator__cv-bottom {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 210px);
+  gap: 16px;
+  align-items: start;
+}
+.dauligor-character-creator__cv-bottom--full { grid-template-columns: 1fr; }
+.dauligor-character-creator__cv-content { min-width: 0; }
+.dauligor-character-creator__cv-sidecol { min-width: 0; }
+
+.dauligor-character-creator__cv-prose { font-size: 12.5px; line-height: 1.55; color: var(--dauligor-text); }
+.dauligor-character-creator__cv-prose p { margin: 0 0 0.7em; }
+.dauligor-character-creator__cv-prose p:last-child { margin-bottom: 0; }
+
+/* Feature cards (Features / Subclass tabs) */
+.dauligor-character-creator__cv-features { display: flex; flex-direction: column; gap: 6px; }
+.dauligor-character-creator__cv-feature {
+  border: 1px solid var(--dauligor-border);
+  border-radius: 6px;
+  background: var(--dauligor-panel-alt);
+}
+.dauligor-character-creator__cv-feature--sub {
+  border-color: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.45);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.08);
+}
+.dauligor-character-creator__cv-feature-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: transparent;
+  border: 0;
+  color: var(--dauligor-text);
+  font: inherit;
+  cursor: pointer;
+  padding: 8px 12px;
+  text-align: left;
+}
+.dauligor-character-creator__cv-feature-name {
+  font-weight: 600;
+  color: var(--dauligor-accent-strong);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.dauligor-character-creator__cv-feature-badge {
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dauligor-accent-strong);
+  border: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.5);
+  background: rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.14);
+  padding: 1px 5px;
+}
+.dauligor-character-creator__cv-feature-lvl { font-size: 11px; color: var(--dauligor-text-muted); white-space: nowrap; }
+.dauligor-character-creator__cv-feature-lvl i { margin-left: 5px; opacity: 0.6; }
+.dauligor-character-creator__cv-feature-body {
+  padding: 8px 12px 12px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--dauligor-text);
+  border-top: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.12);
+}
+.dauligor-character-creator__cv-feature-body p { margin: 0 0 0.7em; }
+.dauligor-character-creator__cv-feature-body p:last-child { margin-bottom: 0; }
+
+/* Spell List tab */
+.dauligor-character-creator__cv-spells { display: flex; flex-direction: column; gap: 12px; }
+.dauligor-character-creator__cv-spell-heading {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: var(--dauligor-accent-strong);
+  border-bottom: 1px solid var(--dauligor-border);
+  padding-bottom: 4px;
+  margin-bottom: 6px;
+}
+.dauligor-character-creator__cv-spell-heading span { color: var(--dauligor-text-muted); font-weight: 400; }
+.dauligor-character-creator__cv-spell-rows { display: flex; flex-wrap: wrap; gap: 4px; }
+.dauligor-character-creator__cv-spell {
+  font-size: 11.5px;
+  border: 1px solid var(--dauligor-border);
+  background: var(--dauligor-panel);
+  padding: 2px 8px;
+  color: var(--dauligor-text);
+}
+
 /* ── Stub (items) ─────────────────────────────────────────────────── */
 
 .dauligor-character-creator__stub {
