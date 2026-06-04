@@ -1225,20 +1225,22 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
             class-meta sidebar so the spell content (browser-style
             row layout) gets the full content-area width. The grid
             collapses to a single column. */}
-        <div className="grid gap-12 pt-8">
-          {/* Tabs use the full content width on every tab (the spell-list
-              layout): the Class Features jump rail needs the horizontal room,
-              and a right-hand class-meta column otherwise collides with the
-              subclass picker in the tab row. Core Traits stacks full-width
-              below instead (non-spell tabs). */}
-          <div>
+        <div className={cn(
+          'grid gap-12 pt-8',
+          activeTab === 'spells' ? 'lg:grid-cols-1' : 'lg:grid-cols-4'
+        )}>
+          {/* Features / Tabs — left (col-span-3); Core Traits sidebar on the
+              right (col-span-1). Spell List goes full-width (no sidebar). The
+              tab row wraps so the subclass picker drops below the tabs instead
+              of colliding with the Core Traits column when the row is wide. */}
+          <div className={activeTab === 'spells' ? '' : 'lg:col-span-3'}>
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               {/* ── Tab row: chevron tab bar (left) + Subclass picker
                   (right). The subclass picker shares the row so the
                   class-meta sidebar no longer needs to host it — see
                   the bottom-of-page sidebar where the old Subclass
                   section used to live. */}
-              <div className="flex items-end justify-between gap-4 mb-8 border-b border-gold/20">
+              <div className="flex flex-wrap items-end justify-between gap-4 mb-8 border-b border-gold/20">
                 <TabsList className="flex bg-transparent rounded-none p-0 h-auto gap-0 overflow-visible">
                   {(() => {
                     const tabs = [
@@ -1283,7 +1285,7 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                     renders when the class actually defines subclasses;
                     classes with no subclasses skip the button entirely. */}
                 {subclasses.length > 0 && (
-                  <div className="pb-2 shrink-0">
+                  <div className="pb-2 shrink-0 ml-auto">
                     <Popover open={subclassPopoverOpen} onOpenChange={setSubclassPopoverOpen}>
                       <PopoverTrigger
                         className={cn(
