@@ -18,6 +18,7 @@ import { SectionFilterPanel, type FilterSection } from './SectionFilterPanel';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
+import SingleSelectSearch from '../ui/SingleSelectSearch';
 
 /**
  * Foundry-import workbench for Species + Backgrounds (mode inside
@@ -57,6 +58,12 @@ function statusFlagsOf(c: SpeciesBackgroundImportCandidate): Set<string> {
   if (c.existingEntryId) flags.add('existing');
   return flags;
 }
+
+// Natural key the `<table>_source_identifier_uniq` index enforces:
+// COALESCE(sourceId,'') + identifier. Used to match a candidate to an existing
+// row by its EFFECTIVE (possibly overridden) source so re-imports / source
+// overrides UPDATE in place instead of inserting a duplicate the index rejects.
+const naturalKeyOf = (sourceId: string, identifier: string) => `${sourceId || ''}|${identifier}`;
 
 export default function SpeciesBackgroundImportWorkbench({
   userProfile,
@@ -137,6 +144,23 @@ export default function SpeciesBackgroundImportWorkbench({
     const s = id ? sourceById[id] : undefined;
     return s ? String(s.abbreviation || s.shortName || s.name || s.id) : '';
   };
+
+  // Existing rows keyed by natural key (effective source + identifier). A
+  // candidate writes to the row matching its EFFECTIVE source+identifier — so a
+  // re-import, or an unresolved entry the user just assigned a source to, UPDATES
+  // that row instead of INSERTing a new UUID that collides on the unique index.
+  const existingIdByNaturalKey = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const e of existingEntries) {
+      const key = naturalKeyOf(String(e.sourceId ?? ''), String(e.identifier ?? ''));
+      if (!m.has(key)) m.set(key, String(e.id));
+    }
+    return m;
+  }, [existingEntries]);
+  // The row id a candidate should write to: the existing row matching its
+  // effective source + identifier, else null (a fresh insert → new UUID).
+  const resolveEntryId = (c: SpeciesBackgroundImportCandidate): string | null =>
+    existingIdByNaturalKey.get(naturalKeyOf(effectiveSourceId(c) || '', c.identifier)) || null;
 
   const candidates = useMemo(
     () => uploadedBatches.flatMap((batch) =>
@@ -225,7 +249,9 @@ export default function SpeciesBackgroundImportWorkbench({
   };
 
   const payloadFor = (c: SpeciesBackgroundImportCandidate) => {
-    const existing = existingEntries.find((e) => e.id === c.existingEntryId);
+    // Look up the row we're actually writing to (by effective source) so an
+    // updated row keeps its original createdAt.
+    const existing = existingEntries.find((e) => e.id === resolveEntryId(c));
     const data: Record<string, any> = {
       ...c.savePayload,
       // Apply any manual source assignment; '' (none) -> null so the FK holds.
@@ -253,16 +279,17 @@ export default function SpeciesBackgroundImportWorkbench({
 
   const handleImportSelected = async () => {
     if (!selectedCandidate) return;
+    const targetId = resolveEntryId(selectedCandidate);
     setSaving(true);
     try {
-      await upsertDocument(meta.collection, selectedCandidate.existingEntryId || crypto.randomUUID(), payloadFor(selectedCandidate));
-      toast.success(`${selectedCandidate.name} ${selectedCandidate.existingEntryId ? 'updated' : 'imported'}.`);
+      await upsertDocument(meta.collection, targetId || crypto.randomUUID(), payloadFor(selectedCandidate));
+      toast.success(`${selectedCandidate.name} ${targetId ? 'updated' : 'imported'}.`);
       await loadExisting();
       onImported?.();
     } catch (err) {
       console.error(`[${meta.singular}Import] import failed:`, err);
       toast.error(`Failed to import ${selectedCandidate.name}.`);
-      reportClientError(err, selectedCandidate.existingEntryId ? OperationType.UPDATE : OperationType.CREATE, `${meta.collection}/${selectedCandidate.existingEntryId || '(new)'}`);
+      reportClientError(err, targetId ? OperationType.UPDATE : OperationType.CREATE, `${meta.collection}/${targetId || '(new)'}`);
     } finally {
       setSaving(false);
     }
@@ -272,11 +299,22 @@ export default function SpeciesBackgroundImportWorkbench({
     if (!visibleCandidates.length) { toast.error('No visible entries to import.'); return; }
     setSaving(true);
     try {
-      const entries = visibleCandidates.map((c) => ({ id: c.existingEntryId || null, data: payloadFor(c) }));
+      // Dedupe by natural key (effective source + identifier) so two candidates
+      // that resolve to the same row — or share a just-assigned source — don't
+      // both write and trip `<table>_source_identifier_uniq`. Last one wins.
+      const byKey = new Map<string, { id: string | null; data: Record<string, any> }>();
+      let collapsed = 0;
+      for (const c of visibleCandidates) {
+        const key = naturalKeyOf(effectiveSourceId(c) || '', c.identifier);
+        if (byKey.has(key)) collapsed++;
+        byKey.set(key, { id: resolveEntryId(c), data: payloadFor(c) });
+      }
+      const entries = Array.from(byKey.values());
       await upsertDocumentBatch(meta.collection, entries);
       const created = entries.filter((e) => !e.id).length;
-      const updated = entries.filter((e) => !!e.id).length;
-      toast.success(`Imported ${entries.length} ${meta.plural.toLowerCase()} (${created} new, ${updated} updated).`);
+      const updated = entries.length - created;
+      const dupNote = collapsed > 0 ? `, ${collapsed} duplicate${collapsed === 1 ? '' : 's'} merged` : '';
+      toast.success(`Imported ${entries.length} ${meta.plural.toLowerCase()} (${created} new, ${updated} updated${dupNote}).`);
       await loadExisting();
       onImported?.();
     } catch (err) {
@@ -316,17 +354,16 @@ export default function SpeciesBackgroundImportWorkbench({
                   <Download className="h-3.5 w-3.5" /> Import Visible ({visibleCandidates.length})
                 </Button>
                 {batchSummary.unresolved > 0 ? (
-                  <select
-                    value=""
-                    onChange={(e) => { assignSourceToUnresolvedVisible(e.target.value); e.currentTarget.value = ''; }}
-                    className="h-8 rounded-md border border-gold/20 bg-background/40 px-2 text-xs text-ink outline-none hover:bg-gold/5 focus:border-gold"
-                    title="Assign a source to all unresolved entries currently in view"
-                  >
-                    <option value="">Set source for unresolved…</option>
-                    {sources.map((s) => (
-                      <option key={s.id} value={s.id}>{sourceLabelOf(s.id) || s.id}</option>
-                    ))}
-                  </select>
+                  <div className="w-[210px]" title="Assign a source to all unresolved entries currently in view">
+                    <SingleSelectSearch
+                      value=""
+                      onChange={(next) => { if (next) assignSourceToUnresolvedVisible(next); }}
+                      options={sources.map((s) => ({ id: s.id, name: sourceLabelOf(s.id) || s.id }))}
+                      placeholder="Set source for unresolved…"
+                      allowClear={false}
+                      triggerClassName="h-8 w-full"
+                    />
+                  </div>
                 ) : null}
               </div>
             </div>
@@ -419,7 +456,7 @@ export default function SpeciesBackgroundImportWorkbench({
                               <div className="font-serif text-sm text-ink truncate">{c.name}</div>
                               <div className="text-[10px] uppercase tracking-[0.16em] text-gold/70 truncate">{c.summary || '—'}</div>
                               <div className="mt-1 flex flex-wrap gap-1">
-                                {c.existingEntryId ? <Badge className="bg-sky-500/15 text-sky-200 border-sky-400/20 text-[9px] px-1 py-0">Saved</Badge> : null}
+                                {resolveEntryId(c) ? <Badge className="bg-sky-500/15 text-sky-200 border-sky-400/20 text-[9px] px-1 py-0">Saved</Badge> : null}
                                 {!effectiveSourceId(c) ? <Badge className="bg-blood/20 text-blood border-blood/30 text-[9px] px-1 py-0">No source</Badge> : null}
                                 {!c.imageUrl ? <Badge className="bg-amber-500/15 text-amber-200 border-amber-400/20 text-[9px] px-1 py-0">No image</Badge> : null}
                               </div>
@@ -458,7 +495,7 @@ export default function SpeciesBackgroundImportWorkbench({
                                 disabled={saving}
                               >
                                 <Download className="h-4 w-4" />
-                                {selectedCandidate.existingEntryId ? `Update ${meta.singular}` : `Import ${meta.singular}`}
+                                {resolveEntryId(selectedCandidate) ? `Update ${meta.singular}` : `Import ${meta.singular}`}
                               </Button>
                             </div>
                           </div>
@@ -479,18 +516,14 @@ export default function SpeciesBackgroundImportWorkbench({
                                 </div>
                                 <div>
                                   <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-gold/70">Source</div>
-                                  <select
+                                  <SingleSelectSearch
                                     value={effectiveSourceId(selectedCandidate)}
-                                    onChange={(e) => setSourceOverrides((prev) => ({ ...prev, [selectedCandidate.candidateId]: e.target.value }))}
-                                    className="mt-1 h-8 w-full max-w-sm rounded-md border border-gold/20 bg-background/40 px-2 text-sm text-ink outline-none focus:border-gold"
-                                  >
-                                    <option value="">— none (import without a source) —</option>
-                                    {sources.map((s) => (
-                                      <option key={s.id} value={s.id}>
-                                        {(s.abbreviation ? `${s.abbreviation} — ` : '') + (s.name || s.id)}
-                                      </option>
-                                    ))}
-                                  </select>
+                                    onChange={(next) => setSourceOverrides((prev) => ({ ...prev, [selectedCandidate.candidateId]: next }))}
+                                    options={sources.map((s) => ({ id: s.id, name: (s.abbreviation ? `${s.abbreviation} — ` : '') + (s.name || s.id) }))}
+                                    placeholder="— none (import without a source) —"
+                                    className="mt-1 w-full max-w-sm"
+                                    triggerClassName="h-8 w-full"
+                                  />
                                   {!selectedCandidate.sourceResolved && !effectiveSourceId(selectedCandidate) ? (
                                     <p className="mt-1 text-[10px] text-blood">
                                       Book "{selectedCandidate.sourceBook || '?'}" didn't match a source — pick one, or it imports without a source.
