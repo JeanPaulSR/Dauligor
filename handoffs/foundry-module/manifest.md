@@ -118,6 +118,7 @@ append-only / non-clobbering where both branches touch the same file.
 
 Newest at the top.
 
+- `2026-06-04` — [2026-06-04-session-state-precompaction.md](2026-06-04-session-state-precompaction.md) — full pickup state after the Character Creator (radial hub + tabs), styled launcher, and the ClassView-style class preview. Git state, what's on main vs branch (`175fce8` class-view is branch-only), the "needs a Foundry eyeball" list, how the class preview pulls data, open follow-ups, and the window-model / div-button gotchas.
 - `2026-06-02` — [2026-06-02-to-compendium-editors-spellcasting-chart.md](2026-06-02-to-compendium-editors-spellcasting-chart.md) — heads-up + asks for the new app-side `/api/module/spellcasting/multiclass-chart.json` endpoint (master multiclass slot chart) that the creator's class preview consumes for spell-slot columns. Additive; they own the dev server + must take it to main.
 - `2026-05-30` — [2026-05-30-session-state-precompaction.md](2026-05-30-session-state-precompaction.md) — full branch state before a context compaction: doc-reconciliation + modularization, export-first bg/race/creature exporters, CSS split + dedup, three import bug fixes, bundled-data deletion. Includes the "can't test in Foundry — verify these" list + operational gotchas (junction, manifest reload).
 

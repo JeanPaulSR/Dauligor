@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Where we left off — foundry-module (2026-06-02)</title>
+<style>
+  :root{--parchment:#f5f2e8;--parchment-soft:#faf7ed;--ink:#1a1a1a;--ink-soft:#3a3a3a;--muted:#6b6457;--gold:#c5a059;--gold-deep:#8a6d2f;--blood:#7a1f1f;--leaf:#355c3a;--card:#fbf8ee;--rule:#d8cfb8;--code-bg:#2b2620;--code-ink:#f0e9d2;--shadow:0 1px 3px rgba(0,0,0,.08),0 4px 10px rgba(0,0,0,.04);}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--parchment);color:var(--ink);font-family:"Inter",-apple-system,"Segoe UI",Roboto,sans-serif;font-size:15px;line-height:1.58;}
+  .wrap{max-width:1060px;margin:0 auto;padding:40px 32px 80px;}
+  header.hero{border-bottom:1px solid var(--rule);padding-bottom:20px;margin-bottom:24px;}
+  header.hero h1{font-family:"Cormorant Garamond","Georgia",serif;font-weight:600;font-size:36px;line-height:1.1;margin:0 0 6px;}
+  header.hero .sub{color:var(--muted);font-size:14px;}
+  h2{font-family:"Cormorant Garamond","Georgia",serif;font-size:24px;font-weight:600;margin:34px 0 10px;padding-bottom:6px;border-bottom:2px solid var(--gold);}
+  h3{font-family:"Cormorant Garamond","Georgia",serif;font-size:18px;font-weight:600;margin:18px 0 4px;color:var(--gold-deep);}
+  p{margin:8px 0;} ul,ol{margin:8px 0 8px 22px;padding:0;} li{margin:5px 0;}
+  code{font-family:"JetBrains Mono","Consolas",monospace;font-size:12.5px;background:rgba(138,109,47,.12);padding:1px 5px;border-radius:3px;}
+  .path{font-family:"JetBrains Mono","Consolas",monospace;font-size:12px;color:var(--gold-deep);}
+  table{border-collapse:collapse;width:100%;margin:12px 0;background:var(--parchment-soft);box-shadow:var(--shadow);border-radius:4px;overflow:hidden;}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--rule);font-size:13.5px;vertical-align:top;} tr:last-child td{border-bottom:none;}
+  th{background:rgba(138,109,47,.10);font-weight:600;color:var(--gold-deep);text-transform:uppercase;font-size:11px;letter-spacing:.6px;}
+  .callout{background:rgba(122,31,31,.06);border:1px solid rgba(122,31,31,.25);border-radius:5px;padding:13px 16px;margin:16px 0;font-size:14px;}
+  .callout strong{color:var(--blood);}
+  .callout.leaf{background:rgba(53,92,58,.08);border-color:rgba(53,92,58,.32);} .callout.leaf strong{color:var(--leaf);}
+  .callout.gold{background:rgba(197,160,89,.12);border-color:rgba(138,109,47,.4);} .callout.gold strong{color:var(--gold-deep);}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:14px 0;}
+  .card{background:var(--card);border:1px solid var(--rule);border-radius:7px;padding:14px 16px;box-shadow:var(--shadow);}
+  .card h3{margin-top:0;}
+  .pill{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:2px 9px;border-radius:20px;vertical-align:middle;}
+  .pill.live{background:rgba(53,92,58,.16);color:var(--leaf);border:1px solid rgba(53,92,58,.4);}
+  .pill.stub{background:rgba(138,109,47,.14);color:var(--gold-deep);border:1px solid rgba(138,109,47,.4);}
+  .pill.todo{background:rgba(122,31,31,.10);color:var(--blood);border:1px solid rgba(122,31,31,.3);}
+  .steps{display:flex;flex-wrap:wrap;gap:7px;margin:12px 0;}
+  .chip{background:var(--card);border:1px solid var(--rule);border-radius:18px;padding:4px 13px;font-size:12.5px;font-weight:600;box-shadow:var(--shadow);}
+  small.note{color:var(--muted);}
+  .lead{font-size:16px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>Where we left off</h1>
+  <div class="sub"><strong>foundry-module</strong> branch &middot; resume brief &middot; 2026-06-02 &middot; last push to <code>main</code>: <code>326b351</code></div>
+</header>
+
+<p class="lead">Over the last stretch we rebuilt the <strong>Character Creator</strong>, restyled the <strong>Dauligor Options</strong> window, gave the class picker a <strong>rich preview</strong>, and added a small <strong>app-side endpoint</strong> for spell-slot data. It's all committed and <strong>pushed to <code>main</code></strong> (so production has it). The main thing waiting on you is a <strong>look in a live Foundry world</strong> — none of the UI has been run there yet.</p>
+
+<div class="callout gold">
+  <strong>Bottom line:</strong> everything below is on <code>main</code> and code-verified, not eyeball-verified.
+  Two things gate the last bit of polish: <strong>(1)</strong> you restart Foundry and tell me what looks off, and
+  <strong>(2)</strong> the <em>compendium-editor</em> reloads their dev server so the new spell-slot endpoint serves
+  locally (it's already on prod).
+</div>
+
+<h2>What shipped &amp; is live on <code>main</code></h2>
+
+<table>
+  <tr><th>Feature</th><th>Status</th><th>What it is</th></tr>
+  <tr>
+    <td><strong>Character Creator</strong> (redesigned)</td>
+    <td><span class="pill live">Live</span></td>
+    <td>A <strong>radial hub</strong>: a "Create" tab with a wheel (center = Ability Scores; wedges = Class, Species, Background, Starting Feat, Image) + a separate "Character" review tab. Click a wedge → that chooser replaces the wheel, with a Back-to-hub control.</td>
+  </tr>
+  <tr>
+    <td><strong>Dauligor Options</strong> window</td>
+    <td><span class="pill live">Live</span></td>
+    <td>The old plain Foundry dialog is now a house-styled tile menu (same for the per-actor "Actor Tools" hub). One reusable launcher window.</td>
+  </tr>
+  <tr>
+    <td><strong>Class preview</strong> in the picker</td>
+    <td><span class="pill live">Live</span></td>
+    <td>A module-themed port of the website's classes-page preview: header (hit die / caster badges), a level table (PB + features + scaling + <strong>spell slots</strong>), proficiencies, subclasses, and tags.</td>
+  </tr>
+  <tr>
+    <td><strong>Spell-slot chart endpoint</strong></td>
+    <td><span class="pill live">Live (prod)</span></td>
+    <td>New <code>/api/module/spellcasting/multiclass-chart.json</code> so the module pulls real slot data from our app instead of hardcoding it. <small class="note">Needs the dev server reloaded to serve locally.</small></td>
+  </tr>
+  <tr>
+    <td><strong>Starting Feat</strong> &amp; <strong>Image</strong> wedges</td>
+    <td><span class="pill stub">Stubbed</span></td>
+    <td>Present on the wheel but open a "coming soon" panel — deliberately deferred until the wheel layout is settled.</td>
+  </tr>
+</table>
+
+<h2>How the Character Creator works now</h2>
+<div class="steps">
+  <span class="chip">Tab: Create (the wheel)</span>
+  <span class="chip">Tab: Character (review)</span>
+</div>
+<div class="grid">
+  <div class="card">
+    <h3>The wheel (Create tab)</h3>
+    <ul>
+      <li><strong>Center button → Ability Scores.</strong> Two modes: <em>Point Buy</em> (32-point budget, 8–16) and a <strong>shared world roll pool</strong> — every player rolls one 4d6-drop-lowest set into a public pool, anyone can pick any set, the DM can enter sets by hand.</li>
+      <li><strong>Wedges → Class / Species / Background</strong> open searchable pickers (Species = the 2024 label over the existing race data).</li>
+      <li><strong>Class</strong> shows the rich preview; on Build it hands off to the existing class importer at level 1 for skill/option choices.</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3>The Character tab + Build</h3>
+    <ul>
+      <li>A review card per section with an <strong>Edit</strong> jump back to its wedge.</li>
+      <li><strong>Build Character</strong> (footer) writes ability scores, embeds the species &amp; background items, then opens the class builder.</li>
+      <li>Opened from a sheet → applies onto that actor; opened from the Actor directory → makes a fresh character.</li>
+    </ul>
+  </div>
+</div>
+
+<h2 id="needs-you">What needs you — a Foundry eyeball</h2>
+<div class="callout">
+  <strong>I can't run Foundry from here</strong>, so all of this is logic- and syntax-checked but never rendered in a live world. Please <strong>fully restart Foundry</strong> (Return to Setup → relaunch — module.json changed, so F5 isn't enough) and check:
+</div>
+<ul>
+  <li><strong>Options window</strong> — tiles laid out cleanly, correct size (this is where we spent a few rounds; it should be right now).</li>
+  <li><strong>Character Creator wheel</strong> — proportions, label placement, the wedge → panel → back flow, and the background reads as one consistent color.</li>
+  <li><strong>Class preview</strong> — pick a few classes; the level table, proficiencies, subclasses, and tags should read well at the picker width.</li>
+  <li><strong>Roll pool</strong> — ideally with two connected clients, to exercise the player → GM relay.</li>
+</ul>
+
+<h2>The one external dependency</h2>
+<div class="callout leaf">
+  <strong>Spell-slot columns</strong> pull from the new endpoint, which is on <code>main</code>/prod but <strong>404s on the local dev server until the compendium-editor reloads it</strong> (they control that server). A full handoff is written for them:
+  <span class="path">handoffs/foundry-module/2026-06-02-to-compendium-editors-spellcasting-chart.md</span>.
+  Until it serves, the preview <em>degrades gracefully</em> — everything shows except the slot columns. Once live, check <strong>Wizard</strong> (full caster), <strong>Paladin</strong> (half), <strong>Warlock</strong> (pact).
+</div>
+
+<h2>Open / next (your call)</h2>
+<ul>
+  <li><span class="pill stub">Next</span> Build the <strong>Starting Feat</strong> and <strong>Image</strong> wheel sections (stubbed now).</li>
+  <li><span class="pill todo">Maybe</span> Give <strong>Species</strong> and <strong>Background</strong> the same richer-preview treatment the class picker got.</li>
+  <li><span class="pill todo">Backlog</span> Older items still in <span class="path">TODO.md</span>: bg/race round-trip verification, the creature importer, dead bundled-file constants cleanup.</li>
+</ul>
+
+<h2>When you sit back down — quick reminders</h2>
+<ul>
+  <li>The local <strong>Foundry module junction points at this worktree</strong> — edits here are picked up on reload, no copy step. (If a different worktree takes over the branch, repoint it — recipe in the manifest.)</li>
+  <li>Changing <code>module.json</code> (styles/esmodules) needs a <strong>full Foundry restart</strong>, not F5.</li>
+  <li>The <strong>dev server (localhost:3000) is the compendium-editor's</strong> — they restart/reload it, not us.</li>
+  <li>Branch state &amp; coordination live in <span class="path">handoffs/foundry-module/manifest.md</span>; the design write-up for the wheel is <span class="path">docs/_drafts/character-creator-design-2026-05-30.html</span>; the window-layout rules are in <span class="path">docs/styles-guide.md</span> ("Window model").</li>
+</ul>
+
+<p style="margin-top:20px;"><small class="note">This brief: <span class="path">module/dauligor-pairing/docs/_drafts/where-we-left-off-2026-06-02.html</span>. Last push to main: <code>d583d6a..326b351</code> (fast-forward, after merging origin/main's 20 commits cleanly).</small></p>
+
+</div>
+</body>
+</html>
