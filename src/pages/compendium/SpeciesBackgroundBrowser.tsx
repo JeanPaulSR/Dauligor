@@ -107,6 +107,9 @@ export default function SpeciesBackgroundBrowser({
   const [profVocab, setProfVocab] = useState<{ skills: any[]; tools: any[]; languages: any[] }>(
     { skills: [], tools: [], languages: [] },
   );
+  // Species options vocab (species view only) → resolve attached option ids to
+  // their name + description.
+  const [speciesOptions, setSpeciesOptions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState('');
@@ -140,6 +143,10 @@ export default function SpeciesBackgroundBrowser({
           ]);
           if (!cancelled) setProfVocab({ skills: sk, tools: tl, languages: lg });
         }
+        if (kind === 'species') {
+          const opts = await fetchCollection<any>('speciesOptions', { orderBy: 'name ASC' });
+          if (!cancelled) setSpeciesOptions(opts);
+        }
       } catch (err) {
         console.error(`[${cfg.singular}Browser] load failed:`, err);
       } finally {
@@ -152,6 +159,10 @@ export default function SpeciesBackgroundBrowser({
   const sourceById = useMemo(
     () => Object.fromEntries(sources.map((s) => [s.id, s])) as Record<string, any>,
     [sources],
+  );
+  const speciesOptionsById = useMemo(
+    () => Object.fromEntries(speciesOptions.map((o) => [String(o.id), o])) as Record<string, any>,
+    [speciesOptions],
   );
   const displayVocab = useMemo<ProficiencyVocab>(() => ({
     skills: profVocab.skills.map((s: any) => ({ id: String(s.id), name: String(s.name || '') })),
@@ -313,6 +324,7 @@ export default function SpeciesBackgroundBrowser({
           onToggleFavorite={toggleFavorite}
           allRows={rows}
           onSelect={setSelectedId}
+          speciesOptionsById={speciesOptionsById}
         />
       )}
       emptyMessage={`No ${cfg.plural.toLowerCase()} yet${isAdmin ? ` — import some from the ${cfg.singular} Manager.` : '.'}`}
@@ -399,6 +411,7 @@ function SBDetail({
   onToggleFavorite,
   allRows,
   onSelect,
+  speciesOptionsById,
 }: {
   row: Row | null;
   kind: SpeciesBackgroundBrowserKind;
@@ -408,6 +421,7 @@ function SBDetail({
   onToggleFavorite: (id: string) => void;
   allRows: Row[];
   onSelect: (id: string) => void;
+  speciesOptionsById: Record<string, any>;
 }) {
   if (!row) {
     return (
@@ -444,6 +458,9 @@ function SBDetail({
   const parentSpecies = (!isBackground && row.parentSpeciesId)
     ? (allRows.find((r) => String(r.id) === String(row.parentSpeciesId)) || null)
     : null;
+  const attachedOptions = (!isBackground && Array.isArray(row.speciesOptionIds))
+    ? row.speciesOptionIds.map((id: any) => speciesOptionsById[String(id)]).filter(Boolean)
+    : [];
 
   // Species keep their stat-block facts; backgrounds surface everything via
   // the proficiency section instead.
@@ -560,6 +577,31 @@ function SBDetail({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Attached species options (granted racial traits) */}
+      {attachedOptions.length > 0 && (
+        <div className="border-b border-gold/10 px-6 py-4 space-y-3">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-gold/70">
+            Traits &amp; Options <span className="text-ink/40">({attachedOptions.length})</span>
+          </div>
+          <div className="space-y-3">
+            {attachedOptions.map((opt: any) => {
+              const oHtml = opt.description ? cleanFoundryHtml(bbcodeToHtml(String(opt.description))) : '';
+              return (
+                <div key={opt.id} className="space-y-1">
+                  <div className="font-serif font-bold text-ink text-sm">{opt.name || 'Option'}</div>
+                  {oHtml ? (
+                    <div
+                      className="prose prose-sm max-w-none text-ink/85 prose-headings:text-ink prose-strong:text-ink"
+                      dangerouslySetInnerHTML={{ __html: oHtml }}
+                    />
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
