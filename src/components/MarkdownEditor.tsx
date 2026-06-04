@@ -104,6 +104,10 @@ function MarkdownEditor({
   const [isWYSIWYG, setIsWYSIWYG] = useState(true);
   const [currentHeight, setCurrentHeight] = useState<string | number>(minHeight);
   const [hasManuallyResized, setHasManuallyResized] = useState(false);
+  // Bumped on every TipTap selection change to force a real re-render so the
+  // toolbar re-evaluates isActive(...) — table-tools visibility + button active
+  // states — on cursor CLICK / arrow movement, not only on typing.
+  const [, setSelectionTick] = useState(0);
   const resizableRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const internalRef = useRef<HTMLTextAreaElement>(null);
@@ -239,10 +243,14 @@ function MarkdownEditor({
         }
       }
     },
-    onSelectionUpdate: ({ editor }) => {
-      // Force a slight state change to ensure toolbar re-evaluates isActive
+    onSelectionUpdate: () => {
+      // Force a REAL re-render so the toolbar re-evaluates isActive(...) on every
+      // selection change. The previous `setHasManuallyResized(prev => prev)` was
+      // a no-op (React bails on same-value setState), so the toolbar — table
+      // tools visibility AND button active highlights — only refreshed on typing,
+      // never on a plain click or arrow-key move into/out of a table.
       if (isWYSIWYG) {
-        setHasManuallyResized(prev => prev); // dummy update
+        setSelectionTick((t) => t + 1);
       }
     },
     editorProps: {
