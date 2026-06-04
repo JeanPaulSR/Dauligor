@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { fetchCollection, fetchDocument } from '../../lib/d1';
 import { useClassRouteId } from '../../lib/useClassRouteId';
@@ -96,6 +96,10 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
   const [selectedOptionItems, setSelectedOptionItems] = useState<Record<string, string>>({});
   const [featureFilter, setFeatureFilter] = useState<'all' | 'class' | 'subclass'>('all');
   const [collapsedFeatures, setCollapsedFeatures] = useState<Record<string, boolean>>({});
+  // In-page feature navigation: id → card node (for jump + scroll-spy), and the
+  // level the jump-bar currently highlights as you scroll.
+  const featureRefs = useRef<Record<string, HTMLElement | null>>({});
+  const [activeLevel, setActiveLevel] = useState<number | null>(null);
   const [classSpellList, setClassSpellList] = useState<ClassSpellListSummary[]>([]);
   const [classSpellListLoading, setClassSpellListLoading] = useState(false);
 
@@ -253,6 +257,29 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
 
     return combined.sort((a, b) => a.level - b.level);
   }, [features, classData?.spellcasting, selectedSubclassId, subclassFeatures, selectedSubclass]);
+
+  // If the Subclass tab is open but the subclass was cleared (or the class
+  // changed), fall back to Class Features. Keyed on the subclass, NOT activeTab,
+  // so normal tab switches never get bounced.
+  useEffect(() => {
+    if (activeTab === 'subclass' && !selectedSubclass) setActiveTab('features');
+  }, [activeTab, selectedSubclass]);
+
+  // Jump-bar scroll-spy: highlight the level of the topmost visible feature card.
+  useEffect(() => {
+    if (activeTab !== 'features' && activeTab !== 'subclass') return;
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries
+        .filter((e) => e.isIntersecting)
+        .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+      if (!visible.length) return;
+      const fid = (visible[0].target as HTMLElement).dataset.featureId;
+      const f = allFeaturesWithSpellcasting.find((x: any) => String(x.id) === fid);
+      if (f) setActiveLevel(f.level);
+    }, { rootMargin: '-80px 0px -55% 0px', threshold: 0 });
+    (Object.values(featureRefs.current).filter(Boolean) as HTMLElement[]).forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, [activeTab, allFeaturesWithSpellcasting, featureFilter, collapsedFeatures]);
 
   useEffect(() => {
     if (!id) return;
@@ -641,6 +668,260 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
     return levelFeatures;
   };
 
+  // Scroll a rendered feature card into view. Retries because the tab/card may
+  // mount or expand on the same tick we scroll (a single rAF silently no-ops
+  // there, and the node may not be laid out yet).
+  const scrollToFeature = (featureId: string) => {
+    let tries = 0;
+    const go = () => {
+      const el = featureRefs.current[featureId];
+      if (el) el.scrollIntoView({ block: 'start' });
+      else if (tries++ < 12) setTimeout(go, 50);
+    };
+    setTimeout(go, 0);
+  };
+
+  // Click a feature in the class table → open Class Features, expand it, scroll.
+  // Resolve the cell to a rendered feature by id, else the first feature at that
+  // level (ASI / subclass-placeholder rows have no card of their own).
+  const jumpFromTable = (tableFeature: any) => {
+    const target = allFeaturesWithSpellcasting.find((f: any) => f.id === tableFeature.id)
+      || allFeaturesWithSpellcasting.find((f: any) => f.level === tableFeature.level);
+    if (!target) return;
+    setActiveTab('features');
+    // Don't let the active filter hide the jump target.
+    if (target.isFromSubclass && featureFilter === 'class') setFeatureFilter('all');
+    if (!target.isFromSubclass && featureFilter === 'subclass') setFeatureFilter('all');
+    setCollapsedFeatures(prev => ({ ...prev, [target.id]: false }));
+    scrollToFeature(target.id);
+  };
+
+  // ── Shared feature render (Class Features tab + Subclass tab) ──────────
+  const renderSubclassBanner = () => (
+    <div className="animate-in fade-in slide-in-from-top-4 duration-500 space-y-6 p-6 border border-gold/30 bg-gold/5 rounded-lg relative overflow-hidden">
+      <div className="absolute top-0 right-0 p-2">
+        <Badge variant="outline" className="border-gold/20 text-gold bg-gold/5 uppercase tracking-widest text-[10px]">
+          Subclass Active
+        </Badge>
+      </div>
+      <div className="flex flex-col md:flex-row gap-6">
+        {selectedSubclass.imageUrl && (
+          <div
+            className="w-full md:w-48 h-48 shrink-0 rounded-md overflow-hidden border border-gold/20 shadow-md cursor-pointer transition-transform hover:scale-[1.02]"
+            onClick={() => navigate(`/images/view?url=${encodeURIComponent(selectedSubclass.imageUrl!)}`)}
+          >
+            <img src={selectedSubclass.imageUrl} alt={selectedSubclass.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+          </div>
+        )}
+        <div className="flex-1 space-y-4">
+          <h2 className="h2-title text-gold uppercase underline decoration-gold/20 underline-offset-8">{selectedSubclass.name}</h2>
+          <BBCodeRenderer content={selectedSubclass.description} className="text-lg italic leading-relaxed opacity-90 font-sans" />
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderFeatureCard = (feature: any) => {
+    const isCollapsed = collapsedFeatures[feature.id] ?? false;
+    const isSubclass = !!feature.isFromSubclass;
+    return (
+      <div
+        key={feature.id}
+        ref={(el) => { featureRefs.current[feature.id] = el; }}
+        data-feature-id={feature.id}
+        className={`scroll-mt-24 rounded-lg border transition-colors ${
+          isSubclass ? 'border-amber-500/30 bg-amber-500/5' : 'border-gold/10 bg-transparent'
+        }`}
+      >
+        {/* Feature header — always visible, click to collapse */}
+        <button
+          type="button"
+          onClick={() => setCollapsedFeatures(prev => ({ ...prev, [feature.id]: !isCollapsed }))}
+          className="w-full flex items-baseline justify-between px-4 pt-3 pb-3 text-left group"
+        >
+          <div className="flex items-center gap-3">
+            {isSubclass && (
+              <span className="text-[8px] font-black uppercase tracking-widest text-amber-400/80 border border-amber-500/30 px-1.5 py-0.5 rounded shrink-0">
+                Subclass
+              </span>
+            )}
+            <h3 className="h3-title text-gold uppercase group-hover:text-white transition-colors">{feature.name}</h3>
+          </div>
+          <div className="flex items-center gap-3 shrink-0">
+            <span className="label-text text-ink/40">Level {feature.level}</span>
+            <ChevronDown className={`w-4 h-4 text-gold/40 transition-transform duration-200 ${isCollapsed ? '' : 'rotate-180'}`} />
+          </div>
+        </button>
+
+        {/* Feature body — collapsible */}
+        {!isCollapsed && (
+          <div className="px-4 pb-4 space-y-4">
+            <BBCodeRenderer content={feature.description} />
+            {(() => {
+              const allAdvs = [
+                ...(classData.advancements || []),
+                ...(selectedSubclass?.advancements || [])
+              ];
+              const featureAdvs = allAdvs.filter((a: any) => a.featureId === feature.id && a.type !== 'ScaleValue' && a.type !== 'Trait');
+              if (featureAdvs.length === 0) return null;
+              return (
+                <div className="space-y-4 pt-4 border-t border-gold/10">
+                  {featureAdvs.map((adv: any, idx: number) => {
+                    const isExpanded = expandedGroups[adv._id] || false;
+                    const advTitle = adv.title || adv.configuration?.title || adv.type;
+                    const isOptionGroup = adv.configuration?.choiceType === 'option-group' && adv.configuration?.optionGroupId;
+                    const hasChoices = (adv.type === 'ItemGrant' || adv.type === 'ItemChoice') &&
+                                       (adv.configuration?.pool?.length > 0 || isOptionGroup);
+                    return (
+                      <div key={idx} className="mt-4 space-y-4">
+                        {hasChoices ? (
+                          <>
+                            <button
+                              onClick={() => setExpandedGroups(prev => ({ ...prev, [adv._id]: !isExpanded }))}
+                              className={`flex items-center justify-between group w-full text-left bg-gold/5 hover:bg-gold/10 border border-gold/20 p-3 transition-colors ${isExpanded ? 'rounded-t border-b-0' : 'rounded'}`}
+                            >
+                              <div className="flex items-center gap-2 shrink-0">
+                                <BookOpen className="w-4 h-4 text-gold group-hover:drop-shadow-[0_0_8px_rgba(255,215,0,0.5)] transition-all" />
+                                <span className="text-xs font-bold uppercase tracking-widest text-gold group-hover:text-white transition-colors">{advTitle}</span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <span className="text-[9px] font-medium text-gold/50 uppercase">{adv.type}</span>
+                                <div className={`transform transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}>
+                                  <ChevronLeft className="w-4 h-4 text-gold -rotate-90 group-hover:text-white transition-colors" />
+                                </div>
+                              </div>
+                            </button>
+                            {isExpanded && (
+                              <div className="animate-in fade-in slide-in-from-top-2 duration-300 bg-gold/5 border border-gold/20 rounded-b p-4">
+                                {isOptionGroup ? (() => {
+                                  const groupId = adv.configuration.optionGroupId;
+                                  const exclusions = adv.configuration?.excludedOptionIds || [];
+                                  const groupItems = optionItems.filter((item: any) =>
+                                    item.groupId === groupId &&
+                                    (!item.classIds || item.classIds.length === 0 || item.classIds.includes(id)) &&
+                                    !(classData?.excludedOptionIds?.[groupId] || []).includes(item.id) &&
+                                    !exclusions.includes(item.id)
+                                  );
+                                  if (groupItems.length === 0) {
+                                    return <p className="text-xs text-ink/40 italic">No options available for this group.</p>;
+                                  }
+                                  return (
+                                    <ModularChoiceView
+                                      items={groupItems}
+                                      groupId={adv._id || groupId}
+                                      selectedId={selectedOptionItems[adv._id || groupId] || groupItems[0]?.id}
+                                      onSelect={(itemId) => setSelectedOptionItems(prev => ({ ...prev, [adv._id || groupId]: itemId }))}
+                                      sidebarWidth="240px"
+                                      maxHeight="350px"
+                                    />
+                                  );
+                                })() : (() => {
+                                  const poolIds = adv.configuration?.pool || [];
+                                  if (poolIds.length === 0) {
+                                    return <p className="text-xs text-ink/40 italic">No options available.</p>;
+                                  }
+                                  const poolItems = poolIds
+                                    .map((itemId: string) => allFeaturesWithSpellcasting.find((f: any) => f.id === itemId))
+                                    .filter(Boolean)
+                                    .map((f: any) => ({
+                                      id: f.id,
+                                      name: f.name,
+                                      description: f.description,
+                                      levelPrerequisite: f.level,
+                                      featureId: f.id
+                                    }));
+                                  if (poolItems.length === 0) {
+                                    return <p className="text-xs text-ink/40 italic">Features could not be found.</p>;
+                                  }
+                                  return (
+                                    <ModularChoiceView
+                                      items={poolItems}
+                                      groupId={adv._id || 'pool'}
+                                      selectedId={selectedOptionItems[adv._id || 'pool'] || poolItems[0]?.id}
+                                      onSelect={(itemId) => setSelectedOptionItems(prev => ({ ...prev, [adv._id || 'pool']: itemId }))}
+                                      sidebarWidth="240px"
+                                      maxHeight="350px"
+                                    />
+                                  );
+                                })()}
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="bg-gold/5 border border-gold/20 rounded p-3 flex flex-col gap-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-bold text-ink uppercase tracking-tight">{advTitle}</span>
+                              <span className="text-[9px] font-medium text-gold/60 uppercase">{adv.type}</span>
+                            </div>
+                            {adv.type === 'Trait' && (
+                              <p className="text-[10px] text-ink/60 italic">Gains proficiency in {adv.configuration?.type || 'Trait'}</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Jump rail (left) + feature cards (right) for the given filter. The rail
+  // groups features by level (plain text, no icons) and scroll-spies the level
+  // you're reading; it's sticky with its own scroll so the deepest levels stay
+  // reachable. Used by both the Class Features and Subclass tabs.
+  const renderFeaturesPanel = (filterMode: 'all' | 'class' | 'subclass') => {
+    const list = allFeaturesWithSpellcasting.filter((feature: any) => {
+      if (filterMode === 'class') return !feature.isFromSubclass;
+      if (filterMode === 'subclass') return !!feature.isFromSubclass;
+      return true;
+    });
+    if (list.length === 0) {
+      return <p className="text-ink/40 italic text-sm">No features to show.</p>;
+    }
+    const levelGroups: { level: number; features: any[] }[] = [];
+    for (const f of list) {
+      let g = levelGroups.find((x) => x.level === f.level);
+      if (!g) { g = { level: f.level, features: [] }; levelGroups.push(g); }
+      g.features.push(f);
+    }
+    return (
+      <div className="flex gap-6 items-start">
+        <nav className="hidden lg:block w-44 shrink-0 sticky top-24 max-h-[calc(100vh-8rem)] overflow-y-auto custom-scrollbar pr-1">
+          <div className="space-y-3">
+            {levelGroups.map((g) => (
+              <div key={g.level} className="space-y-1">
+                <div className={`label-text transition-colors ${activeLevel === g.level ? 'text-gold' : 'text-ink/40'}`}>
+                  Level {g.level}
+                </div>
+                <div className="space-y-0.5 border-l border-gold/10 pl-2">
+                  {g.features.map((f: any) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => { setCollapsedFeatures(prev => ({ ...prev, [f.id]: false })); scrollToFeature(f.id); }}
+                      title={f.name}
+                      className="block w-full text-left text-[11px] leading-snug truncate text-ink/50 hover:text-gold transition-colors"
+                    >
+                      {f.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </nav>
+        <div className="space-y-3 flex-1 min-w-0">
+          {list.map((feature: any) => renderFeatureCard(feature))}
+        </div>
+      </div>
+    );
+  };
+
   const handleExportSlice = async (slice: "everything" | "skeleton" | "subclasses" | "features" | "unique-options") => {
     try {
       const data = await exportClassSemantic(id!, { fetchCollection, fetchDocument });
@@ -858,7 +1139,15 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                       <td className="p-1.5 border-r border-gold/5">
                         <div className="flex flex-wrap gap-1">
                           {levelFeatures.map(f => (
-                            <span key={f.id} className={`font-bold hover:underline cursor-help transition-colors ${f.isFromSubclass ? 'text-gold/80 italic' : 'text-gold'}`}>
+                            <span
+                              key={f.id}
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => jumpFromTable(f)}
+                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); jumpFromTable(f); } }}
+                              title={`Jump to ${f.name.split(' (')[0]}`}
+                              className={`font-bold hover:underline cursor-pointer transition-colors focus:outline-none focus-visible:underline ${f.isFromSubclass ? 'text-gold/80 italic' : 'text-gold'}`}
+                            >
                               {f.name.split(' (')[0]}{levelFeatures.indexOf(f) < levelFeatures.length - 1 ? ',' : ''}
                             </span>
                           ))}
@@ -941,6 +1230,7 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                   {(() => {
                     const tabs = [
                       { value: 'features', label: 'Class Features' },
+                      ...(selectedSubclass ? [{ value: 'subclass', label: selectedSubclass.name }] : []),
                       ...(classData.spellcasting?.hasSpellcasting
                         ? [{ value: 'spells', label: 'Spell List' }]
                         : []),
@@ -1050,37 +1340,7 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
 
               {/* ── Features Tab ─────────────────────────────────────── */}
               <TabsContent value="features" className="space-y-8">
-                {selectedSubclass && (
-                  <div className="animate-in fade-in slide-in-from-top-4 duration-500 space-y-6 p-6 border border-gold/30 bg-gold/5 rounded-lg relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-2">
-                      <Badge variant="outline" className="border-gold/20 text-gold bg-gold/5 uppercase tracking-widest text-[10px]">
-                        Subclass Active
-                      </Badge>
-                    </div>
-
-                    <div className="flex flex-col md:flex-row gap-6">
-                      {selectedSubclass.imageUrl && (
-                        <div 
-                          className="w-full md:w-48 h-48 shrink-0 rounded-md overflow-hidden border border-gold/20 shadow-md cursor-pointer transition-transform hover:scale-[1.02]"
-                          onClick={() => navigate(`/images/view?url=${encodeURIComponent(selectedSubclass.imageUrl!)}`)}
-                        >
-                          <img
-                            src={selectedSubclass.imageUrl}
-                            alt={selectedSubclass.name}
-                            className="w-full h-full object-cover"
-                            referrerPolicy="no-referrer"
-                          />
-                        </div>
-                      )}
-                      <div className="flex-1 space-y-4">
-                        <h2 className="h2-title text-gold uppercase underline decoration-gold/20 underline-offset-8">
-                          {selectedSubclass.name}
-                        </h2>
-                        <BBCodeRenderer content={selectedSubclass.description} className="text-lg italic leading-relaxed opacity-90 font-sans" />
-                      </div>
-                    </div>
-                  </div>
-                )}
+                {selectedSubclass && renderSubclassBanner()}
 
                 {/* Filter toggle — only when a subclass is active */}
                 {selectedSubclass && (
@@ -1102,179 +1362,18 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                   </div>
                 )}
 
-                <div className="space-y-3">
-                  {allFeaturesWithSpellcasting
-                    .filter((feature) => {
-                      if (featureFilter === 'class') return !feature.isFromSubclass;
-                      if (featureFilter === 'subclass') return !!feature.isFromSubclass;
-                      return true;
-                    })
-                    .map((feature) => {
-                      const linkedMappings = (classData.uniqueOptionMappings || []).filter((m: any) => m.featureId === feature.id);
-                      const isCollapsed = collapsedFeatures[feature.id] ?? false;
-                      const isSubclass = !!feature.isFromSubclass;
-
-                      return (
-                        <div
-                          key={feature.id}
-                          className={`rounded-lg border transition-colors ${
-                            isSubclass
-                              ? 'border-amber-500/30 bg-amber-500/5'
-                              : 'border-gold/10 bg-transparent'
-                          }`}
-                        >
-                          {/* Feature header — always visible, click to collapse */}
-                          <button
-                            type="button"
-                            onClick={() => setCollapsedFeatures(prev => ({ ...prev, [feature.id]: !isCollapsed }))}
-                            className="w-full flex items-baseline justify-between px-4 pt-3 pb-3 text-left group"
-                          >
-                            <div className="flex items-center gap-3">
-                              {isSubclass && (
-                                <span className="text-[8px] font-black uppercase tracking-widest text-amber-400/80 border border-amber-500/30 px-1.5 py-0.5 rounded shrink-0">
-                                  Subclass
-                                </span>
-                              )}
-                              <h3 className="h3-title text-gold uppercase group-hover:text-white transition-colors">{feature.name}</h3>
-                            </div>
-                            <div className="flex items-center gap-3 shrink-0">
-                              <span className="label-text text-ink/40">Level {feature.level}</span>
-                              <ChevronDown
-                                className={`w-4 h-4 text-gold/40 transition-transform duration-200 ${isCollapsed ? '' : 'rotate-180'}`}
-                              />
-                            </div>
-                          </button>
-
-                          {/* Feature body — collapsible */}
-                          {!isCollapsed && (
-                            <div className="px-4 pb-4 space-y-4">
-                              <BBCodeRenderer content={feature.description} />
-
-                              {/* Linked advancements */}
-                              {(() => {
-                                const allAdvs = [
-                                  ...(classData.advancements || []),
-                                  ...(selectedSubclass?.advancements || [])
-                                ];
-                                const featureAdvs = allAdvs.filter((a: any) => a.featureId === feature.id && a.type !== 'ScaleValue' && a.type !== 'Trait');
-                                if (featureAdvs.length === 0) return null;
-
-                                return (
-                                  <div className="space-y-4 pt-4 border-t border-gold/10">
-                                    {featureAdvs.map((adv: any, idx: number) => {
-                                      const isExpanded = expandedGroups[adv._id] || false;
-                                      const advTitle = adv.title || adv.configuration?.title || adv.type;
-                                      const isOptionGroup = adv.configuration?.choiceType === 'option-group' && adv.configuration?.optionGroupId;
-                                      const hasChoices = (adv.type === 'ItemGrant' || adv.type === 'ItemChoice') &&
-                                                         (adv.configuration?.pool?.length > 0 || isOptionGroup);
-
-                                      return (
-                                        <div key={idx} className="mt-4 space-y-4">
-                                          {hasChoices ? (
-                                            <>
-                                              <button
-                                                onClick={() => setExpandedGroups(prev => ({ ...prev, [adv._id]: !isExpanded }))}
-                                                className={`flex items-center justify-between group w-full text-left bg-gold/5 hover:bg-gold/10 border border-gold/20 p-3 transition-colors ${isExpanded ? 'rounded-t border-b-0' : 'rounded'}`}
-                                              >
-                                                <div className="flex items-center gap-2 shrink-0">
-                                                  <BookOpen className="w-4 h-4 text-gold group-hover:drop-shadow-[0_0_8px_rgba(255,215,0,0.5)] transition-all" />
-                                                  <span className="text-xs font-bold uppercase tracking-widest text-gold group-hover:text-white transition-colors">{advTitle}</span>
-                                                </div>
-                                                <div className="flex items-center gap-3">
-                                                  <span className="text-[9px] font-medium text-gold/50 uppercase">{adv.type}</span>
-                                                  <div className={`transform transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}>
-                                                    <ChevronLeft className="w-4 h-4 text-gold -rotate-90 group-hover:text-white transition-colors" />
-                                                  </div>
-                                                </div>
-                                              </button>
-
-                                              {isExpanded && (
-                                                <div className="animate-in fade-in slide-in-from-top-2 duration-300 bg-gold/5 border border-gold/20 rounded-b p-4">
-                                                  {isOptionGroup ? (() => {
-                                                    const groupId = adv.configuration.optionGroupId;
-                                                    const exclusions = adv.configuration?.excludedOptionIds || [];
-                                                    const groupItems = optionItems.filter((item: any) =>
-                                                      item.groupId === groupId &&
-                                                      (!item.classIds || item.classIds.length === 0 || item.classIds.includes(id)) &&
-                                                      !(classData?.excludedOptionIds?.[groupId] || []).includes(item.id) &&
-                                                      !exclusions.includes(item.id)
-                                                    );
-                                                    console.log("Rendering advancement option group", {
-                                                      adv, groupId, exclusions,
-                                                      groupItems: groupItems.length,
-                                                      totalOptionItems: optionItems.length,
-                                                      allGroupIds
-                                                    });
-                                                    if (groupItems.length === 0) {
-                                                      return <p className="text-xs text-ink/40 italic">No options available for this group.</p>;
-                                                    }
-                                                    return (
-                                                      <ModularChoiceView
-                                                        items={groupItems}
-                                                        groupId={adv._id || groupId}
-                                                        selectedId={selectedOptionItems[adv._id || groupId] || groupItems[0]?.id}
-                                                        onSelect={(itemId) => setSelectedOptionItems(prev => ({ ...prev, [adv._id || groupId]: itemId }))}
-                                                        sidebarWidth="240px"
-                                                        maxHeight="350px"
-                                                      />
-                                                    );
-                                                  })() : (() => {
-                                                    const poolIds = adv.configuration?.pool || [];
-                                                    if (poolIds.length === 0) {
-                                                      return <p className="text-xs text-ink/40 italic">No options available.</p>;
-                                                    }
-                                                    const poolItems = poolIds
-                                                      .map((itemId: string) => allFeaturesWithSpellcasting.find((f: any) => f.id === itemId))
-                                                      .filter(Boolean)
-                                                      .map((f: any) => ({
-                                                        id: f.id,
-                                                        name: f.name,
-                                                        description: f.description,
-                                                        levelPrerequisite: f.level,
-                                                        featureId: f.id
-                                                      }));
-
-                                                    if (poolItems.length === 0) {
-                                                      return <p className="text-xs text-ink/40 italic">Features could not be found.</p>;
-                                                    }
-                                                    return (
-                                                      <ModularChoiceView
-                                                        items={poolItems}
-                                                        groupId={adv._id || 'pool'}
-                                                        selectedId={selectedOptionItems[adv._id || 'pool'] || poolItems[0]?.id}
-                                                        onSelect={(itemId) => setSelectedOptionItems(prev => ({ ...prev, [adv._id || 'pool']: itemId }))}
-                                                        sidebarWidth="240px"
-                                                        maxHeight="350px"
-                                                      />
-                                                    );
-                                                  })()}
-                                                </div>
-                                              )}
-                                            </>
-                                          ) : (
-                                            <div className="bg-gold/5 border border-gold/20 rounded p-3 flex flex-col gap-1">
-                                              <div className="flex items-center justify-between">
-                                                <span className="text-[11px] font-bold text-ink uppercase tracking-tight">{advTitle}</span>
-                                                <span className="text-[9px] font-medium text-gold/60 uppercase">{adv.type}</span>
-                                              </div>
-                                              {adv.type === 'Trait' && (
-                                                <p className="text-[10px] text-ink/60 italic">Gains proficiency in {adv.configuration?.type || 'Trait'}</p>
-                                              )}
-                                            </div>
-                                          )}
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                );
-                              })()}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                </div>
+                {renderFeaturesPanel(featureFilter)}
               </TabsContent>
+
+              {/* ── Subclass Tab — only when a subclass is selected; shows just
+                  that subclass's features (no filter chips, since the tab itself
+                  is the subclass-only view). ──────────────────────────────── */}
+              {selectedSubclass && (
+                <TabsContent value="subclass" className="space-y-8">
+                  {renderSubclassBanner()}
+                  {renderFeaturesPanel('subclass')}
+                </TabsContent>
+              )}
 
               {/* ── Spell List Tab ────────────────────────────────────── */}
               {classData.spellcasting?.hasSpellcasting && (
