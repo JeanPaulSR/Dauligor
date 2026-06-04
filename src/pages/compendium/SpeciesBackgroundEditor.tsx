@@ -43,6 +43,7 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Checkbox } from '../../components/ui/checkbox';
 import SingleSelectSearch from '../../components/ui/SingleSelectSearch';
+import EntityPicker from '../../components/ui/EntityPicker';
 import { Button } from '../../components/ui/button';
 import { Footprints, Eye, Dna, ChevronLeft } from 'lucide-react';
 
@@ -176,6 +177,8 @@ type SBFormData = {
   movement: MovementShape;
   senses: SensesShape;
   creatureType: CreatureTypeShape;
+  // Species-only — reusable racial-trait options attached to this species (ids)
+  speciesOptionIds: string[];
   // Species-only — subspecies parent ('' = base species; an id = subspecies of that species)
   parentSpeciesId: string;
   // Bookkeeping
@@ -212,6 +215,7 @@ function makeInitialForm(sources: any[] = []): SBFormData {
     movement: { ...DEFAULT_MOVEMENT },
     senses: { ...DEFAULT_SENSES },
     creatureType: { ...DEFAULT_CREATURE_TYPE },
+    speciesOptionIds: [],
     parentSpeciesId: '',
   };
 }
@@ -296,6 +300,8 @@ export default function SpeciesBackgroundEditor({
   const [availableFeatures, setAvailableFeatures] = useState<any[]>([]);
   const [availableOptionGroups, setAvailableOptionGroups] = useState<any[]>([]);
   const [availableOptionItems, setAvailableOptionItems] = useState<any[]>([]);
+  // Species options (the reusable racial-trait library) for the Options picker.
+  const [availableSpeciesOptions, setAvailableSpeciesOptions] = useState<any[]>([]);
   // Proficiency-vocab lists (background Proficiencies section). Small tables.
   const [availableSkills, setAvailableSkills] = useState<any[]>([]);
   const [availableTools, setAvailableTools] = useState<any[]>([]);
@@ -403,6 +409,22 @@ export default function SpeciesBackgroundEditor({
     return () => { cancelled = true; };
   }, [canManage, cfg.collection, kind]);
 
+  // Species options (reusable racial-trait library) for the Options picker —
+  // species only.
+  useEffect(() => {
+    if (!canManage || kind !== 'species') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await fetchCollection<any>('speciesOptions', { orderBy: 'name ASC' });
+        if (!cancelled) setAvailableSpeciesOptions(rows);
+      } catch (err) {
+        console.error('[SpeciesBackgroundEditor] species options load failed:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [canManage, kind]);
+
   // Default source on first New row.
   useEffect(() => {
     if (editingId) return;
@@ -505,6 +527,7 @@ export default function SpeciesBackgroundEditor({
         creatureType: row.creatureType && typeof row.creatureType === 'object'
           ? { ...DEFAULT_CREATURE_TYPE, ...row.creatureType }
           : { ...DEFAULT_CREATURE_TYPE },
+        speciesOptionIds: Array.isArray(row.speciesOptionIds) ? row.speciesOptionIds : [],
         parentSpeciesId: row.parentSpeciesId || '',
       };
       setFormData(loaded);
@@ -589,6 +612,7 @@ export default function SpeciesBackgroundEditor({
         payload.movement = formData.movement;
         payload.senses = formData.senses;
         payload.creatureType = formData.creatureType;
+        payload.speciesOptionIds = Array.isArray(formData.speciesOptionIds) ? formData.speciesOptionIds : [];
         payload.parentSpeciesId = formData.parentSpeciesId || null;
       }
 
@@ -708,6 +732,19 @@ export default function SpeciesBackgroundEditor({
         label: 'Traits',
         layout: 'scroll',
         render: () => <SpeciesTraitsFields formData={formData} setFormData={setFormData} />,
+      });
+      tabs.push({
+        key: 'options',
+        label: 'Options',
+        layout: 'scroll',
+        render: () => (
+          <SpeciesOptionsFields
+            formData={formData}
+            setFormData={setFormData}
+            availableOptions={availableSpeciesOptions}
+            sourceAbbrevById={sourceAbbrevById}
+          />
+        ),
       });
       // Subspecies tab — only for a SAVED base species (not itself a child;
       // one level deep). Children are authored as full species via this tab.
@@ -833,7 +870,7 @@ export default function SpeciesBackgroundEditor({
 
     return tabs;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kind, formData, sources, editingId, scalingColumns, availableFeats, availableFeatures, availableOptionGroups, availableOptionItems, profPicker, requirementLookups]);
+  }, [kind, formData, sources, editingId, scalingColumns, availableFeats, availableFeatures, availableOptionGroups, availableOptionItems, availableSpeciesOptions, sourceAbbrevById, profPicker, requirementLookups]);
 
   const tagsSubTabs: TagsSubTab[] = useMemo(() => [
     {
@@ -1093,6 +1130,48 @@ function BasicsFields({
           className="flex-1 min-h-0"
         />
       </div>
+    </div>
+  );
+}
+
+// ─── Species options picker (reusable racial-trait library) ─────────
+
+function SpeciesOptionsFields({
+  formData,
+  setFormData,
+  availableOptions,
+  sourceAbbrevById,
+}: {
+  formData: SBFormData;
+  setFormData: React.Dispatch<React.SetStateAction<SBFormData>>;
+  availableOptions: any[];
+  sourceAbbrevById: Record<string, any>;
+}) {
+  const selectedIds = Array.isArray(formData.speciesOptionIds) ? formData.speciesOptionIds : [];
+  const entities = availableOptions.map((o) => ({
+    id: String(o.id),
+    name: String(o.name || 'Untitled'),
+    hint: o.sourceId ? String(sourceAbbrevById[o.sourceId] || '') : '',
+  }));
+  return (
+    <div className="space-y-3 pt-4 border-t border-gold/10">
+      <div>
+        <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Species Options</h3>
+        <p className="text-[10px] text-ink/40 italic">
+          Reusable racial traits (Darkvision, Powerful Build, …) this species grants. Authored in the
+          Options manager and shared across species; each attached option is granted as a feature on
+          Foundry export.
+        </p>
+      </div>
+      <EntityPicker
+        entities={entities}
+        selectedIds={selectedIds}
+        onChange={(next) => setFormData((prev) => ({ ...prev, speciesOptionIds: next }))}
+        searchPlaceholder="Search species options…"
+        noEntitiesText="No species options yet — create some via the Options button on the Species browser."
+        collapsible={false}
+        maxHeightClass="max-h-72"
+      />
     </div>
   );
 }
