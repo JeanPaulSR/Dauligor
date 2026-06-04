@@ -37,6 +37,7 @@ import {
 } from '../../lib/proficiencySelection';
 import { fetchCollection, fetchDocument, queryD1, upsertDocument, deleteDocument } from '../../lib/d1';
 import { normalizeFeatureData, denormalizeCompendiumData } from '../../lib/compendium';
+import { effectiveOptionLevel } from '../../lib/requirements';
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
 import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
 import { useBlockDraftPickerOptions } from '../../hooks/useBlockDraftPickerOptions';
@@ -2956,8 +2957,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                       />
                       <div className="space-y-0.5">
                         <span className="text-xs font-bold text-ink block">{item.name}</span>
-                        {item.levelPrerequisite > 0 && (
-                          <span className="text-[10px] text-gold/60 font-mono block">Level {item.levelPrerequisite}+</span>
+                        {effectiveOptionLevel(item) > 0 && (
+                          <span className="text-[10px] text-gold/60 font-mono block">Level {effectiveOptionLevel(item)}+</span>
                         )}
                         {isClassRestricted && (
                           <span className="text-[9px] text-blood font-bold uppercase block">Restricted by Item</span>

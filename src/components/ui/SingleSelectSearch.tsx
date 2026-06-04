@@ -35,6 +35,14 @@ export interface SingleSelectSearchOption {
   name: string;
   /** Optional secondary label (category, level, etc.) shown right-aligned. */
   hint?: string;
+  /**
+   * When true, this option is omitted from the default (empty-query)
+   * list and only appears once the user types a search query. Lets a
+   * caller de-clutter the default view with rarely-relevant entries
+   * (e.g. option groups locked to other classes) while keeping them
+   * discoverable via search. Always eligible once a query matches.
+   */
+  hiddenUntilSearch?: boolean;
 }
 
 export interface SingleSelectSearchProps {
@@ -102,7 +110,9 @@ export default function SingleSelectSearch({
           o.name.toLowerCase().includes(q) ||
           (o.hint?.toLowerCase().includes(q) ?? false),
         )
-      : options;
+      // Empty query: drop options flagged hidden-until-search so the
+      // default list stays focused; they reappear the moment a query is typed.
+      : options.filter(o => !o.hiddenUntilSearch);
     return matched.slice(0, MAX_VISIBLE);
   }, [options, search]);
 
@@ -291,7 +301,9 @@ export default function SingleSelectSearch({
               <p className="px-3 py-3 text-[10px] text-ink/25 italic">{noEntitiesText}</p>
             ) : filtered.length === 0 ? (
               <p className="px-3 py-3 text-[10px] text-ink/25 italic">
-                {emptyText || `No matches for "${search}".`}
+                {search.trim()
+                  ? (emptyText || `No matches for "${search}".`)
+                  : (emptyText || 'Type to search…')}
               </p>
             ) : (
               filtered.map((opt, i) => {

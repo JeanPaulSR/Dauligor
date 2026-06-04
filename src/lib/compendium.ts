@@ -309,10 +309,16 @@ export function denormalizeCompendiumData(row: any): any {
     // uses_max / uses_spent / uses_recovery) are already covered by
     // the features-table mapping above; reuse instead of duplicate.
     level_prerequisite: 'levelPrerequisite',
+    level_prereq_is_total: 'levelPrereqIsTotal',
     string_prerequisite: 'stringPrerequisite',
     is_repeatable: 'isRepeatable',
     class_ids: 'classIds',
     requires_option_ids: 'requiresOptionIds',
+    // requirements_tree is parsed by d1.ts on read (jsonFields); the alias
+    // exposes it in camelCase so option-item consumers (level gates,
+    // requirement summaries) can read `requirementsTree` consistently with
+    // the rest of the denormalized shape.
+    requirements_tree: 'requirementsTree',
     // spell prerequisites + Layer-2 GrantSpells/ExtendSpellList source attribution
     // (claude/kind-maxwell-bfa076 — Spellbook Manager).
     required_tags: 'requiredTags',

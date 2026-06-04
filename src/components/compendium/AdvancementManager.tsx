@@ -12,6 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 // "feature / feat" picker consistent with how authors pick prereqs.
 import SingleSelectSearch from '../ui/SingleSelectSearch';
 import { fetchCollection } from '../../lib/d1';
+import { effectiveOptionLevel } from '../../lib/requirements';
 import { toast } from 'sonner';
 import ReferenceSheetDialog from '../reference/ReferenceSheetDialog';
 import type { ReferenceContext } from '../../lib/referenceSyntax';
@@ -131,6 +132,23 @@ const ADVANCEMENT_INFO: Record<AdvancementType, { label: string, icon: any, colo
   ItemBumpUses: { label: 'Bump Uses', icon: <Plus className="w-4 h-4" />, color: 'text-teal-500' },
 };
 
+// "Grant Spells" and "Choose Spells" are the SAME stored advancement type
+// (GrantSpells), distinguished only by configuration.mode ('fixed' = auto-
+// grant, 'choice' = player picks N from a pool) — mirroring how Item Grant /
+// Item Choice relate. The type dropdown surfaces them as two entries via this
+// synthetic value; the stored type stays 'GrantSpells' and the runtime keys on
+// `mode`, so nothing downstream (resolver / export / builder) changes.
+const CHOOSE_SPELLS_VALUE = 'GrantSpells:choice';
+
+// Menu / list label for an advancement, accounting for the GrantSpells
+// fixed-vs-choice split above. Falls back to ADVANCEMENT_INFO.
+function advancementMenuLabel(type: string | undefined, configuration: any): string {
+  if (type === 'GrantSpells') {
+    return configuration?.mode === 'choice' ? 'Choose Spells' : 'Grant Spells';
+  }
+  return (type && ADVANCEMENT_INFO[type as AdvancementType]?.label) || type || '';
+}
+
 const ITEM_TYPE_LABELS: Record<string, string> = {
   any: 'Anything',
   feature: 'Feature',
@@ -138,7 +156,9 @@ const ITEM_TYPE_LABELS: Record<string, string> = {
   // already handled them, the missing piece was authoring.
   feat: 'Feat',
   'option-group': 'Unique Option Group',
-  spell: 'Spell (Placeholder)',
+  // Spells have dedicated GrantSpells / ExtendSpellList advancement types,
+  // so the spell choiceType placeholder was removed. Item grants/choices
+  // are still in development — keep the placeholder.
   item: 'Item (Placeholder)',
 };
 
@@ -317,8 +337,6 @@ function AdvancementManager({
   // in when they intentionally want to grant a racial / background
   // feature via ItemGrant.
   const [includeNonFeatTypes, setIncludeNonFeatTypes] = useState(false);
-  const [optionGroupSearch, setOptionGroupSearch] = useState('');
-  const [showAllOptionGroups, setShowAllOptionGroups] = useState(false);
   const setEditingAdv = (nextValue: React.SetStateAction<Partial<Advancement>>) => {
     setEditingAdvState((previousValue) => normalizeAdvancementForEditor(
       typeof nextValue === 'function'
@@ -337,8 +355,8 @@ function AdvancementManager({
     ? availableOptionItems
         .filter((item: any) => item.groupId === selectedOptionGroup.id)
         .sort((a: any, b: any) => {
-          const aLevel = Number(a.levelPrerequisite || 0);
-          const bLevel = Number(b.levelPrerequisite || 0);
+          const aLevel = effectiveOptionLevel(a);
+          const bLevel = effectiveOptionLevel(b);
           if (aLevel !== bLevel) return aLevel - bLevel;
           return String(a.name || '').localeCompare(String(b.name || ''));
         })
@@ -895,8 +913,6 @@ function AdvancementManager({
     toast.success(isNew ? 'Advancement added (save the parent to commit)' : 'Advancement updated (save the parent to commit)');
     setIsModalOpen(false);
     setFeatureSearch('');
-    setOptionGroupSearch('');
-    setShowAllOptionGroups(false);
   };
 
   if (isInsideFeature) {
@@ -922,7 +938,7 @@ function AdvancementManager({
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] font-mono text-gold/65">L{adv.level}</span>
                       <span className={`text-[10px] uppercase font-black tracking-tight ${ADVANCEMENT_INFO[adv.type]?.color}`}>
-                        {ADVANCEMENT_INFO[adv.type]?.label || adv.type}
+                        {advancementMenuLabel(adv.type, adv.configuration)}
                       </span>
                     </div>
                     <div className="text-xs font-serif font-bold text-ink truncate">
@@ -967,7 +983,7 @@ function AdvancementManager({
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-black uppercase text-ink/85 tracking-wider truncate">
-                  {adv.title || ADVANCEMENT_INFO[adv.type]?.label || adv.type}
+                  {adv.title || advancementMenuLabel(adv.type, adv.configuration)}
                 </span>
                 {adv.isBase && (
                   <span className="text-[8px] bg-gold/15 text-gold px-1.5 py-0.5 rounded font-black tracking-widest uppercase">Base</span>
@@ -1092,20 +1108,33 @@ function AdvancementManager({
                 <div className="space-y-1.5">
                   <label className="field-label">Advancement Type</label>
                   <Select
-                    value={editingAdv.type}
-                    onValueChange={(val: AdvancementType | null) => {
+                    value={editingAdv.type === 'GrantSpells' && editingAdv.configuration?.mode === 'choice' ? CHOOSE_SPELLS_VALUE : (editingAdv.type || '')}
+                    onValueChange={(val: string | null) => {
                       if (!val) return;
-                      const base: Partial<Advancement> = {
+                      // Grant Spells / Choose Spells both store as GrantSpells,
+                      // differing only by configuration.mode. Flipping between
+                      // the two preserves the existing config (keeps the chosen
+                      // spell pool); arriving from another type builds the
+                      // GrantSpells default first.
+                      if (val === CHOOSE_SPELLS_VALUE || val === 'GrantSpells') {
+                        const mode = val === CHOOSE_SPELLS_VALUE ? 'choice' : 'fixed';
+                        const baseConfig = editingAdv.type === 'GrantSpells'
+                          ? (editingAdv.configuration || {})
+                          : buildDefaultAdvancementConfiguration('GrantSpells', resolvedDefaultHitDie);
+                        setEditingAdv({ ...editingAdv, type: 'GrantSpells', configuration: { ...baseConfig, mode } });
+                        return;
+                      }
+                      const next = val as AdvancementType;
+                      setEditingAdv({
                         ...editingAdv,
-                        type: val,
-                        configuration: buildDefaultAdvancementConfiguration(val, resolvedDefaultHitDie)
-                      };
-                      setEditingAdv(base);
+                        type: next,
+                        configuration: buildDefaultAdvancementConfiguration(next, resolvedDefaultHitDie)
+                      });
                     }}
                   >
                     <SelectTrigger className="w-full h-9 bg-background/50 border-gold/15">
                       <SelectValue>
-                        {editingAdv.type ? (ADVANCEMENT_INFO[editingAdv.type]?.label || editingAdv.type) : 'Select type...'}
+                        {editingAdv.type ? advancementMenuLabel(editingAdv.type, editingAdv.configuration) : 'Select type...'}
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
@@ -1121,9 +1150,16 @@ function AdvancementManager({
                           if (key === 'Size') return !isFeatContext || parentContext === 'race';
                           return true;
                         })
-                        .map(([key, info]) => (
-                          <SelectItem key={key} value={key}>{info.label}</SelectItem>
-                        ))}
+                        // GrantSpells surfaces as two entries: Grant Spells
+                        // (mode 'fixed') and Choose Spells (mode 'choice').
+                        .flatMap(([key, info]) =>
+                          key === 'GrantSpells'
+                            ? [
+                                <SelectItem key="GrantSpells" value="GrantSpells">Grant Spells</SelectItem>,
+                                <SelectItem key={CHOOSE_SPELLS_VALUE} value={CHOOSE_SPELLS_VALUE}>Choose Spells</SelectItem>,
+                              ]
+                            : [<SelectItem key={key} value={key}>{info.label}</SelectItem>]
+                        )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1212,7 +1248,6 @@ function AdvancementManager({
                                 <SelectItem value="feature">Feature</SelectItem>
                                 <SelectItem value="feat">Feat</SelectItem>
                                 <SelectItem value="option-group">Unique Option Group</SelectItem>
-                                <SelectItem value="spell" disabled>Spell (Placeholder)</SelectItem>
                                 <SelectItem value="item" disabled>Item (Placeholder)</SelectItem>
                               </SelectContent>
                             </Select>
@@ -1226,71 +1261,34 @@ function AdvancementManager({
                                   : 'Grant Source'}
                             </label>
                             {editingAdv.configuration?.choiceType === 'option-group' ? (() => {
-                              const classFiltered = classId
-                                ? availableOptionGroups.filter(g => !g.classIds?.length || g.classIds.includes(classId))
-                                : availableOptionGroups;
-                              const q = optionGroupSearch.trim().toLowerCase();
-                              const searchFiltered = q
-                                ? availableOptionGroups.filter(g => (g.name || '').toLowerCase().includes(q))
-                                : availableOptionGroups;
+                              // Single searchable picker for the target option group.
+                              // Unrestricted groups + groups for THIS class show by
+                              // default; groups locked to other classes are hidden
+                              // until the author searches (hiddenUntilSearch), so
+                              // cross-class discovery (e.g. a Wizard subclass granting
+                              // Warlock invocations) still works without cluttering the
+                              // default list. This class's groups sort first.
+                              const forThisClass = (g: any) => !g.classIds?.length || (classId && g.classIds.includes(classId));
+                              const options = [...availableOptionGroups]
+                                .sort((a, b) => {
+                                  const own = (forThisClass(a) ? 0 : 1) - (forThisClass(b) ? 0 : 1);
+                                  return own !== 0 ? own : String(a.name || '').localeCompare(String(b.name || ''));
+                                })
+                                .map((g: any) => ({
+                                  id: g.id,
+                                  name: g.name || g.id,
+                                  // Locked to other classes → hidden until the author searches.
+                                  hiddenUntilSearch: !forThisClass(g),
+                                }));
                               return (
-                                <div className="space-y-1.5">
-                                  <Select
-                                    value={editingAdv.configuration?.optionGroupId || ''}
-                                    onValueChange={val => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, optionGroupId: val, excludedOptionIds: [] }})}
-                                  >
-                                    <SelectTrigger className="w-full h-9 bg-background/50 border-gold/15">
-                                      <SelectValue>
-                                        {editingAdv.configuration?.optionGroupId
-                                          ? (availableOptionGroups.find(g => g.id === editingAdv.configuration.optionGroupId)?.name || editingAdv.configuration.optionGroupId)
-                                          : 'Select a group...'}
-                                      </SelectValue>
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {classFiltered.map(g => (
-                                        <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
-                                      ))}
-                                      {classFiltered.length === 0 && <p className="px-2 py-2 text-[10px] italic text-ink/35">No groups assigned to this class.</p>}
-                                    </SelectContent>
-                                  </Select>
-                                  {/* Inline search-all panel */}
-                                  <div className="border border-gold/15 rounded-md overflow-hidden bg-background/20">
-                                    <div className="flex items-center gap-2 px-2 py-1.5 border-b border-gold/15">
-                                      <Search className="w-3 h-3 text-ink/45 shrink-0" />
-                                      <input
-                                        type="text"
-                                        placeholder="Search all option groups…"
-                                        value={optionGroupSearch}
-                                        onChange={e => { setOptionGroupSearch(e.target.value); setShowAllOptionGroups(true); }}
-                                        onFocus={() => setShowAllOptionGroups(true)}
-                                        className="flex-1 bg-transparent text-xs outline-none placeholder:text-ink/45 text-ink"
-                                      />
-                                      {optionGroupSearch && (
-                                        <button type="button" onClick={() => { setOptionGroupSearch(''); setShowAllOptionGroups(false); }} className="text-ink/35 hover:text-ink/65 text-sm leading-none">×</button>
-                                      )}
-                                    </div>
-                                    {showAllOptionGroups && (
-                                      <div className="max-h-40 overflow-y-auto divide-y divide-gold/5 custom-scrollbar">
-                                        {searchFiltered.map(g => (
-                                          <button
-                                            key={g.id}
-                                            type="button"
-                                            className="w-full text-left px-3 py-2 text-xs hover:bg-gold/15 flex items-center justify-between gap-2"
-                                            onClick={() => {
-                                              setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, optionGroupId: g.id, excludedOptionIds: [] }});
-                                              setShowAllOptionGroups(false);
-                                              setOptionGroupSearch('');
-                                            }}
-                                          >
-                                            <span className="font-bold text-ink">{g.name}</span>
-                                            {g.classIds?.length > 0 && <span className="text-[9px] text-gold/65 shrink-0">{g.classIds.length} class{g.classIds.length !== 1 ? 'es' : ''}</span>}
-                                          </button>
-                                        ))}
-                                        {searchFiltered.length === 0 && <p className="px-3 py-3 text-[10px] italic text-ink/35">No groups match.</p>}
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
+                                <SingleSelectSearch
+                                  value={editingAdv.configuration?.optionGroupId || ''}
+                                  onChange={(val) => setEditingAdv({ ...editingAdv, configuration: { ...editingAdv.configuration, optionGroupId: val, excludedOptionIds: [] } })}
+                                  options={options}
+                                  placeholder="Search option groups…"
+                                  noEntitiesText="No option groups available."
+                                  triggerClassName="w-full h-9"
+                                />
                               );
                             })() : (
                               <div className="h-9 rounded-md border border-gold/15 bg-background/35 px-3 flex items-center text-[10px] text-ink/45">
@@ -1429,7 +1427,7 @@ function AdvancementManager({
                                     <span className="text-[10px] font-black tracking-widest text-ink/45 uppercase">
                                       {editingAdv.configuration?.optional && optionalPoolIds.has(item.id) ? 'Yes' : 'No'}
                                     </span>
-                                    <span className="text-[10px] font-black tracking-widest text-ink/45 uppercase">Lvl {item.levelPrerequisite || 0}+</span>
+                                    <span className="text-[10px] font-black tracking-widest text-ink/45 uppercase">Lvl {effectiveOptionLevel(item)}+</span>
                                     <div>
                                       <p className="text-xs font-bold text-ink">{item.name}</p>
                                       {(item.featureId || item.sourceId) && (
@@ -1613,7 +1611,7 @@ function AdvancementManager({
                                 <Button type="button" variant="outline" size="sm" className="h-6 text-[10px] text-ink/65 border-gold/25 hover:bg-gold/15 hover:text-ink/85" onClick={() => {
                                   let excluded = new Set(editingAdv.configuration?.excludedOptionIds || []);
                                   selectedOptionItems.forEach(item => {
-                                    if ((item.levelPrerequisite || 0) > 0) excluded.add(item.id);
+                                    if (effectiveOptionLevel(item) > 0) excluded.add(item.id);
                                   });
                                   setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, excludedOptionIds: Array.from(excluded) }});
                                 }}>Exclude Options with Level Prerequisites</Button>
@@ -1652,7 +1650,7 @@ function AdvancementManager({
                                         }}
                                       />
                                     </label>
-                                    <span className="text-[10px] font-black tracking-widest text-ink/45 uppercase">Lvl {item.levelPrerequisite || 0}+</span>
+                                    <span className="text-[10px] font-black tracking-widest text-ink/45 uppercase">Lvl {effectiveOptionLevel(item)}+</span>
                                     <div>
                                       <p className="text-xs font-bold text-ink">{item.name}</p>
                                       {(item.featureId || item.sourceId) && (
@@ -1809,77 +1807,36 @@ function AdvancementManager({
                               <SelectItem value="feature">Feature</SelectItem>
                               <SelectItem value="feat">Feat</SelectItem>
                               <SelectItem value="option-group">Unique Option Group</SelectItem>
-                              <SelectItem value="spell" disabled>Spell (Placeholder)</SelectItem>
                               <SelectItem value="item" disabled>Item (Placeholder)</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
                         {editingAdv.configuration?.choiceType === 'option-group' && (() => {
-                          const classFiltered = classId
-                            ? availableOptionGroups.filter(g => !g.classIds?.length || g.classIds.includes(classId))
-                            : availableOptionGroups;
-                          const q = optionGroupSearch.trim().toLowerCase();
-                          const searchFiltered = q
-                            ? availableOptionGroups.filter(g => (g.name || '').toLowerCase().includes(q))
-                            : availableOptionGroups;
+                          // Single searchable picker — same pattern as the ItemGrant
+                          // branch above (this class's groups first, then the rest).
+                          const forThisClass = (g: any) => !g.classIds?.length || (classId && g.classIds.includes(classId));
+                          const options = [...availableOptionGroups]
+                            .sort((a, b) => {
+                              const own = (forThisClass(a) ? 0 : 1) - (forThisClass(b) ? 0 : 1);
+                              return own !== 0 ? own : String(a.name || '').localeCompare(String(b.name || ''));
+                            })
+                            .map((g: any) => ({
+                              id: g.id,
+                              name: g.name || g.id,
+                              // Locked to other classes → hidden until the author searches.
+                              hiddenUntilSearch: !forThisClass(g),
+                            }));
                           return (
                             <div className="space-y-1.5">
                               <label className="field-label">Option Group</label>
-                              <Select
+                              <SingleSelectSearch
                                 value={editingAdv.configuration?.optionGroupId || ''}
-                                onValueChange={val => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, optionGroupId: val, excludedOptionIds: [] }})}
-                              >
-                                <SelectTrigger className="w-full h-9 bg-background/50 border-gold/15">
-                                  <SelectValue>
-                                    {editingAdv.configuration?.optionGroupId
-                                      ? (availableOptionGroups.find(g => g.id === editingAdv.configuration.optionGroupId)?.name || editingAdv.configuration.optionGroupId)
-                                      : 'Select a group...'}
-                                  </SelectValue>
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {classFiltered.map(g => (
-                                    <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
-                                  ))}
-                                  {classFiltered.length === 0 && <p className="px-2 py-2 text-[10px] italic text-ink/35">No groups assigned to this class.</p>}
-                                </SelectContent>
-                              </Select>
-                              {/* Inline search-all panel */}
-                              <div className="border border-gold/15 rounded-md overflow-hidden bg-background/20">
-                                <div className="flex items-center gap-2 px-2 py-1.5 border-b border-gold/15">
-                                  <Search className="w-3 h-3 text-ink/45 shrink-0" />
-                                  <input
-                                    type="text"
-                                    placeholder="Search all option groups…"
-                                    value={optionGroupSearch}
-                                    onChange={e => { setOptionGroupSearch(e.target.value); setShowAllOptionGroups(true); }}
-                                    onFocus={() => setShowAllOptionGroups(true)}
-                                    className="flex-1 bg-transparent text-xs outline-none placeholder:text-ink/45 text-ink"
-                                  />
-                                  {optionGroupSearch && (
-                                    <button type="button" onClick={() => { setOptionGroupSearch(''); setShowAllOptionGroups(false); }} className="text-ink/35 hover:text-ink/65 text-sm leading-none">×</button>
-                                  )}
-                                </div>
-                                {showAllOptionGroups && (
-                                  <div className="max-h-40 overflow-y-auto divide-y divide-gold/5 custom-scrollbar">
-                                    {searchFiltered.map(g => (
-                                      <button
-                                        key={g.id}
-                                        type="button"
-                                        className="w-full text-left px-3 py-2 text-xs hover:bg-gold/15 flex items-center justify-between gap-2"
-                                        onClick={() => {
-                                          setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, optionGroupId: g.id, excludedOptionIds: [] }});
-                                          setShowAllOptionGroups(false);
-                                          setOptionGroupSearch('');
-                                        }}
-                                      >
-                                        <span className="font-bold text-ink">{g.name}</span>
-                                        {g.classIds?.length > 0 && <span className="text-[9px] text-gold/65 shrink-0">{g.classIds.length} class{g.classIds.length !== 1 ? 'es' : ''}</span>}
-                                      </button>
-                                    ))}
-                                    {searchFiltered.length === 0 && <p className="px-3 py-3 text-[10px] italic text-ink/35">No groups match.</p>}
-                                  </div>
-                                )}
-                              </div>
+                                onChange={(val) => setEditingAdv({ ...editingAdv, configuration: { ...editingAdv.configuration, optionGroupId: val, excludedOptionIds: [] } })}
+                                options={options}
+                                placeholder="Search option groups…"
+                                noEntitiesText="No option groups available."
+                                triggerClassName="w-full h-9"
+                              />
                             </div>
                           );
                         })()}
@@ -2038,7 +1995,7 @@ function AdvancementManager({
                                 <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto custom-scrollbar">
                                   {includedOptionItems.map((item: any) => (
                                     <div key={item.id} className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-3 px-3 py-2 items-start">
-                                      <span className="text-[10px] font-black tracking-widest text-ink/45 uppercase">Lvl {item.levelPrerequisite || 0}+</span>
+                                      <span className="text-[10px] font-black tracking-widest text-ink/45 uppercase">Lvl {effectiveOptionLevel(item)}+</span>
                                       <div>
                                         <p className="text-xs font-bold text-ink">{item.name}</p>
                                         {(item.featureId || item.sourceId) && (
@@ -2249,7 +2206,7 @@ function AdvancementManager({
                                 <Button type="button" variant="outline" size="sm" className="h-6 text-[10px] text-ink/65 border-gold/25 hover:bg-gold/15 hover:text-ink/85" onClick={() => {
                                   let excluded = new Set(editingAdv.configuration?.excludedOptionIds || []);
                                   selectedOptionItems.forEach(item => {
-                                    if ((item.levelPrerequisite || 0) > 0) excluded.add(item.id);
+                                    if (effectiveOptionLevel(item) > 0) excluded.add(item.id);
                                   });
                                   setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, excludedOptionIds: Array.from(excluded) }});
                                 }}>Exclude Options with Level Prerequisites</Button>
@@ -2276,7 +2233,7 @@ function AdvancementManager({
                                         onChange={e => toggleExcludedOption(item.id, e.target.checked)}
                                       />
                                     </label>
-                                    <span className="text-[10px] font-black tracking-widest text-ink/45 uppercase">Lvl {item.levelPrerequisite || 0}+</span>
+                                    <span className="text-[10px] font-black tracking-widest text-ink/45 uppercase">Lvl {effectiveOptionLevel(item)}+</span>
                                     <div>
                                       <p className="text-xs font-bold text-ink">{item.name}</p>
                                       {(item.featureId || item.sourceId) && (
@@ -3092,10 +3049,11 @@ function AdvancementManager({
               {/* ── GrantSpells (Layer-2, Spellbook Manager) ── */}
               {editingAdv.type === 'GrantSpells' && (
                 <fieldset className="border border-gold/15 rounded-md px-4 pt-1 pb-4">
-                  <legend className="section-label text-gold/65 px-1">Grant Spells</legend>
+                  <legend className="section-label text-gold/65 px-1">{editingAdv.configuration?.mode === 'choice' ? 'Choose Spells' : 'Grant Spells'}</legend>
                   <GrantSpellsConfigEditor
                     configuration={editingAdv.configuration || {}}
                     onChange={(next) => setEditingAdv({ ...editingAdv, configuration: next })}
+                    hideMode
                   />
                 </fieldset>
               )}
