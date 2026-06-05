@@ -60,28 +60,38 @@ The two `*_SECRET` values must match. See [../platform/env-vars.md](../platform/
 
 ### Bootstrap the local D1 database
 
-If `worker/.wrangler/state/` doesn't already contain a populated database, apply the full migration chain locally and pull a snapshot of remote D1's data:
+If `worker/.wrangler/state/` doesn't already contain a populated database, seed it from remote D1 — **schema first, then data** (do **not** apply migrations by hand; the numbered chain is ~60 timestamp migrations short of current):
 
 ```bash
-# 1. Apply the schema chain locally (skips the stillborn 0016).
 cd worker
-for f in migrations/0001_*.sql migrations/0002_*.sql migrations/0003_*.sql \
-         migrations/0004_*.sql migrations/0005_*.sql migrations/0006_*.sql \
-         migrations/0007_*.sql migrations/0008_*.sql migrations/0009_*.sql \
-         migrations/0010_*.sql migrations/0011_*.sql migrations/0012_*.sql \
-         migrations/0013_*.sql migrations/0014_*.sql migrations/0015_*.sql \
-         migrations/0017_*.sql; do
-  npx wrangler d1 execute dauligor-db --local --file="$f"
-done
-
-# 2. Snapshot remote → local so you have the same content as production.
-npx wrangler d1 export dauligor-db --remote --output=./remote-dump.sql --no-schema
-npx wrangler d1 execute dauligor-db --local --file=./remote-dump.sql
-rm ./remote-dump.sql
+# 1. Schema only (--no-data) — creates every table before any row is inserted.
+npx wrangler d1 export  dauligor-db --remote --no-data   -y --output=./schema.sql
+npx wrangler d1 execute dauligor-db --local              -y --file=./schema.sql
+# 2. Data only (--no-schema) — the dump carries `PRAGMA defer_foreign_keys=TRUE`,
+#    so with all tables already present, the inserts resolve cleanly.
+npx wrangler d1 export  dauligor-db --remote --no-schema -y --output=./data.sql
+npx wrangler d1 execute dauligor-db --local              -y --file=./data.sql
+rm ./schema.sql ./data.sql
 cd ..
 ```
 
+**Why split it — don't combine.** A single `wrangler d1 export --remote` (schema + data in one file) **fails** on re-import with `no such table: …`. D1's dump interleaves `CREATE TABLE` + that table's `INSERT`s per table, but an early table's foreign key `REFERENCES` a table created hundreds of lines later; the deferred FK check fires at batch-commit before that table exists. Schema-then-data guarantees every table exists before any insert. (`--no-data` = schema, `--no-schema` = data — confusingly named, but that's wrangler.) The `--remote` export is read-only on prod, so it's safe. Verified end-to-end: 84 tables, ~4.3k rows, byte-for-byte equal to remote, FK-clean, app boots against it with no errors.
+
 `scripts/_archive/migrate.js` is the historical Firestore→D1 importer; it is **not** part of the regular dev loop and should not be run today. Use the remote-snapshot pattern above to refresh local data instead.
+
+### Refreshing an existing local DB
+
+The bootstrap above is for an **empty / absent** local D1. It is **not idempotent** — the dump emits bare `CREATE TABLE` (no `IF NOT EXISTS`), so re-running it over a populated DB errors with `table … already exists` (and the data inserts would then hit PK conflicts). To pull newer prod data into a DB you've already seeded, **wipe and re-seed** — and **stop the stack first**, because `wrangler dev` holds the SQLite file open (you can't delete a directory Windows has locked):
+
+```bash
+# 1. Stop the dev stack (kill the worker + app so nothing holds the DB file).
+# 2. Wipe the local D1:
+rm -rf worker/.wrangler/state/v3/d1
+# 3. Re-run the schema-then-data seed from "Bootstrap the local D1 database" above.
+# 4. Restart the stack.
+```
+
+**Never run the seed against a *live* local DB.** A mid-flight import leaves the running worker reading a half-seeded database, and concurrent writes can deadlock on `SQLITE_BUSY`. (Read-only `wrangler d1 execute --local` queries against a live DB are fine — it's the bulk *write* that isn't.)
 
 ## For Claude Code agents
 
@@ -90,13 +100,17 @@ cd ..
 The full bring-up sequence — run these only when something below isn't already up:
 
 ```bash
-# 1. If worker/.wrangler/state/v3/d1 isn't populated, bootstrap local D1.
-#    Snapshot remote into local (faster + dodges the d1_migrations
-#    tracking gap that breaks `wrangler d1 migrations apply --local`):
+# 1. If worker/.wrangler/state/v3/d1 isn't populated, seed local D1 from remote —
+#    SCHEMA FIRST, THEN DATA. A combined `export` fails on re-import: a forward
+#    FK reference trips the deferred-FK check before its table is created. The
+#    split also dodges the d1_migrations tracking gap that breaks
+#    `wrangler d1 migrations apply --local`. The `--remote` export is read-only.
 cd worker
-npx wrangler d1 export dauligor-db --remote --output=./remote-snapshot.sql
-npx wrangler d1 execute dauligor-db --local --file=./remote-snapshot.sql
-rm ./remote-snapshot.sql
+npx wrangler d1 export  dauligor-db --remote --no-data   -y --output=./schema.sql
+npx wrangler d1 execute dauligor-db --local              -y --file=./schema.sql
+npx wrangler d1 export  dauligor-db --remote --no-schema -y --output=./data.sql
+npx wrangler d1 execute dauligor-db --local              -y --file=./data.sql
+rm ./schema.sql ./data.sql
 
 # 2. Confirm .env points at localhost:
 #       R2_WORKER_URL=http://localhost:8787
