@@ -72,10 +72,13 @@ interface ActivityEditorProps {
   itemTargets?: { id: string; name: string; hint?: string }[];
 }
 
+// Activity kinds in Foundry's add-activity order (CONFIG.DND5E.activityTypes,
+// alphabetical) with Foundry's exact labels (DND5E.<TYPE>.Title — note "Use"
+// for utility, "Cast"/"Check" not "Cast Spell"/"Ability Check").
 const ACTIVITY_KINDS: { kind: ActivityKind; label: string; icon: any }[] = [
   { kind: 'attack', label: 'Attack', icon: Swords },
-  { kind: 'cast', label: 'Cast Spell', icon: Wand2 },
-  { kind: 'check', label: 'Ability Check', icon: Dices },
+  { kind: 'cast', label: 'Cast', icon: Wand2 },
+  { kind: 'check', label: 'Check', icon: Dices },
   { kind: 'damage', label: 'Damage', icon: Zap },
   { kind: 'enchant', label: 'Enchant', icon: Sparkles },
   { kind: 'forward', label: 'Forward', icon: ArrowRight },
@@ -83,7 +86,7 @@ const ACTIVITY_KINDS: { kind: ActivityKind; label: string; icon: any }[] = [
   { kind: 'save', label: 'Save', icon: Shield },
   { kind: 'summon', label: 'Summon', icon: Boxes },
   { kind: 'transform', label: 'Transform', icon: RefreshCw },
-  { kind: 'utility', label: 'Utility', icon: Wrench },
+  { kind: 'utility', label: 'Use', icon: Wrench },
 ];
 
 // Option catalogs + parseCsv/parseNullableInteger helpers live in
@@ -108,12 +111,32 @@ const KIND_DESCRIPTIONS: Record<string, string> = {
   utility:   'Perform a custom roll or passive effect',
 };
 
-// Which kinds are "primary" (shown first) per context
-const PRIMARY_KINDS: Record<NonNullable<ActivityEditorProps['context']>, ActivityKind[]> = {
-  feature: ['attack', 'damage', 'save', 'heal', 'utility'],
-  spell:   ['attack', 'damage', 'save', 'heal'],
-  item:    ['attack', 'damage', 'save', 'heal', 'utility'],
-  feat:    ['attack', 'damage', 'save', 'heal', 'utility'],
+// Enchant restriction "Item Type" options — Foundry's enchantable item types
+// (CONFIG.Item, filtered to enchantableTypes) with "" = Any Enchantable Type.
+const ENCHANT_ITEM_TYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: '', label: 'Any Enchantable Type' },
+  { value: 'container', label: 'Container' },
+  { value: 'consumable', label: 'Consumable' },
+  { value: 'equipment', label: 'Equipment' },
+  { value: 'feat', label: 'Feature' },
+  { value: 'loot', label: 'Loot' },
+  { value: 'spell', label: 'Spell' },
+  { value: 'tool', label: 'Tool' },
+  { value: 'weapon', label: 'Weapon' },
+];
+// Item types Foundry treats as "physical" (their data model has a `quantity`) —
+// this is what gates the Allow Magical checkbox (plus the "Any" case).
+const ENCHANT_PHYSICAL_TYPES = new Set(['weapon', 'equipment', 'consumable', 'container', 'loot', 'tool']);
+// Per-Item-Type "Valid Categories" source collection (Foundry's itemCategories).
+// "Valid Properties" come from the item_properties table filtered by each row's
+// valid_types (Foundry's validProperties), so every enchantable type resolves.
+// All admin-managed (keys = Foundry trait keys), so the picks round-trip.
+const ENCHANT_CATEGORY_COLLECTION: Record<string, string> = {
+  weapon: 'weaponCategories',
+  equipment: 'armorCategories',
+  tool: 'toolCategories',
+  consumable: 'consumableCategories',
+  loot: 'lootCategories',
 };
 
 function formatActivationSummary(activity: SemanticActivity): string {
@@ -188,6 +211,15 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
   // homebrew types appear without a code change; falls back to the bundled
   // DAMAGE_TYPE_OPTIONS list if the table hasn't been seeded.
   const [damageTypeRows, setDamageTypeRows] = useState<{ id: string; identifier?: string; name: string; order?: number }[]>([]);
+  // Skills + tools feed the Check activity's "Associated Skills or Tools"
+  // multi-select (Foundry's check.associated). Identifiers are the Foundry
+  // skill/tool keys (acr, inv, thieves, …) so the picked set round-trips.
+  const [skills, setSkills] = useState<{ id: string; identifier?: string; name: string }[]>([]);
+  const [tools, setTools] = useState<{ id: string; identifier?: string; name: string }[]>([]);
+  // Enchant restriction Category/Property options keyed by collection name
+  // (weaponCategories / weaponProperties / armorCategories / toolCategories);
+  // surfaced per Item Type via ENCHANT_CATEGORY_COLLECTION + item_properties.valid_types.
+  const [restrictionData, setRestrictionData] = useState<Record<string, { id: string; identifier?: string; name: string }[]>>({});
 
   useEffect(() => {
     fetchCollection<{ id: string; identifier?: string; name: string }>('attributes')
@@ -199,6 +231,17 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
     fetchCollection<{ id: string; identifier?: string; name: string; order?: number }>('damageTypes')
       .then(setDamageTypeRows)
       .catch(() => {});
+    fetchCollection<{ id: string; identifier?: string; name: string }>('skills', { orderBy: 'name ASC' })
+      .then(setSkills)
+      .catch(() => {});
+    fetchCollection<{ id: string; identifier?: string; name: string }>('tools', { orderBy: 'name ASC' })
+      .then(setTools)
+      .catch(() => {});
+    (['weaponCategories', 'armorCategories', 'toolCategories', 'consumableCategories', 'lootCategories', 'itemProperties'] as const).forEach(coll => {
+      fetchCollection<{ id: string; identifier?: string; name: string }>(coll, { orderBy: 'name ASC' })
+        .then(rows => setRestrictionData(prev => ({ ...prev, [coll]: rows })))
+        .catch(() => {});
+    });
   }, []);
 
   const attrLabel = (id: string): string => {
@@ -217,6 +260,14 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
         .sort((a, b) => (a.order ?? 999) - (b.order ?? 999) || a.name.localeCompare(b.name))
         .map(d => ({ value: (d.identifier || d.id).toLowerCase(), label: d.name }))
     : DAMAGE_TYPE_OPTIONS;
+
+  // "Associated Skills or Tools" options for the Check activity — the app's
+  // skills + tools collections (identifier = the Foundry key), badged so the
+  // picker shows which is which (Foundry groups them in its dropdown).
+  const associatedOptions = [
+    ...skills.map(s => ({ id: s.identifier || s.id, name: s.name, hint: 'Skill' })),
+    ...tools.map(t => ({ id: t.identifier || t.id, name: t.name, hint: 'Tool' })),
+  ];
 
   const activityList = Array.isArray(activities) 
     ? activities 
@@ -266,7 +317,9 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
       };
       newActivity.damage = { parts: [], includeBase: true, critical: { allow: false, bonus: '' } };
     } else if (kind === 'check') {
-      newActivity.check = { ability: 'str', associated: [], dc: { calculation: 'spellcasting' } };
+      // Match Foundry's fresh check: no ability (derives from the skill), no
+      // associated skills/tools, DC as a custom formula (so it's editable).
+      newActivity.check = { ability: '', associated: [], dc: { calculation: '' } };
     } else if (kind === 'save') {
       // Match Foundry's fresh save: no challenge ability selected, DC derived
       // (spellcasting → formula disabled), damage half-on-save with no parts.
@@ -341,6 +394,12 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
   const showsTargeting = !!editingActivity?.target;
   const showsBaseDamageToggle = editingActivity?.kind === 'attack' && !!editingActivity.damage;
   const showsDamageCritical = !!editingActivity?.damage && editingActivity.kind !== 'save';
+  // Foundry gates the damage-part Scaling field on `activity.canScaleDamage`
+  // (consumption.scaling.allowed || isScaledScroll || item.system.canScaleDamage).
+  // Spells always scale (item.system.canScaleDamage === true); otherwise the
+  // activity's own consumption "Allow Scaling" toggle drives it. Hiding it on a
+  // plain damage activity avoids a dead field, matching Foundry's damage-part UI.
+  const canScaleDamage = !!editingActivity?.consumption?.scaling?.allowed || context === 'spell';
 
   const updateCurrent = (data: Partial<SemanticActivity>) => {
     if (!editingId) return;
@@ -443,9 +502,6 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
     });
   };
 
-  const primaryKinds = PRIMARY_KINDS[context];
-  const secondaryKinds = ACTIVITY_KINDS.filter(k => !primaryKinds.includes(k.kind));
-  const primaryKindEntries = ACTIVITY_KINDS.filter(k => primaryKinds.includes(k.kind));
 
   return (
     <div className="space-y-3">
@@ -542,9 +598,11 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
             <DialogTitle className="dialog-title">Add Activity</DialogTitle>
           </DialogHeader>
           <div className="p-3 overflow-y-auto max-h-[70vh]">
-            {/* Primary kinds for this context */}
+            {/* One flat, ungrouped list of every activity kind in Foundry's
+                order (ACTIVITY_KINDS = CONFIG.DND5E.activityTypes, alphabetical) —
+                Foundry's add-activity dialog has no "Advanced" delimiter. */}
             <div className="space-y-0.5">
-              {primaryKindEntries.map(({ kind, label, icon: Icon }) => (
+              {ACTIVITY_KINDS.map(({ kind, label, icon: Icon }) => (
                 <button
                   key={kind}
                   type="button"
@@ -561,35 +619,6 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                 </button>
               ))}
             </div>
-
-            {/* Secondary / advanced kinds */}
-            {secondaryKinds.length > 0 && (
-              <>
-                <div className="flex items-center gap-2 my-2.5">
-                  <div className="flex-1 border-t border-gold/15" />
-                  <span className="text-[9px] uppercase tracking-widest text-ink/25">Advanced</span>
-                  <div className="flex-1 border-t border-gold/15" />
-                </div>
-                <div className="space-y-0.5">
-                  {secondaryKinds.map(({ kind, label, icon: Icon }) => (
-                    <button
-                      key={kind}
-                      type="button"
-                      onClick={() => handleAddActivity(kind)}
-                      className="w-full flex items-center gap-3 px-3 py-2 rounded border border-transparent hover:border-gold/25 hover:bg-gold/5 transition-all text-left group"
-                    >
-                      <div className="w-6 h-6 rounded border border-gold/15 bg-gold/5 flex items-center justify-center shrink-0 group-hover:border-gold/35 transition-colors">
-                        <Icon className="w-3.5 h-3.5 text-gold/45 group-hover:text-gold/75 transition-colors" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-[11px] font-semibold text-ink/65 group-hover:text-ink/85 leading-none">{label}</p>
-                        <p className="text-[9px] text-ink/25 mt-0.5 leading-snug">{KIND_DESCRIPTIONS[kind]}</p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
           </div>
         </DialogContent>
       </Dialog>
@@ -960,32 +989,60 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                           )}
                           {editingActivity.check && (
                             <>
-                              <FieldRow label="Ability">
+                              <FieldRow label="Associated Skills or Tools" hint="Present ability checks using proficiency and bonuses with these skills or tools.">
                                 <Select
-                                  value={editingActivity.check.ability}
+                                  multiple
+                                  value={editingActivity.check.associated || []}
+                                  onValueChange={(vals: string[]) => handleUpdateActivity(editingId!, {
+                                    check: { ...editingActivity.check!, associated: vals }
+                                  })}
+                                >
+                                  <SelectTrigger className="field-input border-gold/15 text-xs">
+                                    <SelectValue placeholder="None">
+                                      {(value: unknown) => {
+                                        const arr = Array.isArray(value) ? (value as string[]) : [];
+                                        if (!arr.length) return '';
+                                        return arr.map(v => associatedOptions.find(o => o.id === v)?.name || v).join(', ');
+                                      }}
+                                    </SelectValue>
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectGroup>
+                                      <SelectLabel className="text-[10px] font-black uppercase tracking-wider text-gold/55 px-2 pt-2 pb-1">Skills</SelectLabel>
+                                      {skills.map(s => (
+                                        <SelectItem key={s.identifier || s.id} value={s.identifier || s.id}>{s.name}</SelectItem>
+                                      ))}
+                                    </SelectGroup>
+                                    <SelectGroup>
+                                      <SelectLabel className="text-[10px] font-black uppercase tracking-wider text-gold/55 px-2 pt-2 pb-1">Tools</SelectLabel>
+                                      {tools.map(t => (
+                                        <SelectItem key={t.identifier || t.id} value={t.identifier || t.id}>{t.name}</SelectItem>
+                                      ))}
+                                    </SelectGroup>
+                                  </SelectContent>
+                                </Select>
+                              </FieldRow>
+                              <FieldRow label="Check Ability" hint="Ability to use when making the check.">
+                                <Select
+                                  value={editingActivity.check.ability || '__blank'}
                                   onValueChange={val => handleUpdateActivity(editingId!, {
-                                    check: { ...editingActivity.check!, ability: val }
+                                    check: { ...editingActivity.check!, ability: val === '__blank' ? '' : val }
                                   })}
                                 >
                                   <SelectTrigger className="field-input border-gold/15 text-xs">
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    {ABILITY_OPTIONS.map(ability => (
-                                      <SelectItem key={ability} value={ability}>{attrLabel(ability)}</SelectItem>
-                                    ))}
+                                    <SelectItem value="__blank" className="min-h-7 items-center">{' '}</SelectItem>
+                                    <SelectItem value="spellcasting">Spellcasting Ability</SelectItem>
+                                    <SelectGroup>
+                                      <SelectLabel className="text-[10px] font-black uppercase tracking-wider text-gold/55 px-2 pt-2 pb-1">Abilities</SelectLabel>
+                                      {ABILITY_OPTIONS.map(ability => (
+                                        <SelectItem key={ability} value={ability}>{attrLabel(ability)}</SelectItem>
+                                      ))}
+                                    </SelectGroup>
                                   </SelectContent>
                                 </Select>
-                              </FieldRow>
-                              <FieldRow label="Associated Checks" hint="Comma-separated skill keys">
-                                <Input
-                                  value={(editingActivity.check.associated || []).join(', ')}
-                                  onChange={e => handleUpdateActivity(editingId!, {
-                                    check: { ...editingActivity.check!, associated: parseCsv(e.target.value) }
-                                  })}
-                                  className="field-input border-gold/15 font-mono text-xs"
-                                  placeholder="arc, inv, thieves"
-                                />
                               </FieldRow>
                             </>
                           )}
@@ -1091,7 +1148,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                             {parts.length === 0 && !isHeal ? (
                               <EmptyRow>None</EmptyRow>
                             ) : (
-                              <DamagePartEditor parts={parts} onChange={setParts} typeOptions={typeOptions} />
+                              <DamagePartEditor parts={parts} onChange={setParts} typeOptions={typeOptions} canScale={canScaleDamage} />
                             )}
                           </ActivitySection>
                         );
@@ -1238,56 +1295,247 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                         </ActivitySection>
                       )}
 
-                      {editingActivity.enchant && (
-                        <ActivitySection label="ENCHANTMENT">
-                          <FieldRow label="Enchant Self" hint="Target self instead of another item." inline>
-                            <Checkbox
-                              checked={editingActivity.enchant.self}
-                              onCheckedChange={checked => handleUpdateActivity(editingId!, {
-                                enchant: { ...editingActivity.enchant!, self: !!checked }
-                              })}
-                            />
-                          </FieldRow>
-                          <FieldRow label="Item Type">
-                            <Input
-                              value={editingActivity.enchant.restrictions?.type || ''}
-                              onChange={e => handleUpdateActivity(editingId!, {
-                                enchant: { ...editingActivity.enchant!, restrictions: { ...(editingActivity.enchant?.restrictions || {}), type: e.target.value } }
-                              })}
-                              className="field-input border-gold/15 text-xs"
-                              placeholder="weapon"
-                            />
-                          </FieldRow>
-                          <FieldRow label="Categories" hint="Comma-separated">
-                            <Input
-                              value={(editingActivity.enchant.restrictions?.categories || []).join(', ')}
-                              onChange={e => handleUpdateActivity(editingId!, {
-                                enchant: { ...editingActivity.enchant!, restrictions: { ...(editingActivity.enchant?.restrictions || {}), categories: parseCsv(e.target.value) } }
-                              })}
-                              className="field-input border-gold/15 text-xs"
-                              placeholder="martial, focus"
-                            />
-                          </FieldRow>
-                          <FieldRow label="Properties" hint="Comma-separated">
-                            <Input
-                              value={(editingActivity.enchant.restrictions?.properties || []).join(', ')}
-                              onChange={e => handleUpdateActivity(editingId!, {
-                                enchant: { ...editingActivity.enchant!, restrictions: { ...(editingActivity.enchant?.restrictions || {}), properties: parseCsv(e.target.value) } }
-                              })}
-                              className="field-input border-gold/15 text-xs"
-                              placeholder="versatile, finesse"
-                            />
-                          </FieldRow>
-                          <FieldRow label="Allow Magical Items" inline>
-                            <Checkbox
-                              checked={editingActivity.enchant.restrictions?.allowMagical}
-                              onCheckedChange={checked => handleUpdateActivity(editingId!, {
-                                enchant: { ...editingActivity.enchant!, restrictions: { ...(editingActivity.enchant?.restrictions || {}), allowMagical: !!checked } }
-                              })}
-                            />
-                          </FieldRow>
-                        </ActivitySection>
-                      )}
+                      {editingActivity.enchant && (() => {
+                        const ench = editingActivity.enchant;
+                        const assoc = ench.effects || [];
+                        const canAuthor = !!onAvailableEffectsChange;
+                        // Enchantments are enchantment-TYPE Active Effects on the parent
+                        // (Foundry filters item.effects by type === "enchantment"); the
+                        // activity associates them by id in `enchant.effects`.
+                        const enchantments = availableEffects.filter(fx => fx._id && fx.type === 'enchantment');
+                        const linkedIds = new Set(assoc.map(a => a._id));
+                        const unlinked = enchantments.filter(fx => !linkedIds.has(fx._id));
+                        const setAssoc = (next: typeof assoc) => handleUpdateActivity(editingId!, { enchant: { ...ench, effects: next } });
+                        const associate = (id: string) => { if (id && !linkedIds.has(id)) setAssoc([...assoc, { _id: id, level: { min: null, max: null } }]); };
+                        const dissociate = (id: string) => setAssoc(assoc.filter(a => a._id !== id));
+                        const patchLevel = (id: string, patch: { min?: number | null; max?: number | null }) =>
+                          setAssoc(assoc.map(a => a._id === id ? { ...a, level: { ...a.level, ...patch } } : a));
+                        // Riders: extra activities / effects / items this enchantment grants to
+                        // the enchanted item while applied (removed with it). Activities come from
+                        // this feature's OTHER activities; effects from its effects; items = UUIDs.
+                        const patchRiders = (id: string, patch: Record<string, unknown>) =>
+                          setAssoc(assoc.map(a => (a._id === id ? { ...a, riders: { ...((a as any).riders || {}), ...patch } } : a)) as typeof assoc);
+                        const siblingActivities = activityList.filter(act => act.id !== editingId).map(act => ({ id: act.id, name: act.name || act.kind }));
+                        const riderEffectOptions = availableEffects.filter(fx => fx._id).map(fx => ({ id: fx._id!, name: fx.name || 'Effect' }));
+                        const createEnchantment = () => {
+                          if (!onAvailableEffectsChange) return;
+                          const fx: FoundryActiveEffect = {
+                            _id: makeFoundryId(), name: 'New Enchantment', img: defaultEffectImg || null,
+                            description: '', disabled: false, transfer: false, tint: '#ffffff',
+                            changes: [], statuses: [], type: 'enchantment', sort: 0,
+                          };
+                          onAvailableEffectsChange([...availableEffects, fx]);
+                          setAssoc([...assoc, { _id: fx._id!, level: { min: null, max: null } }]);
+                        };
+                        const renameEnchantment = (id: string, name: string) =>
+                          onAvailableEffectsChange?.(availableEffects.map(fx => fx._id === id ? { ...fx, name } : fx));
+                        const deleteEnchantment = (id: string) => {
+                          onAvailableEffectsChange?.(availableEffects.filter(fx => fx._id !== id));
+                          dissociate(id);
+                        };
+                        const rType = ench.restrictions?.type || '';
+                        const isTypePhysical = !rType || ENCHANT_PHYSICAL_TYPES.has(rType);
+                        const setRestriction = (patch: Record<string, unknown>) =>
+                          handleUpdateActivity(editingId!, { enchant: { ...ench, restrictions: { ...(ench.restrictions || {}), ...patch } } });
+                        return (
+                          <>
+                            {/* ── Enchantments ── Foundry's "Enchantments" sub-tab: create/associate
+                                enchantment-type effects, each with an Additional Settings tray. */}
+                            <ActivitySection label="Enchantments" onAdd={canAuthor ? createEnchantment : undefined} addLabel="Create new enchantment">
+                              {unlinked.length > 0 && (
+                                <div className="py-2">
+                                  <SingleSelectSearch
+                                    value=""
+                                    onChange={(id) => associate(id)}
+                                    options={unlinked.map(fx => ({ id: fx._id!, name: fx.name || 'Enchantment' }))}
+                                    placeholder="Associate an existing enchantment…"
+                                    noEntitiesText="No unlinked enchantments."
+                                    triggerClassName="w-full"
+                                  />
+                                </div>
+                              )}
+                              {assoc.length === 0 ? (
+                                <EmptyRow>None</EmptyRow>
+                              ) : (
+                                assoc.map(a => {
+                                  const fx = availableEffects.find(e => e._id === a._id);
+                                  const expanded = expandedEffectId === a._id;
+                                  return (
+                                    <div key={a._id} className="py-2">
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-5 h-5 rounded border border-gold/15 overflow-hidden shrink-0 bg-gold/5 flex items-center justify-center">
+                                          {fx?.img
+                                            ? <img src={fx.img} alt="" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                                            : <Sparkles className="w-3 h-3 text-gold/50" />}
+                                        </div>
+                                        {canAuthor ? (
+                                          <Input
+                                            value={fx?.name || ''}
+                                            onChange={e => renameEnchantment(a._id, e.target.value)}
+                                            autoComplete="off"
+                                            className="flex-1 h-7 bg-background/40 border-gold/15 text-xs"
+                                            placeholder={fx ? 'Enchantment name' : 'Missing enchantment'}
+                                          />
+                                        ) : (
+                                          <span className={`flex-1 text-xs truncate ${fx ? 'text-ink/85' : 'text-blood/60 italic'}`}>{fx?.name || '(missing enchantment)'}</span>
+                                        )}
+                                        <button type="button" onClick={() => dissociate(a._id)} title="Remove from this activity" aria-label="Dissociate enchantment" className="shrink-0 w-5 h-5 flex items-center justify-center cursor-pointer rounded border border-gold/30 bg-gold/10 text-gold/70 hover:bg-gold/20 hover:text-gold transition-colors">
+                                          <Minus className="w-3.5 h-3.5" />
+                                        </button>
+                                        {canAuthor && (
+                                          <button type="button" onClick={() => deleteEnchantment(a._id)} title="Delete this enchantment entirely" aria-label="Delete enchantment" className="shrink-0 w-5 h-5 flex items-center justify-center cursor-pointer rounded border border-gold/30 bg-gold/10 text-gold/70 hover:bg-blood/15 hover:border-blood/45 hover:text-blood transition-colors">
+                                            <Trash2 className="w-3 h-3" />
+                                          </button>
+                                        )}
+                                      </div>
+                                      <button type="button" onClick={() => setExpandedEffectId(expanded ? null : a._id)} className="mt-1.5 flex items-center justify-center gap-1.5 w-full cursor-pointer text-[10px] uppercase tracking-wider font-black text-gold/55 hover:text-gold/85 transition-colors">
+                                        <Settings className="w-3 h-3" />
+                                        Additional Settings
+                                        <ChevronDown className={cn('w-3 h-3 transition-transform', expanded && 'rotate-180')} />
+                                      </button>
+                                      {expanded && (
+                                        <div className="mt-1 pl-1">
+                                          <FieldRow label="Level Limit" hint="Range of levels required to use this enchantment.">
+                                            <div className="flex items-center gap-2 w-full">
+                                              <Input type="number" value={a.level?.min ?? ''} placeholder="0" onChange={e => patchLevel(a._id, { min: e.target.value === '' ? null : parseInt(e.target.value) })} autoComplete="off" className="h-8 flex-1 min-w-0 bg-background/40 border-gold/15 text-center text-xs no-number-spin" />
+                                              <span className="text-[10px] uppercase tracking-wider text-ink/40 shrink-0 select-none">to</span>
+                                              <Input type="number" value={a.level?.max ?? ''} placeholder="∞" onChange={e => patchLevel(a._id, { max: e.target.value === '' ? null : parseInt(e.target.value) })} autoComplete="off" className="h-8 flex-1 min-w-0 bg-background/40 border-gold/15 text-center text-xs no-number-spin" />
+                                            </div>
+                                          </FieldRow>
+                                          <FieldRow label="Additional Activities" hint="These additional activities will be added to the enchanted item when this enchantment is applied, and removed when the enchantment is removed.">
+                                            <Select multiple value={((a as any).riders?.activity as string[]) || []} onValueChange={(vals: string[]) => patchRiders(a._id, { activity: vals })}>
+                                              <SelectTrigger className="field-input border-gold/15 text-xs">
+                                                <SelectValue placeholder="None">
+                                                  {(value: unknown) => {
+                                                    const arr = Array.isArray(value) ? (value as string[]) : [];
+                                                    if (!arr.length) return '';
+                                                    return arr.map(v => siblingActivities.find(o => o.id === v)?.name || v).join(', ');
+                                                  }}
+                                                </SelectValue>
+                                              </SelectTrigger>
+                                              <SelectContent>
+                                                {siblingActivities.length === 0
+                                                  ? <SelectItem value="__none" disabled>No other activities</SelectItem>
+                                                  : siblingActivities.map(act => <SelectItem key={act.id} value={act.id}>{act.name}</SelectItem>)}
+                                              </SelectContent>
+                                            </Select>
+                                          </FieldRow>
+                                          <FieldRow label="Additional Effects" hint="These additional effects will be added to the enchanted item when this enchantment is applied, and removed when the enchantment is removed.">
+                                            <Select multiple value={((a as any).riders?.effect as string[]) || []} onValueChange={(vals: string[]) => patchRiders(a._id, { effect: vals })}>
+                                              <SelectTrigger className="field-input border-gold/15 text-xs">
+                                                <SelectValue placeholder="None">
+                                                  {(value: unknown) => {
+                                                    const arr = Array.isArray(value) ? (value as string[]) : [];
+                                                    if (!arr.length) return '';
+                                                    return arr.map(v => riderEffectOptions.find(o => o.id === v)?.name || v).join(', ');
+                                                  }}
+                                                </SelectValue>
+                                              </SelectTrigger>
+                                              <SelectContent>
+                                                {riderEffectOptions.length === 0
+                                                  ? <SelectItem value="__none" disabled>No effects</SelectItem>
+                                                  : riderEffectOptions.map(fx => <SelectItem key={fx.id} value={fx.id}>{fx.name}</SelectItem>)}
+                                              </SelectContent>
+                                            </Select>
+                                          </FieldRow>
+                                          <FieldRow label="Additional Items" hint="These additional items will be added to the creature when one of its items is enchanted, and will be removed if the enchantment is ever removed.">
+                                            <Input
+                                              value={Array.isArray((a as any).riders?.item) ? (a as any).riders.item.join(', ') : ((a as any).riders?.item || '')}
+                                              onChange={e => patchRiders(a._id, { item: parseCsv(e.target.value) })}
+                                              autoComplete="off"
+                                              placeholder="Item UUIDs (comma-separated)"
+                                              className="field-input border-gold/15 text-xs font-mono"
+                                            />
+                                          </FieldRow>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </ActivitySection>
+                            {/* ── Restrictions ── Foundry's "Restrictions" sub-tab. */}
+                            <ActivitySection label="Restrictions">
+                              <FieldRow label="Item Type" hint="Type of item to which this enchantment can be applied.">
+                                <Select
+                                  value={rType || '__any'}
+                                  onValueChange={val => setRestriction({ type: val === '__any' ? '' : val })}
+                                >
+                                  <SelectTrigger className="field-input border-gold/15 text-xs">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {ENCHANT_ITEM_TYPE_OPTIONS.map(o => (
+                                      <SelectItem key={o.value || '__any'} value={o.value || '__any'}>{o.label}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </FieldRow>
+                              {(() => {
+                                // Valid Categories (per-type collection) + Valid Properties
+                                // (item_properties filtered by valid_types) — Foundry's
+                                // categoryOptions / propertyOptions, for every enchantable type.
+                                const catColl = ENCHANT_CATEGORY_COLLECTION[rType];
+                                const catRows = (catColl ? restrictionData[catColl] : undefined) || [];
+                                const propRows = (restrictionData['itemProperties'] || []).filter((p: any) => {
+                                  try { return JSON.parse(p.valid_types || '[]').includes(rType); } catch { return false; }
+                                });
+                                if (!catRows.length && !propRows.length) return null;
+                                return (
+                                  <>
+                                    {catRows.length > 0 && (
+                                      <FieldRow label="Valid Categories" hint="Specific item categories to which this enchantment can be applied.">
+                                        <Select multiple value={ench.restrictions?.categories || []} onValueChange={(vals: string[]) => setRestriction({ categories: vals })}>
+                                          <SelectTrigger className="field-input border-gold/15 text-xs">
+                                            <SelectValue placeholder="Any">
+                                              {(value: unknown) => {
+                                                const arr = Array.isArray(value) ? (value as string[]) : [];
+                                                return arr.length ? arr.map(v => catRows.find(r => (r.identifier || r.id) === v)?.name || v).join(', ') : '';
+                                              }}
+                                            </SelectValue>
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {catRows.map(r => (
+                                              <SelectItem key={r.identifier || r.id} value={r.identifier || r.id}>{r.name}</SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      </FieldRow>
+                                    )}
+                                    {propRows.length > 0 && (
+                                      <FieldRow label="Valid Properties" hint="Specific item properties which must be present for this enchantment to be applied.">
+                                        <Select multiple value={ench.restrictions?.properties || []} onValueChange={(vals: string[]) => setRestriction({ properties: vals })}>
+                                          <SelectTrigger className="field-input border-gold/15 text-xs">
+                                            <SelectValue placeholder="Any">
+                                              {(value: unknown) => {
+                                                const arr = Array.isArray(value) ? (value as string[]) : [];
+                                                return arr.length ? arr.map(v => propRows.find((r: any) => (r.identifier || r.id) === v)?.name || v).join(', ') : '';
+                                              }}
+                                            </SelectValue>
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {propRows.map((r: any) => (
+                                              <SelectItem key={r.identifier || r.id} value={r.identifier || r.id}>{r.name}</SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      </FieldRow>
+                                    )}
+                                  </>
+                                );
+                              })()}
+                              {isTypePhysical && (
+                                <FieldRow label="Allow Magical" hint="Allow physical items that are already magical to be enchanted." inline>
+                                  <Checkbox
+                                    checked={ench.restrictions?.allowMagical}
+                                    onCheckedChange={checked => setRestriction({ allowMagical: !!checked })}
+                                  />
+                                </FieldRow>
+                              )}
+                            </ActivitySection>
+                          </>
+                        );
+                      })()}
 
                       {editingActivity.activity && (
                         <ActivitySection label="FORWARD EXECUTION">
@@ -1550,8 +1798,9 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                           associate dropdown links existing effects; each row has a
                           dissociate (−) and delete (🗑) control plus a collapsible
                           "Additional Settings" tray holding the Level Limit. Deep
-                          edits (changes/keys) still happen in the Effects tab. */}
-                      {(() => {
+                          edits (changes/keys) still happen in the Effects tab. Hidden for the
+                          enchant kind, which has its own Enchantments manager above. */}
+                      {editingActivity.kind !== 'enchant' && (() => {
                         const assoc = editingActivity.effects || [];
                         const canAuthor = !!onAvailableEffectsChange;
                         const linkedIds = new Set(assoc.map(a => a._id));
