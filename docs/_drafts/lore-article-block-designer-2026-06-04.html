@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lore Article Block Designer — Design Spec</title>
+<style>
+  :root{--ink:#1a1a1a;--ink65:rgba(26,26,26,.65);--ink45:rgba(26,26,26,.45);--gold:#c5a059;--goldsoft:rgba(197,160,89,.15);--goldline:rgba(197,160,89,.3);--bg:#f0ece1;--card:#fffdf8;--blood:#8a2f2f;--green:#2f6b43;}
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1100px 500px at 85% -10%,rgba(197,160,89,.10),transparent 60%),var(--bg);color:var(--ink);font-family:-apple-system,"Segoe UI",Roboto,system-ui,sans-serif;line-height:1.6;}
+  .wrap{max-width:920px;margin:0 auto;padding:36px 28px 90px;}
+  h1{font-family:"Iowan Old Style",Georgia,serif;font-size:32px;margin:.2em 0 .1em;letter-spacing:-.01em}
+  h2{font-family:"Iowan Old Style",Georgia,serif;font-size:22px;margin:1.8em 0 .4em;border-bottom:1px solid var(--goldline);padding-bottom:.25em;color:var(--gold)}
+  h3{font-family:Georgia,serif;font-size:16px;margin:1.3em 0 .3em}
+  .eyebrow{font-size:10px;letter-spacing:.22em;text-transform:uppercase;font-weight:800;color:var(--gold)}
+  .sub{color:var(--ink65);font-size:15px;max-width:68ch}
+  code{background:var(--goldsoft);padding:1px 5px;border-radius:4px;font-size:.88em}
+  .card{background:var(--card);border:1px solid var(--goldline);border-radius:12px;padding:14px 18px;margin:12px 0}
+  .lock{display:flex;gap:10px;align-items:flex-start;background:rgba(47,107,67,.08);border:1px solid rgba(47,107,67,.3);border-radius:10px;padding:12px 16px;margin:10px 0}
+  .lock b{color:var(--green)}
+  table{border-collapse:collapse;width:100%;font-size:13.5px;margin:8px 0}
+  th,td{border:1px solid var(--goldline);padding:7px 10px;text-align:left;vertical-align:top}
+  th{background:var(--goldsoft);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--gold)}
+  ul,ol{padding-left:22px}
+  li{margin:.25em 0}
+  .phase{border-left:3px solid var(--gold);padding:4px 0 4px 16px;margin:14px 0}
+  .phase .n{font-size:10px;letter-spacing:.16em;text-transform:uppercase;font-weight:800;color:var(--gold)}
+  .phase h3{margin:.1em 0 .2em}
+  .tag{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:999px;border:1px solid var(--goldline);color:var(--gold);background:var(--goldsoft)}
+  .warn{color:var(--blood)}
+  .muted{color:var(--ink45)}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">Design Spec · Dauligor · 2026-06-04</div>
+  <h1>Lore Article Block Designer</h1>
+  <p class="sub">Repurpose the campaign homepage block builder into a fullscreen designer for authoring
+  lore articles as block layouts. Lore articles first; system articles later (their reference-backed
+  entries need extra work).</p>
+
+  <div class="lock">
+    <div>✅</div>
+    <div><b>Decisions locked.</b>
+      <ul style="margin:.3em 0">
+        <li><b>Standalone fullscreen designer</b> — one designer that folds all article settings into a side panel; the body is the block canvas. (Replaces the current tabbed <code>LoreEditor</code>.)</li>
+        <li><b>Migrate all bodies to blocks</b> — every existing article's BBCode <code>content</code> is wrapped into a single text block; blocks become the one body model; the viewer always renders blocks.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>1 · Core insight — nothing is lost</h2>
+  <p>The block model's <code>text</code> block already stores <b>BBCode</b>. So every authoring capability
+  survives the move, just relocated:</p>
+  <table>
+    <tr><th>Capability</th><th>Where it lives after</th></tr>
+    <tr><td>BBCode formatting, <code>@kind[id]</code> entity refs, <code>&amp;kind[id]</code> rule refs, <code>[era]</code>/<code>[campaign]</code> conditional spans</td><td>Inside <code>text</code> blocks (rendered per-block via <code>BBCodeRenderer</code>) — unchanged</td></tr>
+    <tr><td>Secrets (reveal-per-campaign), visibility junctions (era/campaign), draft status</td><td>Article-level systems — kept exactly as-is, surfaced in the designer's settings panel</td></tr>
+    <tr><td>Metadata sub-tables (character/location/org/deity), tags, parent hierarchy, images, dm_notes, excerpt</td><td>Article-level — moved into the settings panel; same tables, same save queries</td></tr>
+  </table>
+  <p>The builder only changes <b>how the body is authored &amp; laid out</b> — it does not touch the
+  surrounding article machinery.</p>
+
+  <h2>2 · Architecture — generalize the block engine</h2>
+  <p>The homepage builder is ~95% campaign-agnostic. Rather than copy it (and per the project's
+  "extract a shared primitive, don't bend a specific one" principle — cf. <code>FocalImageField</code>),
+  we <b>generalize it into a reusable layout engine</b> that both campaigns and lore articles (and later
+  system articles) consume.</p>
+  <table>
+    <tr><th>Today (campaign-only)</th><th>Generalized</th></tr>
+    <tr><td><code>src/lib/campaignHome.ts</code></td><td><code>src/lib/layoutBlocks.ts</code> — generic block model + serialize/parse; the campaign-only <code>recommended</code> block is registered by the campaign consumer, not baked in</td></tr>
+    <tr><td><code>CampaignHomeEditor.tsx</code> (props: <code>campaignId</code>, <code>campaignName</code>)</td><td><code>LayoutEditor</code> — props: <code>blocks</code>, <code>onChange</code>, <code>allowedTypes</code>, and a host-supplied settings panel slot</td></tr>
+    <tr><td><code>CampaignHomeBlocks.tsx</code> (prop: <code>recommendedLore</code>)</td><td><code>LayoutBlocks</code> renderer — block-type renderers are a registry; <code>recommended</code> stays a campaign-supplied renderer</td></tr>
+    <tr><td><code>fetch/saveCampaignHomeBlocks(campaignId)</code></td><td>Generic <code>fetch/saveLayout(loadUrl, saveUrl)</code>; campaigns &amp; articles pass their own endpoints</td></tr>
+  </table>
+  <p class="muted">Phase 1 refactors campaigns onto the generic engine with <b>zero behavior change</b>
+  (the live homepage keeps working), which de-risks everything after it.</p>
+
+  <h2>3 · The standalone designer (UX)</h2>
+  <p>Fullscreen, like the campaign homepage builder, but the side panel now owns the whole article.</p>
+  <ul>
+    <li><b>Canvas (center)</b> — the block layout: live preview + structure, drag-to-reorder, add/duplicate/delete, nesting (group/columns). Same interactions as the homepage builder.</li>
+    <li><b>Settings panel (side)</b> — collapsible sections folding the old <code>LoreEditor</code> tabs:
+      <ul>
+        <li><b>Details</b> — title, slug, category, folder, parent, excerpt, draft/published toggle</li>
+        <li><b>Visibility</b> — era &amp; campaign scope multi-selects</li>
+        <li><b>Imagery</b> — header / card / preview images (via the shared <code>FocalImageField</code>)</li>
+        <li><b>Taxonomy</b> — tags; per-category metadata sub-form (character/location/org/deity)</li>
+        <li><b>Secrets</b> — existing reveal-per-campaign secret manager</li>
+        <li><b>Storyteller Notes</b> — <code>dm_notes</code> (staff-only)</li>
+      </ul>
+    </li>
+    <li><b>Block inspector</b> — when a block is selected, the side panel shows that block's controls (same Inspector as today).</li>
+  </ul>
+
+  <h2>4 · Block set for articles</h2>
+  <p>Reuse the existing types; drop the campaign-only one; leave room to add article-flavored blocks.</p>
+  <ul>
+    <li><b>Keep:</b> <code>hero</code>, <code>text</code> (the workhorse — BBCode), <code>image</code>, <code>divider</code>, <code>callout</code>, <code>group</code>, <code>columns</code>/<code>column</code>, <code>entity-feature</code>, <code>entity-row</code> (embed class/spell/item/article cards in lore — genuinely useful).</li>
+    <li><b>Drop:</b> <code>recommended</code> (campaign-specific).</li>
+    <li><b>Later candidates:</b> <code>quote</code>, <code>infobox</code> (metadata card), <code>gallery</code>, and a block-level <code>secret</code>/era-scope wrapper (defer — inline <code>[era]</code>/<code>[campaign]</code> still works in text).</li>
+  </ul>
+
+  <h2>5 · Storage</h2>
+  <p>Mirror the proven <code>campaign_home_blocks</code> shape so the generalized save/load idiom (replace-all rows) is reused verbatim:</p>
+  <div class="card mono">
+    CREATE TABLE lore_article_blocks (<br>
+    &nbsp;&nbsp;id TEXT PRIMARY KEY,<br>
+    &nbsp;&nbsp;article_id TEXT NOT NULL REFERENCES lore_articles(id) ON DELETE CASCADE,<br>
+    &nbsp;&nbsp;block_type TEXT NOT NULL,<br>
+    &nbsp;&nbsp;"order" INTEGER NOT NULL DEFAULT 0,<br>
+    &nbsp;&nbsp;config TEXT,  -- JSON; containers nest children in config.children<br>
+    &nbsp;&nbsp;created_at / updated_at<br>
+    );  -- INDEX (article_id, "order")
+  </div>
+  <p><code>lore_articles.content</code> is <b>retained but demoted</b>: no longer the render source. We keep
+  it populated with a plaintext/BBCode mirror (derived from text blocks) so existing <b>search, excerpts,
+  and the <code>lore_links</code> mention-extraction</b> keep working without a rewrite. (Alternative: move
+  search to the blocks — out of scope for v1.)</p>
+
+  <h2>6 · API</h2>
+  <ul>
+    <li><code>GET /api/lore/articles/:id/blocks</code> and <code>PUT …/blocks</code> — mirror the campaign home-blocks handlers (staff-gated writes, replace-all). Include blocks in the existing article packet (<code>GET /api/lore/articles/:id</code>) so the viewer gets them in one round-trip.</li>
+    <li>On article save, derive the <code>content</code> mirror from the text blocks server-side (keeps mention-extraction + search intact).</li>
+  </ul>
+
+  <h2>7 · Migration (one-time, both DBs)</h2>
+  <ol>
+    <li>For every <code>lore_articles</code> row with non-empty <code>content</code>: insert one <code>lore_article_blocks</code> row — a <code>text</code> block whose <code>config.body</code> = the existing content.</li>
+    <li>Idempotent guard: skip articles that already have block rows.</li>
+    <li>Apply to <b>local</b> (dev worker) and <b>remote</b> (one file via <code>d1 execute --remote --file</code>, per the migration-landmine rule — never <code>migrations apply</code>).</li>
+  </ol>
+  <p class="muted">After migration, articles render identically (one text block == the old body), so it's a safe no-visual-change cutover.</p>
+
+  <div class="lock"><div>🔎</div><div><b>Preservation check (verified 2026-06-04, prod D1).</b>
+    11 articles, all with content; <b>none</b> use <code>[era]</code>/<code>[campaign]</code> conditional
+    blocks, entity/rule refs, wiki-links, or tables today (largest body ~33&nbsp;KB). So every existing
+    article wraps losslessly into one text block and renders identically — the migration is a clean,
+    no-visual-change cutover for the current set.</div></div>
+
+  <div class="card"><b class="warn">Required for correctness:</b> the generic <code>LayoutBlocks</code>
+  text renderer MUST thread <code>viewContext</code> (era / campaign / isStaff) into
+  <code>BBCodeRenderer</code>. The current homepage renderer (<code>CampaignHomeBlocks.tsx:242</code>)
+  calls <code>&lt;BBCodeRenderer content={block.body}/&gt;</code> with <b>no</b> context — fine for
+  homepages, but for articles that omission would stop <code>[era]</code>/<code>[campaign]</code> spans
+  from being filtered (restricted content could leak). No current article triggers this, but the engine
+  must support it before anyone authors conditional content. Added to Phase&nbsp;1 + Phase&nbsp;4.</div>
+
+  <h2>8 · Viewer changes</h2>
+  <p><code>LoreArticle.tsx</code>: replace the single <code>&lt;BBCodeRenderer content={article.content}/&gt;</code>
+  body with the generic <code>&lt;LayoutBlocks blocks={article.blocks}/&gt;</code>. Secrets, mentions,
+  metadata card, dm_notes, sidebar — all unchanged. Text blocks render via <code>BBCodeRenderer</code>
+  <b>with the article's <code>viewContext</code> threaded in</b> (see the correctness note in §7), so
+  refs/conditionals/secrets-in-text behave exactly as before.</p>
+
+  <h2>9 · System articles (deferred — why)</h2>
+  <p>System pages (<code>system_pages</code>/<code>system_page_entries</code>) differ: entries can be
+  <b>entity-backed</b> (<code>source_kind</code>/<code>source_id</code>), they're site-wide (no campaign
+  scope), and they use the <code>&amp;kind[id]</code> rule-reference sigil with a master-detail editor.
+  The block engine will extend to them, but their reference-backed entries need bespoke block types
+  (e.g. an "entry" block bound to a source row) — a later phase once the lore flow is proven.</p>
+
+  <h2>10 · Phased plan</h2>
+  <div class="phase"><div class="n">Phase 1 · Generalize</div><h3>Extract the layout engine</h3>
+    <code>layoutBlocks.ts</code> + <code>LayoutEditor</code> + <code>LayoutBlocks</code>; refactor the campaign homepage to consume them. Add an optional <code>viewContext</code> prop threaded into text blocks (homepage passes none → unchanged; articles will pass theirs). <b>No behavior change</b> — verify the live homepage still works. <span class="tag">foundation</span></div>
+  <div class="phase"><div class="n">Phase 2 · Storage + API + migrate</div><h3>Article blocks persistence</h3>
+    <code>lore_article_blocks</code> table; blocks sub-route + packet inclusion; <code>content</code> mirror on save; one-time migration (local + remote). <span class="tag warn">DB change · remote apply</span></div>
+  <div class="phase"><div class="n">Phase 3 · Designer</div><h3>Standalone fullscreen article designer</h3>
+    New designer page; fold <code>LoreEditor</code>'s tabs into the settings panel; canvas = LayoutEditor (article block set). Route <code>/wiki/edit/:id</code> → designer. Keep the old editor reachable until parity. <span class="tag">UI</span></div>
+  <div class="phase"><div class="n">Phase 4 · Viewer</div><h3>Render blocks</h3>
+    <code>LoreArticle</code> renders <code>LayoutBlocks</code>; retire the BBCode-body render path. <span class="tag">UI</span></div>
+  <div class="phase"><div class="n">Phase 5 · Polish + retire</div><h3>Cleanup</h3>
+    Remove the old tabbed editor once parity is confirmed; add article-flavored blocks if wanted; docs. <span class="tag">cleanup</span></div>
+  <div class="phase"><div class="n">Later</div><h3>System articles</h3>
+    Extend the engine with entity-backed entry blocks + <code>&amp;</code>-reference handling. <span class="tag">future</span></div>
+
+  <h2>11 · Risks &amp; open questions</h2>
+  <ul>
+    <li><b>Generalizing live code (Phase 1)</b> — the campaign homepage is in production; the refactor must be behavior-preserving. Mitigation: extract first, point campaigns at it, verify, then build lore on top.</li>
+    <li><b>The <code>content</code> mirror</b> — deriving plaintext/BBCode from a block tree for search/mentions. Decision needed: mirror on save (recommended) vs. migrate search to blocks (bigger).</li>
+    <li><b>Folding 4 tabs of article settings into one side panel</b> is the bulk of Phase 3 UI work — metadata sub-forms per category are non-trivial.</li>
+    <li><b>Secrets in a block world</b> — kept as the existing separate system for v1; a block-level secret type is a later nicety.</li>
+    <li><b>Per-block era/campaign scoping</b> — could become block metadata later; for v1, inline <code>[era]</code>/<code>[campaign]</code> in text blocks is the path.</li>
+  </ul>
+</div>
+</body>
+</html>

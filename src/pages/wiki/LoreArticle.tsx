@@ -1,10 +1,12 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { toast } from 'sonner';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { auth, OperationType, reportClientError } from '../../lib/firebase';
 import { fetchCollection } from '../../lib/d1';
 import { fetchLoreArticle, upsertLoreSecret, deleteLoreArticle } from '../../lib/lore';
 import BBCodeRenderer from '@/components/BBCodeRenderer';
+import LayoutBlocks from '@/components/layout/LayoutBlocks';
+import { makeBlock, parseLayoutBlock, type LayoutBlock } from '@/lib/layoutBlocks';
 import { useWikiPreview } from '@/lib/wikiPreviewContext';
 import { ClassImageStyle, DEFAULT_DISPLAY } from '@/components/compendium/ClassImageEditor';
 import { Button } from '@/components/ui/button';
@@ -108,6 +110,19 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
       isStaff: false
     };
   })();
+
+  // Article body = block layout. Parse the packet's block rows; fall back to
+  // wrapping the legacy `content` in a single text block (articles authored in
+  // the classic editor after the migration have no block rows yet), so every
+  // article renders regardless of how it was created.
+  const bodyBlocks: LayoutBlock[] = useMemo(() => {
+    const raw = Array.isArray(article?.blocks) ? article.blocks : [];
+    const parsed = raw.map(parseLayoutBlock).filter(Boolean) as LayoutBlock[];
+    if (parsed.length > 0) return parsed;
+    const tb = makeBlock('text', 'body') as any;
+    tb.body = typeof article?.content === 'string' ? article.content : '';
+    return [tb];
+  }, [article]);
 
   useEffect(() => {
     if (!id) return;
@@ -551,9 +566,18 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
                   ref={contentRef}
                   onMouseOver={handleContentMouseOver}
                   onMouseOut={handleContentMouseOut}
-                  className="prose prose-invert max-w-none prose-gold leading-relaxed font-sans text-ink/95"
+                  className="max-w-none"
                 >
-                  <BBCodeRenderer content={article.content} viewContext={viewContext} />
+                  {/* Body renders from the block layout. Text blocks carry the
+                      article's prose typography via `textClassName`; structural
+                      blocks (image / callout / columns / entity cards) render via
+                      LayoutBlocks. viewContext filters [era]/[campaign] spans. */}
+                  <LayoutBlocks
+                    blocks={bodyBlocks}
+                    viewContext={viewContext}
+                    className="space-y-8"
+                    textClassName="prose prose-invert max-w-none prose-gold leading-relaxed font-sans text-ink/95"
+                  />
                 </div>
 
                 {/* Storyteller Notes */}

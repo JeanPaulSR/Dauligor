@@ -3,11 +3,12 @@ import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ChevronRight } from 'lucide-react';
 import BBCodeRenderer from '../BBCodeRenderer';
+import type { BbcodeViewContext } from '../../lib/bbcode';
 import { resolveReference, type RefResolved } from '../../lib/references';
 import {
   isContainer, isPlaceholderRef, clampSpan, PLACEHOLDER_TITLE, PLACEHOLDER_DESCRIPTION,
-  type EntityRef, type HomeBlock,
-} from '../../lib/campaignHome';
+  type EntityRef, type LayoutBlock,
+} from '../../lib/layoutBlocks';
 
 interface ArticleLite {
   id: string;
@@ -18,11 +19,23 @@ interface ArticleLite {
 }
 
 interface Props {
-  blocks: HomeBlock[];
-  /** The campaign's auto-recommended article (resolved by Home from
-   *  recommended_lore_id), used by `recommended` blocks in `auto` mode. */
-  recommendedLore: ArticleLite | null;
-  campaignName: string;
+  blocks: LayoutBlock[];
+  /** The campaign's auto-recommended article (resolved by the host from
+   *  recommended_lore_id), used by `recommended` blocks in `auto` mode. Surfaces
+   *  that have no recommended block (e.g. lore articles) omit this. */
+  recommendedLore?: ArticleLite | null;
+  /** Used by `recommended` blocks for the default heading ("Recommended for …"). */
+  campaignName?: string;
+  /** Threaded into every BBCode render so `[era]`/`[campaign]` conditional spans
+   *  and reference visibility resolve to the viewing context. Homepages pass none
+   *  (no conditional content); articles pass their era/campaign/staff context so
+   *  restricted spans are filtered rather than leaked. */
+  viewContext?: BbcodeViewContext;
+  /** Override the outer container classes (default = the homepage container). */
+  className?: string;
+  /** Extra classes for `text` block prose — lets a host (e.g. the lore article
+   *  page) apply its own typography (prose-gold etc.). Homepages pass none. */
+  textClassName?: string;
 }
 
 /** Strip BBCode tags + collapse whitespace for a plain card excerpt. */
@@ -39,10 +52,10 @@ const refKey = (r: EntityRef) => `${r.kind}::${r.id}`;
 
 /** Walk the block tree and collect every EntityRef that needs resolving.
  *  Placeholder refs are skipped — they don't point at a real entity. */
-function collectRefs(blocks: HomeBlock[]): EntityRef[] {
+function collectRefs(blocks: LayoutBlock[]): EntityRef[] {
   const out: EntityRef[] = [];
   const push = (r: EntityRef | null) => { if (r && !isPlaceholderRef(r)) out.push(r); };
-  const visit = (b: HomeBlock) => {
+  const visit = (b: LayoutBlock) => {
     // Guard against a malformed/unparseable block sneaking into a children array
     // (e.g. an undefined from a missing parse case) — skip rather than crash.
     if (!b || typeof b !== 'object') return;
@@ -55,10 +68,6 @@ function collectRefs(blocks: HomeBlock[]): EntityRef[] {
   return out;
 }
 
-/** A card view-model: either resolved entity data, or a placeholder (an
- *  intentional GM placeholder, OR a real ref whose target doesn't exist yet —
- *  both render a graceful card instead of vanishing, matching the legacy
- *  "(Article not found)" tile). */
 /** A resolved card view-model. `title`/`description` are the EFFECTIVE strings
  *  after applying per-card overrides (ref.title / ref.description) over the
  *  resolved entity, falling back to the Placeholder / Coming-Soon defaults.
@@ -123,7 +132,7 @@ function PlaceholderCard({ title, description, card }: { title: string; descript
 /** One entity card — image-led, links to the entity's route when it has one.
  *  `title`/`description` are the effective strings (per-card override, else the
  *  resolved entity's name / plain summary). */
-function EntityCard({ data, card, excerpt, title, description }: { data: RefResolved; card: 'image' | 'compact' | 'list'; excerpt: boolean; title: string; description: string }) {
+function EntityCard({ data, card, excerpt, title, description, viewContext }: { data: RefResolved; card: 'image' | 'compact' | 'list'; excerpt: boolean; title: string; description: string; viewContext?: BbcodeViewContext }) {
   if (card === 'list') {
     const inner = (
       <span className="flex items-center gap-2 py-2 border-b border-gold/15 text-ink/85 hover:text-gold transition-colors">
@@ -157,7 +166,7 @@ function EntityCard({ data, card, excerpt, title, description }: { data: RefReso
               supporting copy) on BBCodeRenderer's `.prose` element — the same way
               the rest of the app styles BBCode (e.g. ClassView `body-text`).
               `text-sm` (standard token) + `line-clamp-3` ride alongside. */}
-          <BBCodeRenderer content={description} className="description-text text-sm line-clamp-3" />
+          <BBCodeRenderer content={description} viewContext={viewContext} className="description-text text-sm line-clamp-3" />
         </div>
       )}
     </div>
@@ -167,10 +176,12 @@ function EntityCard({ data, card, excerpt, title, description }: { data: RefReso
     : <div className="group h-full">{body}</div>;
 }
 
-/** Renders a campaign's custom homepage from its (possibly nested) block list.
- *  Resolves every entity ref once up front via `resolveReference`, then renders
- *  synchronously from the resolved map. */
-export default function CampaignHomeBlocks({ blocks, recommendedLore, campaignName }: Props) {
+/** Renders a (possibly nested) block list. Resolves every entity ref once up
+ *  front via `resolveReference`, then renders synchronously from the resolved
+ *  map. Generic across surfaces — campaign homepages, lore articles, etc.; the
+ *  campaign-only `recommended` block stays dormant unless `recommendedLore` is
+ *  supplied. */
+export default function LayoutBlocks({ blocks, recommendedLore = null, campaignName = '', viewContext, className, textClassName }: Props) {
   const refs = useMemo(() => collectRefs(blocks), [blocks]);
   // Stable signature of WHICH entities are referenced — so the resolve effect
   // fires only when the set of refs changes, not on every unrelated edit
@@ -213,7 +224,7 @@ export default function CampaignHomeBlocks({ blocks, recommendedLore, campaignNa
       }
     : null;
 
-  const renderBlock = (block: HomeBlock): React.ReactNode => {
+  const renderBlock = (block: LayoutBlock): React.ReactNode => {
     switch (block.blockType) {
       case 'hero': {
         const alignClass = block.align === 'left' ? 'text-left' : block.align === 'right' ? 'text-right' : 'text-center';
@@ -229,7 +240,7 @@ export default function CampaignHomeBlocks({ blocks, recommendedLore, campaignNa
                 // hardcoded `italic`. Only the centered variant gets the readable
                 // max-width; left/right stay full-width so text-align positions them.
                 <div className={`text-xl text-ink/75 font-serif ${block.align === 'center' ? 'max-w-3xl mx-auto' : ''}`}>
-                  <BBCodeRenderer content={block.subtitle} />
+                  <BBCodeRenderer content={block.subtitle} viewContext={viewContext} />
                 </div>
               )}
             </motion.div>
@@ -239,7 +250,7 @@ export default function CampaignHomeBlocks({ blocks, recommendedLore, campaignNa
 
       case 'text': {
         const w = block.width === 'narrow' ? 'max-w-2xl' : block.width === 'wide' ? 'max-w-none' : 'max-w-4xl';
-        return <section key={block.id} className={w}><BBCodeRenderer content={block.body} /></section>;
+        return <section key={block.id} className={w}><BBCodeRenderer content={block.body} viewContext={viewContext} className={textClassName} /></section>;
       }
 
       case 'image': {
@@ -285,7 +296,7 @@ export default function CampaignHomeBlocks({ blocks, recommendedLore, campaignNa
             ? ({ 2: 'md:col-span-2', 3: 'md:col-span-3', 4: 'md:col-span-2 lg:col-span-4' }[span] || '')
             : '';
           const inner = vm.data
-            ? <EntityCard key={i} data={vm.data} card={block.card} excerpt={block.card === 'list' ? false : block.excerpt} title={vm.title} description={vm.description} />
+            ? <EntityCard key={i} data={vm.data} card={block.card} excerpt={block.card === 'list' ? false : block.excerpt} title={vm.title} description={vm.description} viewContext={viewContext} />
             : <PlaceholderCard key={i} title={vm.title} description={vm.description} card={block.card} />;
           return spanCls ? <div key={i} className={spanCls}>{inner}</div> : inner;
         };
@@ -320,7 +331,7 @@ export default function CampaignHomeBlocks({ blocks, recommendedLore, campaignNa
                 // `.prose` element (theme-remapped supporting copy), plus layout
                 // utilities (margins + centered max-width are layout, not colour,
                 // so no theme concern). Matches how the app styles BBCode.
-                <BBCodeRenderer content={block.body} className="description-text mt-2 mb-6 max-w-2xl mx-auto" />
+                <BBCodeRenderer content={block.body} viewContext={viewContext} className="description-text mt-2 mb-6 max-w-2xl mx-auto" />
               )}
               {hasButton && (
                 <Link to={block.buttonLink}>
@@ -436,7 +447,7 @@ export default function CampaignHomeBlocks({ blocks, recommendedLore, campaignNa
     }
   };
 
-  return <div className="max-w-6xl mx-auto space-y-16 pb-20">{blocks.map(renderBlock)}</div>;
+  return <div className={className ?? 'max-w-6xl mx-auto space-y-16 pb-20'}>{blocks.map(renderBlock)}</div>;
 }
 
 /** The recommended / featured wide card body. */

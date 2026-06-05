@@ -102,6 +102,48 @@ function safeJson(raw: string): any {
   }
 }
 
+// Article block set = the campaign-homepage set MINUS `recommended` (which is
+// campaign-specific). Owned by the app (LayoutBlockType); enforced here on write.
+const ALLOWED_ARTICLE_BLOCK_TYPES = new Set([
+  "hero",
+  "text",
+  "image",
+  "divider",
+  "callout",
+  "entity-row",
+  "entity-feature",
+  "group",
+  "columns",
+  "column",
+]);
+
+/**
+ * Concatenate every text block's BBCode body (depth-first, container children
+ * included) into one string. Kept in `lore_articles.content` as a search /
+ * excerpt / recommended-card mirror now that blocks are the render source.
+ * Accepts the wire shape (`{ block_type, config }` with config an object or a
+ * JSON string) so it works on both the PUT payload and DB rows.
+ */
+function deriveContentMirror(blocks: any[]): string {
+  const out: string[] = [];
+  const visit = (b: any): void => {
+    if (!b || typeof b !== "object") return;
+    const type = b.block_type ?? b.blockType;
+    const cfg = b.config && typeof b.config === "object"
+      ? b.config
+      : typeof b.config === "string"
+        ? safeJson(b.config) ?? {}
+        : b;
+    if (type === "text" && typeof cfg?.body === "string" && cfg.body.trim()) {
+      out.push(cfg.body.trim());
+    }
+    const children = Array.isArray(cfg?.children) ? cfg.children : [];
+    children.forEach(visit);
+  };
+  blocks.forEach(visit);
+  return out.join("\n\n");
+}
+
 /**
  * Drop the dm_notes/dmNotes pair from a row. Keep BOTH the snake_case
  * and the camelCase alias because consumers downstream of
@@ -236,7 +278,7 @@ async function handleSingle(staff: boolean, articleId: string): Promise<Response
     throw new HttpError(404, "Article not found.");
   }
 
-  const [metadata, tagRes, eraRes, campRes, mentionsRes] = await Promise.all([
+  const [metadata, tagRes, eraRes, campRes, mentionsRes, blocksRes] = await Promise.all([
     loadMetadata(articleId, baseRow.category),
     executeD1QueryInternal({
       sql: "SELECT tag_id FROM lore_article_tags WHERE article_id = ?",
@@ -256,9 +298,17 @@ async function handleSingle(staff: boolean, articleId: string): Promise<Response
             WHERE l.target_id = ?`,
       params: [articleId],
     }),
+    executeD1QueryInternal({
+      sql: `SELECT id, article_id, block_type, "order", config
+              FROM lore_article_blocks
+             WHERE article_id = ?
+             ORDER BY "order" ASC`,
+      params: [articleId],
+    }),
   ]);
 
   const tags = (Array.isArray(tagRes?.results) ? tagRes.results : []).map((r: any) => r.tag_id);
+  const blocks = Array.isArray(blocksRes?.results) ? blocksRes.results : [];
   const visibilityEraIds = (Array.isArray(eraRes?.results) ? eraRes.results : []).map((r: any) => r.era_id);
   const visibilityCampaignIds = (Array.isArray(campRes?.results) ? campRes.results : []).map((r: any) => r.campaign_id);
   const mentions = (Array.isArray(mentionsRes?.results) ? mentionsRes.results : [])
@@ -287,6 +337,7 @@ async function handleSingle(staff: boolean, articleId: string): Promise<Response
     tags,
     visibilityEraIds,
     visibilityCampaignIds,
+    blocks,
   };
 
   return Response.json({ article, parent, mentions });
@@ -329,6 +380,31 @@ async function handleSecrets(staff: boolean, uid: string, articleId: string): Pr
   return Response.json({ secrets: visible });
 }
 
+async function handleArticleBlocks(staff: boolean, articleId: string): Promise<Response> {
+  const check = await executeD1QueryInternal({
+    sql: "SELECT status FROM lore_articles WHERE id = ? LIMIT 1",
+    params: [articleId],
+  });
+  const rows = Array.isArray(check?.results) ? check.results : [];
+  if (rows.length === 0) {
+    throw new HttpError(404, "Article not found.");
+  }
+  // Same visibility rule as the article itself — non-staff see published only.
+  if (!staff && (rows[0] as any).status !== "published") {
+    throw new HttpError(404, "Article not found.");
+  }
+
+  const result = await executeD1QueryInternal({
+    sql: `SELECT id, article_id, block_type, "order", config
+            FROM lore_article_blocks
+           WHERE article_id = ?
+           ORDER BY "order" ASC`,
+    params: [articleId],
+  });
+  const blocks = Array.isArray(result?.results) ? result.results : [];
+  return Response.json({ blocks });
+}
+
 /* -------------------------------------------------------------------------- */
 /* Write handlers — PUT / DELETE for articles and secrets                      */
 /* -------------------------------------------------------------------------- */
@@ -354,6 +430,54 @@ async function handleArticleUpsert(request: Request, decoded: any, articleId: st
   await executeD1QueryInternal(queries);
 
   return Response.json({ ok: true, id: articleId });
+}
+
+async function handleArticleBlocksPut(request: Request, articleId: string): Promise<Response> {
+  const check = await executeD1QueryInternal({
+    sql: "SELECT id FROM lore_articles WHERE id = ? LIMIT 1",
+    params: [articleId],
+  });
+  if (!Array.isArray(check?.results) || check.results.length === 0) {
+    throw new HttpError(404, "Article not found.");
+  }
+
+  const body = (await request.json().catch(() => ({}))) as any;
+  const blocks = Array.isArray(body?.blocks) ? body.blocks : [];
+
+  // Replace-all: clear the article's blocks, then re-insert in array order.
+  // Plain INSERT after DELETE (NOT INSERT OR REPLACE), `order` from array index —
+  // the same idiom campaign home-blocks use.
+  const now = new Date().toISOString();
+  const queries: Array<{ sql: string; params: any[] }> = [
+    { sql: "DELETE FROM lore_article_blocks WHERE article_id = ?", params: [articleId] },
+  ];
+
+  blocks.forEach((b: any, index: number) => {
+    const blockType = typeof b?.block_type === "string" ? b.block_type : "";
+    if (!ALLOWED_ARTICLE_BLOCK_TYPES.has(blockType)) {
+      throw new HttpError(400, `Invalid article block type \`${blockType}\`.`);
+    }
+    const id = typeof b?.id === "string" && b.id ? b.id : crypto.randomUUID();
+    const config = b?.config && typeof b.config === "object" ? JSON.stringify(b.config) : "{}";
+    queries.push({
+      sql: `INSERT INTO lore_article_blocks (id, article_id, block_type, "order", config, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      params: [id, articleId, blockType, index, config, now, now],
+    });
+  });
+
+  // Keep lore_articles.content as a BBCode mirror of the text blocks so search,
+  // excerpts, and recommended-card fallbacks keep working now that blocks are the
+  // render source. (Mention/lore_links extraction stays client-driven via the
+  // article save payload — the designer recomputes links from this same content.)
+  const mirror = deriveContentMirror(blocks);
+  queries.push({
+    sql: "UPDATE lore_articles SET content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+    params: [mirror, articleId],
+  });
+
+  await executeD1QueryInternal(queries);
+  return Response.json({ ok: true, count: blocks.length });
 }
 
 async function handleArticleDelete(articleId: string): Promise<Response> {
@@ -454,6 +578,9 @@ export const onRequest = async (context: any): Promise<Response> => {
       if (path.length === 3 && path[0] === "articles" && path[2] === "secrets") {
         return await handleSecrets(staff, uid, path[1]);
       }
+      if (path.length === 3 && path[0] === "articles" && path[2] === "blocks") {
+        return await handleArticleBlocks(staff, path[1]);
+      }
       return Response.json(
         { error: `Unknown lore route: /${path.join("/")}` },
         { status: 404 },
@@ -468,6 +595,14 @@ export const onRequest = async (context: any): Promise<Response> => {
     if (path.length === 2 && path[0] === "articles") {
       if (request.method === "PUT") return await handleArticleUpsert(request, decoded, path[1]);
       if (request.method === "DELETE") return await handleArticleDelete(path[1]);
+      return Response.json(
+        { error: `Method ${request.method} not allowed.` },
+        { status: 405 },
+      );
+    }
+
+    if (path.length === 3 && path[0] === "articles" && path[2] === "blocks") {
+      if (request.method === "PUT") return await handleArticleBlocksPut(request, path[1]);
       return Response.json(
         { error: `Method ${request.method} not allowed.` },
         { status: 405 },

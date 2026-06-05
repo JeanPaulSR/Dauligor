@@ -1,10 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import {
-  fetchCampaignHomeBlocks,
-  defaultHomeBlocks,
-  type HomeBlock,
-} from '../../lib/campaignHome';
-import CampaignHomeBlocks from '../../components/campaign/CampaignHomeBlocks';
+import { fetchCampaignHomeBlocks, defaultHomeBlocks } from '../../lib/campaignHome';
+import type { LayoutBlock } from '../../lib/layoutBlocks';
+import LayoutBlocks from '../../components/layout/LayoutBlocks';
 import { getSessionToken } from "../../lib/auth";
 
 /**
@@ -22,7 +19,7 @@ export default function Home({ userProfile }: { userProfile: any }) {
   const [recommendedLore, setRecommendedLore] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   // Saved campaign-specific layout (empty = fall back to the default below).
-  const [homeBlocks, setHomeBlocks] = useState<HomeBlock[]>([]);
+  const [homeBlocks, setHomeBlocks] = useState<LayoutBlock[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -78,7 +75,7 @@ export default function Home({ userProfile }: { userProfile: any }) {
   // default with no active campaign, drop the `recommended` block (it has no
   // article to show and the legacy home only showed it for an active campaign).
   // Memoised so the default's fresh uuids stay stable across re-renders.
-  const blocksToRender = useMemo<HomeBlock[]>(() => {
+  const blocksToRender = useMemo<LayoutBlock[]>(() => {
     if (homeBlocks.length > 0) return homeBlocks;
     const def = defaultHomeBlocks();
     return activeCampaign ? def : def.filter((b) => b.blockType !== 'recommended');
@@ -117,7 +114,7 @@ export default function Home({ userProfile }: { userProfile: any }) {
   }
 
   return (
-    <CampaignHomeBlocks
+    <LayoutBlocks
       blocks={blocksToRender}
       recommendedLore={recommendedLore}
       campaignName={activeCampaign?.name ?? ''}
