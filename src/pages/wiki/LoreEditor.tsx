@@ -594,10 +594,10 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                   Press <kbd className="mx-1 px-1.5 py-0.5 text-[9px] bg-ink/5 border border-ink/15 rounded font-mono">Ctrl+Space</kbd> inside the editor to insert an article link
                 </span>
                 <Popover>
-                  <PopoverTrigger asChild>
-                    <span role="button" tabIndex={0} className="inline-flex items-center justify-center rounded-lg border bg-background hover:bg-muted h-6 gap-1 px-2 border-gold/25 text-gold/65 hover:text-gold text-[10px] gap-1.5 transition-all select-none cursor-pointer">
-                      <Globe className="w-2.5 h-2.5" /> Insert Era/Campaign Block
-                    </span>
+                  {/* Base UI's PopoverTrigger composes via `render`, NOT Radix's
+                      `asChild`; render={<span/>} avoids the nested-button hydration bug. */}
+                  <PopoverTrigger render={<span role="button" tabIndex={0} className="inline-flex items-center justify-center rounded-lg border bg-background hover:bg-muted h-6 gap-1 px-2 border-gold/25 text-gold/65 hover:text-gold text-[10px] gap-1.5 transition-all select-none cursor-pointer" />}>
+                    <Globe className="w-2.5 h-2.5" /> Insert Era/Campaign Block
                   </PopoverTrigger>
                   <PopoverContent className="w-72 p-3 space-y-3" align="end">
                     <p className="label-text text-[10px] text-ink/45">Wraps selected text in a conditional block. Only players in the matching era/campaign will see this content.</p>
@@ -853,27 +853,27 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                   <span className="font-normal text-ink/35">— visible to campaigns in these eras</span>
                 </label>
                 <Popover>
-                  <PopoverTrigger asChild>
-                    <div role="button" tabIndex={0} className="w-full flex items-start gap-2 min-h-9 px-3 py-2 rounded-md border border-gold/15 bg-background/60 hover:border-gold/35 transition-colors text-left select-none cursor-pointer">
-                      <Globe className="w-3.5 h-3.5 text-ink/35 mt-0.5 shrink-0" />
-                      {(formData.visibilityEraIds?.length ?? 0) === 0 ? (
-                        <span className="text-xs text-ink/35 italic">All eras (no restriction)</span>
-                      ) : (
-                        <div className="flex flex-wrap gap-1">
-                          {formData.visibilityEraIds.map((eId: string) => {
-                            const era = eras.find((e: any) => e.id === eId);
-                            return era ? (
-                              <span key={eId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gold/15 border border-gold/35 text-gold text-[10px] font-medium">
-                                {era.name}
-                                <button type="button" onClick={(e) => { e.stopPropagation(); setFormData({ ...formData, visibilityEraIds: formData.visibilityEraIds.filter((i: string) => i !== eId) }); }} className="hover:text-blood">
-                                  <X className="w-2.5 h-2.5" />
-                                </button>
-                              </span>
-                            ) : null;
-                          })}
-                        </div>
-                      )}
-                    </div>
+                  {/* Base UI's PopoverTrigger composes via `render`, NOT Radix's
+                      `asChild`; render={<div/>} avoids the nested-button hydration bug. */}
+                  <PopoverTrigger render={<div role="button" tabIndex={0} className="w-full flex items-start gap-2 min-h-9 px-3 py-2 rounded-md border border-gold/15 bg-background/60 hover:border-gold/35 transition-colors text-left select-none cursor-pointer" />}>
+                    <Globe className="w-3.5 h-3.5 text-ink/35 mt-0.5 shrink-0" />
+                    {(formData.visibilityEraIds?.length ?? 0) === 0 ? (
+                      <span className="text-xs text-ink/35 italic">All eras (no restriction)</span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {formData.visibilityEraIds.map((eId: string) => {
+                          const era = eras.find((e: any) => e.id === eId);
+                          return era ? (
+                            <span key={eId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gold/15 border border-gold/35 text-gold text-[10px] font-medium">
+                              {era.name}
+                              <button type="button" onClick={(e) => { e.stopPropagation(); setFormData({ ...formData, visibilityEraIds: formData.visibilityEraIds.filter((i: string) => i !== eId) }); }} className="hover:text-blood">
+                                <X className="w-2.5 h-2.5" />
+                              </button>
+                            </span>
+                          ) : null;
+                        })}
+                      </div>
+                    )}
                   </PopoverTrigger>
                   <PopoverContent className="w-72 p-0" align="start">
                     <Command>
@@ -910,27 +910,27 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                   <span className="font-normal text-ink/35">— visible only to these campaigns</span>
                 </label>
                 <Popover>
-                  <PopoverTrigger asChild>
-                    <div role="button" tabIndex={0} className="w-full flex items-start gap-2 min-h-9 px-3 py-2 rounded-md border border-gold/15 bg-background/60 hover:border-gold/35 transition-colors text-left select-none cursor-pointer">
-                      <Shield className="w-3.5 h-3.5 text-ink/35 mt-0.5 shrink-0" />
-                      {(formData.visibilityCampaignIds?.length ?? 0) === 0 ? (
-                        <span className="text-xs text-ink/35 italic">All campaigns (no restriction)</span>
-                      ) : (
-                        <div className="flex flex-wrap gap-1">
-                          {formData.visibilityCampaignIds.map((cId: string) => {
-                            const camp = campaigns.find((c: any) => c.id === cId);
-                            return camp ? (
-                              <span key={cId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/15 border border-primary/30 text-primary text-[10px] font-medium">
-                                {camp.name}
-                                <button type="button" onClick={(e) => { e.stopPropagation(); setFormData({ ...formData, visibilityCampaignIds: formData.visibilityCampaignIds.filter((i: string) => i !== cId) }); }} className="hover:text-blood">
-                                  <X className="w-2.5 h-2.5" />
-                                </button>
-                              </span>
-                            ) : null;
-                          })}
-                        </div>
-                      )}
-                    </div>
+                  {/* Base UI's PopoverTrigger composes via `render`, NOT Radix's
+                      `asChild`; render={<div/>} avoids the nested-button hydration bug. */}
+                  <PopoverTrigger render={<div role="button" tabIndex={0} className="w-full flex items-start gap-2 min-h-9 px-3 py-2 rounded-md border border-gold/15 bg-background/60 hover:border-gold/35 transition-colors text-left select-none cursor-pointer" />}>
+                    <Shield className="w-3.5 h-3.5 text-ink/35 mt-0.5 shrink-0" />
+                    {(formData.visibilityCampaignIds?.length ?? 0) === 0 ? (
+                      <span className="text-xs text-ink/35 italic">All campaigns (no restriction)</span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {formData.visibilityCampaignIds.map((cId: string) => {
+                          const camp = campaigns.find((c: any) => c.id === cId);
+                          return camp ? (
+                            <span key={cId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/15 border border-primary/30 text-primary text-[10px] font-medium">
+                              {camp.name}
+                              <button type="button" onClick={(e) => { e.stopPropagation(); setFormData({ ...formData, visibilityCampaignIds: formData.visibilityCampaignIds.filter((i: string) => i !== cId) }); }} className="hover:text-blood">
+                                <X className="w-2.5 h-2.5" />
+                              </button>
+                            </span>
+                          ) : null;
+                        })}
+                      </div>
+                    )}
                   </PopoverTrigger>
                   <PopoverContent className="w-72 p-0" align="start">
                     <Command>
