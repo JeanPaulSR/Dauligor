@@ -10,9 +10,12 @@ The **Mark & Build** window (`/compendium/import`, admin-only) is now a **text-i
 
 ## Branch state
 
-- On `manual-uploads`, **7 commits ahead / 5 behind `origin/main`** (origin advanced during the session). Working tree clean except the untracked throwaway `scripts/_mint-token.mjs` (see token note). **NOT pushed** (local only). **Rebase onto `origin/main` before any merge/cherry-pick to main** (`git fetch origin && git rebase origin/main`).
+- On `manual-uploads`, **10 commits ahead / 5 behind `origin/main`** (origin advanced during the session; count includes this handoff refresh). Working tree clean except the untracked throwaway `scripts/_mint-token.mjs` (see token note). **NOT pushed** (local only). **Rebase onto `origin/main` before any merge/cherry-pick to main** (`git fetch origin && git rebase origin/main`).
 - Commits (newest first):
-  - `feat(import): text-interpreting Mark & Build — parser, mark-up workspace, batch, HTML` (**`d49444f`** — this whole session's arc, one cohesive commit; the 5 files were rewritten across features so a per-feature split wasn't clean)
+  - `docs(handoff): compaction-ready import system snapshot` (this refresh)
+  - `docs(import): component guide + how-to-add-a-type recipe` (**`cc6e296`** — adds `docs/architecture/import-system.md`)
+  - `docs(handoff): refresh import system snapshot — interpreter, mark-up, batch, HTML` (**`bdc3cf9`**)
+  - `feat(import): text-interpreting Mark & Build — parser, mark-up workspace, batch, HTML` (**`d49444f`** — this session's arc, one cohesive commit; the 5 files were rewritten across features so a per-feature split wasn't clean)
   - `docs(handoff): import system state snapshot (pre-compaction)`
   - `feat(import): persistent source picker + empty-source warning`
   - `chore(dev): branch dev stack launcher on port 3003`
