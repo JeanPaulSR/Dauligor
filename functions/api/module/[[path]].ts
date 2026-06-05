@@ -288,6 +288,11 @@ export const onRequest = async (context: any): Promise<Response> => {
       const result = await getOrBuild(
         sourceClassCatalogKey(sourceSlug),
         () => buildSourceClassCatalog(sourceSlug),
+        // Self-heal catalogs cached before `category` was added: a cached blob
+        // whose entries lack a string `category` is treated as invalid and
+        // rebuilt on next read (handoff foundry-module → 2026-06-04).
+        (cached: any) => Array.isArray(cached?.entries)
+          && cached.entries.every((e: any) => typeof e?.category === "string"),
       );
       if (result) return serveCached(result);
     }
