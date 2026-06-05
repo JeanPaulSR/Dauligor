@@ -44,6 +44,19 @@ export function resolveEntity(
     }
   }
 
+  // Empty-source warning — source-less entries are filtered out of the public
+  // browsers (the spell/feat/item browsers gate on source). Non-blocking: you
+  // can still create one deliberately, but it won't appear until a source is set.
+  const sourceField = descriptor.fields.find((f) => f.kind === 'source');
+  if (sourceField) {
+    const sv = fields[sourceField.key];
+    if (sv === undefined || sv === null || String(sv).trim() === '') {
+      warnings.push(
+        'No source set — source-less entries are hidden from the public browser until you assign one.',
+      );
+    }
+  }
+
   const now = ctx.now ?? new Date().toISOString();
   const payload = descriptor.buildPayload(fields, { ...ctx, now });
   const id = ctx.existingId ?? crypto.randomUUID();

@@ -1,17 +1,20 @@
 // Mark & Build — the manual-upload / import window (proof of concept: spells).
 //
-// Pick a compendium type, fill its fields (paste from a PDF, or type), watch the
-// live preview resolve into the EXACT payload that will be written, then Create.
-// The write goes through the import registry's `commit()`, which delegates to the
-// editor's real write call (spell → `upsertSpell`) — so an entity created here is
-// byte-identical to one saved from the hand editor. Span-marking of pasted source
-// text is the next phase; v1 is faithful manual entry + look-before-commit.
+// Pick a compendium type, set a Source (persists across creates + type switches —
+// the "set it once per book" default-source behaviour the Foundry import
+// workbenches use), fill the fields, watch the live preview resolve into the EXACT
+// payload that will be written, then Create. The write goes through the import
+// registry's `commit()`, which delegates to the editor's real write call
+// (spell → `upsertSpell`) — so an entity created here is byte-identical to one
+// saved from the hand editor. Span-marking of pasted source text is the next
+// phase; v1 is faithful manual entry + look-before-commit.
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { FileText, Sparkles, Wand2 } from 'lucide-react';
+import { AlertTriangle, FileText, Library, Sparkles, Wand2 } from 'lucide-react';
 import { fetchCollection } from '../../lib/d1';
 import { reportClientError, OperationType } from '../../lib/firebase';
+import SingleSelectSearch from '../../components/ui/SingleSelectSearch';
 import {
   listImportDescriptors,
   getImportDescriptor,
@@ -29,10 +32,20 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
   const descriptor = getImportDescriptor(type);
 
   const [values, setValues] = useState<Record<string, any>>({});
+  // Source is held separately from the per-entity fields so it PERSISTS across
+  // creates and type changes — the same "set it once per book" default-source
+  // behaviour the Foundry import workbenches use.
+  const [sourceId, setSourceId] = useState('');
   const [sources, setSources] = useState<SourceRow[]>([]);
   const [saving, setSaving] = useState(false);
 
-  // Load sources once for any `source`-kind fields.
+  // The form-state key of the descriptor's source field, if it has one.
+  const sourceKey = useMemo(
+    () => descriptor?.fields.find((f) => f.kind === 'source')?.key,
+    [descriptor],
+  );
+
+  // Load sources once for the Source picker.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -43,30 +56,45 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
         console.error('[ImportMarkWindow] failed to load sources:', err);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
-  // Seed the form with the descriptor's defaults whenever the type changes.
+  const sourceOptions = useMemo(
+    () => sources.map((s) => ({
+      id: s.id,
+      name: (s.abbreviation ? `${s.abbreviation} — ` : '') + (s.name || s.id),
+    })),
+    [sources],
+  );
+
+  // Seed the form with the descriptor's defaults whenever the type changes. The
+  // source field is managed separately (sourceId), so it's skipped here and
+  // persists across the type switch.
   useEffect(() => {
     if (!descriptor) return;
     const init: Record<string, any> = {};
     for (const field of descriptor.fields) {
+      if (field.kind === 'source') continue;
       init[field.key] = field.default ?? (field.kind === 'boolean' ? false : '');
     }
     setValues(init);
   }, [type]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Merge the persistent source into the field set the resolver / commit sees.
+  const fieldsForResolve = useMemo(
+    () => (sourceKey ? { ...values, [sourceKey]: sourceId } : values),
+    [values, sourceKey, sourceId],
+  );
+
   // Pure preview — the resolved payload the Create button would write.
   const resolved: ResolvedEntity | null = useMemo(() => {
     if (!descriptor) return null;
     try {
-      return resolveEntity(type, values);
+      return resolveEntity(type, fieldsForResolve);
     } catch {
       return null;
     }
-  }, [type, values, descriptor]);
+  }, [type, fieldsForResolve, descriptor]);
 
   const setField = (key: string, value: any) =>
     setValues((prev) => ({ ...prev, [key]: value }));
@@ -74,12 +102,10 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
   const grouped = useMemo(() => {
     const groups: { name: string; fields: ImportFieldDef[] }[] = [];
     for (const field of descriptor?.fields ?? []) {
+      if (field.kind === 'source') continue; // rendered top-level, not in the grid
       const name = field.group ?? 'Fields';
       let g = groups.find((x) => x.name === name);
-      if (!g) {
-        g = { name, fields: [] };
-        groups.push(g);
-      }
+      if (!g) { g = { name, fields: [] }; groups.push(g); }
       g.fields.push(field);
     }
     return groups;
@@ -94,13 +120,12 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
     setSaving(true);
     try {
       // Re-resolve at commit so id + timestamps are fresh and stable for the write.
-      const toWrite = resolveEntity(type, values);
+      const toWrite = resolveEntity(type, sourceKey ? { ...values, [sourceKey]: sourceId } : values);
       await commitEntity(toWrite);
       toast.success(`${descriptor.label} “${toWrite.displayName}” created`);
-      // Clear name/identifier so the next entity starts fresh (other fields persist
-      // so a run of similar entities stays quick).
-      setField('name', '');
-      setField('identifier', '');
+      // Clear name/identifier so the next entity starts fresh; Source and the
+      // other fields persist so a run from one book stays quick.
+      setValues((prev) => ({ ...prev, name: '', identifier: '' }));
     } catch (err) {
       console.error('[ImportMarkWindow] create failed:', err);
       toast.error(`Failed to create ${descriptor.label.toLowerCase()}.`);
@@ -114,35 +139,61 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
     return <div className="px-6 py-12 text-center text-ink/50">Sign in to use the import window.</div>;
   }
 
+  const sourceLabel = sourceId
+    ? (sourceOptions.find((o) => o.id === sourceId)?.name ?? sourceId)
+    : '— none —';
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
       {/* Header */}
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-gold/20 pb-3">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-gold/20 pb-3">
         <div className="flex items-center gap-3">
           <Wand2 className="h-5 w-5 text-gold" />
           <div>
             <h1 className="font-serif text-2xl font-bold text-ink">Mark &amp; Build</h1>
             <p className="text-xs text-ink/60">
-              Fill the fields (paste from a PDF or type), preview, and create — written through the
-              editor’s real save path.
+              Set a source, fill the fields (paste from a PDF or type), preview, and create — written
+              through the editor’s real save path.
             </p>
           </div>
         </div>
         <label className="flex items-center gap-2 text-sm">
           <span className="text-ink/60">Type</span>
-          <select
-            className="field-input h-9"
-            value={type}
-            onChange={(e) => setType(e.target.value)}
-          >
+          <select className="field-input h-9" value={type} onChange={(e) => setType(e.target.value)}>
             {descriptors.map((d) => (
-              <option key={d.type} value={d.type}>
-                {d.label}
-              </option>
+              <option key={d.type} value={d.type}>{d.label}</option>
             ))}
           </select>
         </label>
       </div>
+
+      {/* Source — persistent, applies to every entity created (set once per book). */}
+      {sourceKey ? (
+        <div className="mb-5 flex flex-wrap items-center gap-3 rounded-lg border border-gold/20 bg-gold/[0.04] px-4 py-3">
+          <div className="flex items-center gap-2">
+            <Library className="h-4 w-4 text-gold" />
+            <span className="text-sm font-semibold text-ink">Source</span>
+          </div>
+          <div className="w-64">
+            <SingleSelectSearch
+              value={sourceId}
+              onChange={setSourceId}
+              options={sourceOptions}
+              placeholder="— none —"
+              noEntitiesText="No sources found."
+              triggerClassName="h-9 w-full text-sm"
+            />
+          </div>
+          {!sourceId ? (
+            <span className="inline-flex items-center gap-1 rounded border border-blood/30 bg-blood/10 px-2 py-0.5 text-[11px] font-semibold text-blood">
+              <AlertTriangle className="h-3 w-3" /> No source — it’ll be hidden from the browser
+            </span>
+          ) : null}
+          <span className="ml-auto text-[11px] text-ink/45">
+            Applies to every entity you create — set it once per book.
+          </span>
+        </div>
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         {/* Form */}
@@ -158,7 +209,6 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
                     key={field.key}
                     field={field}
                     value={values[field.key]}
-                    sources={sources}
                     onChange={(v) => setField(field.key, v)}
                   />
                 ))}
@@ -178,18 +228,23 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
                 <dl className="space-y-1 text-sm">
                   <Row label="Name" value={resolved.displayName} />
                   <Row label="Identifier" value={resolved.identifier || '—'} mono />
+                  <Row label="Source" value={sourceLabel} dim={!sourceId} />
                   <Row label="New id" value={resolved.id} mono dim />
                 </dl>
 
                 {resolved.errors.length > 0 ? (
                   <ul className="mt-3 space-y-1 rounded border border-blood/30 bg-blood/5 p-2 text-xs text-blood">
-                    {resolved.errors.map((e) => (
-                      <li key={e}>• {e}</li>
-                    ))}
+                    {resolved.errors.map((e) => (<li key={e}>• {e}</li>))}
                   </ul>
-                ) : (
+                ) : null}
+                {resolved.warnings.length > 0 ? (
+                  <ul className="mt-2 space-y-1 rounded border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-700">
+                    {resolved.warnings.map((w) => (<li key={w}>⚠ {w}</li>))}
+                  </ul>
+                ) : null}
+                {resolved.errors.length === 0 && resolved.warnings.length === 0 ? (
                   <p className="mt-3 text-xs text-emerald-700">Ready to create.</p>
-                )}
+                ) : null}
 
                 <button
                   type="button"
@@ -206,7 +261,7 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
           </div>
 
           {/* Raw payload — the literal object handed to the write function. */}
-          {resolved && (
+          {resolved ? (
             <details className="compendium-card rounded-lg border border-gold/15 p-3">
               <summary className="flex cursor-pointer items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-ink/60">
                 <FileText className="h-3.5 w-3.5" /> Resolved payload
@@ -215,7 +270,7 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
 {JSON.stringify(resolved.payload, null, 2)}
               </pre>
             </details>
-          )}
+          ) : null}
         </aside>
       </div>
     </div>
@@ -236,21 +291,13 @@ function Row({ label, value, mono, dim }: { label: string; value: string; mono?:
 function FieldControl({
   field,
   value,
-  sources,
   onChange,
 }: {
   field: ImportFieldDef;
   value: any;
-  sources: SourceRow[];
   onChange: (value: any) => void;
 }) {
   const id = `imp-${field.key}`;
-  const labelEl = (
-    <label htmlFor={id} className="mb-1 block text-xs font-medium text-ink/70">
-      {field.label}
-      {field.required && <span className="ml-1 text-blood">*</span>}
-    </label>
-  );
 
   // Boolean renders as a single inline checkbox row (no separate label above).
   if (field.kind === 'boolean') {
@@ -272,7 +319,10 @@ function FieldControl({
 
   return (
     <div className={wrapClass}>
-      {labelEl}
+      <label htmlFor={id} className="mb-1 block text-xs font-medium text-ink/70">
+        {field.label}
+        {field.required ? <span className="ml-1 text-blood">*</span> : null}
+      </label>
       {field.kind === 'textarea' ? (
         <textarea
           id={id}
@@ -290,24 +340,7 @@ function FieldControl({
           onChange={(e) => onChange(e.target.value)}
         >
           {field.options?.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      ) : field.kind === 'source' ? (
-        <select
-          id={id}
-          className="field-input h-9 w-full"
-          value={value ?? ''}
-          onChange={(e) => onChange(e.target.value)}
-        >
-          <option value="">— none —</option>
-          {sources.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.abbreviation ? `${s.abbreviation} — ` : ''}
-              {s.name || s.id}
-            </option>
+            <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
       ) : (
@@ -320,7 +353,7 @@ function FieldControl({
           onChange={(e) => onChange(e.target.value)}
         />
       )}
-      {field.help && <p className="mt-0.5 text-[10px] text-ink/45">{field.help}</p>}
+      {field.help ? <p className="mt-0.5 text-[10px] text-ink/45">{field.help}</p> : null}
     </div>
   );
 }
