@@ -1259,6 +1259,8 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                   activities={editingItem?.activities || []}
                   onChange={(acts) => setEditingItem((prev: any) => ({ ...(prev || {}), activities: acts }))}
                   availableEffects={editingItem?.effects || []}
+                  onAvailableEffectsChange={(fx) => setEditingItem((prev: any) => ({ ...(prev || {}), effects: fx }))}
+                  defaultEffectImg={editingItem?.iconUrl || editingItem?.imageUrl || editingItem?.icon_url || editingItem?.image_url || null}
                   itemTargets={allFeatures
                     .filter((f: any) => f?.uses?.max)
                     .map((f: any) => ({ id: f.identifier || f.id, name: f.name || f.identifier || String(f.id) }))}

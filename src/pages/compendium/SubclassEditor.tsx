@@ -1646,8 +1646,10 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                   <div className="pt-2">
                     <ActivityEditor
                       activities={editingFeature.activities || {}}
-                      onChange={(acts) => setEditingFeature({ ...editingFeature, activities: acts })}
+                      onChange={(acts) => setEditingFeature((prev: any) => ({ ...prev, activities: acts }))}
                       availableEffects={editingFeature.effects || []}
+                      onAvailableEffectsChange={(fx) => setEditingFeature((prev: any) => ({ ...prev, effects: fx }))}
+                      defaultEffectImg={editingFeature.iconUrl || editingFeature.imageUrl || editingFeature.icon_url || editingFeature.image_url || null}
                     />
                   </div>
                 )}

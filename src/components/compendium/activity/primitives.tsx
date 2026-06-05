@@ -32,7 +32,7 @@ export function ActivitySection({
             onClick={onAdd}
             title={addLabel}
             aria-label={addLabel}
-            className="-my-0.5 shrink-0 flex items-center justify-center w-5 h-5 rounded border border-gold/30 bg-gold/10 text-gold/80 hover:bg-gold/20 hover:text-gold hover:border-gold/50 transition-colors"
+            className="-my-0.5 shrink-0 flex items-center justify-center w-5 h-5 cursor-pointer rounded border border-gold/30 bg-gold/10 text-gold/80 hover:bg-gold/20 hover:text-gold hover:border-gold/50 transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
           </button>
@@ -57,20 +57,26 @@ export function ActivitySection({
  * Flat To Hit, etc.) — label left, control right, vertically centered.
  */
 export function FormRow({
-  label, hint, children, below, inline = false,
+  label, hint, children, below, inline = false, wideControls = false,
 }: {
   label: React.ReactNode;
   hint?: React.ReactNode;
   children?: React.ReactNode;
   below?: React.ReactNode;
   inline?: boolean;
+  /**
+   * Let the control cluster fill the remaining row width (label shrinks to its
+   * content) instead of the fixed 256px column — for rows packing several
+   * cells, e.g. the area Dimensions row (Size / Width / Height / Unit).
+   */
+  wideControls?: boolean;
 }) {
   return (
     <div className="py-2">
       <div className={cn('flex gap-4', inline ? 'items-center' : 'items-end')}>
-        <p className="flex-1 min-w-0 text-xs font-semibold text-ink/85 leading-tight">{label}</p>
+        <p className={cn('min-w-0 text-xs font-semibold text-ink/85 leading-tight', wideControls ? 'shrink-0' : 'flex-1')}>{label}</p>
         {children != null && (
-          <div className={cn('flex items-end gap-2 shrink-0', inline ? '' : 'w-[256px]')}>
+          <div className={cn('flex items-end gap-2', inline ? 'shrink-0' : (wideControls ? 'flex-1' : 'w-[256px] shrink-0'))}>
             {children}
           </div>
         )}

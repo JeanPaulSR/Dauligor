@@ -114,6 +114,14 @@ export const CONSUMPTION_TARGET_TYPES: { value: string; label: string }[] = [
   { value: 'attribute',    label: 'Attribute' },
 ];
 
+// Healing-roll types — `CONFIG.DND5E.healingTypes` (dnd5e 5.3.1). Heal
+// activities pick from these instead of the damage-type list.
+export const HEALING_TYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'healing',  label: 'Hit Points' },
+  { value: 'temphp',   label: 'Temp HP' },
+  { value: 'maximum',  label: 'Max HP' },
+];
+
 export const DAMAGE_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: 'acid',        label: 'Acid' },
   { value: 'bludgeoning', label: 'Bludgeoning' },
@@ -142,7 +150,7 @@ export const SCALING_MODE_OPTIONS: { value: string; label: string }[] = [
  *  / "Every Other Level" inside the part editor where the context is a
  *  level-up cadence. Keep both in sync — slug values match. */
 export const DAMAGE_SCALING_MODE_OPTIONS: { value: string; label: string }[] = [
-  { value: '',      label: 'None' },
+  { value: '',      label: 'No Scaling' },
   { value: 'whole', label: 'Every Level' },
   { value: 'half',  label: 'Every Other Level' },
 ];

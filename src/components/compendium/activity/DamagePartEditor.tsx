@@ -1,28 +1,15 @@
 import React from 'react';
-import { Plus, Trash2 } from 'lucide-react';
-import { Button } from '../../ui/button';
+import { Minus } from 'lucide-react';
 import { Input } from '../../ui/input';
-import { Label } from '../../ui/label';
 import { Checkbox } from '../../ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
-import EntityPicker from '../../ui/EntityPicker';
-import {
-  DAMAGE_TYPE_OPTIONS,
-  DAMAGE_DIE_DENOMINATIONS,
-  DAMAGE_SCALING_MODE_OPTIONS,
-} from './constants';
+import { Field } from './primitives';
+import { DAMAGE_DIE_DENOMINATIONS, DAMAGE_SCALING_MODE_OPTIONS } from './constants';
 
 /**
- * Damage-part shape — same `parts[]` element type the dnd5e 5.x
- * `damage` and `healing` activity sections store. Each part is one
- * damage roll component (Xd6 + Y of type Z, optionally scaling per
- * level, optionally with a custom formula override).
- *
- * Used by:
- *   - attack activities (single primary damage roll)
- *   - save activities (damage roll with onSave handler)
- *   - damage activities (direct damage, no attack)
- *   - heal activities (single healing roll — singlePart=true)
+ * Damage-part shape — the `parts[]` element of a dnd5e 5.x damage/healing
+ * activity section: one roll component (Xd6 + Y of type Z, optionally a custom
+ * formula, optionally scaling per level).
  */
 export interface DamagePart {
   number?: number | null;
@@ -30,230 +17,188 @@ export interface DamagePart {
   bonus?: string;
   types?: string[];
   custom?: { enabled: boolean; formula: string };
-  scaling?: { mode: string; number?: number; formula?: string };
+  scaling?: { mode: string; number?: number | null; formula?: string };
 }
 
 export interface DamagePartEditorProps {
   parts: DamagePart[];
   onChange: (next: DamagePart[]) => void;
   /**
-   * When true, omits the "Add Damage Part" affordance and renders a
-   * help note instead — heal activities only ever have one healing
-   * roll, so the per-part list is fixed-length.
+   * Type options for the part's single Type dropdown — damage types for
+   * attack/save/damage, healing types for heal. The host passes the right list.
    */
-  singlePart?: boolean;
-  /** Label on the empty-list message + Add button. Defaults to "Damage Part". */
-  partNoun?: string;
+  typeOptions: { value: string; label: string }[];
+  /**
+   * Whether the scaling field-group is shown. Mirrors Foundry's `canScale`
+   * (`activity.canScaleDamage`) — scaling only renders when the parent activity
+   * can actually scale its damage. Defaults to `true` to preserve prior behavior.
+   */
+  canScale?: boolean;
 }
 
 /**
- * Editor for the `parts[]` array on a damage/healing activity
- * section. One card per part, with controls for number of dice,
- * denomination, flat bonus, damage type chips, custom-formula
- * override, and per-level scaling.
+ * Editor for the `parts[]` array, rebuilt to mirror Foundry dnd5e 5.3.1's
+ * `damage-part.hbs` + its `.split-group.card` CSS exactly:
  *
- * Extracted out of ActivityEditor (commit "ActivityEditor: extract
- * DamagePartEditor sub-component") so the same surface is used
- * across attack/save/damage/heal without ~190 lines of inline JSX
- * duplicated per activity-kind branch. Parent owns the array;
- * `onChange` receives the full next state on every patch.
+ *   • a relative card with a right gutter for the absolute delete control;
+ *   • field-group 1 — a `.singleton` custom-formula checkbox (vertically
+ *     centered) followed by Number / Die / Bonus (equal columns), or a single
+ *     Formula input when custom is toggled on;
+ *   • field-group 2 — the Type dropdown;
+ *   • field-group 3 — Scaling (+ Dice and Formula once a mode is picked), shown
+ *     only when `canScale`;
+ *   • a minus (–) delete button pinned to the card's bottom-right corner
+ *     (`inset: auto 0 0 auto`).
+ *
+ * Adding parts is owned by the parent (the section header's ➕); this component
+ * renders/edits the existing parts and removes them.
  */
-export default function DamagePartEditor({
-  parts,
-  onChange,
-  singlePart = false,
-  partNoun = 'Damage Part',
-}: DamagePartEditorProps) {
+export default function DamagePartEditor({ parts, onChange, typeOptions, canScale = true }: DamagePartEditorProps) {
   const patchAt = (idx: number, patch: Partial<DamagePart>) => {
     const next = parts.slice();
     next[idx] = { ...next[idx], ...patch };
     onChange(next);
   };
-
-  const removeAt = (idx: number) => {
-    onChange(parts.filter((_, i) => i !== idx));
-  };
-
-  const addPart = () => {
-    onChange([...parts, { types: [''] }]);
-  };
+  const removeAt = (idx: number) => onChange(parts.filter((_, i) => i !== idx));
 
   return (
-    <div className="py-2 space-y-3">
-      {parts.map((part, idx) => (
-        <div key={idx} className="p-3 border border-gold/15 bg-gold/5 rounded relative group">
-          {/* Hover-only remove button anchored to the card corner.
-              Trash2 to stay consistent with the rest of the editor. */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-background border border-gold/15 opacity-0 group-hover:opacity-100 transition-opacity"
-            onClick={() => removeAt(idx)}
-            type="button"
-            aria-label="Remove part"
-          >
-            <Trash2 className="h-3 w-3 text-red-400" />
-          </Button>
-
-          {/* Row 1: number of dice + die size + flat bonus.
-              Even 3-col split keeps each input wide enough to type a
-              real value at the dialog's standard 4xl width without
-              overflowing on smaller screens. Previously 2/3/7 made the
-              Number input cramped and pushed Bonus too far right. */}
-          <div className="grid grid-cols-3 gap-3 mb-3">
-            <div>
-              <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest mb-1">Number</p>
-              <Input
-                type="number"
-                value={part.number ?? ''}
-                onChange={e => patchAt(idx, { number: parseInt(e.target.value) || null })}
-                className="h-8 bg-background/40 border-gold/15 text-center text-xs no-number-spin"
-              />
-            </div>
-            <div>
-              <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest mb-1">Die</p>
-              <Select
-                value={part.denomination?.toString() || ''}
-                onValueChange={val => patchAt(idx, { denomination: parseInt(val) || null })}
-              >
-                <SelectTrigger className="h-8 bg-background/40 border-gold/15 text-xs">
-                  <SelectValue placeholder="—" />
-                </SelectTrigger>
-                <SelectContent>
-                  {DAMAGE_DIE_DENOMINATIONS.map(d => (
-                    <SelectItem key={d} value={String(d)}>d{d}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest mb-1">Bonus</p>
-              <Input
-                value={part.bonus || ''}
-                onChange={e => patchAt(idx, { bonus: e.target.value })}
-                className="h-8 bg-background/40 border-gold/15 text-xs font-mono"
-                placeholder="+5 or @mod"
-              />
-            </div>
-          </div>
-
-          {/* Row 2: damage type chips. Multi-select via EntityPicker
-              — same shared pattern used elsewhere. */}
-          <div className="mb-3">
-            <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest mb-1.5">Damage Types</p>
-            <EntityPicker
-              entities={DAMAGE_TYPE_OPTIONS.map(dt => ({ id: dt.value, name: dt.label }))}
-              selectedIds={part.types || []}
-              onChange={(nextTypes) => patchAt(idx, { types: nextTypes })}
-              searchPlaceholder="Search damage types…"
-              maxHeightClass="max-h-32"
-              showChips
-            />
-          </div>
-
-          {/* Row 3: custom formula toggle (replaces the dice roll
-              entirely when enabled). */}
-          <div className="flex items-center gap-3 border-t border-gold/5 pt-2.5">
-            <Checkbox
-              id={`custom-${idx}`}
-              checked={part.custom?.enabled}
-              onCheckedChange={checked => patchAt(idx, {
-                custom: {
-                  enabled: !!checked,
-                  formula: part.custom?.formula || '',
-                },
-              })}
-            />
-            <Label htmlFor={`custom-${idx}`} className="text-[9px] uppercase text-ink/65 font-black tracking-widest">
-              Custom Formula
-            </Label>
-            {part.custom?.enabled && (
-              <Input
-                value={part.custom.formula}
-                onChange={e => patchAt(idx, {
-                  custom: {
-                    enabled: true,
-                    formula: e.target.value,
-                  },
-                })}
-                className="h-7 flex-1 bg-background/40 border-gold/15 text-[9px] font-mono"
-                placeholder="Formula…"
-              />
-            )}
-          </div>
-
-          {/* Row 4: scaling — adds dice/formula as character level
-              increases. Mode None / Every Level / Every Other Level
-              matches Foundry's display labels for the dnd5e slug
-              values "" / "whole" / "half".
-              base-ui's Select disallows SelectItem value="" (collides
-              with the "no selection" sentinel), so we translate the
-              empty-string mode to a `__none` token while in the
-              dropdown and back to "" when patching the data. Without
-              this, clicking the dropdown options did nothing because
-              base-ui silently swallowed the change. */}
-          <div className="grid grid-cols-12 gap-2 border-t border-gold/5 mt-2.5 pt-2.5">
-            <div className="col-span-4">
-              <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest mb-1">Scaling Mode</p>
-              <Select
-                value={part.scaling?.mode || '__none'}
-                onValueChange={val => patchAt(idx, {
-                  scaling: { ...part.scaling, mode: val === '__none' ? '' : val },
-                })}
-              >
-                <SelectTrigger className="h-7 bg-background/40 border-gold/15 text-[9px]">
-                  <SelectValue placeholder="None" />
-                </SelectTrigger>
-                <SelectContent>
-                  {DAMAGE_SCALING_MODE_OPTIONS.map(o => (
-                    <SelectItem key={o.value || '__none'} value={o.value || '__none'}>{o.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="col-span-8">
-              <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest mb-1">Scaling Dice / Formula</p>
-              <div className="flex gap-2">
-                <Input
-                  type="number"
-                  value={part.scaling?.number ?? ''}
-                  onChange={e => patchAt(idx, {
-                    scaling: { ...part.scaling, mode: part.scaling?.mode ?? '', number: parseInt(e.target.value) || 0 },
-                  })}
-                  className="h-7 w-12 bg-background/40 border-gold/15 text-[9px] text-center no-number-spin"
-                  placeholder="1"
+    <div className="py-2 space-y-2">
+      {parts.map((part, idx) => {
+        const custom = !!part.custom?.enabled;
+        const scalingMode = part.scaling?.mode || '';
+        return (
+          <div key={idx} className="relative pr-7 p-2 bg-gold/5 border border-gold/10 rounded">
+            <div className="flex flex-col gap-2">
+              {/* ── field-group 1: [☐ custom] + Number/Die/Bonus (or Formula) ── */}
+              <div className="flex items-end gap-1.5">
+                <Checkbox
+                  checked={custom}
+                  onCheckedChange={checked => patchAt(idx, { custom: { enabled: !!checked, formula: part.custom?.formula || '' } })}
+                  title="Use a custom formula rather than the default dice."
+                  aria-label="Use a custom formula rather than the default dice."
+                  className="self-center shrink-0 mx-0.5"
                 />
-                <Input
-                  value={part.scaling?.formula || ''}
-                  onChange={e => patchAt(idx, {
-                    scaling: { ...part.scaling, mode: part.scaling?.mode ?? '', formula: e.target.value },
-                  })}
-                  className="h-7 flex-1 bg-background/40 border-gold/15 text-[9px] font-mono"
-                  placeholder="Formula…"
-                />
+                {custom ? (
+                  <Field label="Formula" className="flex-1">
+                    <Input
+                      value={part.custom?.formula || ''}
+                      onChange={e => patchAt(idx, { custom: { enabled: true, formula: e.target.value } })}
+                      autoComplete="off"
+                      className="field-input border-gold/15 text-xs font-mono"
+                    />
+                  </Field>
+                ) : (
+                  <>
+                    <Field label="Number" className="flex-1">
+                      <Input
+                        type="number"
+                        value={part.number ?? ''}
+                        onChange={e => patchAt(idx, { number: parseInt(e.target.value) || null })}
+                        autoComplete="off"
+                        className="field-input border-gold/15 text-xs text-center no-number-spin"
+                      />
+                    </Field>
+                    <Field label="Die" className="flex-1">
+                      <Select
+                        value={part.denomination ? String(part.denomination) : '__none'}
+                        onValueChange={val => patchAt(idx, { denomination: val === '__none' ? null : parseInt(val) })}
+                      >
+                        <SelectTrigger className="field-input border-gold/15 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none" className="min-h-7 items-center">{' '}</SelectItem>
+                          {DAMAGE_DIE_DENOMINATIONS.map(d => (
+                            <SelectItem key={d} value={String(d)}>{`d${d}`}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                    <Field label="Bonus" className="flex-1">
+                      <Input
+                        value={part.bonus || ''}
+                        onChange={e => patchAt(idx, { bonus: e.target.value })}
+                        autoComplete="off"
+                        className="field-input border-gold/15 text-xs font-mono"
+                      />
+                    </Field>
+                  </>
+                )}
               </div>
-            </div>
-          </div>
-        </div>
-      ))}
 
-      {/* Footer affordance varies by activity kind. Heal activities
-          have exactly one healing roll — show a help note instead of
-          an add button so authors don't accidentally produce a heal
-          activity with two parallel healing parts. */}
-      {!singlePart ? (
-        <button
-          type="button"
-          onClick={addPart}
-          className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[10px] uppercase tracking-widest font-black text-gold/55 hover:text-gold border border-dashed border-gold/15 hover:border-gold/35 rounded transition-colors"
-        >
-          <Plus className="w-3 h-3" /> Add {partNoun}
-        </button>
-      ) : (
-        <p className="text-[10px] text-ink/45 border border-dashed border-gold/15 rounded p-3">
-          Foundry heal activities use a single healing roll. This editor keeps one primary healing part.
-        </p>
-      )}
+              {/* ── field-group 2: Type ── */}
+              <Field label="Type">
+                <Select
+                  value={part.types?.[0] || '__none'}
+                  onValueChange={val => patchAt(idx, { types: val === '__none' ? [] : [val] })}
+                >
+                  <SelectTrigger className="field-input border-gold/15 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none" className="py-1.5">{' '}</SelectItem>
+                    {typeOptions.map(o => (
+                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+
+              {/* ── field-group 3: Scaling (+ Dice / Formula once a mode is set) ── */}
+              {canScale && (
+                <div className="flex items-end gap-1.5">
+                  <Field label="Scaling" className="flex-1">
+                    <Select
+                      value={scalingMode || '__none'}
+                      onValueChange={val => patchAt(idx, { scaling: { ...(part.scaling || { mode: '' }), mode: val === '__none' ? '' : val } })}
+                    >
+                      <SelectTrigger className="field-input border-gold/15 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {DAMAGE_SCALING_MODE_OPTIONS.map(o => (
+                          <SelectItem key={o.value || '__none'} value={o.value || '__none'}>{o.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  {scalingMode ? (
+                    <>
+                      <Field label="Dice" className="flex-1">
+                        <Input
+                          type="number"
+                          value={part.scaling?.number ?? ''}
+                          onChange={e => patchAt(idx, { scaling: { ...(part.scaling || { mode: '' }), number: parseInt(e.target.value) || null } })}
+                          autoComplete="off"
+                          className="field-input border-gold/15 text-xs text-center no-number-spin"
+                        />
+                      </Field>
+                      <Field label="Formula" className="flex-1">
+                        <Input
+                          value={part.scaling?.formula || ''}
+                          onChange={e => patchAt(idx, { scaling: { ...(part.scaling || { mode: '' }), formula: e.target.value } })}
+                          autoComplete="off"
+                          className="field-input border-gold/15 text-xs font-mono"
+                        />
+                      </Field>
+                    </>
+                  ) : null}
+                </div>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => removeAt(idx)}
+              className="absolute bottom-1.5 right-1 w-5 h-5 flex items-center justify-center cursor-pointer rounded border border-gold/30 bg-gold/10 text-gold/70 hover:bg-blood/15 hover:border-blood/45 hover:text-blood transition-colors"
+              aria-label="Remove damage part"
+              title="Remove damage part"
+            >
+              <Minus className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 }

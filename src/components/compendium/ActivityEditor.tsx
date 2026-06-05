@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   Swords, Wand2, Dices, Zap, Sparkles, ArrowRight,
   Heart, Shield, Boxes, RefreshCw, Wrench, Plus,
-  Trash2, Info, Timer, Target,
+  Trash2, Info, Timer, Target, Minus, Settings, ChevronDown,
 } from 'lucide-react';
 import { ImageUpload } from '../ui/ImageUpload';
 import { type FoundryActiveEffect } from './ActiveEffectEditor';
@@ -11,7 +11,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '../ui/select';
 import { Checkbox } from '../ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { ActivityKind, SemanticActivity } from '../../types/activities';
@@ -24,7 +24,7 @@ import ActiveEffectKeyInput from './ActiveEffectKeyInput';
 // Sub-components + shared primitives/constants for the activity
 // editor. Each lives in `./activity/` so the file stays browsable;
 // see DamagePartEditor for the canonical example.
-import { ActivitySection, FieldRow } from './activity/primitives';
+import { ActivitySection, FieldRow, EmptyRow } from './activity/primitives';
 import DamagePartEditor from './activity/DamagePartEditor';
 import ActivationDurationEditor from './activity/ActivationDurationEditor';
 import RangeTargetingEditor from './activity/RangeTargetingEditor';
@@ -39,6 +39,7 @@ import {
   TEMPLATE_TYPE_OPTIONS,
   CONSUMPTION_TARGET_TYPES,
   DAMAGE_TYPE_OPTIONS,
+  HEALING_TYPE_OPTIONS,
   SCALING_MODE_OPTIONS,
   SUMMON_OR_TRANSFORM_MODE_OPTIONS,
   MOVEMENT_TYPE_OPTIONS,
@@ -53,6 +54,15 @@ interface ActivityEditorProps {
   onChange: (activities: SemanticActivity[]) => void;
   context?: 'feature' | 'spell' | 'item' | 'feat';
   availableEffects?: FoundryActiveEffect[];
+  /**
+   * Lets the activity's Applied Effects section create / rename / delete the
+   * parent's Active Effects — Foundry's add/delete-effect controls. Wire the
+   * SAME setter the host gives <ActiveEffectEditor> (the `effects` array on the
+   * feature). Omitted ⇒ Applied Effects is associate-only (no authoring).
+   */
+  onAvailableEffectsChange?: (effects: FoundryActiveEffect[]) => void;
+  /** Icon seeded onto effects created from the Applied Effects ➕ (parent's icon). */
+  defaultEffectImg?: string | null;
   /**
    * Candidate entities an "Item Uses" consumption target can draw from —
    * forwarded to ConsumptionTabEditor. Hosts supply the context-appropriate
@@ -158,11 +168,14 @@ const sanitizeActivity = (activity: SemanticActivity): SemanticActivity => {
   return sanitized;
 };
 
-export default function ActivityEditor({ activities, onChange, context = 'feature', availableEffects = [], itemTargets = [] }: ActivityEditorProps) {
+export default function ActivityEditor({ activities, onChange, context = 'feature', availableEffects = [], onAvailableEffectsChange, defaultEffectImg, itemTargets = [] }: ActivityEditorProps) {
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('identity');
   const [activeActivationTab, setActiveActivationTab] = useState('time');
+  // Which applied-effect's "Additional Settings" tray is open (Foundry shows one
+  // collapsible per effect; we track the single open one by effect id).
+  const [expandedEffectId, setExpandedEffectId] = useState<string | null>(null);
   const [attributes, setAttributes] = useState<{ id: string; identifier?: string; name: string }[]>([]);
   // Classes drive the Visibility › Class Identifier picker (was a
   // free-text slug input — authors now pick from the seeded classes
@@ -170,6 +183,11 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
   // fetched on mount; d1.ts caches the response so multiple
   // ActivityEditor instances on the same page only hit D1 once.
   const [classes, setClasses] = useState<{ id: string; identifier?: string; name: string }[]>([]);
+  // Damage types are admin-managed (Proficiencies › Damage Types → the
+  // `damage_types` table). The damage-part Type dropdown reads them live so
+  // homebrew types appear without a code change; falls back to the bundled
+  // DAMAGE_TYPE_OPTIONS list if the table hasn't been seeded.
+  const [damageTypeRows, setDamageTypeRows] = useState<{ id: string; identifier?: string; name: string; order?: number }[]>([]);
 
   useEffect(() => {
     fetchCollection<{ id: string; identifier?: string; name: string }>('attributes')
@@ -178,12 +196,27 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
     fetchCollection<{ id: string; identifier?: string; name: string }>('classes', { orderBy: 'name ASC' })
       .then(setClasses)
       .catch(() => {});
+    fetchCollection<{ id: string; identifier?: string; name: string; order?: number }>('damageTypes')
+      .then(setDamageTypeRows)
+      .catch(() => {});
   }, []);
 
   const attrLabel = (id: string): string => {
     const match = attributes.find(a => (a.identifier ?? a.id).toLowerCase() === id.toLowerCase());
     return match?.name ?? FALLBACK_ABILITY_LABELS[id] ?? id.toUpperCase();
   };
+
+  // Damage-type options for the damage-part Type dropdown: admin-managed
+  // `damage_types` rows when present, else the bundled DAMAGE_TYPE_OPTIONS so
+  // authoring still works unseeded. The value is normalized to lowercase so it
+  // matches Foundry's `CONFIG.DND5E.damageTypes` keys (the slugs are canonically
+  // lowercase, and existing items/the export expect `acid`/`fire`/… — the table
+  // currently seeds some identifiers uppercase, which would otherwise mismatch).
+  const damageTypeOptions = damageTypeRows.length
+    ? [...damageTypeRows]
+        .sort((a, b) => (a.order ?? 999) - (b.order ?? 999) || a.name.localeCompare(b.name))
+        .map(d => ({ value: (d.identifier || d.id).toLowerCase(), label: d.name }))
+    : DAMAGE_TYPE_OPTIONS;
 
   const activityList = Array.isArray(activities) 
     ? activities 
@@ -231,16 +264,18 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
         flat: false,
         critical: { threshold: null }
       };
-      newActivity.damage = { parts: [{}], includeBase: true, critical: { allow: false, bonus: '' } };
+      newActivity.damage = { parts: [], includeBase: true, critical: { allow: false, bonus: '' } };
     } else if (kind === 'check') {
       newActivity.check = { ability: 'str', associated: [], dc: { calculation: 'spellcasting' } };
     } else if (kind === 'save') {
-      newActivity.save = { abilities: ['dex'], dc: { calculation: 'spellcasting' } };
-      newActivity.damage = { parts: [{}], onSave: 'half' };
+      // Match Foundry's fresh save: no challenge ability selected, DC derived
+      // (spellcasting → formula disabled), damage half-on-save with no parts.
+      newActivity.save = { abilities: [], dc: { calculation: 'spellcasting' } };
+      newActivity.damage = { parts: [], onSave: 'half' };
     } else if (kind === 'heal') {
       newActivity.healing = { parts: [{ types: ['healing'] }] };
     } else if (kind === 'damage') {
-      newActivity.damage = { parts: [{}], critical: { allow: false, bonus: '' } };
+      newActivity.damage = { parts: [], critical: { allow: false, bonus: '' } };
     } else if (kind === 'cast') {
       newActivity.consumption = { ...newActivity.consumption, spellSlot: true };
       newActivity.spell = {
@@ -605,6 +640,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                           <Input
                             value={editingActivity.name}
                             onChange={e => handleUpdateActivity(editingId!, { name: e.target.value })}
+                            autoComplete="off"
                             className="field-input border-gold/15 font-serif"
                           />
                         </FieldRow>
@@ -626,6 +662,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                           <Input
                             value={editingActivity.chatFlavor || ''}
                             onChange={e => handleUpdateActivity(editingId!, { chatFlavor: e.target.value })}
+                            autoComplete="off"
                             className="field-input border-gold/15 text-xs"
                             placeholder="Additional context…"
                           />
@@ -817,10 +854,88 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
 
                   {activeTab === 'effect' && (
                     <div>
-                      {(editingActivity.save || editingActivity.check) && (
-                        <ActivitySection label={editingActivity.save ? 'SAVING THROW' : 'ABILITY CHECK'}>
-                          {editingActivity.save && (
-                            <FieldRow label="Abilities">
+                      {/* ——— ATTACK DETAILS ——— Foundry keeps the to-hit fields on
+                          the Effect tab (Identity only carries Type + Classification). */}
+                      {editingActivity.kind === 'attack' && (
+                        <ActivitySection label="Attack Details">
+                          <FieldRow label="Attack Ability" hint="Ability used for the attack and to determine damage. Available using @mod in formulas.">
+                            <Select
+                              value={editingActivity.attack?.ability || '__default'}
+                              onValueChange={val => handleUpdateActivity(editingId!, { attack: { ...editingActivity.attack!, ability: val === '__default' ? '' : val } })}
+                            >
+                              <SelectTrigger className="field-input border-gold/15 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__default">{editingActivity.attack?.type === 'ranged' ? 'Default (Dexterity)' : 'Default (Strength)'}</SelectItem>
+                                <SelectItem value="none">None</SelectItem>
+                                <SelectItem value="spellcasting">Spellcasting</SelectItem>
+                                <SelectGroup>
+                                  <SelectLabel className="text-[10px] font-black uppercase tracking-wider text-gold/55 px-2 pt-2 pb-1">Abilities</SelectLabel>
+                                  <SelectItem value="str">Strength</SelectItem>
+                                  <SelectItem value="dex">Dexterity</SelectItem>
+                                  <SelectItem value="con">Constitution</SelectItem>
+                                  <SelectItem value="int">Intelligence</SelectItem>
+                                  <SelectItem value="wis">Wisdom</SelectItem>
+                                  <SelectItem value="cha">Charisma</SelectItem>
+                                </SelectGroup>
+                              </SelectContent>
+                            </Select>
+                          </FieldRow>
+                          <FieldRow label="To Hit Bonus" hint="Bonus added to the to-hit roll for the attack.">
+                            <Input
+                              value={editingActivity.attack?.bonus || ''}
+                              onChange={e => handleUpdateActivity(editingId!, { attack: { ...editingActivity.attack!, bonus: e.target.value } })}
+                              autoComplete="off"
+                              className="field-input border-gold/15 font-mono text-xs"
+                              placeholder="e.g. +2 or @prof"
+                            />
+                          </FieldRow>
+                          <FieldRow label="Flat To Hit" hint="Ignore the ability modifier, proficiency, and other actor bonuses — use only the bonus defined here." inline>
+                            <Checkbox
+                              checked={editingActivity.attack?.flat}
+                              onCheckedChange={checked => handleUpdateActivity(editingId!, { attack: { ...editingActivity.attack!, flat: !!checked } })}
+                            />
+                          </FieldRow>
+                          <FieldRow label="Critical Threshold" hint="Minimum value on the d20 needed to roll a critical hit.">
+                            <Input
+                              type="number"
+                              value={editingActivity.attack?.critical?.threshold ?? ''}
+                              onChange={e => handleUpdateActivity(editingId!, {
+                                attack: {
+                                  ...editingActivity.attack!,
+                                  critical: {
+                                    ...(editingActivity.attack?.critical ?? { threshold: null }),
+                                    threshold: parseNullableInteger(e.target.value)
+                                  }
+                                }
+                              })}
+                              autoComplete="off"
+                              className="field-input border-gold/15 text-center no-number-spin"
+                              placeholder="20"
+                            />
+                          </FieldRow>
+                        </ActivitySection>
+                      )}
+                      {(editingActivity.save || editingActivity.check) && (() => {
+                        const isSave = !!editingActivity.save;
+                        const dc = isSave ? editingActivity.save!.dc : editingActivity.check!.dc;
+                        // Foundry's save/check DC dropdown (calculationOptions) is exactly:
+                        // Custom Formula ("") · Spellcasting Ability · one per ability. The save
+                        // default "initial" is NOT a listed option (it means "derive from the
+                        // parent item"), so it reads here as the spellcasting-derived case; either
+                        // way a non-empty calculation keeps the formula disabled/auto-derived.
+                        const rawCalc = (dc?.calculation ?? '') as string;
+                        const calc = rawCalc === 'initial' ? 'spellcasting' : rawCalc;
+                        const isCustomDC = calc === '';
+                        const setDc = (patch: Record<string, unknown>) => {
+                          if (isSave) handleUpdateActivity(editingId!, { save: { ...editingActivity.save!, dc: { ...editingActivity.save!.dc, ...patch } } });
+                          else handleUpdateActivity(editingId!, { check: { ...editingActivity.check!, dc: { ...editingActivity.check!.dc, ...patch } } });
+                        };
+                        return (
+                        <ActivitySection label={isSave ? 'Save Details' : 'Check Details'}>
+                          {isSave && (
+                            <FieldRow label="Challenge Abilities" hint="Abilities that may be rolled to attempt to save.">
                               <div className="flex flex-wrap gap-1">
                                 {ABILITY_OPTIONS.map(ab => {
                                   const active = (editingActivity.save!.abilities || []).includes(ab);
@@ -874,126 +989,113 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                               </FieldRow>
                             </>
                           )}
-                          <FieldRow label="DC Mode">
+                          <FieldRow label="DC Calculation" hint="Method or ability used to calculate the difficulty class.">
                             <Select
-                              value={editingActivity.save?.dc?.calculation || editingActivity.check?.dc?.calculation || '__formula'}
-                              onValueChange={val => {
-                                const calculation = val === '__formula' ? '' : val;
-                                if (editingActivity.save) {
-                                  handleUpdateActivity(editingId!, {
-                                    save: { ...editingActivity.save, dc: { ...editingActivity.save.dc, calculation } }
-                                  });
-                                } else if (editingActivity.check) {
-                                  handleUpdateActivity(editingId!, {
-                                    check: { ...editingActivity.check, dc: { ...editingActivity.check.dc, calculation } }
-                                  });
-                                }
-                              }}
+                              value={calc === '' ? '__custom' : calc}
+                              onValueChange={val => setDc({ calculation: val === '__custom' ? '' : val })}
                             >
                               <SelectTrigger className="field-input border-gold/15 text-xs">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="initial">Item Default</SelectItem>
-                                <SelectItem value="spellcasting">Spellcasting DC</SelectItem>
-                                <SelectItem value="__formula">Flat / Formula</SelectItem>
-                                {ABILITY_OPTIONS.map(ability => (
-                                  <SelectItem key={ability} value={ability}>{ability.toUpperCase()} Save</SelectItem>
-                                ))}
+                                <SelectItem value="__custom">Custom Formula</SelectItem>
+                                <SelectItem value="spellcasting">Spellcasting Ability</SelectItem>
+                                <SelectGroup>
+                                  <SelectLabel className="text-[10px] font-black uppercase tracking-wider text-gold/55 px-2 pt-2 pb-1">Abilities</SelectLabel>
+                                  {ABILITY_OPTIONS.map(ability => (
+                                    <SelectItem key={ability} value={ability}>{attrLabel(ability)}</SelectItem>
+                                  ))}
+                                </SelectGroup>
                               </SelectContent>
                             </Select>
                           </FieldRow>
-                          <FieldRow label="DC Formula" hint="10, or @abilities.int.dc">
+                          <FieldRow label="DC Formula" hint={isCustomDC ? 'Custom formula or flat value for defining the DC.' : 'Calculated automatically from the selection above.'}>
                             <Input
-                              value={editingActivity.save?.dc?.formula || editingActivity.check?.dc?.formula || ''}
-                              onChange={e => {
-                                if (editingActivity.save) {
-                                  handleUpdateActivity(editingId!, {
-                                    save: { ...editingActivity.save, dc: { ...editingActivity.save.dc, formula: e.target.value } }
-                                  });
-                                } else if (editingActivity.check) {
-                                  handleUpdateActivity(editingId!, {
-                                    check: { ...editingActivity.check, dc: { ...editingActivity.check.dc, formula: e.target.value } }
-                                  });
-                                }
-                              }}
-                              className="field-input border-gold/15 font-mono text-xs"
-                              placeholder="10, or @abilities.int.dc"
+                              value={isCustomDC ? (dc?.formula || '') : ''}
+                              disabled={!isCustomDC}
+                              onChange={e => setDc({ formula: e.target.value })}
+                              autoComplete="off"
+                              className="field-input border-gold/15 font-mono text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                              placeholder={isCustomDC ? '10, or @abilities.int.dc' : '8 + @mod + @prof'}
                             />
                           </FieldRow>
                         </ActivitySection>
-                      )}
+                        );
+                      })()}
 
-                      {(editingActivity.damage || editingActivity.healing) && (
-                        <ActivitySection label={editingActivity.healing ? 'HEALING' : 'DAMAGE'}>
-                          {/* Damage / healing parts editor — same
-                              extracted component used wherever an
-                              activity carries a `parts[]` damage roll.
-                              Heal activities pass singlePart=true so
-                              the editor surfaces the "single healing
-                              roll" note instead of an Add button. */}
-                          <DamagePartEditor
-                            parts={(editingActivity.damage?.parts || editingActivity.healing?.parts || []) as any}
-                            onChange={(nextParts) => {
-                              const key = editingActivity.healing ? 'healing' : 'damage';
-                              const obj = editingActivity[key] as any;
-                              handleUpdateActivity(editingId!, {
-                                [key]: { ...(obj || {}), parts: nextParts },
-                              });
-                            }}
-                            singlePart={!!editingActivity.healing}
-                            partNoun={editingActivity.healing ? 'Healing Part' : 'Damage Part'}
-                          />
-                          {showsBaseDamageToggle && (
-                            <FieldRow label="Base Item Damage" inline>
-                              <Checkbox
-                                checked={editingActivity.damage?.includeBase}
-                                onCheckedChange={checked => handleUpdateActivity(editingId!, { damage: { ...editingActivity.damage!, includeBase: !!checked } })}
-                              />
-                            </FieldRow>
-                          )}
-                          {editingActivity.kind === 'save' && editingActivity.damage && (
-                            <FieldRow label="On Save">
-                              <Select
-                                value={editingActivity.damage.onSave}
-                                onValueChange={val => handleUpdateActivity(editingId!, {
-                                  damage: { ...editingActivity.damage!, onSave: val }
-                                })}
-                              >
-                                <SelectTrigger className="field-input border-gold/15 text-xs">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="half">Half Damage</SelectItem>
-                                  <SelectItem value="none">No Damage</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </FieldRow>
-                          )}
-                          {showsDamageCritical && (
-                            <>
-                              <FieldRow label="Allow Critical Bonus" hint="Native damage activities can opt into extra critical damage." inline>
-                                <Checkbox
-                                  checked={editingActivity.damage!.critical?.allow}
-                                  onCheckedChange={checked => handleUpdateActivity(editingId!, {
-                                    damage: { ...editingActivity.damage!, critical: { ...(editingActivity.damage?.critical || {}), allow: !!checked } }
-                                  })}
-                                />
-                              </FieldRow>
-                              <FieldRow label="Critical Bonus Formula">
+                      {(editingActivity.damage || editingActivity.healing) && (() => {
+                        const isHeal = !!editingActivity.healing;
+                        const isAttack = editingActivity.kind === 'attack';
+                        const isDamageKind = editingActivity.kind === 'damage';
+                        const damageKey = isHeal ? 'healing' : 'damage';
+                        const parts = (((editingActivity as any)[damageKey]?.parts) || []) as any[];
+                        const setParts = (nextParts: any[]) => handleUpdateActivity(editingId!, {
+                          [damageKey]: { ...(((editingActivity as any)[damageKey]) || {}), parts: nextParts },
+                        });
+                        const typeOptions = isHeal ? HEALING_TYPE_OPTIONS : damageTypeOptions;
+                        return (
+                          <ActivitySection
+                            label={isHeal ? 'Healing' : isAttack ? 'Attack Damage' : 'Damage'}
+                            onAdd={isHeal ? undefined : () => setParts([...parts, { types: [] }])}
+                            addLabel="Add damage part"
+                          >
+                            {isAttack && (
+                              <FieldRow label="Extra Critical Damage" hint="Extra damage applied when a critical is rolled. Added to the base damage or first damage part.">
                                 <Input
-                                  value={editingActivity.damage!.critical?.bonus || ''}
-                                  onChange={e => handleUpdateActivity(editingId!, {
-                                    damage: { ...editingActivity.damage!, critical: { ...(editingActivity.damage?.critical || {}), bonus: e.target.value } }
-                                  })}
+                                  value={editingActivity.damage?.critical?.bonus || ''}
+                                  onChange={e => handleUpdateActivity(editingId!, { damage: { ...editingActivity.damage!, critical: { ...(editingActivity.damage?.critical || {}), bonus: e.target.value } } })}
+                                  autoComplete="off"
                                   className="field-input border-gold/15 text-xs font-mono"
                                   placeholder="1d8"
                                 />
                               </FieldRow>
-                            </>
-                          )}
-                        </ActivitySection>
-                      )}
+                            )}
+                            {editingActivity.kind === 'save' && editingActivity.damage && (
+                              <FieldRow label="Damage on Save" hint="How much damage should be applied on a successful save?">
+                                <Select
+                                  value={editingActivity.damage.onSave}
+                                  onValueChange={val => handleUpdateActivity(editingId!, { damage: { ...editingActivity.damage!, onSave: val } })}
+                                >
+                                  <SelectTrigger className="field-input border-gold/15 text-xs">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="none">No Damage</SelectItem>
+                                    <SelectItem value="half">Half Damage</SelectItem>
+                                    <SelectItem value="full">Full Damage</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </FieldRow>
+                            )}
+                            {isDamageKind && (
+                              <>
+                                <FieldRow label="Allow Critical Bonus" hint="Opt into extra damage when this activity scores a critical." inline>
+                                  <Checkbox
+                                    checked={editingActivity.damage?.critical?.allow}
+                                    onCheckedChange={checked => handleUpdateActivity(editingId!, { damage: { ...editingActivity.damage!, critical: { ...(editingActivity.damage?.critical || {}), allow: !!checked } } })}
+                                  />
+                                </FieldRow>
+                                {editingActivity.damage?.critical?.allow && (
+                                  <FieldRow label="Critical Bonus Formula">
+                                    <Input
+                                      value={editingActivity.damage?.critical?.bonus || ''}
+                                      onChange={e => handleUpdateActivity(editingId!, { damage: { ...editingActivity.damage!, critical: { ...(editingActivity.damage?.critical || {}), bonus: e.target.value } } })}
+                                      autoComplete="off"
+                                      className="field-input border-gold/15 text-xs font-mono"
+                                      placeholder="1d8"
+                                    />
+                                  </FieldRow>
+                                )}
+                              </>
+                            )}
+                            {parts.length === 0 && !isHeal ? (
+                              <EmptyRow>None</EmptyRow>
+                            ) : (
+                              <DamagePartEditor parts={parts} onChange={setParts} typeOptions={typeOptions} />
+                            )}
+                          </ActivitySection>
+                        );
+                      })()}
 
                       {editingActivity.spell && (
                         <ActivitySection label="SPELLCASTING">
@@ -1443,71 +1545,139 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                         </ActivitySection>
                       )}
 
-                      {/* ── Applied Effects ── */}
-                      <ActivitySection label="APPLIED EFFECTS">
-                        {availableEffects.length === 0 ? (
-                          <p className="text-[10px] text-ink/35 italic py-2 text-center">
-                            No effects defined on this feature. Add effects in the Effects tab first.
-                          </p>
-                        ) : (
-                          <div className="space-y-1 pb-1">
-                            {availableEffects.map((fx, index) => {
-                              const linked = (editingActivity.effects || []).find(e => e._id === fx._id);
-                              const toggle = () => {
-                                const cur = editingActivity.effects || [];
-                                handleUpdateActivity(editingId!, {
-                                  effects: linked
-                                    ? cur.filter(e => e._id !== fx._id)
-                                    : [...cur, { _id: fx._id!, level: { min: null, max: null } }]
-                                });
-                              };
-                              const patchLevel = (patch: { min?: number | null; max?: number | null }) => {
-                                const cur = editingActivity.effects || [];
-                                handleUpdateActivity(editingId!, {
-                                  effects: cur.map(e => e._id === fx._id ? { ...e, level: { ...e.level, ...patch } } : e)
-                                });
-                              };
-                              return (
-                                <div key={fx._id || `fx-${index}`} className="flex items-center gap-2 py-1.5">
-                                  <button
-                                    type="button"
-                                    onClick={toggle}
-                                    className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${linked ? 'bg-gold/35 border-gold/65' : 'border-gold/25 hover:border-gold/45'}`}
-                                  >
-                                    {linked && <svg className="w-2.5 h-2.5 text-gold" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth={2}><path d="M1.5 5l2.5 2.5 4.5-4.5"/></svg>}
-                                  </button>
-                                  {fx.img && (
-                                    <div className="w-5 h-5 rounded border border-gold/15 overflow-hidden shrink-0">
-                                      <img src={fx.img} alt="" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                      {/* ── Applied Effects ── Foundry parity (activity-effects.hbs):
+                          ➕ creates a new effect on the parent and associates it; an
+                          associate dropdown links existing effects; each row has a
+                          dissociate (−) and delete (🗑) control plus a collapsible
+                          "Additional Settings" tray holding the Level Limit. Deep
+                          edits (changes/keys) still happen in the Effects tab. */}
+                      {(() => {
+                        const assoc = editingActivity.effects || [];
+                        const canAuthor = !!onAvailableEffectsChange;
+                        const linkedIds = new Set(assoc.map(a => a._id));
+                        const unlinked = availableEffects.filter(fx => fx._id && !linkedIds.has(fx._id));
+                        const setAssoc = (next: typeof assoc) => handleUpdateActivity(editingId!, { effects: next });
+                        const associate = (id: string) => { if (id && !linkedIds.has(id)) setAssoc([...assoc, { _id: id, level: { min: null, max: null } }]); };
+                        const dissociate = (id: string) => setAssoc(assoc.filter(a => a._id !== id));
+                        const patchLevel = (id: string, patch: { min?: number | null; max?: number | null }) =>
+                          setAssoc(assoc.map(a => a._id === id ? { ...a, level: { ...a.level, ...patch } } : a));
+                        const createEffect = () => {
+                          if (!onAvailableEffectsChange) return;
+                          const fx: FoundryActiveEffect = {
+                            _id: makeFoundryId(), name: 'New Effect', img: defaultEffectImg || null,
+                            description: '', disabled: false, transfer: true, tint: '#ffffff',
+                            changes: [], statuses: [], type: 'base', sort: 0,
+                          };
+                          onAvailableEffectsChange([...availableEffects, fx]);
+                          setAssoc([...assoc, { _id: fx._id!, level: { min: null, max: null } }]);
+                        };
+                        const renameEffect = (id: string, name: string) =>
+                          onAvailableEffectsChange?.(availableEffects.map(fx => fx._id === id ? { ...fx, name } : fx));
+                        const deleteEffect = (id: string) => {
+                          onAvailableEffectsChange?.(availableEffects.filter(fx => fx._id !== id));
+                          dissociate(id);
+                        };
+                        return (
+                          <ActivitySection label="Applied Effects" onAdd={canAuthor ? createEffect : undefined} addLabel="Create new effect">
+                            {unlinked.length > 0 && (
+                              <div className="py-2">
+                                <SingleSelectSearch
+                                  value=""
+                                  onChange={(id) => associate(id)}
+                                  options={unlinked.map(fx => ({ id: fx._id!, name: fx.name || 'Effect' }))}
+                                  placeholder="Associate an existing effect…"
+                                  noEntitiesText="No unlinked effects."
+                                  triggerClassName="w-full"
+                                />
+                              </div>
+                            )}
+                            {assoc.length === 0 ? (
+                              <EmptyRow>None</EmptyRow>
+                            ) : (
+                              assoc.map(a => {
+                                const fx = availableEffects.find(e => e._id === a._id);
+                                const expanded = expandedEffectId === a._id;
+                                return (
+                                  <div key={a._id} className="py-2">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-5 h-5 rounded border border-gold/15 overflow-hidden shrink-0 bg-gold/5 flex items-center justify-center">
+                                        {fx?.img
+                                          ? <img src={fx.img} alt="" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                                          : <Sparkles className="w-3 h-3 text-gold/50" />}
+                                      </div>
+                                      {canAuthor ? (
+                                        <Input
+                                          value={fx?.name || ''}
+                                          onChange={e => renameEffect(a._id, e.target.value)}
+                                          autoComplete="off"
+                                          className="flex-1 h-7 bg-background/40 border-gold/15 text-xs"
+                                          placeholder={fx ? 'Effect name' : 'Missing effect'}
+                                        />
+                                      ) : (
+                                        <span className={`flex-1 text-xs truncate ${fx ? 'text-ink/85' : 'text-blood/60 italic'}`}>{fx?.name || '(missing effect)'}</span>
+                                      )}
+                                      <button
+                                        type="button"
+                                        onClick={() => dissociate(a._id)}
+                                        title="Remove from this activity"
+                                        aria-label="Dissociate effect"
+                                        className="shrink-0 w-5 h-5 flex items-center justify-center cursor-pointer rounded border border-gold/30 bg-gold/10 text-gold/70 hover:bg-gold/20 hover:text-gold transition-colors"
+                                      >
+                                        <Minus className="w-3.5 h-3.5" />
+                                      </button>
+                                      {canAuthor && (
+                                        <button
+                                          type="button"
+                                          onClick={() => deleteEffect(a._id)}
+                                          title="Delete this effect entirely"
+                                          aria-label="Delete effect"
+                                          className="shrink-0 w-5 h-5 flex items-center justify-center cursor-pointer rounded border border-gold/30 bg-gold/10 text-gold/70 hover:bg-blood/15 hover:border-blood/45 hover:text-blood transition-colors"
+                                        >
+                                          <Trash2 className="w-3 h-3" />
+                                        </button>
+                                      )}
                                     </div>
-                                  )}
-                                  <span className={`flex-1 text-xs truncate ${linked ? 'text-ink/85 font-medium' : 'text-ink/45'}`}>{fx.name}</span>
-                                  {linked && (
-                                    <div className="flex items-center gap-1 shrink-0">
-                                      <span className="text-[9px] text-ink/35 uppercase tracking-wider">Lvl</span>
-                                      <Input
-                                        type="number"
-                                        value={linked.level?.min ?? ''}
-                                        onChange={e => patchLevel({ min: e.target.value === '' ? null : parseInt(e.target.value) })}
-                                        className="h-6 w-10 text-[10px] text-center bg-background/40 border-gold/15 no-number-spin"
-                                        placeholder="—"
-                                      />
-                                      <span className="text-[9px] text-ink/25">–</span>
-                                      <Input
-                                        type="number"
-                                        value={linked.level?.max ?? ''}
-                                        onChange={e => patchLevel({ max: e.target.value === '' ? null : parseInt(e.target.value) })}
-                                        className="h-6 w-10 text-[10px] text-center bg-background/40 border-gold/15 no-number-spin"
-                                        placeholder="—"
-                                      />
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </ActivitySection>
+                                    <button
+                                      type="button"
+                                      onClick={() => setExpandedEffectId(expanded ? null : a._id)}
+                                      className="mt-1.5 flex items-center justify-center gap-1.5 w-full cursor-pointer text-[10px] uppercase tracking-wider font-black text-gold/55 hover:text-gold/85 transition-colors"
+                                    >
+                                      <Settings className="w-3 h-3" />
+                                      Additional Settings
+                                      <ChevronDown className={cn('w-3 h-3 transition-transform', expanded && 'rotate-180')} />
+                                    </button>
+                                    {expanded && (
+                                      <div className="mt-1 pl-1">
+                                        <FieldRow label="Level Limit" hint="Range of levels required to apply this effect.">
+                                          <div className="flex items-center gap-2 w-full">
+                                            <Input
+                                              type="number"
+                                              value={a.level?.min ?? ''}
+                                              placeholder="0"
+                                              onChange={e => patchLevel(a._id, { min: e.target.value === '' ? null : parseInt(e.target.value) })}
+                                              autoComplete="off"
+                                              className="h-8 flex-1 min-w-0 bg-background/40 border-gold/15 text-center text-xs no-number-spin"
+                                            />
+                                            <span className="text-[10px] uppercase tracking-wider text-ink/40 shrink-0 select-none">to</span>
+                                            <Input
+                                              type="number"
+                                              value={a.level?.max ?? ''}
+                                              placeholder="∞"
+                                              onChange={e => patchLevel(a._id, { max: e.target.value === '' ? null : parseInt(e.target.value) })}
+                                              autoComplete="off"
+                                              className="h-8 flex-1 min-w-0 bg-background/40 border-gold/15 text-center text-xs no-number-spin"
+                                            />
+                                          </div>
+                                        </FieldRow>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })
+                            )}
+                          </ActivitySection>
+                        );
+                      })()}
 
                     </div>
                   )}
