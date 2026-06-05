@@ -5,8 +5,10 @@
 // renders `fields`, calls `resolveEntity()` for a look-before-commit preview,
 // then `commitEntity()` to persist. A descriptor's `commit()` MUST delegate to
 // the same write function the matching hand-editor uses (e.g. `upsertSpell`) so
-// imports and manual edits produce byte-identical rows. See
-// docs/_drafts/manual-uploads-import-system-2026-06-04.html.
+// imports and manual edits produce byte-identical rows.
+//
+// Component guide + "how to add a type" recipe (read this before extending):
+//   docs/architecture/import-system.md
 
 /** Input control the Mark & Build window renders for a field. */
 export type ImportFieldKind =

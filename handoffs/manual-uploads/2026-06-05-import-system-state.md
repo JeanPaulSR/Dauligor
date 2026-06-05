@@ -82,6 +82,7 @@ Each descriptor's `commit()` MUST call the editor's real write function with the
 
 ## Pointers
 
+- **Component guide + "how to add a type" recipe: [`docs/architecture/import-system.md`](../../docs/architecture/import-system.md)** — read this first when building the class/feat/item importers.
 - Design spec (per-type save-path table): `docs/_drafts/manual-uploads-import-system-2026-06-04.html`.
 - Branch manifest: `handoffs/manual-uploads/manifest.md`; registry row in `handoffs/BRANCH_REGISTRY.md`.
 - Relevant memory: `reference_style_guide`, `project_d1_local_seed_method`, `project_worktree_node_modules_junction`, `feedback_main_is_production_deploy`, `feedback_handoffs_folder`.
