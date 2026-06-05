@@ -113,7 +113,7 @@ These are bootstrap promotions — you can always sign in as one of these and re
 
 ### Promote a player to lore-writer
 1. `/admin/users` → find the user → edit → role `lore-writer` → save.
-2. The user's existing JWT continues to claim `user` role until refresh; they should sign out and back in (or `getIdToken(true)`).
+2. The user's existing token continues to claim `user` role until it's reissued; they should sign out and back in.
 
 ### Audit recent password resets
 

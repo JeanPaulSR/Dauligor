@@ -29,7 +29,7 @@ Source: [worker/index.js](../../worker/index.js).
 
 ## Proxy routes (Cloudflare Pages Function in prod, Express in dev)
 
-The browser calls these. They verify the user's Firebase JWT (`requireImageManagerAccess`), then forward to the Worker with the shared `R2_API_SECRET`. Production routing is via [functions/api/r2/[action].ts](../../functions/api/r2/%5Baction%5D.ts) (single Pages Function dispatcher); local dev uses the Express handler in [server.ts](../../server.ts) backed by the same [api/_lib/r2-proxy.ts](../../api/_lib/r2-proxy.ts) helpers.
+The browser calls these. They verify the user's session token (`requireImageManagerAccess`), then forward to the Worker with the shared `R2_API_SECRET`. Production routing is via [functions/api/r2/[action].ts](../../functions/api/r2/%5Baction%5D.ts) (single Pages Function dispatcher); local dev uses the Express handler in [server.ts](../../server.ts) backed by the same [api/_lib/r2-proxy.ts](../../api/_lib/r2-proxy.ts) helpers.
 
 | Method | Path | Calls Worker |
 |---|---|---|
@@ -116,7 +116,7 @@ If any row references the URL (in `image_url`, `card_image_url`, `preview_image_
 R2 is publicly readable through `images.dauligor.com`, but **writes are gated**. The chain is:
 
 ```
-browser → /api/r2/upload (verify Firebase JWT, role check)
+browser → /api/r2/upload (verify session token, role check)
        → Worker /upload (verify API_SECRET)
        → R2 BUCKET binding
 ```

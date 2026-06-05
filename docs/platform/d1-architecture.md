@@ -7,7 +7,7 @@ The data layer that replaces Firestore. This doc covers the D1 client API, the t
 | Piece | Path | Role |
 |---|---|---|
 | Client lib | [src/lib/d1.ts](../../src/lib/d1.ts) | All D1 reads and writes from the browser |
-| Express dev / Pages Function proxy | [api/_lib/d1-proxy.ts](../../api/_lib/d1-proxy.ts) | Verifies Firebase JWT, forwards to Worker |
+| Express dev / Pages Function proxy | [api/_lib/d1-proxy.ts](../../api/_lib/d1-proxy.ts) | Verifies the session token (native HS256 / Firebase fallback), forwards to Worker |
 | Worker endpoint | [worker/index.js](../../worker/index.js) (`/query`) | `env.DB.prepare(sql).bind(...).all()` |
 | Schema migrations | [worker/migrations/](../../worker/migrations/) | `0001_phase1_foundation.sql` … `0011_system_metadata.sql` |
 | Historical migration scripts | [scripts/_archive/](../../scripts/_archive/) | Firestore→D1 utilities + codemods from the May 2026 cut. Reference only — not part of any current loop. |

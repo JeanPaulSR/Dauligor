@@ -6,7 +6,7 @@ For the role definitions (`admin`, `co-dm`, `lore-writer`, `trusted-player`, `us
 
 ## Threat model
 
-Every signed-in user has a Firebase JWT. The token is verified server-side and the caller's `role` is read from D1. Without further checks, an authenticated user could:
+Every signed-in user has a session token (native HS256; Firebase during the migration window). The token is verified server-side and the caller's `role` is read from D1. Without further checks, an authenticated user could:
 
 1. Open devtools and `fetch('/api/d1/query', { body: JSON.stringify({ sql: 'SELECT * FROM users' }) })` to exfiltrate every user's `recovery_email`, `bio`, etc.
 2. `fetch('/api/d1/query', { body: JSON.stringify({ sql: "UPDATE users SET role = 'admin' WHERE id = '<their-uid>'" }) })` to self-promote.

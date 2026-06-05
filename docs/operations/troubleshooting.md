@@ -43,18 +43,17 @@ The proxy can't initialise `firebase-admin`.
 - The local-dev fallback parses tokens signaturelessly and grants admin — the warning is expected and **must not happen in production**.
 
 ### "Missing bearer token" / 401 on every D1 call
-The browser isn't attaching the Firebase ID token.
+The browser isn't attaching the session token.
 
-- Confirm the user is signed in (`auth.currentUser` is non-null in the console).
-- Token might be expired — call `auth.currentUser.getIdToken(true)` to force a refresh.
+- Confirm the user is signed in (`getSessionToken()` from `src/lib/auth.ts` returns a token; `getIdentity()` is non-null).
+- The native session may have expired — sign out and back in to reissue it (a valid session auto-slides; an expired one is cleared). On the Firebase fallback path, `auth.currentUser.getIdToken(true)` force-refreshes.
 - The user might have been deleted server-side; sign out and back in.
 
 ### Admin role not recognised after promotion
-The user's existing JWT still claims their old role until refresh.
+The user's existing token still claims their old role until it's reissued.
 
-- The user can sign out and back in.
-- Or call `auth.currentUser.getIdToken(true)` from the console.
-- The app code force-refreshes on detected role changes; if that's not happening, check the role-change effect in `App.tsx`.
+- The user can sign out and back in (reissues the token with the new role).
+- The app code refreshes on detected role changes; if that's not happening, check the role-change effect in `App.tsx`.
 
 ### `403 — Admin access required`
 The user's D1 `users.role` isn't one of the values required by the route.

@@ -69,8 +69,8 @@ const effectiveProfile = useMemo(() => ({
 
 Roughly what happens between page load and ready-to-render:
 
-1. **Auth bootstrap.** `onAuthStateChanged` fires with the current `User` (or null). If null, render the sign-in route.
-2. **Profile load.** Call `GET /api/me` with the Firebase ID token. The server endpoint handles steps 3 and 4 itself — the client just consumes the returned `profile`. While the request is in flight, render a splash.
+1. **Auth bootstrap.** `onAuthChange` (`src/lib/auth.ts`) fires with the current identity (or null) — the native session if present, else the Firebase fallback. If null, render the sign-in route.
+2. **Profile load.** Call `GET /api/me` with the session token (Bearer). The server endpoint handles steps 3 and 4 itself — the client just consumes the returned `profile`. While the request is in flight, render a splash.
 3. **Auto-create + auto-promote (server-side).** `/api/me` synthesizes the `users` row on first sign-in, then forces `role = admin` for the hardcoded owner email and the `admin` / `gm` usernames.
 4. **Default campaign (server-side).** Same endpoint pins the user's first `campaign_members` row as `active_campaign_id` if it's null.
 5. **Foundation heartbeat.** Start the 30-second polling loop on `system_metadata.last_foundation_update` for cross-tab cache invalidation.

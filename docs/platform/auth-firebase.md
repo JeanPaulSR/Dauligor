@@ -1,12 +1,17 @@
-# Firebase Authentication (the part of Firebase that stayed)
+# Authentication — Native Session Tokens (Firebase fallback during migration)
 
-The Firestore-to-D1 migration completed in May 2026; **Firebase Authentication remains the JWT layer** and is the only Firebase service still in use. This doc explains what stayed, why, and the full auth flow end-to-end.
+Auth runs on the Archive's **own native session tokens**: a Worker-signed HS256 JWT minted by `POST /api/auth/login` after it verifies a scrypt password hash stored in D1 (the `users_password_credentials` table). Mint + verify live entirely in our code — [`api/_lib/sessionToken.ts`](../../api/_lib/sessionToken.ts) — with no third-party issuer and no JWKS round-trip.
+
+**Firebase Authentication is no longer the auth layer.** Having finished the Firestore→D1 / Storage→R2 move, the auth cutover replaced Firebase ID tokens with native session tokens; Firebase now survives only as a *migration-window fallback* for users not yet migrated to native credentials, and is removed in Phase 5 (the final auth-exit step). This doc covers the native flow, the Firebase fallback, and the parts that are unchanged (identity handles, RBAC helpers, privacy, account lifecycle).
+
+> **Names lag reality:** this file stays `auth-firebase.md` and `api/_lib/firebase-admin.ts` keeps its name for link/import stability, but both now centre on the native path. Don't read the filename as "Firebase is the auth system" — it isn't.
 
 ## What's kept vs. what's gone
 
 | Service | Status | Why |
 |---|---|---|
-| Firebase Authentication | **Kept** | Solid JWT issuer; user accounts already exist; verification done locally via JWKS, no SDK lock-in |
+| **Native session tokens** (`api/_lib/sessionToken.ts`) | **Primary auth** | Worker-signed HS256 JWT; scrypt passwords in D1; no third-party issuer, no JWKS round-trip. Issued by `/api/auth/login`. |
+| Firebase Authentication | **Fallback only** (removed Phase 5) | Was the JWT issuer pre-cutover; now accepted only for users not yet migrated to native credentials. Verified locally via JWKS, no SDK. |
 | Firestore | Removed | Replaced by Cloudflare D1 (May 2026) |
 | Firebase Storage | Removed | Replaced by Cloudflare R2 |
 | `firebase-admin` SDK on the proxy | **Removed** (May 2026) | Replaced by `jose` (JWKS-based JWT verify) + direct Firebase Identity Toolkit REST calls for admin operations (createUser / updateUser / deleteUser / createCustomToken). Runtime-portable: works in Node and Cloudflare Workers. |
@@ -47,13 +52,13 @@ The list must stay in sync between those two files.
 
 ## End-to-end auth flow
 
-### 1. Sign-in
-1. User enters username + password.
-2. `usernameToEmail` converts the handle to `<handle>@archive.internal`.
-3. `signInWithEmailAndPassword` issues a Firebase ID token.
-4. `onAuthStateChanged` in `App.tsx` triggers a profile refresh.
+### 1. Sign-in (native-first, Firebase fallback)
+1. User enters username + password; `login()` in [`src/lib/auth.ts`](../../src/lib/auth.ts) POSTs `/api/auth/login`.
+2. The server verifies the scrypt hash on the user's D1 credentials row and, on success, `issueSessionToken()` mints a 30-day sliding HS256 JWT. The client stores it (localStorage) and is signed in — **no Firebase involved.**
+3. **Fallback (migration window only):** if native login fails (bad creds, `AUTH_JWT_SECRET` unset, the remote DB not yet carrying the password column, or a network error), `login()` falls through to Firebase `signInWithEmailAndPassword` (using `usernameToEmail` → `<handle>@archive.internal`), then POSTs `/api/auth/adopt` to write the D1 scrypt hash so the *next* login goes native ("hash-on-next-login" cutover).
+4. `onAuthChange` in `App.tsx` (native token set, or Firebase `onAuthStateChanged`) triggers a profile refresh.
 
-There's also a non-password sign-in path via Firebase **custom tokens**: an admin can mint a one-hour token through `POST /api/admin/users/[id]/sign-in-token`, share the resulting `/auth/redeem?token=…` URL, and [`RedeemTokenPage.tsx`](../../src/pages/auth/RedeemTokenPage.tsx) calls `signInWithCustomToken(auth, token)`. See [admin-users.md](../features/admin-users.md#sign-in-link-non-destructive--prefer-this).
+There's also a non-password sign-in path via Firebase **custom tokens** (still Firebase-backed during the migration window): an admin can mint a one-hour token through `POST /api/admin/users/[id]/sign-in-token`, share the resulting `/auth/redeem?token=…` URL, and [`RedeemTokenPage.tsx`](../../src/pages/auth/RedeemTokenPage.tsx) calls `signInWithCustomToken(auth, token)`. See [admin-users.md](../features/admin-users.md#sign-in-link-non-destructive--prefer-this).
 
 ### 2. Profile load
 1. `App.tsx` calls `GET /api/me` with the Bearer token.
@@ -67,17 +72,17 @@ There's also a non-password sign-in path via Firebase **custom tokens**: an admi
 This whole sequence used to live on the client (with `fetchDocument('users', uid)` + conditional `upsertDocument('users', uid, {...})`). Moving it server-side closes the H6 risk where a coerced client could spread `{ ..., role: 'admin' }` into the upsert.
 
 ### 3. Authorised request to D1 / R2
-1. Browser fetches an ID token: `await auth.currentUser.getIdToken()`.
-2. Adds `Authorization: Bearer <id-token>` to the request.
-3. Proxy verifies the token via `jose` against Firebase's public JWKS endpoint (`https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com`). No credentials required server-side — verification is signature-checked against the public keys.
+1. Browser fetches the active bearer token via `getSessionToken()` ([`src/lib/auth.ts`](../../src/lib/auth.ts)): the native session token if present + unexpired, else (migration window) the current Firebase ID token.
+2. Adds `Authorization: Bearer <token>` to the request.
+3. Proxy verifies via `verifyEitherToken()` ([`api/_lib/firebase-admin.ts`](../../api/_lib/firebase-admin.ts)): when `AUTH_JWT_SECRET` is configured it tries the **native HS256 verify first** (`verifySessionToken`); a Firebase token is RS256 so it fails that and falls through to `jose` JWKS verification against Firebase's public keys (`https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com`). Both paths are signature-checked — no credentials required server-side.
 4. Proxy checks the user's role against the route's required role. Which helper fires depends on the endpoint — see the helpers table below.
 5. Proxy forwards to the Worker with the shared `R2_API_SECRET`.
 
 The generic `/api/d1/query` proxy has a split gate: writes / DDL go through `requireStaffAccess`, reads go through `requireAuthenticatedUser`. Per-route endpoints (`/api/me`, `/api/characters/[id]`, `/api/lore`, `/api/campaigns`, `/api/profiles/[username]`, `/api/admin/characters`, `/api/admin/users/[id]/[action]`, etc.) each enforce their own role + ownership rules. See [api-endpoints.md](api-endpoints.md) for the per-route surface.
 
 ### 4. Sign-out
-1. `signOut(auth)` clears the local Firebase session.
-2. `onAuthStateChanged` fires with `null`; `App.tsx` clears `userProfile`.
+1. The client clears the native session token (and signs out any Firebase fallback session).
+2. Subscribers fire with `null`; `App.tsx` clears `userProfile`.
 3. All cached D1 data is cleared via `clearCache()` in `d1.ts`.
 
 ## Server-side helpers
@@ -94,14 +99,14 @@ All in [api/_lib/firebase-admin.ts](../../api/_lib/firebase-admin.ts):
 | `isCharacterDM(role)` | Predicate: `admin` or `co-dm` (deliberately NOT `lore-writer` — that role is for wiki content, not character management) |
 | `isWikiStaff(role)` | Predicate: `admin`, `co-dm`, or `lore-writer` (broader than the character set because `lore-writer` exists to author wiki content and needs draft + dm_notes visibility) |
 
-Each `require*` helper:
+Each `require*` helper (via the shared `checkAccessFromToken` → `verifyEitherToken`):
 1. Validates the `Bearer <token>` header is present.
-2. Verifies the token via `jose` (`jwtVerify` against the cached Firebase JWKS).
+2. Verifies the token — native HS256 first (`verifySessionToken`, when `AUTH_JWT_SECRET` is set), falling back to Firebase JWKS (`jwtVerify`) during the migration window.
 3. Reads the user's role from the D1 `users` table.
 4. Throws `HttpError(401|403|404, message)` on failure.
 5. Returns `{ decoded, role }` (or richer for `requireCharacterAccess`) on success.
 
-There is **no** signatureless fallback. Token verification has no credential dependency (JWKS is public), so every token is signature-checked unconditionally on every request. If verification fails the helper throws 401 and the caller sees an "Invalid auth token" message.
+There is **no** signatureless fallback. Both verify paths are signature-checked (native HS256 secret / public Firebase JWKS), so every token is checked unconditionally on every request. If verification fails the helper throws 401 and the caller sees an "Invalid auth token" message.
 
 ## RBAC role matrix
 
@@ -149,6 +154,6 @@ The proxy-gate decision tree (which tables are read-blocked, which are write-blo
 - [api-endpoints.md](api-endpoints.md) — the per-route endpoint surface and which `require*` helper each one uses
 - [runtime.md](runtime.md) — full request flow including the auth chain
 - [d1-architecture.md](d1-architecture.md) — `getAuthHeaders()` in the D1 client
-- [env-vars.md](env-vars.md) — `FIREBASE_SERVICE_ACCOUNT_JSON` (the only Firebase env var the server reads after the SDK exit)
+- [env-vars.md](env-vars.md) — `AUTH_JWT_SECRET` (signs + verifies native session tokens) and `FIREBASE_SERVICE_ACCOUNT_JSON` (Firebase admin user-management ops + fallback verify)
 - [../architecture/permissions-rbac.md](../architecture/permissions-rbac.md) — role definitions and `effectiveProfile`
 - [../features/admin-users.md](../features/admin-users.md) — admin user management UI

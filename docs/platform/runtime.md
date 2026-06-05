@@ -8,11 +8,11 @@ This doc explains where each piece of the application runs, how requests flow be
 ┌─────────────────────────────────────────────────────────────────┐
 │  1. Browser (Vite-built React SPA)                              │
 │     - Calls /api/* on the same origin                           │
-│     - Uses Firebase Auth SDK directly (JWT issuance)            │
+│     - Native session token auth (Firebase fallback)             │
 │     - Calls D1 via /api/d1/query, R2 via /api/r2/*              │
 └─────────────────────────────────────────────────────────────────┘
                               │
-                              ▼  HTTP, Bearer <Firebase ID token>
+                              ▼  HTTP, Bearer <session token>
 ┌─────────────────────────────────────────────────────────────────┐
 │  2. Cloudflare Pages Functions (prod) OR Express (local dev)    │
 │     - functions/api/**: native Pages Function handlers          │
@@ -41,7 +41,7 @@ This doc explains where each piece of the application runs, how requests flow be
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-Authentication is handled by **Firebase**, but Firebase Authentication is only used as a JWT issuer. Firestore was decommissioned in May 2026 and replaced by Cloudflare D1. See [auth-firebase.md](auth-firebase.md).
+Authentication uses the Archive's **own native session tokens** (Worker-signed HS256 JWT, login via `/api/auth/login`); Firebase Auth remains only as a migration-window fallback, removed in Phase 5. Firestore was decommissioned in May 2026 and replaced by Cloudflare D1. See [auth-firebase.md](auth-firebase.md).
 
 ## Local dev vs production
 
@@ -63,7 +63,7 @@ The Express dev server in `server.ts` and the Pages Functions in `functions/api/
 
 1. `ClassList.tsx` calls `fetchCollection('classes')` from `src/lib/d1.ts`.
 2. `d1.ts` checks in-memory cache → sessionStorage cache → de-duplicates inflight → otherwise issues a `POST /api/d1/query` with the SQL.
-3. The Express/Pages handler `handleD1Query` verifies the Firebase JWT (via `jose` against Firebase's public JWKS — no Admin SDK). The gate is split: writes/DDL go through `requireStaffAccess`, reads go through `requireAuthenticatedUser`. A `SELECT * FROM classes` read passes the latter for any signed-in user.
+3. The Express/Pages handler `handleD1Query` verifies the bearer token via `verifyEitherToken` (native HS256 session token first, Firebase JWKS fallback — no Admin SDK). The gate is split: writes/DDL go through `requireStaffAccess`, reads go through `requireAuthenticatedUser`. A `SELECT * FROM classes` read passes the latter for any signed-in user.
 4. Proxy forwards to the Worker with the shared `API_SECRET`.
 5. The Worker calls `env.DB.prepare(sql).bind(...params).all()`.
 6. Result returns through the chain. `d1.ts` caches it and auto-parses JSON columns.
@@ -85,7 +85,7 @@ The PUT branch on the same endpoint handles both create (row doesn't exist yet �
 ### c) Uploading an image
 
 1. `ImageUpload` component converts the file to WebP (and to icon/token canvas size if applicable) via `src/lib/imageUtils.ts`.
-2. Calls `r2Upload(file, key)` from `src/lib/r2.ts`. It POSTs `multipart/form-data` to `/api/r2/upload` with the user's Firebase JWT.
+2. Calls `r2Upload(file, key)` from `src/lib/r2.ts`. It POSTs `multipart/form-data` to `/api/r2/upload` with the user's session token (Bearer).
 3. `handleR2Upload` (Pages/Express) calls `requireImageManagerAccess(...)` then forwards the body to the Worker with the shared `API_SECRET`.
 4. The Worker writes to R2 (`env.BUCKET.put`) and returns the public URL.
 5. The client typically writes a metadata row through D1 (e.g., `image_metadata`) referencing the URL.
@@ -94,8 +94,8 @@ All seven R2 actions (list / delete / rename / move-folder / upload / scan-refer
 
 ### d) Authenticating a user
 
-1. Browser calls `signInWithEmailAndPassword(auth, usernameToEmail(username), pw)` from `src/lib/firebase.ts`.
-2. Firebase Auth issues an ID token. The token is automatically attached to every D1 / R2 / per-route call as `Authorization: Bearer <id-token>`.
+1. Browser calls `login(username, password)` from `src/lib/auth.ts`, which POSTs `/api/auth/login`; on success the server returns a native session token. (Firebase `signInWithEmailAndPassword` is the migration-window fallback when native login can't complete.)
+2. The token is attached to every D1 / R2 / per-route call as `Authorization: Bearer <token>` (resolved by `getSessionToken()`).
 3. `App.tsx` calls `GET /api/me`, which verifies the token, auto-creates the `users` row on first sign-in, auto-promotes the bootstrap admins, and returns the profile. See [auth-firebase.md §2 Profile load](auth-firebase.md#2-profile-load) for the full sequence.
 
 ## Why one Worker, two bindings
@@ -122,7 +122,7 @@ The Worker is intentionally stateless and trusts only the proxy-layer auth. **Th
 
 ## Process boundaries / what runs where
 
-- **Firebase token verification** runs only on the proxy (Express / Pages Functions), never in the Worker. The Worker has no Firebase dependency. The proxy uses `jose` to verify ID tokens against Firebase's public JWKS (no Admin SDK); admin user-management calls Identity Toolkit REST directly.
+- **Token verification** runs only on the proxy (Express / Pages Functions), never in the Worker. The Worker trusts only the shared `API_SECRET`. The proxy verifies the native session token (HS256 via `AUTH_JWT_SECRET`) first, falling back to Firebase JWKS during the migration window (`jose`, no Admin SDK); admin user-management calls Firebase Identity Toolkit REST directly.
 - **No Firestore client.** The `firebase/firestore` package is no longer imported anywhere in the codebase; D1 fully replaced it. See [d1-architecture.md](d1-architecture.md) for the current data layer.
 - **R2 operations** never touch the proxy's filesystem. Uploads stream from browser through the proxy to the Worker.
 
@@ -134,6 +134,6 @@ See [env-vars.md](env-vars.md) for the complete list of environment variables, w
 
 - [d1-architecture.md](d1-architecture.md) — D1 client API, cache layers, JSON columns
 - [r2-storage.md](r2-storage.md) — R2 bucket structure, image handling
-- [auth-firebase.md](auth-firebase.md) — Firebase Auth, JWT flow, server-side helpers
+- [auth-firebase.md](auth-firebase.md) — native session-token auth (+ Firebase fallback), JWT flow, server-side helpers
 - [../operations/local-dev.md](../operations/local-dev.md) — practical setup for the two-terminal workflow
 - [../operations/deployment.md](../operations/deployment.md) — deploying changes
