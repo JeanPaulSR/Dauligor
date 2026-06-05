@@ -1,28 +1,19 @@
 import React from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { Input } from '../../ui/input';
 import { Checkbox } from '../../ui/checkbox';
-import { ActivitySection, FieldRow } from './primitives';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
 import SingleSelectSearch from '../../ui/SingleSelectSearch';
+import { ActivitySection, FormRow, Field, EmptyRow } from './primitives';
 import ActiveEffectKeyInput from '../ActiveEffectKeyInput';
-import {
-  RECOVERY_PERIOD_OPTIONS,
-  RECOVERY_TYPE_OPTIONS,
-  CONSUMPTION_TARGET_TYPES,
-  SCALING_MODE_OPTIONS,
-} from './constants';
+import { RECOVERY_PERIOD_OPTIONS, CONSUMPTION_TARGET_TYPES } from './constants';
 
 /**
- * Consumption-tab content: Scaling toggle, Uses + Recovery rules,
- * and the Consumption Targets array. Combines the four
- * ActivitySections that live under "consumption" on every activity.
- *
- * Why all four together: they share the same `consumption` /
- * `uses` patch path on the parent activity, so keeping them
- * co-located makes the props surface smaller (one onConsumptionChange,
- * one onUsesChange) and the sub-component reads cleanly as a single
- * unit. Future authoring tweaks (e.g. autocomplete on recovery
- * formula) only need to touch this one file.
+ * Consumption-tab content, rebuilt to mirror Foundry dnd5e 5.3.1's
+ * `activity-consumption.hbs` (+ the `field-uses` partial). Section order
+ * matches Foundry exactly: Consumption → Consumption Scaling → Usage →
+ * Recovery. Owns the consumption-targets + recovery arrays via the parent's
+ * `onConsumptionChange` / `onUsesChange` patch callbacks.
  */
 
 export interface ConsumptionScalingShape {
@@ -43,10 +34,6 @@ export interface ConsumptionShape {
   targets?: ConsumptionTargetShape[];
 }
 
-/** Matches `SemanticActivity['uses']['recovery'][n]` — all required
- *  strings, even when the author hasn't typed a value yet (empty
- *  string keeps the shape stable). Aligning fully with the canonical
- *  activity type so the parent's `onUsesChange` accepts the patches. */
 export interface UsesRecoveryShape {
   period: string;
   type: string;
@@ -59,11 +46,50 @@ export interface UsesShape {
   recovery?: UsesRecoveryShape[];
 }
 
+/** An entity an "Item Uses" consumption target can draw from. */
+export interface ConsumptionItemTarget {
+  id: string;
+  name: string;
+  hint?: string;
+}
+
 export interface ConsumptionTabEditorProps {
   consumption: ConsumptionShape | undefined;
   onConsumptionChange: (patch: Partial<ConsumptionShape>) => void;
   uses: UsesShape | undefined;
   onUsesChange: (next: UsesShape) => void;
+  /** Cast activities surface a "Consume Spell Slot" toggle; others don't. */
+  showSpellSlot?: boolean;
+  /**
+   * Candidate entities for an "Item Uses" consumption target. Supplied by
+   * the host editor (class features with uses in ClassEditor; sibling option
+   * items in the option-group editor; etc.). When provided, the target field
+   * for `itemUses` becomes a searchable dropdown instead of a free-text path.
+   */
+  itemTargets?: ConsumptionItemTarget[];
+}
+
+// Native `uses.recovery[].type` values (dnd5e 5.3.1). The editor previously
+// carried invented `recoverPartial` / `recovery` slugs — Foundry only
+// recognises these three. Kept local so the shared activity constants (also
+// consumed by ItemUsesField / Spells / Feats editors) stay untouched.
+const RECOVERY_TYPE_OPTIONS = [
+  { value: 'recoverAll', label: 'Recover All Uses' },
+  { value: 'formula',    label: 'Recover Formula' },
+  { value: 'loseAll',    label: 'Lose All Uses' },
+];
+
+// Consumption-target scaling modes. Generic targets scale by a flat
+// "amount"; spell-slot consumption can also scale by slot "level". (This is
+// distinct from a damage part's whole/half scaling.)
+function consumptionScalingModes(type: string | undefined): { value: string; label: string }[] {
+  const base = [
+    { value: '', label: 'None' },
+    { value: 'amount', label: 'Amount' },
+  ];
+  return type === 'spellSlots'
+    ? [...base, { value: 'level', label: 'Spell Slot Level' }]
+    : base;
 }
 
 export default function ConsumptionTabEditor({
@@ -71,204 +97,248 @@ export default function ConsumptionTabEditor({
   onConsumptionChange,
   uses,
   onUsesChange,
+  showSpellSlot = false,
+  itemTargets = [],
 }: ConsumptionTabEditorProps) {
-  const patchScaling = (patch: Partial<ConsumptionScalingShape>) => {
-    onConsumptionChange({
-      scaling: { ...(consumption?.scaling || {}), ...patch },
-    });
-  };
-  const patchTargets = (next: ConsumptionTargetShape[]) => {
-    onConsumptionChange({ targets: next });
-  };
+  const targets = consumption?.targets ?? [];
+  const patchTargets = (next: ConsumptionTargetShape[]) => onConsumptionChange({ targets: next });
+  const addTarget = () =>
+    patchTargets([...targets, { type: 'activityUses', target: '', value: '1', scaling: { mode: '', formula: '' } }]);
+
+  const patchScaling = (patch: Partial<ConsumptionScalingShape>) =>
+    onConsumptionChange({ scaling: { ...(consumption?.scaling || {}), ...patch } });
+
   const recovery = uses?.recovery ?? [];
-  const patchRecovery = (next: UsesRecoveryShape[]) => {
-    onUsesChange({ ...(uses || {}), recovery: next });
-  };
+  const patchRecovery = (next: UsesRecoveryShape[]) => onUsesChange({ ...(uses || {}), recovery: next });
+  const addRecovery = () => patchRecovery([...recovery, { period: 'lr', type: 'recoverAll', formula: '' }]);
+
+  const scalingAllowed = !!consumption?.scaling?.allowed;
 
   return (
     <div>
-      <ActivitySection label="SCALING">
-        <FieldRow label="Allow Scaling" hint="Can this activity be activated at higher levels?" inline>
-          <Checkbox
-            checked={consumption?.scaling?.allowed}
-            onCheckedChange={checked => patchScaling({
-              allowed: !!checked,
-              max: consumption?.scaling?.max || '',
-            })}
-          />
-        </FieldRow>
-        {consumption?.scaling?.allowed && (
-          <FieldRow label="Maximum Formula">
-            <Input
-              value={consumption?.scaling?.max || ''}
-              onChange={e => patchScaling({ max: e.target.value })}
-              className="field-input border-gold/15 font-mono text-xs"
-              placeholder="@item.level or 9"
+      {/* ── CONSUMPTION ── */}
+      <ActivitySection label="Consumption" onAdd={addTarget} addLabel="Add consumption target">
+        {showSpellSlot && (
+          <FormRow inline label="Consume Spell Slot" hint="Native cast activities usually leave this enabled.">
+            <Checkbox
+              checked={consumption?.spellSlot}
+              onCheckedChange={checked => onConsumptionChange({ spellSlot: !!checked })}
             />
-          </FieldRow>
+          </FormRow>
         )}
-        <FieldRow label="Consume Spell Slot" hint="Native cast activities usually leave this enabled." inline>
+        {targets.length === 0 ? (
+          <EmptyRow>None</EmptyRow>
+        ) : (
+          <div className="py-2 space-y-2">
+            {targets.map((target, idx) => {
+              const patchAt = (patch: Partial<ConsumptionTargetShape>) => {
+                const next = targets.slice();
+                next[idx] = { ...target, ...patch };
+                patchTargets(next);
+              };
+              const showTarget = !!target.type && target.type !== 'activityUses';
+              const useItemPicker = target.type === 'itemUses' && itemTargets.length > 0;
+              const scalingModes = consumptionScalingModes(target.type);
+              return (
+                <div key={idx} className="p-2.5 bg-gold/5 border border-gold/10 rounded space-y-2">
+                  <div className="flex items-end gap-2">
+                    <Field label="Type" className="flex-1">
+                      <Select value={target.type || 'activityUses'} onValueChange={val => patchAt({ type: val })}>
+                        <SelectTrigger className="field-input border-gold/15 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {CONSUMPTION_TARGET_TYPES.map(o => (
+                            <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                    <Field label="Amount" className="w-24 shrink-0">
+                      <Input
+                        value={target.value || ''}
+                        onChange={e => patchAt({ value: e.target.value })}
+                        autoComplete="off"
+                        className="field-input border-gold/15 text-xs text-center font-mono"
+                        placeholder="1"
+                      />
+                    </Field>
+                    <button
+                      type="button"
+                      onClick={() => patchTargets(targets.filter((_, i) => i !== idx))}
+                      className="h-9 flex items-center text-blood/60 hover:text-blood shrink-0 transition-colors"
+                      aria-label="Remove consumption target"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  {showTarget && (
+                    useItemPicker ? (
+                      <Field label="Target">
+                        <SingleSelectSearch
+                          value={target.target || ''}
+                          onChange={(val) => patchAt({ target: val })}
+                          options={itemTargets}
+                          placeholder="Search items with uses…"
+                          noEntitiesText="No items with uses available."
+                          triggerClassName="w-full h-9"
+                        />
+                      </Field>
+                    ) : (
+                      <ActiveEffectKeyInput
+                        value={target.target || ''}
+                        onChange={(next) => patchAt({ target: next })}
+                        placeholder="resources.primary.value"
+                      />
+                    )
+                  )}
+                  <div className="flex items-end gap-2">
+                    <Field label="Scaling" className="flex-1">
+                      <Select
+                        value={target.scaling?.mode || '__none'}
+                        onValueChange={val => patchAt({
+                          scaling: { ...(target.scaling || { mode: '', formula: '' }), mode: val === '__none' ? '' : val },
+                        })}
+                      >
+                        <SelectTrigger className="field-input border-gold/15 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {scalingModes.map(o => (
+                            <SelectItem key={o.value || '__none'} value={o.value || '__none'}>{o.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                    {target.scaling?.mode ? (
+                      <Field label="Formula" className="flex-1">
+                        <Input
+                          value={target.scaling?.formula || ''}
+                          onChange={e => patchAt({
+                            scaling: { ...(target.scaling || { mode: '', formula: '' }), formula: e.target.value },
+                          })}
+                          autoComplete="off"
+                          className="field-input border-gold/15 text-xs font-mono"
+                          placeholder="Automatic"
+                        />
+                      </Field>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </ActivitySection>
+
+      {/* ── CONSUMPTION SCALING ── */}
+      <ActivitySection label="Consumption Scaling">
+        <FormRow inline label="Allow Scaling" hint="Can an activity not on a spell be activated at higher levels?">
           <Checkbox
-            checked={consumption?.spellSlot}
-            onCheckedChange={checked => onConsumptionChange({ spellSlot: !!checked })}
+            checked={scalingAllowed}
+            onCheckedChange={checked => patchScaling({ allowed: !!checked, max: consumption?.scaling?.max || '' })}
           />
-        </FieldRow>
-      </ActivitySection>
-
-      <ActivitySection label="USES">
-        <FieldRow label="Spent">
-          <Input
-            type="number"
-            value={uses?.spent || 0}
-            onChange={e => onUsesChange({ ...(uses || {}), spent: parseInt(e.target.value) || 0 })}
-            className="field-input border-gold/15 text-xs text-center no-number-spin"
-          />
-        </FieldRow>
-        <FieldRow label="Maximum">
-          <Input
-            value={uses?.max || ''}
-            onChange={e => onUsesChange({ ...(uses || {}), max: e.target.value })}
-            className="field-input border-gold/15 text-xs"
-            placeholder="Formula or number"
-          />
-        </FieldRow>
-      </ActivitySection>
-
-      <ActivitySection label="RECOVERY">
-        <div className="space-y-2 py-2">
-          {recovery.map((entry, idx) => (
-            <div key={idx} className="flex gap-2 items-center p-2.5 bg-gold/5 border border-gold/5 rounded">
-              <SingleSelectSearch
-                value={entry.period || ''}
-                onChange={(val) => {
-                  const next = recovery.slice();
-                  next[idx] = { ...entry, period: val };
-                  patchRecovery(next);
-                }}
-                options={RECOVERY_PERIOD_OPTIONS.map(o => ({ id: o.value, name: o.label, hint: o.hint }))}
-                placeholder="Period"
-                triggerClassName="flex-1"
-              />
-              <SingleSelectSearch
-                value={entry.type || ''}
-                onChange={(val) => {
-                  const next = recovery.slice();
-                  next[idx] = { ...entry, type: val };
-                  patchRecovery(next);
-                }}
-                options={RECOVERY_TYPE_OPTIONS.map(o => ({ id: o.value, name: o.label }))}
-                placeholder="Type"
-                triggerClassName="flex-1"
-              />
+        </FormRow>
+        {scalingAllowed && (
+          <FormRow label="Maximum">
+            <Field className="flex-1">
               <Input
-                value={entry.formula || ''}
-                onChange={e => {
-                  const next = recovery.slice();
-                  next[idx] = { ...entry, formula: e.target.value };
-                  patchRecovery(next);
-                }}
-                className="h-7 text-[10px] font-mono bg-background/40 border-gold/15 flex-1"
-                placeholder="1d4 or @prof"
+                value={consumption?.scaling?.max || ''}
+                onChange={e => patchScaling({ max: e.target.value })}
+                autoComplete="off"
+                className="field-input border-gold/15 text-xs font-mono"
+                placeholder="∞"
               />
-              <button
-                type="button"
-                onClick={() => patchRecovery(recovery.filter((_, i) => i !== idx))}
-                className="text-blood/60 hover:text-blood shrink-0 transition-colors"
-                aria-label="Remove recovery rule"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          ))}
-          {recovery.length === 0 && (
-            <p className="text-center py-3 text-ink/35 italic text-[10px]">No recovery rules.</p>
-          )}
-          <button
-            type="button"
-            onClick={() => patchRecovery([...recovery, { period: '', type: '', formula: '' }])}
-            className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[10px] uppercase tracking-widest font-black text-gold/55 hover:text-gold border border-dashed border-gold/15 hover:border-gold/35 rounded transition-colors"
-          >
-            <Plus className="w-3 h-3" /> Add Recovery Rule
-          </button>
-        </div>
+            </Field>
+          </FormRow>
+        )}
       </ActivitySection>
 
-      <ActivitySection label="CONSUMPTION TARGETS">
-        <div className="space-y-2 py-2">
-          {(consumption?.targets || []).map((target, idx) => {
-            const targets = consumption?.targets || [];
-            const patchAt = (patch: Partial<ConsumptionTargetShape>) => {
-              const next = targets.slice();
-              next[idx] = { ...target, ...patch };
-              patchTargets(next);
-            };
-            return (
-              <div key={idx} className="p-2.5 bg-gold/5 border border-gold/5 rounded space-y-2">
-                <div className="flex gap-2 items-center">
-                  <SingleSelectSearch
-                    value={target.type || ''}
-                    onChange={(val) => patchAt({ type: val })}
-                    options={CONSUMPTION_TARGET_TYPES.map(o => ({ id: o.value, name: o.label }))}
-                    placeholder="Type"
-                    triggerClassName="flex-1"
-                  />
-                  <Input
-                    value={target.value || ''}
-                    onChange={e => patchAt({ value: e.target.value })}
-                    className="h-7 w-16 text-[10px] font-mono bg-background/40 border-gold/15 text-center"
-                    placeholder="1"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => patchTargets(targets.filter((_, i) => i !== idx))}
-                    className="text-blood/60 hover:text-blood shrink-0 transition-colors"
-                    aria-label="Remove consumption target"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+      {/* ── USAGE ── */}
+      <ActivitySection label="Usage">
+        <FormRow label="Limited Uses">
+          <Field label="Spent" className="flex-1">
+            <Input
+              type="number"
+              value={uses?.spent || 0}
+              onChange={e => onUsesChange({ ...(uses || {}), spent: parseInt(e.target.value) || 0 })}
+              className="field-input border-gold/15 text-xs text-center no-number-spin"
+            />
+          </Field>
+          <Field label="Max" className="flex-1">
+            <Input
+              value={uses?.max || ''}
+              onChange={e => onUsesChange({ ...(uses || {}), max: e.target.value })}
+              autoComplete="off"
+              className="field-input border-gold/15 text-xs text-center font-mono"
+              placeholder="—"
+            />
+          </Field>
+        </FormRow>
+      </ActivitySection>
+
+      {/* ── RECOVERY ── */}
+      <ActivitySection label="Recovery" onAdd={addRecovery} addLabel="Add recovery rule">
+        {recovery.length === 0 ? (
+          <EmptyRow>Never</EmptyRow>
+        ) : (
+          <div className="py-2 space-y-2">
+            {recovery.map((entry, idx) => {
+              const patchAt = (patch: Partial<UsesRecoveryShape>) => {
+                const next = recovery.slice();
+                next[idx] = { ...entry, ...patch };
+                patchRecovery(next);
+              };
+              return (
+                <div key={idx} className="p-2.5 bg-gold/5 border border-gold/10 rounded space-y-2">
+                  <div className="flex items-end gap-2">
+                    <Field label="Period" className="flex-1">
+                      <Select value={entry.period || 'lr'} onValueChange={val => patchAt({ period: val })}>
+                        <SelectTrigger className="field-input border-gold/15 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {RECOVERY_PERIOD_OPTIONS.map(o => (
+                            <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                    <Field label="Recovery" className="flex-1">
+                      <Select value={entry.type || 'recoverAll'} onValueChange={val => patchAt({ type: val })}>
+                        <SelectTrigger className="field-input border-gold/15 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {RECOVERY_TYPE_OPTIONS.map(o => (
+                            <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                    <button
+                      type="button"
+                      onClick={() => patchRecovery(recovery.filter((_, i) => i !== idx))}
+                      className="h-9 flex items-center text-blood/60 hover:text-blood shrink-0 transition-colors"
+                      aria-label="Remove recovery rule"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  {entry.type === 'formula' && (
+                    <Input
+                      value={entry.formula || ''}
+                      onChange={e => patchAt({ formula: e.target.value })}
+                      autoComplete="off"
+                      className="field-input border-gold/15 text-xs font-mono w-full"
+                      placeholder="1d4 or @prof"
+                    />
+                  )}
                 </div>
-                <ActiveEffectKeyInput
-                  value={target.target || ''}
-                  onChange={(next) => patchAt({ target: next })}
-                  placeholder="resources.primary.value"
-                />
-                <div className="flex gap-2 items-center">
-                  <SingleSelectSearch
-                    value={target.scaling?.mode || ''}
-                    onChange={(val) => patchAt({
-                      scaling: { ...(target.scaling || { mode: '', formula: '' }), mode: val },
-                    })}
-                    options={SCALING_MODE_OPTIONS.map(o => ({ id: o.value, name: o.label }))}
-                    placeholder="No Scaling"
-                    allowClear={false}
-                    triggerClassName="flex-1"
-                  />
-                  <Input
-                    value={target.scaling?.formula || ''}
-                    onChange={e => patchAt({
-                      scaling: { ...(target.scaling || { mode: '', formula: '' }), formula: e.target.value },
-                    })}
-                    className="h-7 text-[10px] font-mono bg-background/40 border-gold/15 flex-1"
-                    placeholder="@item.level"
-                  />
-                </div>
-              </div>
-            );
-          })}
-          {!(consumption?.targets?.length) && (
-            <p className="text-center py-3 text-ink/35 italic text-[10px]">No consumption targets.</p>
-          )}
-          <button
-            type="button"
-            onClick={() => patchTargets([
-              ...(consumption?.targets || []),
-              { type: '', target: '', value: '', scaling: { mode: '', formula: '' } },
-            ])}
-            className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[10px] uppercase tracking-widest font-black text-gold/55 hover:text-gold border border-dashed border-gold/15 hover:border-gold/35 rounded transition-colors"
-          >
-            <Plus className="w-3 h-3" /> Add Target
-          </button>
-        </div>
+              );
+            })}
+          </div>
+        )}
       </ActivitySection>
     </div>
   );

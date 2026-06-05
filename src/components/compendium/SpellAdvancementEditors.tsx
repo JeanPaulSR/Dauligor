@@ -42,9 +42,13 @@ const SCOPE_OPTIONS: { value: 'self' | 'all-spellcasting' | 'specific'; label: s
 export function GrantSpellsConfigEditor({
   configuration,
   onChange,
+  hideMode = false,
 }: {
   configuration: any;
   onChange: (next: any) => void;
+  // When true, the Fixed/Choice mode toggle is hidden — the advancement-type
+  // menu (Grant Spells vs Choose Spells) already determines the mode.
+  hideMode?: boolean;
 }) {
   const cfg = useNormalizedGrantSpellsCfg(configuration);
   const { spells, rules, classes } = useSpellAdvancementFoundation();
@@ -74,6 +78,7 @@ export function GrantSpellsConfigEditor({
       <ModeAndResolverPicker
         mode={cfg.mode}
         resolverKind={cfg.resolverKind}
+        hideMode={hideMode}
         onModeChange={mode => updateField({ mode })}
         onResolverKindChange={kind => {
           if (kind === 'explicit') {
@@ -418,36 +423,40 @@ function ToggleRow({
 function ModeAndResolverPicker({
   mode,
   resolverKind,
+  hideMode = false,
   onModeChange,
   onResolverKindChange,
 }: {
   mode: 'fixed' | 'choice';
   resolverKind: 'explicit' | 'rule';
+  hideMode?: boolean;
   onModeChange: (m: 'fixed' | 'choice') => void;
   onResolverKindChange: (k: 'explicit' | 'rule') => void;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-3">
-      <div className="space-y-1">
-        <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/65">Mode</Label>
-        <div className="flex gap-1.5">
-          {(['fixed', 'choice'] as const).map(m => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => onModeChange(m)}
-              className={cn(
-                'flex-1 h-9 rounded border text-xs font-bold uppercase tracking-wide transition-colors',
-                mode === m
-                  ? 'border-gold/65 bg-gold/15 text-gold'
-                  : 'border-gold/15 text-ink/55 hover:border-gold/35 hover:text-gold/85',
-              )}
-            >
-              {m === 'fixed' ? 'Fixed (auto-grant)' : 'Choice (player picks)'}
-            </button>
-          ))}
+    <div className={hideMode ? '' : 'grid grid-cols-2 gap-3'}>
+      {!hideMode && (
+        <div className="space-y-1">
+          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/65">Mode</Label>
+          <div className="flex gap-1.5">
+            {(['fixed', 'choice'] as const).map(m => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => onModeChange(m)}
+                className={cn(
+                  'flex-1 h-9 rounded border text-xs font-bold uppercase tracking-wide transition-colors',
+                  mode === m
+                    ? 'border-gold/65 bg-gold/15 text-gold'
+                    : 'border-gold/15 text-ink/55 hover:border-gold/35 hover:text-gold/85',
+                )}
+              >
+                {m === 'fixed' ? 'Fixed (auto-grant)' : 'Choice (player picks)'}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
       <div className="space-y-1">
         <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/65">Source</Label>
         <div className="flex gap-1.5">

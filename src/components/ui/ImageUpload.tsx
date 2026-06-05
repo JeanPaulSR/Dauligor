@@ -35,6 +35,7 @@ interface ImageUploadProps {
   filename?: string;            // override auto-generated filename (no extension)
   compact?: boolean;            // avatar-style picker for icon slots in editors
   browseRoot?: string;          // R2 prefix to browse for an existing image (omit → no browse button)
+  fallback?: React.ReactNode;   // compact empty-state glyph (e.g. a kind icon) instead of the generic Icon placeholder
 }
 
 // ── component ─────────────────────────────────────────────────────────────────
@@ -49,6 +50,7 @@ export function ImageUpload({
   filename,
   compact,
   browseRoot,
+  fallback,
 }: ImageUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -128,6 +130,8 @@ export function ImageUpload({
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
             />
+          ) : fallback ? (
+            <div className="w-full h-full flex items-center justify-center">{fallback}</div>
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center gap-1">
               <ImageIcon className="w-6 h-6 text-gold/25" />

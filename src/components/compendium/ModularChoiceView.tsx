@@ -3,6 +3,7 @@ import BBCodeRenderer from '../BBCodeRenderer';
 import { cn } from '../../lib/utils';
 import { BookOpen, ChevronLeft } from 'lucide-react';
 import { fetchDocument } from '../../lib/d1';
+import { effectiveOptionLevel } from '../../lib/requirements';
 
 export interface ModularChoiceItem {
   id: string;
@@ -44,6 +45,10 @@ export default function ModularChoiceView({
 
   const selectedItem = items.find(i => i.id === selectedId) || items[0];
   const effectiveSelectedId = selectedItem?.id;
+  // Level gate honors the new requirements tree's `level` leaf first, then
+  // the legacy flat column (see effectiveOptionLevel) so tree-authored
+  // prerequisites surface here, not only flat-column ones.
+  const selectedItemLevel = effectiveOptionLevel(selectedItem);
   
   useEffect(() => {
     if (selectedItem?.featureId && !featureDescriptions[selectedItem.featureId]) {
@@ -74,8 +79,8 @@ export default function ModularChoiceView({
   const cleanName = (name: string) => name.replace(/\s*(Choice|Modular Choice Group)$/i, '');
 
   const sortedItems = [...items].sort((a, b) => {
-    const levelA = a.levelPrerequisite || 0;
-    const levelB = b.levelPrerequisite || 0;
+    const levelA = effectiveOptionLevel(a);
+    const levelB = effectiveOptionLevel(b);
     if (levelA !== levelB) {
       return levelA - levelB;
     }
@@ -90,7 +95,9 @@ export default function ModularChoiceView({
         style={{ width: sidebarWidth }}
       >
         <div className="flex-grow overflow-y-auto custom-scrollbar" style={{ maxHeight }}>
-          {sortedItems.map(item => (
+          {sortedItems.map(item => {
+            const itemLevel = effectiveOptionLevel(item);
+            return (
             <button
               key={item.id}
               onClick={() => onSelect(item.id)}
@@ -103,12 +110,13 @@ export default function ModularChoiceView({
             >
               <div className="flex flex-col gap-0.5">
                 <span>{item.name}</span>
-                {item.levelPrerequisite !== undefined && item.levelPrerequisite > 0 && (
-                  <span className="text-[9px] opacity-40 italic font-normal">Level {item.levelPrerequisite}</span>
+                {itemLevel > 0 && (
+                  <span className="text-[9px] opacity-40 italic font-normal">Level {itemLevel}</span>
                 )}
               </div>
             </button>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -121,8 +129,8 @@ export default function ModularChoiceView({
                 {selectedItem.name}
               </h4>
               <div className="flex gap-2 text-[9px] font-bold text-gold/45 italic uppercase">
-                {selectedItem.levelPrerequisite !== undefined && selectedItem.levelPrerequisite > 0 && (
-                  <span className="bg-gold/5 px-1.5 py-0.5 rounded border border-gold/15">Level {selectedItem.levelPrerequisite}+</span>
+                {selectedItemLevel > 0 && (
+                  <span className="bg-gold/5 px-1.5 py-0.5 rounded border border-gold/15">Level {selectedItemLevel}+</span>
                 )}
                 {selectedItem.stringPrerequisite && (
                   <span className="bg-gold/5 px-1.5 py-0.5 rounded border border-gold/15">{selectedItem.stringPrerequisite}</span>

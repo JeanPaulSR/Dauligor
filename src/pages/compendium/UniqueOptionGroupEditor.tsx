@@ -190,6 +190,9 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
   // `availableOptionItems.filter(i => i.groupId === groupId)`.
   const [allOptionItems, setAllOptionItems] = useState<any[]>([]);
   const [feats, setFeats] = useState<any[]>([]);
+  // Global feature compendium (any feature with uses) — Item Uses consumption
+  // targets for option-feature activities. See ActivityEditor `itemTargets`.
+  const [allFeatures, setAllFeatures] = useState<any[]>([]);
   /**
    * Proficiency pools (weapons + categories, armor + categories, tools +
    * categories, skills, languages + categories) used by the `proficiency`
@@ -313,7 +316,7 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
           allGroups, allOptionItems,
           weapons, weaponCategories, armor, armorCategories,
           tools, toolCategories, skills, languages, languageCategories,
-          featsData,
+          featsData, featuresData,
         ] = await settleAll([
           fetchCollection('sources', { orderBy: 'name ASC' }),
           fetchCollection('classes', { orderBy: 'name ASC' }),
@@ -341,6 +344,9 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
           fetchCollection('languageCategories', { orderBy: '"order", name ASC' }),
           // Feats catalog — ItemGrant feat targets in the Advancement tab.
           fetchCollection('feats', { orderBy: 'name ASC' }),
+          // Global feature compendium — Item Uses consumption targets for
+          // option-feature activities (any feature carrying `uses`).
+          fetchCollection('features', { orderBy: 'name ASC' }),
         ]);
         setSources(sourcesData);
         setClasses(classesData);
@@ -361,6 +367,7 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
         // group→items resolution; feats catalog for ItemGrant feat targets.
         setAllOptionItems((allOptionItems as any[]).map((it: any) => denormalizeCompendiumData(it)));
         setFeats(featsData as any[]);
+        setAllFeatures(featuresData as any[]);
 
         // Merge per-kind proficiency pools. Each row's `identifier`
         // is what gets stored on the leaf and round-trips as the
@@ -1252,6 +1259,9 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                   activities={editingItem?.activities || []}
                   onChange={(acts) => setEditingItem((prev: any) => ({ ...(prev || {}), activities: acts }))}
                   availableEffects={editingItem?.effects || []}
+                  itemTargets={allFeatures
+                    .filter((f: any) => f?.uses?.max)
+                    .map((f: any) => ({ id: f.identifier || f.id, name: f.name || f.identifier || String(f.id) }))}
                 />
               </div>
             )}
@@ -1298,12 +1308,12 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
 
               </div>
 
-              <div className="p-4 border-t border-gold/15 bg-background flex justify-end shrink-0 gap-3">
+              <div className="px-5 py-2 border-t border-gold/15 bg-gold/[0.03] flex justify-end shrink-0 gap-2">
                 <Button
                   type="button"
                   variant="ghost"
                   onClick={() => setEditingItem(null)}
-                  className="label-text opacity-70 hover:opacity-100"
+                  className="label-text opacity-70 hover:opacity-100 h-8"
                 >
                   Close
                 </Button>

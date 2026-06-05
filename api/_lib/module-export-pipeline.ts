@@ -258,6 +258,11 @@ export async function buildSourceClassCatalog(sourceSlug: string) {
     return {
       sourceId: `class-${identifier}`,
       name: cls.name,
+      // Drives Core / Alternate / New grouping in the website class list and
+      // the Foundry creator's class picker. Default "core" matches the site's
+      // `!category` fallback so the field is always present (handoff
+      // foundry-module → compendium-editors, 2026-06-04).
+      category: cls.category || "core",
       // Source abbreviation (PHB, XGE, …) so the Foundry browser can label
       // classes by abbreviation. The legacy `deriveSourceLabel` fallback
       // produced "2014" / "2024" when given just the rules year.

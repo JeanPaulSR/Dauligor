@@ -1,20 +1,25 @@
 import React from 'react';
 import { Input } from '../../ui/input';
 import { Checkbox } from '../../ui/checkbox';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
-import { ActivitySection, FieldRow } from './primitives';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '../../ui/select';
+import { ActivitySection, FormRow, Field } from './primitives';
 
 /**
- * Activation + Duration sections of the activity editor's
- * Activation tab. Extracted out of ActivityEditor for the same
- * reason DamagePartEditor was — every activity kind carries an
- * activation, and most carry a duration, so this is repeated
- * surface that's nicer as a single component.
+ * Activation + Duration sections of the activity editor's Activation
+ * tab — rebuilt to mirror Foundry dnd5e 5.3.1's `activity-time.hbs`
+ * (+ the `field-activation` / `field-duration` shared partials):
+ *
+ * - Two-part labels: a bold field label on the left, each control
+ *   carrying its own small uppercase header ("COST" / "TIME").
+ * - The numeric "Amount" field appears ONLY for scalar types — the
+ *   activation costs minute/hour/day/legendary/mythic/crew, and the
+ *   scalar duration periods turn…year. Foundry hides it otherwise.
+ * - Activation Condition is a full-width input beneath the cost row.
+ * - Duration "Special" only shows when units === "spec".
  *
  * The parent passes the activation/duration sub-objects + a patch
- * callback per section. `showsDuration` mirrors the parent's
- * kind-aware visibility flag (forward activities don't have a
- * duration of their own).
+ * callback per section. `showsDuration` mirrors the parent's kind-aware
+ * visibility flag (forward activities don't carry a duration).
  */
 
 export interface ActivationShape {
@@ -41,49 +46,60 @@ export interface ActivationDurationEditorProps {
   showsDuration: boolean;
 }
 
-// Mirrors `CONFIG.DND5E.activityActivationTypes` in dnd5e v5.3.1 — see
-// the activity-window exports in `Foundry-JSON/windows/`. The set was
-// expanded from the original 6 to cover the full Foundry vocabulary so
-// authors can express legendary / mythic / lair / crew actions and
-// passive rest-based activations without the slug being silently
-// dropped on round-trip. Optgroups follow Foundry's grouping
-// (Standard / Time / Rest / Combat / Monster / Vehicle / Special).
-const ACTIVATION_TYPE_OPTIONS: { value: string; label: string; group: string }[] = [
+// Mirrors `CONFIG.DND5E.activityActivationTypes` (dnd5e 5.3.1). Groups
+// follow Foundry's Standard / Time / Rest / Combat / Monster / Vehicle /
+// Special. `scalar` marks the costs that take a numeric Amount. (Foundry
+// has no "none" entry in the activity list, unlike the legacy ability
+// activation map — so it's intentionally absent here.)
+const ACTIVATION_TYPE_OPTIONS: { value: string; label: string; group: string; scalar?: boolean }[] = [
   { value: 'action',    label: 'Action',              group: 'Standard' },
   { value: 'bonus',     label: 'Bonus Action',        group: 'Standard' },
   { value: 'reaction',  label: 'Reaction',            group: 'Standard' },
-  { value: 'minute',    label: 'Minute',              group: 'Time' },
-  { value: 'hour',      label: 'Hour',                group: 'Time' },
-  { value: 'day',       label: 'Day',                 group: 'Time' },
+  { value: 'minute',    label: 'Minute',              group: 'Time', scalar: true },
+  { value: 'hour',      label: 'Hour',                group: 'Time', scalar: true },
+  { value: 'day',       label: 'Day',                 group: 'Time', scalar: true },
   { value: 'longRest',  label: 'End of a Long Rest',  group: 'Rest' },
   { value: 'shortRest', label: 'End of a Short Rest', group: 'Rest' },
   { value: 'encounter', label: 'Start of Encounter',  group: 'Combat' },
   { value: 'turnStart', label: 'Start of Turn',       group: 'Combat' },
   { value: 'turnEnd',   label: 'End of Turn',         group: 'Combat' },
-  { value: 'legendary', label: 'Legendary Action',    group: 'Monster' },
-  { value: 'mythic',    label: 'Mythic Action',       group: 'Monster' },
+  { value: 'legendary', label: 'Legendary Action',    group: 'Monster', scalar: true },
+  { value: 'mythic',    label: 'Mythic Action',       group: 'Monster', scalar: true },
   { value: 'lair',      label: 'Lair Action',         group: 'Monster' },
-  { value: 'crew',      label: 'Crew Action',         group: 'Vehicle' },
+  { value: 'crew',      label: 'Crew Action',         group: 'Vehicle', scalar: true },
   { value: 'special',   label: 'Special',             group: 'Special' },
-  { value: 'none',      label: 'None',                group: 'Special' },
 ];
+const SCALAR_ACTIVATION = new Set(ACTIVATION_TYPE_OPTIONS.filter(o => o.scalar).map(o => o.value));
 
-// Mirrors `CONFIG.DND5E.timePeriods` in dnd5e v5.3.1. `turn` is the
-// per-creature beat (1/6 round); `disp`/`dstr`/`perm` are the end-state
-// markers Foundry uses for buffs that last "Until Dispelled",
-// "Until Dispelled or Triggered", and "Permanent" respectively.
-const DURATION_UNIT_OPTIONS: { value: string; label: string }[] = [
+// Mirrors `CONFIG.DND5E.timePeriods` (dnd5e 5.3.1), ordered Foundry-style
+// special → permanent → scalar. `month` / `year` were previously missing.
+// `scalar` marks the periods that take a numeric Amount.
+const DURATION_UNIT_OPTIONS: { value: string; label: string; scalar?: boolean; group?: string }[] = [
+  // Ungrouped (rendered first, no header) — matches Foundry's duration menu.
   { value: 'inst',   label: 'Instantaneous' },
-  { value: 'turn',   label: 'Turn' },
-  { value: 'round',  label: 'Round' },
-  { value: 'minute', label: 'Minute' },
-  { value: 'hour',   label: 'Hour' },
-  { value: 'day',    label: 'Day' },
   { value: 'spec',   label: 'Special' },
-  { value: 'disp',   label: 'Until Dispelled' },
-  { value: 'dstr',   label: 'Until Dispelled or Triggered' },
-  { value: 'perm',   label: 'Permanent' },
+  // Time group (scalar — takes a numeric Amount).
+  { value: 'turn',   label: 'Turn',   scalar: true, group: 'Time' },
+  { value: 'round',  label: 'Round',  scalar: true, group: 'Time' },
+  { value: 'minute', label: 'Minute', scalar: true, group: 'Time' },
+  { value: 'hour',   label: 'Hour',   scalar: true, group: 'Time' },
+  { value: 'day',    label: 'Day',    scalar: true, group: 'Time' },
+  { value: 'month',  label: 'Month',  scalar: true, group: 'Time' },
+  { value: 'year',   label: 'Year',   scalar: true, group: 'Time' },
+  // Permanent group.
+  { value: 'disp',   label: 'Until Dispelled',              group: 'Permanent' },
+  { value: 'dstr',   label: 'Until Dispelled or Triggered', group: 'Permanent' },
+  { value: 'perm',   label: 'Permanent',                    group: 'Permanent' },
 ];
+const SCALAR_DURATION = new Set(DURATION_UNIT_OPTIONS.filter(o => o.scalar).map(o => o.value));
+
+// Foundry groups both dropdowns under category headers (matched to the
+// dnd5e menus): activation → Standard / Time / Rest / Combat / Monster /
+// Vehicle / Special; duration → ungrouped Instantaneous/Special, then Time,
+// then Permanent. These orders drive the optgroup-style rendering below.
+const ACTIVATION_GROUP_ORDER = ['Standard', 'Time', 'Rest', 'Combat', 'Monster', 'Vehicle', 'Special'] as const;
+const DURATION_GROUP_ORDER = ['Time', 'Permanent'] as const;
+const GROUP_LABEL_CLASS = 'text-[10px] font-black uppercase tracking-wider text-gold/55 px-2 pt-2 pb-1';
 
 export default function ActivationDurationEditor({
   activation,
@@ -92,93 +108,123 @@ export default function ActivationDurationEditor({
   onDurationChange,
   showsDuration,
 }: ActivationDurationEditorProps) {
+  const isScalarActivation = SCALAR_ACTIVATION.has(activation?.type || '');
+  const isScalarDuration = SCALAR_DURATION.has(duration?.units || '');
+
   return (
     <div>
-      <ActivitySection label="ACTIVATION">
-        <FieldRow label="Cost">
-          <Select
-            value={activation?.type}
-            onValueChange={val => onActivationChange({ type: val })}
-          >
-            <SelectTrigger className="field-input border-gold/15 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {ACTIVATION_TYPE_OPTIONS.map(opt => (
-                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </FieldRow>
-        <FieldRow label="Value">
-          <Input
-            type="number"
-            value={activation?.value ?? 1}
-            onChange={e => onActivationChange({ value: parseInt(e.target.value, 10) || 1 })}
-            className="field-input border-gold/15 text-xs text-center no-number-spin"
-          />
-        </FieldRow>
-        <FieldRow label="Condition" hint="Required condition to trigger this activation">
-          <Input
-            value={activation?.condition || ''}
-            onChange={e => onActivationChange({ condition: e.target.value })}
-            placeholder="Activation Condition"
-            className="field-input border-gold/15 text-xs"
-          />
-        </FieldRow>
-        <FieldRow label="Override Activation" hint="Use this activity's activation instead of inheriting from a cast/forward source." inline>
-          <Checkbox
-            checked={activation?.override}
-            onCheckedChange={checked => onActivationChange({ override: !!checked })}
-          />
-        </FieldRow>
-      </ActivitySection>
-
-      {showsDuration && (
-        <ActivitySection label="DURATION">
-          <FieldRow label="Value">
+      <ActivitySection label="Activation">
+        <FormRow
+          label="Activation Cost"
+          below={
             <Input
-              value={duration?.value || ''}
-              onChange={e => onDurationChange({ value: e.target.value })}
-              className="field-input border-gold/15 text-xs font-mono"
-              placeholder="1"
+              value={activation?.condition || ''}
+              onChange={e => onActivationChange({ condition: e.target.value })}
+              placeholder="Activation Condition"
+              className="field-input border-gold/15 text-xs w-full mt-2"
             />
-          </FieldRow>
-          <FieldRow label="Time">
+          }
+        >
+          {isScalarActivation && (
+            <Field label="Amount" className="w-16 shrink-0">
+              <Input
+                type="number"
+                value={activation?.value ?? 1}
+                onChange={e => onActivationChange({ value: parseInt(e.target.value, 10) || 1 })}
+                className="field-input border-gold/15 text-xs text-center no-number-spin"
+              />
+            </Field>
+          )}
+          <Field label="Cost" className="flex-1">
             <Select
-              value={duration?.units}
-              onValueChange={val => onDurationChange({ units: val })}
+              value={activation?.type}
+              onValueChange={val => onActivationChange({ type: val })}
             >
               <SelectTrigger className="field-input border-gold/15 text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {DURATION_UNIT_OPTIONS.map(opt => (
-                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                ))}
+                {ACTIVATION_GROUP_ORDER.map(groupName => {
+                  const items = ACTIVATION_TYPE_OPTIONS.filter(o => o.group === groupName);
+                  if (!items.length) return null;
+                  return (
+                    <SelectGroup key={groupName}>
+                      <SelectLabel className={GROUP_LABEL_CLASS}>{groupName}</SelectLabel>
+                      {items.map(opt => (
+                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                      ))}
+                    </SelectGroup>
+                  );
+                })}
               </SelectContent>
             </Select>
-          </FieldRow>
-          <FieldRow label="Special">
-            <Input
-              value={duration?.special || ''}
-              onChange={e => onDurationChange({ special: e.target.value })}
-              className="field-input border-gold/15 text-xs"
-              placeholder="Special duration text"
-            />
-          </FieldRow>
-          <FieldRow label="Concentration" hint="Creature must maintain concentration while active." inline>
+          </Field>
+        </FormRow>
+      </ActivitySection>
+
+      {showsDuration && (
+        <ActivitySection label="Duration">
+          <FormRow
+            label="Duration"
+            below={
+              duration?.units === 'spec' ? (
+                <Input
+                  value={duration?.special || ''}
+                  onChange={e => onDurationChange({ special: e.target.value })}
+                  placeholder="Special duration text"
+                  className="field-input border-gold/15 text-xs w-full mt-2"
+                />
+              ) : null
+            }
+          >
+            {isScalarDuration && (
+              <Field label="Amount" className="w-20 shrink-0">
+                <Input
+                  value={duration?.value || ''}
+                  onChange={e => onDurationChange({ value: e.target.value })}
+                  className="field-input border-gold/15 text-xs text-center font-mono"
+                  placeholder="1"
+                />
+              </Field>
+            )}
+            <Field label="Time" className="flex-1">
+              <Select
+                value={duration?.units}
+                onValueChange={val => onDurationChange({ units: val })}
+              >
+                <SelectTrigger className="field-input border-gold/15 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {DURATION_UNIT_OPTIONS.filter(o => !o.group).map(opt => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                  {DURATION_GROUP_ORDER.map(groupName => {
+                    const items = DURATION_UNIT_OPTIONS.filter(o => o.group === groupName);
+                    if (!items.length) return null;
+                    return (
+                      <SelectGroup key={groupName}>
+                        <SelectLabel className={GROUP_LABEL_CLASS}>{groupName}</SelectLabel>
+                        {items.map(opt => (
+                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
+                      </SelectGroup>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </Field>
+          </FormRow>
+          <FormRow
+            inline
+            label="Concentration"
+            hint="Creature must maintain concentration while active."
+          >
             <Checkbox
               checked={duration?.concentration}
               onCheckedChange={checked => onDurationChange({ concentration: !!checked })}
             />
-          </FieldRow>
-          <FieldRow label="Override Duration" inline>
-            <Checkbox
-              checked={duration?.override}
-              onCheckedChange={checked => onDurationChange({ override: !!checked })}
-            />
-          </FieldRow>
+          </FormRow>
         </ActivitySection>
       )}
     </div>

@@ -673,6 +673,31 @@ export function extractTopLevelLevelLeaf(
   return null;
 }
 
+/**
+ * Effective numeric level gate for an option item / feat row.
+ *
+ * Resolves the level from the NEW requirements tree first (its top-level
+ * `level` leaf) and falls back to the legacy flat `level_prerequisite`
+ * column. Use this anywhere option items are sorted or labeled by level so
+ * the tree-authored `level` leaf and the flat projection can't disagree —
+ * the flat column is lossy (only populated from a top-level `level` leaf in
+ * an `all` group, and only re-synced when the item is saved through the
+ * option editor), so reading it alone misses tree-authored gates.
+ *
+ * Tolerant of both row shapes: a parsed `requirementsTree` (camelCase,
+ * post-denormalize) or a raw `requirements_tree` (snake — parsed object or
+ * JSON string straight off D1), plus `levelPrerequisite` / `level_prerequisite`
+ * for the flat fallback. `parseRequirementTree` makes the tree read safe
+ * whether the value arrived parsed or as a string.
+ */
+export function effectiveOptionLevel(item: any): number {
+  if (!item) return 0;
+  const tree = parseRequirementTree(item.requirementsTree ?? item.requirements_tree);
+  const leaf = extractTopLevelLevelLeaf(tree);
+  if (leaf) return Number(leaf.minLevel) || 0;
+  return Number(item.levelPrerequisite ?? item.level_prerequisite) || 0;
+}
+
 /** Best-effort: pick the first top-level `string` leaf's value. Same
  *  scoping rules as extractTopLevelLevelLeaf — root leaf or direct
  *  child of a root `all` group. */
