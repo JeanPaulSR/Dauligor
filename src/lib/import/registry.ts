@@ -4,7 +4,7 @@
 // New types are added by writing a descriptor (like `spell.ts`) and registering
 // it here. The window discovers types via `listImportDescriptors()`.
 
-import type { ImportDescriptor, ResolvedEntity, ImportContext } from './types';
+import type { ImportDescriptor, ResolvedEntity, ImportContext, ParseResult, ImportAssignTarget } from './types';
 import { spellDescriptor } from './spell';
 
 const DESCRIPTORS: Record<string, ImportDescriptor> = {
@@ -18,6 +18,47 @@ export function listImportDescriptors(): ImportDescriptor[] {
 
 export function getImportDescriptor(type: string): ImportDescriptor | undefined {
   return DESCRIPTORS[type];
+}
+
+/** True when the type can interpret pasted text (has a `parseText`). The window
+ * shows its Interpret panel only for these. */
+export function canParseText(type: string): boolean {
+  return typeof getImportDescriptor(type)?.parseText === 'function';
+}
+
+/**
+ * PURE — interpret a blob of pasted text into best-effort field values for the
+ * given type. Returns `null` if the type has no parser (manual-entry only). The
+ * window applies `fields` to form state and flags everything below `high`
+ * confidence for a quick human check.
+ */
+export function parseEntityText(type: string, text: string): ParseResult | null {
+  const descriptor = getImportDescriptor(type);
+  if (!descriptor?.parseText) return null;
+  return descriptor.parseText(text);
+}
+
+/** Logical targets a selected span can be re-assigned to, for this type's mark-up
+ * panel. Empty when the type has no parser/assignment support. */
+export function getAssignTargets(type: string): ImportAssignTarget[] {
+  return getImportDescriptor(type)?.assignTargets ?? [];
+}
+
+/**
+ * PURE — ingest a raw text selection into a target, returning the form-key →
+ * value map to apply (re-running the type's own classifier). Empty when the type
+ * can't assign.
+ */
+export function assignFieldText(type: string, targetKey: string, text: string): Record<string, unknown> {
+  const descriptor = getImportDescriptor(type);
+  return descriptor?.assignField ? descriptor.assignField(targetKey, text) : {};
+}
+
+/** PURE — split a multi-entity paste into per-entity block-start offsets. Empty
+ * (or the type has no splitter) ⇒ treat the whole paste as one entity. */
+export function splitEntityBlocks(type: string, text: string): number[] {
+  const descriptor = getImportDescriptor(type);
+  return descriptor?.splitBlocks ? descriptor.splitBlocks(text) : [];
 }
 
 /**

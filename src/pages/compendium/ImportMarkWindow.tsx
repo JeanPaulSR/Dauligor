@@ -1,359 +1,889 @@
-// Mark & Build — the manual-upload / import window (proof of concept: spells).
+// Mark & Build — the manual-upload / import window.
 //
-// Pick a compendium type, set a Source (persists across creates + type switches —
-// the "set it once per book" default-source behaviour the Foundry import
-// workbenches use), fill the fields, watch the live preview resolve into the EXACT
-// payload that will be written, then Create. The write goes through the import
-// registry's `commit()`, which delegates to the editor's real write call
-// (spell → `upsertSpell`) — so an entity created here is byte-identical to one
-// saved from the hand editor. Span-marking of pasted source text is the next
-// phase; v1 is faithful manual entry + look-before-commit.
+// Paste one or many entities. The interpreter fills structured fields; every
+// value is highlighted back onto the source text in the gold accent and can be
+// re-mapped by selecting text (the EntityWorkspace). When a paste holds several
+// entities it switches to BATCH mode: a division editor on the left (auto-split,
+// with add/remove controls for misfires) and a candidate list on the right;
+// Review opens any candidate in the same workspace, then Create N bulk-commits.
+//
+// Styling follows docs/ui/style-guide.md — theme tokens only (gold = accent /
+// highlight, ink = text, blood = warnings) and the documented component classes.
+// No raw palette colours.
+//
+// Create writes through the import registry's `commit()` → the editor's real
+// write call (spell → `upsertSpell`), so entities made here are byte-identical
+// to ones saved from the hand editor. Activities/automation are NOT parsed.
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { AlertTriangle, FileText, Library, Sparkles, Wand2 } from 'lucide-react';
+import { AlertTriangle, ChevronUp, FileText, Library, ListChecks, Pencil, ScanText, Scissors, Sparkles, Wand2 } from 'lucide-react';
 import { fetchCollection } from '../../lib/d1';
+import { slugify } from '../../lib/utils';
+import { htmlToBbcode } from '../../lib/bbcode';
+import { cleanFoundryHtml } from '../../lib/foundryHtmlCleanup';
 import { reportClientError, OperationType } from '../../lib/firebase';
 import SingleSelectSearch from '../../components/ui/SingleSelectSearch';
+import SpellDetailPanel from '../../components/compendium/SpellDetailPanel';
 import {
   listImportDescriptors,
   getImportDescriptor,
   resolveEntity,
   commitEntity,
+  canParseText,
+  parseEntityText,
+  getAssignTargets,
+  assignFieldText,
+  splitEntityBlocks,
+  type ImportDescriptor,
   type ImportFieldDef,
-  type ResolvedEntity,
+  type ImportAssignTarget,
 } from '../../lib/import';
 
 type SourceRow = { id: string; name?: string; abbreviation?: string };
+type FieldFlag = { confidence: 'low' | 'none'; note?: string };
+type Span = { start: number; end: number };
+type ActiveSelection = { start: number; end: number; text: string; top: number; left: number };
+/** The editable state of one entity in the workspace. */
+type EntityState = { values: Record<string, any>; spans: Record<string, Span>; provenance: Record<string, FieldFlag>; leftovers: string[] };
+
+const PLACEHOLDER =
+  'Fireball\n3rd-level evocation\nCasting Time: 1 action\nRange: 150 feet\n' +
+  'Components: V, S, M (a tiny ball of bat guano and sulfur)\nDuration: Instantaneous\n\n' +
+  'A bright streak flashes from your pointing finger…\n\n' +
+  'Paste several stat blocks at once for batch import.';
+
+// Seed a fresh entity (all fields at their descriptor default).
+function emptyState(descriptor?: ImportDescriptor): EntityState {
+  const values: Record<string, any> = {};
+  for (const f of descriptor?.fields ?? []) {
+    if (f.kind === 'source') continue;
+    values[f.key] = f.default ?? (f.kind === 'boolean' ? false : '');
+  }
+  return { values, spans: {}, provenance: {}, leftovers: [] };
+}
+
+// ── Format templates ────────────────────────────────────────────────────────
+// A format template remembers, per source, which LINE each section sits on
+// (relative to the block's first content line) so a non-standard layout parses
+// right without re-marking every spell. Captured from one marked-up example and
+// applied over the heuristic parse (user layout wins). Keyed by type + source.
+type FormatTemplate = Record<string, number>; // assign-target key → relative line index
+const FORMAT_LS_PREFIX = 'dauligor:importFormat:';
+const formatKey = (type: string, sourceId: string) => `${FORMAT_LS_PREFIX}${type}:${sourceId || 'default'}`;
+function loadFormat(type: string, sourceId: string): FormatTemplate | null {
+  try { const raw = localStorage.getItem(formatKey(type, sourceId)); return raw ? JSON.parse(raw) : null; } catch { return null; }
+}
+function saveFormatLS(type: string, sourceId: string, tpl: FormatTemplate) {
+  try { localStorage.setItem(formatKey(type, sourceId), JSON.stringify(tpl)); } catch { /* quota / private mode */ }
+}
+function clearFormatLS(type: string, sourceId: string) {
+  try { localStorage.removeItem(formatKey(type, sourceId)); } catch { /* ignore */ }
+}
+
+function lineStartsOf(text: string): number[] { const s: number[] = []; let o = 0; for (const l of text.split('\n')) { s.push(o); o += l.length + 1; } return s; }
+function lineOfOffset(starts: number[], offset: number): number { let i = 0; while (i + 1 < starts.length && starts[i + 1] <= offset) i++; return i; }
+function firstContentLineIndex(lines: string[]): number { const i = lines.findIndex((l) => l.trim() !== ''); return i < 0 ? 0 : i; }
+
+// Capture target → relative line index from the current spans (skips description,
+// which is the multi-line tail the heuristic always owns).
+function buildFormatTemplate(type: string, text: string, spans: Record<string, Span>): FormatTemplate {
+  const lines = text.split('\n');
+  const starts = lineStartsOf(text);
+  const base = firstContentLineIndex(lines);
+  const tpl: FormatTemplate = {};
+  for (const t of getAssignTargets(type)) {
+    if (t.key === 'description') continue;
+    const fk = t.fieldKeys.find((k) => spans[k]);
+    if (!fk) continue;
+    const rel = lineOfOffset(starts, spans[fk].start) - base;
+    if (rel >= 0) tpl[t.key] = rel;
+  }
+  return tpl;
+}
+
+// Override a parsed state from a saved template: read each target's templated
+// line, re-run the target's classifier, and treat the result as user-confirmed.
+function applyFormatTemplate(state: EntityState, type: string, text: string, tpl: FormatTemplate) {
+  const lines = text.split('\n');
+  const starts = lineStartsOf(text);
+  const base = firstContentLineIndex(lines);
+  for (const [targetKey, rel] of Object.entries(tpl)) {
+    const lineIdx = base + rel;
+    const line = lines[lineIdx];
+    if (line == null || !line.trim()) continue;
+    const result = assignFieldText(type, targetKey, line.trim());
+    for (const [fk, v] of Object.entries(result)) {
+      state.values[fk] = v;
+      delete state.provenance[fk]; // user-defined layout → confident, no flag
+      state.spans[fk] = { start: starts[lineIdx], end: starts[lineIdx] + line.length };
+    }
+  }
+}
+
+// Interpret a block of text into an entity state (defaults + parsed overrides +
+// optional format template + auto-slugged identifier). Shared by single mode and
+// every batch candidate.
+function parseToState(type: string, text: string, template?: FormatTemplate | null): EntityState {
+  const descriptor = getImportDescriptor(type);
+  const state = emptyState(descriptor);
+  const result = parseEntityText(type, text);
+  if (result) {
+    for (const [key, pf] of Object.entries(result.fields)) {
+      state.values[key] = pf.value;
+      if (pf.confidence !== 'high') state.provenance[key] = { confidence: pf.confidence, note: pf.note };
+      if (pf.span) state.spans[key] = pf.span;
+    }
+    state.leftovers = result.leftovers;
+  }
+  if (template) applyFormatTemplate(state, type, text, template);
+  if (descriptor && 'identifier' in state.values) {
+    state.values.identifier = slugify(String(state.values[descriptor.nameField] ?? ''));
+  }
+  return state;
+}
+
+function firstContentOffset(text: string): number {
+  const m = /\S/.exec(text);
+  return m ? m.index : 0;
+}
+
+// HTML paste (a spell from a web page, a Foundry feature description) → the
+// site's stored BBCode, via the SAME canonical path every importer uses
+// (cleanFoundryHtml strips enricher tokens, htmlToBbcode maps tags → BBCode).
+const looksLikeHtml = (s: string) => /<\/?[a-z][a-z0-9]*\b[^>]*>/i.test(s);
+
+function renameEl(el: Element, tag: string) {
+  const n = el.ownerDocument!.createElement(tag);
+  while (el.firstChild) n.appendChild(el.firstChild);
+  el.replaceWith(n);
+}
+
+// Normalise a parsed clipboard DOM the way TipTap's schema does on paste, so the
+// downstream htmlToBbcode (which only maps clean, attribute-free semantic tags)
+// produces tidy BBCode regardless of the source (web page, Google Docs, Word):
+//   • promote inline-style formatting (font-style:italic, font-weight:bold,
+//     underline) to <em>/<strong>/<u> — TipTap's marks do this via parseHTML;
+//   • drop Office namespace tags (<o:p> …);
+//   • rename <b>/<i> → <strong>/<em> (htmlToBbcode's <b>/<strong> matchers are
+//     attribute-free, and its <i> handler is buggy);
+//   • strip noise attributes (style/class/mso-*), keeping href so links survive;
+//   • unwrap <font> wrappers.
+function normalizeClipboardDom(body: HTMLElement) {
+  body.querySelectorAll<HTMLElement>('[style]').forEach((el) => {
+    const s = el.getAttribute('style') || '';
+    const wrap = (tag: string) => { const w = el.ownerDocument!.createElement(tag); while (el.firstChild) w.appendChild(el.firstChild); el.appendChild(w); };
+    if (/font-style:\s*italic/i.test(s)) wrap('em');
+    if (/font-weight:\s*(?:bold|[6-9]00)/i.test(s)) wrap('strong');
+    if (/text-decoration:[^;]*underline/i.test(s)) wrap('u');
+  });
+  body.querySelectorAll('*').forEach((el) => { if (el.tagName.includes(':')) el.remove(); });
+  body.querySelectorAll('b').forEach((el) => renameEl(el, 'strong'));
+  body.querySelectorAll('i').forEach((el) => renameEl(el, 'em'));
+  body.querySelectorAll('*').forEach((el) => {
+    for (const a of Array.from(el.attributes)) if (a.name !== 'href') el.removeAttribute(a.name);
+  });
+  body.querySelectorAll('font').forEach((el) => el.replaceWith(...Array.from(el.childNodes)));
+}
+
+/**
+ * HTML → the site's stored BBCode, the way the rich editor (MarkdownEditor →
+ * TipTap) does it: parse with the REAL browser DOM (DOMParser) so any document
+ * structure — full `<html><head><style>…` clipboard payloads, comments, messy
+ * Word/Docs markup — is handled correctly, normalise it to clean semantic HTML,
+ * then run the canonical `htmlToBbcode(cleanFoundryHtml)`.
+ */
+function htmlToSiteBbcode(html: string): string {
+  let body = html;
+  try {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    doc.querySelectorAll('style, script, meta, link, title').forEach((el) => el.remove());
+    const it = doc.createNodeIterator(doc.body, NodeFilter.SHOW_COMMENT);
+    const comments: Node[] = [];
+    for (let n = it.nextNode(); n; n = it.nextNode()) comments.push(n);
+    comments.forEach((n) => n.parentNode?.removeChild(n));
+    normalizeClipboardDom(doc.body);
+    body = doc.body.innerHTML;
+  } catch { /* non-browser / parse failure → fall back to the raw string */ }
+  return htmlToBbcode(cleanFoundryHtml(body));
+}
+
+function normalizeInput(text: string): string {
+  const t = text.replace(/\r\n?/g, '\n');
+  return looksLikeHtml(t) ? htmlToSiteBbcode(t) : t;
+}
+
+// Adapt the editor-shape spell payload into the raw row SpellDetailPanel renders
+// (its `spellData` path). buildPayload's `foundry_data` carries activation/range/
+// duration but not the `properties[]` / `materials` the panel reads for the
+// Components line — derive those from `components` + the ritual/concentration
+// flags so the preview matches a saved spell exactly.
+function buildSpellPreviewRow(payload: Record<string, any>): Record<string, any> {
+  const c = payload.components || {};
+  const properties: string[] = [];
+  if (c.vocal) properties.push('vocal');
+  if (c.somatic) properties.push('somatic');
+  if (c.material) properties.push('material');
+  if (payload.concentration) properties.push('concentration');
+  if (payload.ritual) properties.push('ritual');
+  return {
+    name: payload.name,
+    level: payload.level,
+    school: payload.school,
+    source_id: payload.sourceId || '',
+    image_url: payload.imageUrl || '',
+    description: payload.description || '',
+    page: payload.page || '',
+    tags: Array.isArray(payload.tags) ? payload.tags : [],
+    required_tags: [],
+    prerequisite_text: payload.prerequisiteText || '',
+    foundry_data: { ...(payload.foundry_data || {}), properties, materials: { value: c.materialText || '' } },
+  };
+}
+
+function groupFields(fields: ImportFieldDef[]): { name: string; fields: ImportFieldDef[] }[] {
+  const groups: { name: string; fields: ImportFieldDef[] }[] = [];
+  for (const field of fields) {
+    if (field.kind === 'source') continue;
+    const name = field.group ?? 'Fields';
+    let g = groups.find((x) => x.name === name);
+    if (!g) { g = { name, fields: [] }; groups.push(g); }
+    g.fields.push(field);
+  }
+  return groups;
+}
 
 export default function ImportMarkWindow({ userProfile }: { userProfile: any }) {
   const descriptors = useMemo(() => listImportDescriptors(), []);
   const [type, setType] = useState<string>(descriptors[0]?.type ?? 'spell');
   const descriptor = getImportDescriptor(type);
 
-  const [values, setValues] = useState<Record<string, any>>({});
-  // Source is held separately from the per-entity fields so it PERSISTS across
-  // creates and type changes — the same "set it once per book" default-source
-  // behaviour the Foundry import workbenches use.
-  const [sourceId, setSourceId] = useState('');
+  const [sourceId, setSourceId] = useState(''); // persists across creates + type changes
   const [sources, setSources] = useState<SourceRow[]>([]);
   const [saving, setSaving] = useState(false);
 
-  // The form-state key of the descriptor's source field, if it has one.
-  const sourceKey = useMemo(
-    () => descriptor?.fields.find((f) => f.kind === 'source')?.key,
-    [descriptor],
-  );
+  // Workspace
+  const [rawText, setRawText] = useState('');
+  const [phase, setPhase] = useState<'input' | 'single' | 'batch'>('input');
+  const [single, setSingle] = useState<EntityState>(() => emptyState(descriptor));
+  // Batch
+  const [boundaries, setBoundaries] = useState<number[]>([]);
+  const [edits, setEdits] = useState<Record<number, EntityState>>({});
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [reviewIndex, setReviewIndex] = useState<number | null>(null);
+  // Per-source format template (target → line index), loaded from localStorage.
+  const [formatTemplate, setFormatTemplate] = useState<FormatTemplate | null>(null);
 
-  // Load sources once for the Source picker.
+  const hasParser = useMemo(() => canParseText(type), [type]);
+  const assignTargets = useMemo(() => getAssignTargets(type), [type]);
+  const sourceKey = useMemo(() => descriptor?.fields.find((f) => f.kind === 'source')?.key, [descriptor]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const rows = await fetchCollection<SourceRow>('sources', { orderBy: 'name ASC' });
         if (!cancelled) setSources(rows);
-      } catch (err) {
-        console.error('[ImportMarkWindow] failed to load sources:', err);
-      }
+      } catch (err) { console.error('[ImportMarkWindow] failed to load sources:', err); }
     })();
     return () => { cancelled = true; };
   }, []);
 
   const sourceOptions = useMemo(
-    () => sources.map((s) => ({
-      id: s.id,
-      name: (s.abbreviation ? `${s.abbreviation} — ` : '') + (s.name || s.id),
-    })),
+    () => sources.map((s) => ({ id: s.id, name: (s.abbreviation ? `${s.abbreviation} — ` : '') + (s.name || s.id) })),
     [sources],
   );
 
-  // Seed the form with the descriptor's defaults whenever the type changes. The
-  // source field is managed separately (sourceId), so it's skipped here and
-  // persists across the type switch.
+  // Reset the workspace on a type switch (source persists).
   useEffect(() => {
-    if (!descriptor) return;
-    const init: Record<string, any> = {};
-    for (const field of descriptor.fields) {
-      if (field.kind === 'source') continue;
-      init[field.key] = field.default ?? (field.kind === 'boolean' ? false : '');
-    }
-    setValues(init);
+    setRawText(''); setPhase('input');
+    setSingle(emptyState(descriptor));
+    setBoundaries([]); setEdits({}); setSelected(new Set()); setReviewIndex(null);
   }, [type]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Merge the persistent source into the field set the resolver / commit sees.
-  const fieldsForResolve = useMemo(
-    () => (sourceKey ? { ...values, [sourceKey]: sourceId } : values),
-    [values, sourceKey, sourceId],
+  // Load the saved format template whenever the type or source changes.
+  useEffect(() => { setFormatTemplate(loadFormat(type, sourceId)); }, [type, sourceId]);
+
+  // ── Batch candidates (auto-parsed baseline; per-index edits override) ───────
+  const blocks = useMemo(
+    () => boundaries.map((b, i) => ({ start: b, end: boundaries[i + 1] ?? rawText.length })),
+    [boundaries, rawText],
   );
+  const candidates = useMemo(
+    () => blocks.map((b) => { const text = rawText.slice(b.start, b.end); return { text, state: parseToState(type, text, formatTemplate) }; }),
+    [blocks, rawText, type, formatTemplate],
+  );
+  const stateFor = (i: number): EntityState => edits[i] ?? candidates[i]?.state ?? emptyState(descriptor);
+  const blockNames = useMemo(() => candidates.map((c, i) => String((edits[i] ?? c.state).values.name ?? '')), [candidates, edits]);
 
-  // Pure preview — the resolved payload the Create button would write.
-  const resolved: ResolvedEntity | null = useMemo(() => {
-    if (!descriptor) return null;
-    try {
-      return resolveEntity(type, fieldsForResolve);
-    } catch {
-      return null;
-    }
-  }, [type, fieldsForResolve, descriptor]);
-
-  const setField = (key: string, value: any) =>
-    setValues((prev) => ({ ...prev, [key]: value }));
-
-  const grouped = useMemo(() => {
-    const groups: { name: string; fields: ImportFieldDef[] }[] = [];
-    for (const field of descriptor?.fields ?? []) {
-      if (field.kind === 'source') continue; // rendered top-level, not in the grid
-      const name = field.group ?? 'Fields';
-      let g = groups.find((x) => x.name === name);
-      if (!g) { g = { name, fields: [] }; groups.push(g); }
-      g.fields.push(field);
-    }
-    return groups;
-  }, [descriptor]);
-
-  const handleCreate = async () => {
-    if (!descriptor || !resolved) return;
-    if (resolved.errors.length) {
-      toast.error(resolved.errors[0]);
-      return;
-    }
-    setSaving(true);
-    try {
-      // Re-resolve at commit so id + timestamps are fresh and stable for the write.
-      const toWrite = resolveEntity(type, sourceKey ? { ...values, [sourceKey]: sourceId } : values);
-      await commitEntity(toWrite);
-      toast.success(`${descriptor.label} “${toWrite.displayName}” created`);
-      // Clear name/identifier so the next entity starts fresh; Source and the
-      // other fields persist so a run from one book stays quick.
-      setValues((prev) => ({ ...prev, name: '', identifier: '' }));
-    } catch (err) {
-      console.error('[ImportMarkWindow] create failed:', err);
-      toast.error(`Failed to create ${descriptor.label.toLowerCase()}.`);
-      reportClientError(err, OperationType.CREATE, `import/${type}`);
-    } finally {
-      setSaving(false);
+  // ── Interpret: split → single or batch ─────────────────────────────────────
+  const handleInterpret = () => {
+    const text = normalizeInput(rawText); // HTML → BBCode if needed
+    if (!text.trim()) return;
+    if (text !== rawText) setRawText(text);
+    const b = hasParser ? splitEntityBlocks(type, text) : [];
+    if (b.length > 1) {
+      setBoundaries(b); setEdits({}); setSelected(new Set(b.map((_, i) => i))); setReviewIndex(null);
+      setPhase('batch');
+    } else {
+      setSingle(parseToState(type, text, formatTemplate));
+      setPhase('single');
     }
   };
 
-  if (!userProfile) {
-    return <div className="px-6 py-12 text-center text-ink/50">Sign in to use the import window.</div>;
-  }
+  // A <textarea> only receives the clipboard's `text/plain` flavour, so copying
+  // RENDERED formatted text (a spell off a web page) loses its <em>/<strong>
+  // before we'd ever see it. Intercept the paste, grab the `text/html` flavour
+  // when present, and convert it to BBCode via the site's canonical path so the
+  // formatting survives. Falls through to the normal plain-text paste otherwise.
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const cd = e.clipboardData || (e.nativeEvent as any)?.clipboardData;
+    const html = cd?.getData?.('text/html') || '';
+    if (!html || !looksLikeHtml(html)) return; // no rich HTML → let the plain paste run
+    e.preventDefault();
+    const bbcode = htmlToSiteBbcode(html);
+    const el = e.currentTarget;
+    const start = el.selectionStart ?? rawText.length;
+    const end = el.selectionEnd ?? rawText.length;
+    setRawText(rawText.slice(0, start) + bbcode + rawText.slice(end));
+    toast.success('Captured HTML formatting');
+  };
 
-  const sourceLabel = sourceId
-    ? (sourceOptions.find((o) => o.id === sourceId)?.name ?? sourceId)
-    : '— none —';
+  // Manually enter batch from single (splitter under-detected → user divides).
+  const enterBatch = () => {
+    const text = normalizeInput(rawText); // HTML → BBCode if needed
+    if (text !== rawText) setRawText(text);
+    let b = splitEntityBlocks(type, text);
+    if (b.length < 1) b = [firstContentOffset(text)];
+    setBoundaries(b); setEdits({}); setSelected(new Set(b.map((_, i) => i))); setReviewIndex(null);
+    setPhase('batch');
+  };
+
+  const applyBoundaries = (next: number[]) => {
+    const sorted = [...new Set(next)].sort((a, b) => a - b);
+    if (sorted.length <= 1) { setSingle(parseToState(type, rawText, formatTemplate)); setBoundaries(sorted); setPhase('single'); return; }
+    setBoundaries(sorted); setEdits({}); setSelected(new Set(sorted.map((_, i) => i))); setReviewIndex(null);
+  };
+  const addDivision = (offset: number) => applyBoundaries([...boundaries, offset]);
+  const removeDivision = (offset: number) => applyBoundaries(boundaries.filter((o) => o !== offset));
+  const toggleSelected = (i: number) => setSelected((prev) => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; });
+
+  // ── Create ─────────────────────────────────────────────────────────────────
+  const commitState = async (st: EntityState) => {
+    const fields = sourceKey ? { ...st.values, [sourceKey]: sourceId } : st.values;
+    const resolved = resolveEntity(type, fields);
+    if (resolved.errors.length) throw new Error(resolved.errors[0]);
+    await commitEntity(resolved);
+    return resolved.displayName;
+  };
+
+  const handleCreateSingle = async () => {
+    if (!descriptor) return;
+    setSaving(true);
+    try {
+      const name = await commitState(single);
+      toast.success(`${descriptor.label} “${name}” created`);
+      setRawText(''); setSingle(emptyState(descriptor)); setPhase('input');
+    } catch (err: any) {
+      toast.error(err?.message || `Failed to create ${descriptor.label.toLowerCase()}.`);
+      reportClientError(err, OperationType.CREATE, `import/${type}`);
+    } finally { setSaving(false); }
+  };
+
+  const handleCreateBatch = async () => {
+    if (!descriptor) return;
+    setSaving(true);
+    let ok = 0; const failed: string[] = [];
+    for (const i of [...selected].sort((a, b) => a - b)) {
+      try { await commitState(stateFor(i)); ok++; }
+      catch (err: any) { failed.push(`#${i + 1}: ${err?.message ?? 'error'}`); console.error('[batch create]', err); }
+    }
+    setSaving(false);
+    if (failed.length) toast.error(`Created ${ok}; ${failed.length} failed — ${failed[0]}`);
+    else { toast.success(`Created ${ok} ${descriptor.label.toLowerCase()}${ok === 1 ? '' : 's'}`); setRawText(''); setPhase('input'); setBoundaries([]); }
+  };
+
+  if (!userProfile) return <div className="px-6 py-12 text-center text-ink/50">Sign in to use the import window.</div>;
+
+  const sourceLabel = sourceId ? (sourceOptions.find((o) => o.id === sourceId)?.name ?? sourceId) : '— none —';
+  const singleResolved = (() => {
+    try { return resolveEntity(type, sourceKey ? { ...single.values, [sourceKey]: sourceId } : single.values); }
+    catch { return null; }
+  })();
+
+  // Live "how it will render" preview using the compendium's real detail pane.
+  // Spell-specific for now; future types wire their own here. Builds the resolved
+  // payload and adapts it to the panel's raw-row shape.
+  const renderPreview: ((state: EntityState) => React.ReactNode) | undefined =
+    type === 'spell'
+      ? (state) => {
+          try {
+            const fields = sourceKey ? { ...state.values, [sourceKey]: sourceId } : state.values;
+            const payload = resolveEntity(type, fields).payload;
+            return <SpellDetailPanel spellId="import-preview" spellData={buildSpellPreviewRow(payload)} size="compact" emptyMessage="" />;
+          } catch { return null; }
+        }
+      : undefined;
+
+  // Save the current marked-up layout as the source's format template, then
+  // re-parse the batch with it. Clear removes it.
+  const handleSaveFormat = (state: EntityState, text: string) => {
+    const tpl = buildFormatTemplate(type, text, state.spans);
+    if (!Object.keys(tpl).length) { toast.error('Assign some fields first, then save the format.'); return; }
+    saveFormatLS(type, sourceId, tpl);
+    setFormatTemplate(tpl);
+    setEdits({});
+    toast.success(`Format saved for ${sourceLabel}`);
+  };
+  const handleClearFormat = () => {
+    clearFormatLS(type, sourceId);
+    setFormatTemplate(null);
+    setEdits({});
+    toast.success('Format cleared');
+  };
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6">
+    <div className="mx-auto max-w-7xl px-4 py-6">
       {/* Header */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-gold/20 pb-3">
+      <div className="page-header">
         <div className="flex items-center gap-3">
           <Wand2 className="h-5 w-5 text-gold" />
           <div>
-            <h1 className="font-serif text-2xl font-bold text-ink">Mark &amp; Build</h1>
-            <p className="text-xs text-ink/60">
-              Set a source, fill the fields (paste from a PDF or type), preview, and create — written
-              through the editor’s real save path.
-            </p>
+            <h1 className="h3-title">Mark &amp; Build</h1>
+            <p className="muted-text text-xs">Paste one or many stat blocks; map them onto the fields, re-assign by selecting text, then create — through the editor’s real save path.</p>
           </div>
         </div>
-        <label className="flex items-center gap-2 text-sm">
-          <span className="text-ink/60">Type</span>
-          <select className="field-input h-9" value={type} onChange={(e) => setType(e.target.value)}>
-            {descriptors.map((d) => (
-              <option key={d.type} value={d.type}>{d.label}</option>
-            ))}
+        <label className="flex items-center gap-2">
+          <span className="field-label">Type</span>
+          <select className="field-input px-2" value={type} onChange={(e) => setType(e.target.value)}>
+            {descriptors.map((d) => (<option key={d.type} value={d.type}>{d.label}</option>))}
           </select>
         </label>
       </div>
 
-      {/* Source — persistent, applies to every entity created (set once per book). */}
+      {/* Source — persistent */}
       {sourceKey ? (
-        <div className="mb-5 flex flex-wrap items-center gap-3 rounded-lg border border-gold/20 bg-gold/[0.04] px-4 py-3">
-          <div className="flex items-center gap-2">
-            <Library className="h-4 w-4 text-gold" />
-            <span className="text-sm font-semibold text-ink">Source</span>
-          </div>
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-gold/15 bg-gold/5 px-4 py-2.5">
+          <div className="flex items-center gap-2"><Library className="h-4 w-4 text-gold" /><span className="field-label">Source</span></div>
           <div className="w-64">
-            <SingleSelectSearch
-              value={sourceId}
-              onChange={setSourceId}
-              options={sourceOptions}
-              placeholder="— none —"
-              noEntitiesText="No sources found."
-              triggerClassName="h-9 w-full text-sm"
-            />
+            <SingleSelectSearch value={sourceId} onChange={setSourceId} options={sourceOptions} placeholder="— none —" noEntitiesText="No sources found." triggerClassName="field-input w-full text-sm" />
           </div>
           {!sourceId ? (
-            <span className="inline-flex items-center gap-1 rounded border border-blood/30 bg-blood/10 px-2 py-0.5 text-[11px] font-semibold text-blood">
-              <AlertTriangle className="h-3 w-3" /> No source — it’ll be hidden from the browser
+            <span className="inline-flex items-center gap-1 rounded border border-blood/30 bg-blood/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-blood">
+              <AlertTriangle className="h-3 w-3" /> No source — hidden from the browser
             </span>
           ) : null}
-          <span className="ml-auto text-[11px] text-ink/45">
-            Applies to every entity you create — set it once per book.
-          </span>
+          {formatTemplate ? (
+            <span className="inline-flex items-center gap-1 rounded border border-gold/30 bg-gold/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-gold" title="A saved field layout is auto-applied on interpret for this source">
+              Format saved
+              <button type="button" onClick={handleClearFormat} className="ml-0.5 text-gold/70 hover:text-blood" title="Clear the saved format">✕</button>
+            </span>
+          ) : null}
+          <span className="ml-auto field-hint">Applies to every entity you create — set it once per book.</span>
         </div>
       ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        {/* Form */}
-        <div className="space-y-5">
-          {grouped.map((group) => (
-            <fieldset key={group.name} className="compendium-card rounded-lg border border-gold/15 p-4">
-              <legend className="px-1 text-[11px] font-bold uppercase tracking-[0.18em] text-gold/80">
-                {group.name}
-              </legend>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {group.fields.map((field) => (
-                  <FieldControl
-                    key={field.key}
-                    field={field}
-                    value={values[field.key]}
-                    onChange={(v) => setField(field.key, v)}
-                  />
-                ))}
-              </div>
-            </fieldset>
-          ))}
-        </div>
-
-        {/* Preview */}
-        <aside className="lg:sticky lg:top-4 h-fit space-y-3">
-          <div className="compendium-card rounded-lg border border-gold/20 p-4">
-            <div className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-gold/80">
-              <Sparkles className="h-3.5 w-3.5" /> Preview — what will be written
-            </div>
-            {resolved ? (
-              <>
-                <dl className="space-y-1 text-sm">
-                  <Row label="Name" value={resolved.displayName} />
-                  <Row label="Identifier" value={resolved.identifier || '—'} mono />
-                  <Row label="Source" value={sourceLabel} dim={!sourceId} />
-                  <Row label="New id" value={resolved.id} mono dim />
-                </dl>
-
-                {resolved.errors.length > 0 ? (
-                  <ul className="mt-3 space-y-1 rounded border border-blood/30 bg-blood/5 p-2 text-xs text-blood">
-                    {resolved.errors.map((e) => (<li key={e}>• {e}</li>))}
-                  </ul>
-                ) : null}
-                {resolved.warnings.length > 0 ? (
-                  <ul className="mt-2 space-y-1 rounded border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-700">
-                    {resolved.warnings.map((w) => (<li key={w}>⚠ {w}</li>))}
-                  </ul>
-                ) : null}
-                {resolved.errors.length === 0 && resolved.warnings.length === 0 ? (
-                  <p className="mt-3 text-xs text-emerald-700">Ready to create.</p>
-                ) : null}
-
-                <button
-                  type="button"
-                  className="btn-gold mt-4 w-full justify-center disabled:opacity-50"
-                  disabled={saving || resolved.errors.length > 0}
-                  onClick={handleCreate}
-                >
-                  {saving ? 'Creating…' : `Create ${descriptor?.label ?? ''}`}
-                </button>
-              </>
-            ) : (
-              <p className="text-sm text-ink/50">Fill in the fields to preview.</p>
-            )}
+      {/* ── INPUT ───────────────────────────────────────────────────────────── */}
+      {phase === 'input' ? (
+        <div className="compendium-card flex flex-col p-3">
+          <div className="mb-2 flex items-center gap-2"><ScanText className="h-4 w-4 text-gold" /><span className="section-label">Source text</span></div>
+          <textarea
+            className="field-input min-h-[24rem] w-full flex-1 p-2 font-mono text-xs leading-relaxed"
+            rows={20}
+            placeholder={PLACEHOLDER}
+            value={rawText}
+            onChange={(e) => setRawText(e.target.value)}
+            onPaste={handlePaste}
+          />
+          <div className="mt-2 flex items-center gap-2">
+            <button type="button" className="btn-gold-solid h-9 px-4 disabled:opacity-50" disabled={!rawText.trim() || !hasParser} onClick={handleInterpret}>Interpret</button>
+            <span className="field-hint">{hasParser ? 'Paste plain text or HTML; multiple stat blocks auto-split into a batch. Activities aren’t parsed — add them in the editor.' : 'This type is manual-entry only.'}</span>
           </div>
+        </div>
+      ) : null}
 
-          {/* Raw payload — the literal object handed to the write function. */}
-          {resolved ? (
-            <details className="compendium-card rounded-lg border border-gold/15 p-3">
-              <summary className="flex cursor-pointer items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-ink/60">
-                <FileText className="h-3.5 w-3.5" /> Resolved payload
-              </summary>
-              <pre className="mt-2 max-h-80 overflow-auto rounded bg-ink/90 p-2 text-[10px] leading-relaxed text-parchment">
-{JSON.stringify(resolved.payload, null, 2)}
-              </pre>
-            </details>
-          ) : null}
-        </aside>
-      </div>
+      {/* ── SINGLE ──────────────────────────────────────────────────────────── */}
+      {phase === 'single' && descriptor ? (
+        <>
+          <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-gold/25 bg-card/40 px-4 py-2.5">
+            <Sparkles className="h-4 w-4 text-gold" />
+            <div className="min-w-0">
+              <span className="font-serif text-base font-bold text-ink">{singleResolved?.displayName || '(unnamed)'}</span>
+              <span className="ml-2 font-mono text-[10px] text-ink/45">{singleResolved?.identifier || '—'} · {sourceLabel}</span>
+            </div>
+            {singleResolved && singleResolved.errors.length > 0 ? (
+              <span className="inline-flex items-center gap-1 rounded border border-blood/30 bg-blood/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-blood">{singleResolved.errors[0]}</span>
+            ) : Object.keys(single.provenance).length > 0 ? (
+              <span className="inline-flex items-center gap-1 rounded border border-blood/30 bg-blood/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-blood"><AlertTriangle className="h-3 w-3" /> {Object.keys(single.provenance).length} to check</span>
+            ) : (<span className="label-text text-gold">Ready to create</span>)}
+            <div className="ml-auto flex items-center gap-2">
+              <button type="button" className="btn-gold inline-flex h-9 items-center gap-1 px-3 text-[11px]" onClick={() => setPhase('input')}><Pencil className="h-3 w-3" /> Edit text</button>
+              <button type="button" className="btn-gold inline-flex h-9 items-center gap-1 px-3 text-[11px]" onClick={enterBatch}><Scissors className="h-3 w-3" /> Divide</button>
+              <button type="button" className="btn-gold-solid h-9 px-5 disabled:opacity-50" disabled={saving || !singleResolved || singleResolved.errors.length > 0} onClick={handleCreateSingle}>{saving ? 'Creating…' : `Create ${descriptor.label}`}</button>
+            </div>
+          </div>
+          <EntityWorkspace type={type} descriptor={descriptor} rawText={rawText} state={single} onChange={setSingle} assignTargets={assignTargets} renderPreview={renderPreview} onSaveFormat={handleSaveFormat} />
+          {singleResolved ? <ResolvedPayload payload={singleResolved.payload} /> : null}
+        </>
+      ) : null}
+
+      {/* ── BATCH ───────────────────────────────────────────────────────────── */}
+      {phase === 'batch' && descriptor && reviewIndex == null ? (
+        <>
+          <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-gold/25 bg-card/40 px-4 py-2.5">
+            <ListChecks className="h-4 w-4 text-gold" />
+            <span className="font-serif text-base font-bold text-ink">Batch import</span>
+            <span className="field-hint">{candidates.length} {descriptor.label.toLowerCase()}s detected · {selected.size} selected</span>
+            <div className="ml-auto flex items-center gap-2">
+              <button type="button" className="btn-gold inline-flex h-9 items-center gap-1 px-3 text-[11px]" onClick={() => setPhase('input')}><Pencil className="h-3 w-3" /> Edit text</button>
+              <button type="button" className="btn-gold-solid h-9 px-5 disabled:opacity-50" disabled={saving || selected.size === 0} onClick={handleCreateBatch}>{saving ? 'Creating…' : `Create ${selected.size} ${descriptor.label}${selected.size === 1 ? '' : 's'}`}</button>
+            </div>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {/* Division editor */}
+            <div className="compendium-card flex flex-col p-3">
+              <div className="mb-2 flex items-center gap-2"><Scissors className="h-4 w-4 text-gold" /><span className="section-label">Divisions</span><span className="ml-auto field-hint">＋ split · ✕ merge</span></div>
+              <DivisionEditor rawText={rawText} boundaries={boundaries} names={blockNames} onAdd={addDivision} onRemove={removeDivision} />
+            </div>
+            {/* Candidate list */}
+            <div className="space-y-2">
+              {candidates.map((c, i) => {
+                const st = stateFor(i);
+                const flags = Object.keys(st.provenance).length;
+                return (
+                  <div key={i} className="compendium-card flex items-center gap-2 p-2">
+                    <input type="checkbox" checked={selected.has(i)} onChange={() => toggleSelected(i)} className="h-4 w-4 accent-[var(--gold)]" />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-bold text-ink">{i + 1}. {st.values.name || '(unnamed)'}</div>
+                      <div className="field-hint">{flags ? `${flags} to check` : 'parsed cleanly'}{st.leftovers.length ? ` · ${st.leftovers.length} note${st.leftovers.length === 1 ? '' : 's'}` : ''}{edits[i] ? ' · edited' : ''}</div>
+                    </div>
+                    {flags > 0 ? <span className="rounded border border-blood/30 bg-blood/10 px-1.5 py-0.5 text-[10px] font-black text-blood">{flags}</span> : null}
+                    <button type="button" className="btn-gold h-7 px-2 text-[11px]" onClick={() => setReviewIndex(i)}>Review</button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      ) : null}
+
+      {/* ── BATCH · review one candidate ────────────────────────────────────── */}
+      {phase === 'batch' && descriptor && reviewIndex != null && candidates[reviewIndex] ? (
+        <>
+          <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-gold/25 bg-card/40 px-4 py-2.5">
+            <button type="button" className="btn-gold h-9 px-3 text-[11px]" onClick={() => setReviewIndex(null)}>← Candidates</button>
+            <span className="font-serif text-base font-bold text-ink">{stateFor(reviewIndex).values.name || '(unnamed)'}</span>
+            <span className="field-hint">Reviewing {reviewIndex + 1} of {candidates.length}</span>
+            <label className="ml-auto inline-flex items-center gap-2 text-sm text-ink/80">
+              <input type="checkbox" checked={selected.has(reviewIndex)} onChange={() => toggleSelected(reviewIndex)} className="h-4 w-4 accent-[var(--gold)]" /> Include in import
+            </label>
+          </div>
+          <EntityWorkspace
+            type={type}
+            descriptor={descriptor}
+            rawText={candidates[reviewIndex].text}
+            state={stateFor(reviewIndex)}
+            onChange={(updater) => setEdits((prev) => ({ ...prev, [reviewIndex]: updater(stateFor(reviewIndex)) }))}
+            assignTargets={assignTargets}
+            renderPreview={renderPreview}
+            onSaveFormat={handleSaveFormat}
+          />
+        </>
+      ) : null}
     </div>
   );
 }
 
-function Row({ label, value, mono, dim }: { label: string; value: string; mono?: boolean; dim?: boolean }) {
+// ───────────────────────────── Division editor ──────────────────────────────
+function DivisionEditor({
+  rawText, boundaries, names, onAdd, onRemove,
+}: {
+  rawText: string;
+  boundaries: number[];
+  names: string[];
+  onAdd: (offset: number) => void;
+  onRemove: (offset: number) => void;
+}) {
+  const lines = useMemo(() => rawText.split('\n'), [rawText]);
+  const lineStarts = useMemo(() => { const s: number[] = []; let o = 0; for (const l of lines) { s.push(o); o += l.length + 1; } return s; }, [lines]);
+  const bset = useMemo(() => new Set(boundaries), [boundaries]);
+  let block = -1;
   return (
-    <div className="flex items-baseline justify-between gap-3">
-      <dt className="text-[11px] uppercase tracking-wider text-ink/50">{label}</dt>
-      <dd className={`text-right ${mono ? 'font-mono text-xs' : ''} ${dim ? 'text-ink/45' : 'text-ink'} truncate`}>
-        {value}
-      </dd>
+    <div className="min-h-[24rem] flex-1 overflow-auto rounded border border-gold/10 bg-background/30 p-2 font-mono text-xs leading-relaxed text-ink/90">
+      {lines.map((ln, i) => {
+        const start = lineStarts[i];
+        const isBoundary = bset.has(start);
+        if (isBoundary) block++;
+        const canSplit = ln.trim() !== '' && !isBoundary;
+        return (
+          <React.Fragment key={i}>
+            {isBoundary ? (
+              <div className={`-mx-2 flex items-center justify-between gap-2 border-y border-gold/30 bg-gold/10 px-2 py-1 ${block === 0 ? 'mt-0' : 'mt-3'}`}>
+                <span className="label-text text-gold">Spell {block + 1} · {names[block] || '(unnamed)'}</span>
+                {block > 0 ? (
+                  <button type="button" onClick={() => onRemove(start)} className="btn-gold inline-flex items-center gap-1 px-2 py-0.5 text-[10px]" title="Merge this spell into the one above">
+                    <ChevronUp className="h-3 w-3" /> Merge up
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+            <div className="group flex items-start">
+              <button
+                type="button"
+                disabled={!canSplit}
+                onClick={() => onAdd(start)}
+                title={canSplit ? 'Split a new entity here' : ''}
+                className={`mr-1 w-4 shrink-0 select-none text-center ${canSplit ? 'text-transparent group-hover:text-gold hover:!text-gold' : 'text-transparent'}`}
+              >＋</button>
+              <span className="whitespace-pre-wrap break-words">{ln || ' '}</span>
+            </div>
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─────────────────────────── Resolved payload ───────────────────────────────
+function ResolvedPayload({ payload }: { payload: Record<string, any> }) {
+  return (
+    <details className="compendium-card mt-4 p-3">
+      <summary className="section-label flex cursor-pointer items-center gap-2 text-ink/60"><FileText className="h-3.5 w-3.5" /> Resolved payload — what will be written</summary>
+      <pre className="mt-2 max-h-80 overflow-auto rounded bg-ink/90 p-2 text-[10px] leading-relaxed text-parchment">{JSON.stringify(payload, null, 2)}</pre>
+    </details>
+  );
+}
+
+// ───────────────────────── Per-entity mark-up editor ────────────────────────
+function EntityWorkspace({
+  type, descriptor, rawText, state, onChange, assignTargets, renderPreview, onSaveFormat,
+}: {
+  type: string;
+  descriptor: ImportDescriptor;
+  rawText: string;
+  state: EntityState;
+  onChange: (updater: (prev: EntityState) => EntityState) => void;
+  assignTargets: ImportAssignTarget[];
+  renderPreview?: (state: EntityState) => React.ReactNode;
+  onSaveFormat?: (state: EntityState, rawText: string) => void;
+}) {
+  const [activeTarget, setActiveTarget] = useState<string | null>(null);
+  const [selection, setSelection] = useState<ActiveSelection | null>(null);
+  const [identifierDirty, setIdentifierDirty] = useState(false);
+  const [rightTab, setRightTab] = useState<'fields' | 'preview'>('fields');
+  const leftRef = useRef<HTMLDivElement>(null);
+
+  const fieldTarget = useMemo(() => {
+    const map: Record<string, { key: string; label: string }> = {};
+    for (const t of assignTargets) for (const fk of t.fieldKeys) map[fk] = { key: t.key, label: t.label };
+    return map;
+  }, [assignTargets]);
+
+  const setField = (key: string, value: any) => {
+    onChange((prev) => {
+      const values = { ...prev.values, [key]: value };
+      if (key === descriptor.nameField && !identifierDirty && 'identifier' in prev.values) values.identifier = slugify(String(value));
+      const provenance = { ...prev.provenance }; delete provenance[key];
+      return { ...prev, values, provenance };
+    });
+    if (key === 'identifier') setIdentifierDirty(true);
+  };
+
+  const offsetOf = (node: Node, offset: number): number | null => {
+    const el = node.nodeType === 3 ? node.parentElement : (node as HTMLElement);
+    const seg = el?.closest('[data-start]');
+    return seg ? Number(seg.getAttribute('data-start')) + offset : null;
+  };
+  const onMouseUp = () => {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
+    const range = sel.getRangeAt(0);
+    const c = leftRef.current;
+    if (!c || !c.contains(range.startContainer) || !c.contains(range.endContainer)) return;
+    const a = offsetOf(range.startContainer, range.startOffset);
+    const b = offsetOf(range.endContainer, range.endOffset);
+    if (a == null || b == null) return;
+    const start = Math.min(a, b), end = Math.max(a, b);
+    if (end <= start) return;
+    const rect = range.getBoundingClientRect();
+    setSelection({ start, end, text: rawText.slice(start, end), top: rect.bottom, left: rect.left });
+  };
+  const onHighlightClick = (e: React.MouseEvent, start: number, end: number) => {
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed) return;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setSelection({ start, end, text: rawText.slice(start, end), top: rect.bottom, left: rect.left });
+  };
+  const handleAssign = (targetKey: string) => {
+    if (!selection) return;
+    const result = assignFieldText(type, targetKey, selection.text);
+    if (!Object.keys(result).length) { toast.error('Nothing to assign from that selection.'); return; }
+    const target = assignTargets.find((t) => t.key === targetKey);
+    const keys = target?.fieldKeys ?? Object.keys(result);
+    onChange((prev) => {
+      const values = { ...prev.values, ...result };
+      const spans = { ...prev.spans };
+      for (const fk of keys) spans[fk] = { start: selection.start, end: selection.end };
+      const provenance = { ...prev.provenance };
+      for (const fk of Object.keys(result)) delete provenance[fk];
+      return { ...prev, values, spans, provenance };
+    });
+    setSelection(null); window.getSelection()?.removeAllRanges();
+    toast.success(`Assigned to ${target?.label ?? targetKey}`);
+  };
+  const dismissSelection = () => { setSelection(null); window.getSelection()?.removeAllRanges(); };
+
+  // Annotated segments
+  const targetSpans = useMemo(() => {
+    const out: { key: string; label: string; start: number; end: number }[] = [];
+    for (const t of assignTargets) {
+      let s: Span | undefined;
+      for (const fk of t.fieldKeys) if (state.spans[fk]) { s = state.spans[fk]; break; }
+      if (s) out.push({ key: t.key, label: t.label, start: s.start, end: s.end });
+    }
+    return out.sort((a, b) => a.start - b.start);
+  }, [assignTargets, state.spans]);
+  const segments = useMemo(() => {
+    const segs: { start: number; end: number; target?: string; label?: string }[] = [];
+    let pos = 0;
+    for (const sp of targetSpans) {
+      if (sp.start < pos) continue;
+      if (sp.start > pos) segs.push({ start: pos, end: sp.start });
+      segs.push({ start: sp.start, end: sp.end, target: sp.key, label: sp.label });
+      pos = sp.end;
+    }
+    if (pos < rawText.length) segs.push({ start: pos, end: rawText.length });
+    return segs;
+  }, [targetSpans, rawText]);
+
+  const grouped = groupFields(descriptor.fields);
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      {/* LEFT — annotated source */}
+      <div className="compendium-card flex flex-col p-3">
+        <div className="mb-2 flex items-center gap-2"><ScanText className="h-4 w-4 text-gold" /><span className="section-label">Source text</span></div>
+        <div ref={leftRef} onMouseUp={onMouseUp} className="min-h-[20rem] flex-1 cursor-text overflow-auto whitespace-pre-wrap rounded border border-gold/10 bg-background/30 p-3 font-mono text-xs leading-relaxed text-ink/90 selection:bg-gold/30">
+          {segments.map((seg, i) => {
+            const txt = rawText.slice(seg.start, seg.end);
+            if (!seg.target) return <span key={i} data-start={seg.start}>{txt}</span>;
+            const active = activeTarget === seg.target;
+            return (
+              <span key={i} data-start={seg.start} title={`${seg.label} — click to re-assign`}
+                onMouseEnter={() => setActiveTarget(seg.target ?? null)} onMouseLeave={() => setActiveTarget(null)}
+                onClick={(e) => onHighlightClick(e, seg.start, seg.end)}
+                className={`cursor-pointer ${active ? 'bg-gold/35 ring-1 ring-gold/60' : 'bg-gold/15 hover:bg-gold/30'}`}>{txt}</span>
+            );
+          })}
+        </div>
+        <p className="mt-2 field-hint">Select text (or click a highlight) to assign it to a field. Hover to see which field it feeds.</p>
+        {state.leftovers.length > 0 ? (
+          <div className="mt-2 rounded border border-blood/30 bg-blood/10 p-2 text-blood">
+            <div className="mb-1 flex items-center gap-1 text-[10px] font-black uppercase tracking-widest"><AlertTriangle className="h-3 w-3" /> Couldn’t place — carry these over in the editor</div>
+            <ul className="space-y-0.5 pl-1 text-xs">{state.leftovers.map((l, i) => (<li key={i}>• {l}</li>))}</ul>
+          </div>
+        ) : null}
+      </div>
+
+      {/* RIGHT — fields / live preview */}
+      <div className="space-y-3">
+        {(renderPreview || onSaveFormat) ? (
+          <div className="flex items-center gap-1">
+            {renderPreview ? (
+              <>
+                <button type="button" onClick={() => setRightTab('fields')} className={`filter-tag ${rightTab === 'fields' ? 'btn-gold-solid' : 'btn-gold'}`}>Edit fields</button>
+                <button type="button" onClick={() => setRightTab('preview')} className={`filter-tag ${rightTab === 'preview' ? 'btn-gold-solid' : 'btn-gold'}`}>Preview</button>
+              </>
+            ) : null}
+            {onSaveFormat ? (
+              <button type="button" onClick={() => onSaveFormat(state, rawText)} className="btn-gold ml-auto inline-flex h-7 items-center gap-1 px-2 text-[10px]" title="Remember this field layout for the source — auto-applied to future spells of this source">
+                Save as format
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        {rightTab === 'preview' && renderPreview ? (
+          <div className="compendium-card min-h-[32rem] overflow-auto">{renderPreview(state)}</div>
+        ) : (
+          <div className="space-y-4">
+            {grouped.map((group) => (
+              <fieldset key={group.name} className="config-fieldset">
+                <legend className="section-label text-gold/60 px-1">{group.name}</legend>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {group.fields.map((field) => {
+                    const tgt = fieldTarget[field.key];
+                    return (
+                      <FieldControl key={field.key} field={field} value={state.values[field.key]} onChange={(v) => setField(field.key, v)}
+                        flag={state.provenance[field.key]} highlighted={!!tgt && activeTarget === tgt.key} onHover={(on) => setActiveTarget(on && tgt ? tgt.key : null)} />
+                    );
+                  })}
+                </div>
+              </fieldset>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Assign popover */}
+      {selection && assignTargets.length > 0 ? (
+        <>
+          <div className="fixed inset-0 z-40" onMouseDown={dismissSelection} />
+          <div className="fixed z-50 w-60 rounded-lg border border-gold/30 bg-popover p-2 shadow-xl" style={{ top: Math.min(selection.top + 6, window.innerHeight - 180), left: Math.min(selection.left, window.innerWidth - 250) }}>
+            <div className="mb-1 flex items-center justify-between">
+              <span className="section-label text-ink/50">Assign selection to</span>
+              <button type="button" className="text-ink/40 hover:text-ink" onMouseDown={(e) => e.preventDefault()} onClick={dismissSelection}>✕</button>
+            </div>
+            <div className="mb-1 max-h-12 overflow-hidden truncate rounded bg-ink/5 px-1.5 py-1 font-mono text-[10px] text-ink/55">“{selection.text.slice(0, 80)}{selection.text.length > 80 ? '…' : ''}”</div>
+            <div className="flex flex-wrap gap-1">
+              {assignTargets.map((t) => (
+                <button key={t.key} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => handleAssign(t.key)} className="filter-tag btn-gold">{t.label}</button>
+              ))}
+            </div>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
 
 function FieldControl({
-  field,
-  value,
-  onChange,
+  field, value, onChange, flag, highlighted, onHover,
 }: {
   field: ImportFieldDef;
   value: any;
   onChange: (value: any) => void;
+  flag?: FieldFlag;
+  highlighted?: boolean;
+  onHover?: (on: boolean) => void;
 }) {
   const id = `imp-${field.key}`;
+  const stateRing = flag ? ' ring-1 ring-blood/50 border-blood/40' : highlighted ? ' ring-1 ring-gold/60' : '';
+  const flagNote = flag ? (flag.note ?? (flag.confidence === 'none' ? 'Not found — please set this.' : 'Best guess — confirm.')) : '';
+  const hover = { onMouseEnter: () => onHover?.(true), onMouseLeave: () => onHover?.(false) };
 
-  // Boolean renders as a single inline checkbox row (no separate label above).
   if (field.kind === 'boolean') {
     return (
-      <label className="flex items-center gap-2 self-end pb-2 text-sm text-ink/80">
-        <input
-          id={id}
-          type="checkbox"
-          checked={!!value}
-          onChange={(e) => onChange(e.target.checked)}
-          className="h-4 w-4 accent-[var(--gold)]"
-        />
+      <label {...hover} className={`flex items-center gap-2 self-end pb-2 text-sm ${flag ? 'text-blood' : 'text-ink/80'}`}>
+        <input id={id} type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} className={`h-4 w-4 accent-[var(--gold)]${flag ? ' ring-1 ring-blood/50' : ''}`} />
         {field.label}
       </label>
     );
   }
 
   const wrapClass = field.kind === 'textarea' ? 'sm:col-span-2' : '';
-
   return (
-    <div className={wrapClass}>
-      <label htmlFor={id} className="mb-1 block text-xs font-medium text-ink/70">
-        {field.label}
-        {field.required ? <span className="ml-1 text-blood">*</span> : null}
-      </label>
+    <div className={wrapClass} {...hover}>
+      <label htmlFor={id} className="field-label mb-1 block">{field.label}{field.required ? <span className="ml-1 text-blood">*</span> : null}</label>
       {field.kind === 'textarea' ? (
-        <textarea
-          id={id}
-          className="field-input w-full"
-          rows={5}
-          placeholder={field.placeholder}
-          value={value ?? ''}
-          onChange={(e) => onChange(e.target.value)}
-        />
+        <textarea id={id} className={`field-input min-h-24 w-full p-2${stateRing}`} rows={5} placeholder={field.placeholder} value={value ?? ''} onChange={(e) => onChange(e.target.value)} />
       ) : field.kind === 'select' ? (
-        <select
-          id={id}
-          className="field-input h-9 w-full"
-          value={value ?? ''}
-          onChange={(e) => onChange(e.target.value)}
-        >
-          {field.options?.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
+        <select id={id} className={`field-input w-full px-2${stateRing}`} value={value ?? ''} onChange={(e) => onChange(e.target.value)}>
+          {field.options?.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
         </select>
       ) : (
-        <input
-          id={id}
-          type={field.kind === 'number' ? 'number' : 'text'}
-          className="field-input h-9 w-full"
-          placeholder={field.placeholder}
-          value={value ?? ''}
-          onChange={(e) => onChange(e.target.value)}
-        />
+        <input id={id} type={field.kind === 'number' ? 'number' : 'text'} className={`field-input w-full px-2${stateRing}`} placeholder={field.placeholder} value={value ?? ''} onChange={(e) => onChange(e.target.value)} />
       )}
-      {field.help ? <p className="mt-0.5 text-[10px] text-ink/45">{field.help}</p> : null}
+      {flag ? <p className="mt-0.5 text-[10px] text-blood/80">{flagNote}</p> : field.help ? <p className="field-hint mt-0.5">{field.help}</p> : null}
     </div>
   );
 }

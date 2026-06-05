@@ -11,6 +11,18 @@ import { upsertSpell } from '../compendium';
 import { slugify } from '../utils';
 import { bbcodeToHtml } from '../bbcode';
 import { SCHOOL_LABELS } from '../spellImport';
+import {
+  parseSpellText,
+  splitSpellBlocks,
+  normalizeSpellName,
+  reflowDescription,
+  classifyLevel,
+  classifySchool,
+  classifyCastingTime,
+  classifyRange,
+  classifyComponents,
+  classifyDuration,
+} from './spellParse';
 import type { ImportDescriptor, ImportContext, ImportFieldOption } from './types';
 
 const toOptions = (pairs: [string, string][]): ImportFieldOption[] =>
@@ -66,9 +78,11 @@ export const spellDescriptor: ImportDescriptor = {
     { key: 'componentsMaterial', label: 'Material (M)', kind: 'boolean', default: false, group: 'Components' },
     { key: 'componentsMaterialText', label: 'Material text', kind: 'text', group: 'Components', placeholder: 'a sprig of bramble' },
     { key: 'activationType', label: 'Casting time', kind: 'select', default: 'action', options: ACTIVATION_OPTIONS, group: 'Casting' },
+    { key: 'activationValue', label: 'Casting time value', kind: 'number', default: 1, group: 'Casting', help: 'e.g. 1 action, 10 minutes' },
     { key: 'rangeUnits', label: 'Range', kind: 'select', default: 'self', options: RANGE_OPTIONS, group: 'Casting' },
     { key: 'rangeValue', label: 'Range value', kind: 'number', default: 0, group: 'Casting', help: 'feet/miles when applicable' },
     { key: 'durationUnits', label: 'Duration', kind: 'select', default: 'inst', options: DURATION_OPTIONS, group: 'Casting' },
+    { key: 'durationValue', label: 'Duration value', kind: 'number', default: 0, group: 'Casting', help: 'e.g. 1 minute, 8 hours' },
     { key: 'description', label: 'Description', kind: 'textarea', group: 'Text', placeholder: 'BBCode — the spell text' },
   ],
 
@@ -138,5 +152,65 @@ export const spellDescriptor: ImportDescriptor = {
   async commit(id: string, payload: Record<string, any>) {
     // The real write call — identical to SpellsEditor's direct-save branch.
     await upsertSpell(id, payload);
+  },
+
+  // Interpret a pasted 5e stat block into these fields (activities stay manual).
+  parseText: parseSpellText,
+
+  // Split a multi-spell paste into per-spell blocks (batch import).
+  splitBlocks: splitSpellBlocks,
+
+  // Mark-up panel: which targets a selected span can be re-assigned to, and how
+  // each ingests the text. Every target re-runs the SAME classifier the parser
+  // uses, so a manual re-assignment is as smart as the first pass.
+  assignTargets: [
+    { key: 'name', label: 'Name', fieldKeys: ['name'] },
+    { key: 'level', label: 'Level', fieldKeys: ['level'] },
+    { key: 'school', label: 'School', fieldKeys: ['school'] },
+    { key: 'castingTime', label: 'Casting Time', fieldKeys: ['activationType', 'activationValue'] },
+    { key: 'range', label: 'Range', fieldKeys: ['rangeUnits', 'rangeValue'] },
+    { key: 'components', label: 'Components', fieldKeys: ['componentsVocal', 'componentsSomatic', 'componentsMaterial', 'componentsMaterialText'] },
+    { key: 'duration', label: 'Duration', fieldKeys: ['durationUnits', 'durationValue', 'concentration'] },
+    { key: 'description', label: 'Description', fieldKeys: ['description'] },
+  ],
+
+  assignField(target: string, text: string): Record<string, unknown> {
+    switch (target) {
+      case 'name':
+        return { name: normalizeSpellName(text) };
+      case 'description':
+        return { description: reflowDescription(text) };
+      case 'level': {
+        const lvl = classifyLevel(text);
+        return lvl != null ? { level: lvl } : {};
+      }
+      case 'school': {
+        const school = classifySchool(text);
+        return school ? { school } : {};
+      }
+      case 'castingTime': {
+        const c = classifyCastingTime(text);
+        return { activationType: c.type, activationValue: c.value };
+      }
+      case 'range': {
+        const r = classifyRange(text);
+        return { rangeUnits: r.units, rangeValue: r.value };
+      }
+      case 'components': {
+        const c = classifyComponents(text);
+        return {
+          componentsVocal: c.v,
+          componentsSomatic: c.s,
+          componentsMaterial: c.m,
+          componentsMaterialText: c.materialText,
+        };
+      }
+      case 'duration': {
+        const d = classifyDuration(text);
+        return { durationUnits: d.units, durationValue: d.value, concentration: d.concentration };
+      }
+      default:
+        return {};
+    }
   },
 };
