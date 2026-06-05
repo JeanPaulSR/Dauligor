@@ -18,6 +18,12 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["--yes", "http-server", "docs/architecture/compendium-editors", "-p", "5500", "-c-1"],
       "port": 5500
+    },
+    {
+      "name": "manual-uploads",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["scripts/dev-manual-uploads.mjs"],
+      "port": 3003
     }
   ]
 }
