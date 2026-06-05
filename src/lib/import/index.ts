@@ -1,0 +1,3 @@
+// Manual-upload / import system — public surface.
+export * from './types';
+export * from './registry';

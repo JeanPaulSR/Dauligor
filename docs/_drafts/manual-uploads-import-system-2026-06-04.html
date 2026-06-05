@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Manual Uploads — Mark &amp; Build Window — Design</title>
+<style>
+  :root {
+    --ink: #2b2117; --gold: #9c7a3c; --gold-soft: #c8a55e;
+    --parch: #f4ecd9; --parch2: #efe6cf; --line: #d8c9a6; --blood: #7c2d2d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 2.4rem clamp(1rem, 4vw, 4rem);
+    background: #efe6cf;
+    background-image: radial-gradient(circle at 20% 0%, #f7f0dd, #e7dcc1);
+    color: #2b2117;
+    font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    line-height: 1.6; max-width: 64rem; margin-inline: auto;
+  }
+  h1, h2, h3 { font-family: inherit; color: #6f561f; letter-spacing: .01em; }
+  h1 { font-size: 2.2rem; margin: 0 0 .2rem; border-bottom: 3px double #c8a55e; padding-bottom: .5rem; }
+  .sub { color: #8a7a52; font-style: italic; margin: 0 0 1.6rem; }
+  h2 { font-size: 1.35rem; margin: 2.1rem 0 .6rem; border-bottom: 1px solid #d8c9a6; padding-bottom: .25rem; }
+  h3 { font-size: 1.05rem; margin: 1.3rem 0 .35rem; color: #7c5e26; }
+  code, .mono { font-family: "SF Mono", "Consolas", monospace; font-size: .85em; background: #e4d8b8; padding: .08em .35em; border-radius: 4px; color: #5a4420; }
+  pre { background: #2b2117; color: #f0e6cd; padding: 1rem 1.1rem; border-radius: 8px; overflow-x: auto; font-size: .8rem; line-height: 1.5; border-left: 4px solid #9c7a3c; }
+  pre code { background: none; color: inherit; padding: 0; }
+  .card { background: #f7f1e1; border: 1px solid #d8c9a6; border-radius: 10px; padding: 1rem 1.2rem; margin: .8rem 0; box-shadow: 0 1px 0 #fff inset, 0 2px 8px rgba(120,90,40,.08); }
+  .card.accent { border-left: 4px solid #9c7a3c; }
+  .card.warn { border-left: 4px solid #7c2d2d; background: #f6ece1; }
+  .pill { display: inline-block; background: #9c7a3c; color: #fff; font-size: .68rem; text-transform: uppercase; letter-spacing: .12em; padding: .18em .6em; border-radius: 999px; vertical-align: middle; }
+  .pill.dim { background: #b9a878; }
+  .ok { color: #3f6f3f; font-weight: 700; }
+  .todo { color: #7c2d2d; font-weight: 700; }
+  ul, ol { margin: .4rem 0 .8rem; padding-left: 1.4rem; }
+  li { margin: .25rem 0; }
+  table { border-collapse: collapse; width: 100%; margin: .6rem 0; font-size: .82rem; }
+  th, td { border: 1px solid #d8c9a6; padding: .4rem .55rem; text-align: left; vertical-align: top; }
+  th { background: #e7dcc1; color: #6f561f; }
+  .lede { font-size: 1.05rem; }
+  .phase { display: flex; gap: .6rem; align-items: baseline; margin: .35rem 0; }
+  .phase .n { background: #2b2117; color: #f0e6cd; border-radius: 50%; width: 1.6rem; height: 1.6rem; display: inline-flex; align-items: center; justify-content: center; font-size: .8rem; flex: 0 0 auto; }
+  .ascii { font-family: "SF Mono", "Consolas", monospace; font-size: .76rem; background: #f7f1e1; border: 1px solid #d8c9a6; border-radius: 8px; padding: .9rem 1.1rem; white-space: pre; overflow-x: auto; color: #5a4420; line-height: 1.35; }
+  small.note { color: #8a7a52; }
+  .rev { font-size: .72rem; color: #8a7a52; }
+</style>
+</head>
+<body>
+  <h1>Manual Uploads — the "Mark &amp; Build" Window <span class="pill">design</span></h1>
+  <p class="sub">An in-app window: paste source text, mark spans as compendium fields, and save every entity through the editors' exact write calls. 2026-06-04 · branch <code>manual-uploads</code> · <span class="rev">rev 2 — pivoted to in-app after verifying the write paths</span></p>
+
+  <p class="lede">Take a block of text from a PDF (or anywhere), <strong>highlight a span and mark it</strong> — "this is the class name," "this paragraph is a feature's description," "this section is a new spell." The window assembles real compendium entities and writes them with the <em>identical</em> calls and payloads the hand editors use. Reading the PDF is still your job (or the chat's); the window's job is faithful field-filling and saving.</p>
+
+  <h2>Confirmed decisions</h2>
+  <div class="card accent">
+    <p><strong>1 · An in-app window with section marking.</strong> A new admin page where you paste or load source text, select spans, and tag each as a field of an entity (or as a whole new entity). Manual typing is always available too — marking is a convenience, not the only path.</p>
+    <p><strong>2 · Byte-identical writes.</strong> Every commit goes through the <em>same</em> function the matching editor calls — <code>upsertSpell</code>/<code>upsertFeat</code>/<code>upsertItem</code>/<code>upsertFeature</code> or a direct <code>upsertDocument(collection, id, payload)</code> — building the same payload, minting ids the same way, and firing the same rebake side-effects. No reimplementation of the SQL layer.</p>
+    <p><strong>Preview, then direct write.</strong> The staged-entities panel <em>is</em> the preview — you see each resolved entity and every field before you click Create. On confirm it writes directly and goes live (no proposal queue). <strong>Skeleton depth</strong> — name, description, required fields, sensible defaults; rich mechanics finished in the editors.</p>
+  </div>
+
+  <div class="card warn">
+    <strong>Why a window and not a chat/CLI script (the pivot).</strong> Decision 2 settles it. The faithful write functions are browser-side React — <code>upsertSpell</code>/<code>upsertFeat</code>/<code>upsertItem</code>/<code>upsertFeature</code> plus the per-type <code>upsertDocument</code> payloads. A Node CLI <em>could</em> reach D1 (auth is now the app's own native session token — a Worker-issued HS256 JWT via <code>/api/auth/login</code>, with Firebase only a migration-window fallback — so a script could log in for one, or hit the Worker's <code>/query</code> with <code>API_SECRET</code>). The real blocker is fidelity: a CLI would have to <em>reimplement the field-shaping</em> (<code>normalizeCompendiumData</code>, the spell filter-buckets, every per-type payload), which is exactly the drift Decision 2 guards against. The window reuses those functions verbatim in their native context — and already holds a live authed session — so it is the faithful home. The chat's role is to help you draft the text you paste.
+  </div>
+
+  <h2>The proven precedent</h2>
+  <p>We are not inventing the shape. <code>SpeciesBackgroundImportWorkbench.tsx</code> already is a working in-app import window: load content &rarr; master list + detail/preview pane &rarr; per-row source assignment &rarr; commit via <code>upsertDocument</code>/<code>upsertDocumentBatch</code> with natural-key dedup and <code>createdAt</code> preservation. The four Foundry workbenches (Spell / Feat / Item / Species-Background) are the reference implementations. <strong>Mark &amp; Build is the same skeleton with a different front-end</strong>: instead of parsing an uploaded Foundry JSON, the candidate entities are built by <em>you marking spans of pasted text</em>.</p>
+
+  <h2>Architecture — window on top, real write calls underneath</h2>
+  <div class="ascii">  ┌──────────────────────────  MARK & BUILD WINDOW (new admin page)  ──────────────────────────┐
+  │                                                                                            │
+  │   SOURCE TEXT             │   STAGED ENTITIES            │   FIELD INSPECTOR / PREVIEW       │
+  │   (paste / .txt)          │   (the candidates)           │   (the selected entity)           │
+  │                           │                              │                                   │
+  │   "The Warden is a …"     │   ▸ Warden        (class)    │   type:  class                    │
+  │    ↑ select span          │   ▸ Wild Resilience (feature)│   name:  Warden        ✓          │
+  │    → "Mark as…" popover    │   ▸ Bramble Snare  (spell)   │   identifier: warden  (auto)      │
+  │      • New entity ▸ type   │                              │   description: "The Warden…"      │
+  │      • Field of ▸ entity   │   [+ source selector]        │   source: Homebrew Tome           │
+  │                           │                              │   ⚠ missing: —     [Create]       │
+  └───────────────┬───────────┴───────────────┬──────────────┴───────────────────────────────────┘
+                  │  builds candidate objects  │  on Create →
+                  ▼                            ▼
+        ┌─────────────────────────────────────────────────────────┐
+        │  IMPORT REGISTRY  (src/lib/import/registry.ts)            │
+        │  per type → { requiredFields, defaults, buildPayload(),   │
+        │              commit(id, payload) , idRule, identifierRule}│
+        │  commit() DELEGATES to the editor's real write function:  │
+        │   spell→upsertSpell · feat→upsertFeat · item→upsertItem   │
+        │   feature→upsertFeature(+rebake) · class→upsertDocument   │
+        │   ('classes',…)+queueRebake · subclass→… · source→… etc.  │
+        └─────────────────────────────────────────────────────────┘</div>
+
+  <ul>
+    <li><strong>The window</strong> (<code>src/pages/compendium/ImportMarkWindow.tsx</code> or similar, admin-gated) — paste box + span-marking + staged-entities list + field inspector. Reuses <code>FilterBar</code>, the workbench detail-pane styling, <code>ImageUpload</code>, and the existing field widgets so it feels native.</li>
+    <li><strong>The import registry</strong> (<code>src/lib/import/registry.ts</code>) — one descriptor per type holding the <em>required fields, defaults, payload builder, and a <code>commit()</code> that calls the editor's real write function</em>. This is the durable artifact and the single place the marking targets are defined. It does <strong>not</strong> reimplement <code>upsertDocument</code>; it routes to the proven helpers.</li>
+    <li><strong>Reuse, verbatim.</strong> Each <code>commit()</code> mirrors the editor's handler exactly (verified table below) — same payload keys, <code>id = existingId ?? crypto.randomUUID()</code>, <code>identifier = identifier.trim() || slugify(name)</code>, the <code>tagIds→tags</code> renames, and <code>queueRebake(...)</code> for class/subclass/feature.</li>
+  </ul>
+
+  <h2>The verified save-path contract <span class="pill dim">point 2</span></h2>
+  <p>Extracted verbatim from the editors. This is the implementation contract — <code>commit()</code> per type must match this row exactly.</p>
+  <table>
+    <tr><th>Type</th><th>Write call (collection)</th><th>Payload built by</th><th>identifier</th><th>tags col</th><th>rebake</th></tr>
+    <tr><td>spell</td><td><code>upsertSpell(id, payload)</code></td><td>editor camelCase + <code>foundry_data</code>; helper runs <code>prepareSpellPayloadForWrite</code> (buckets!)</td><td><code>…||slugify(name)</code></td><td><code>tags</code> (in helper)</td><td>none</td></tr>
+    <tr><td>feat</td><td><code>upsertFeat(id, payload)</code></td><td>snake_case payload; helper runs <code>normalizeCompendiumData</code></td><td><code>…||slugify(name)</code></td><td><code>tags</code> (in helper)</td><td>verify*</td></tr>
+    <tr><td>item</td><td><code>upsertItem(id, payload)</code></td><td>snake_case + JSON sub-objects; helper normalizes</td><td><code>…||slugify(name)</code></td><td><code>tags</code> (in helper)</td><td>none</td></tr>
+    <tr><td>feature</td><td><code>upsertFeature(id, payload)</code> (features)</td><td><code>normalizeFeatureData</code>; set <code>parentId</code>+<code>parentType</code></td><td><code>…||slugify(name)</code></td><td><code>tags</code> (in helper)</td><td><code>queueRebake('feature',id)</code></td></tr>
+    <tr><td>class</td><td><code>upsertDocument('classes', id, d1Data)</code></td><td>hand-built snake_case <code>d1Data</code> (verbatim list)</td><td><code>slugify(name)</code></td><td><code>tag_ids</code></td><td><code>queueRebake('class',id)</code></td></tr>
+    <tr><td>subclass</td><td><code>upsertDocument('subclasses', id, d1Data)</code></td><td>hand-built snake_case; needs <code>class_id</code>+<code>class_identifier</code></td><td><code>slugify(name)</code></td><td><code>tag_ids</code></td><td><code>queueRebake('subclass',id)</code></td></tr>
+    <tr><td>unique option group</td><td><code>upsertDocument('uniqueOptionGroups', id, d1Data)</code></td><td><code>{name,description,source_id,class_ids,updated_at}</code></td><td>— (no column)</td><td>—</td><td>none</td></tr>
+    <tr><td>unique option item</td><td><code>upsertDocument('uniqueOptionItems', id, d1Data)</code></td><td>feat-shape; <code>group_id</code>, <code>requirements_tree</code>, <code>feature_type←group.name</code></td><td>— (no column)</td><td><code>tags</code></td><td>none</td></tr>
+    <tr><td>background</td><td><code>upsertDocument('backgrounds', id, payload)</code></td><td>camelCase payload (no normalize); <code>tagIds→tags</code> inline</td><td><code>…||slugify(name)</code></td><td><code>tags</code></td><td>none</td></tr>
+    <tr><td>species</td><td><code>upsertDocument('species', id, payload)</code></td><td>camelCase; <code>movement/senses/creatureType/speciesOptionIds</code></td><td><code>…||slugify(name)</code></td><td><code>tags</code></td><td>none</td></tr>
+    <tr><td>subspecies</td><td><code>upsertDocument('species', id, payload)</code></td><td>camelCase + <code>parentSpeciesId</code></td><td><code>subspecies-&lt;id8&gt;</code></td><td><code>tags</code></td><td>none</td></tr>
+    <tr><td>species option</td><td><code>upsertDocument('speciesOptions', id, payload)</code></td><td>camelCase feat-shape</td><td><code>…||slugify(name)</code></td><td><code>tags</code></td><td>none</td></tr>
+    <tr><td>background feature</td><td><code>upsertDocument('backgroundFeatures', id, payload)</code></td><td>camelCase; <code>parentBackgroundId</code></td><td><code>…||slugify(name)</code></td><td><code>tags</code></td><td>none</td></tr>
+    <tr><td>facility</td><td><code>upsertDocument('facilities', id, payload)</code> via DCM</td><td><code>normalizeCompendiumData</code> path (DevelopmentCompendiumManager)</td><td><code>…||slugify(name)</code></td><td><code>tags</code></td><td>none</td></tr>
+    <tr><td>source</td><td><code>upsertDocument('sources', id, sourceData)</code></td><td><code>{name,slug,abbreviation,rules_version,status,…}</code></td><td>— (uses <code>slug</code>)</td><td><code>tags</code></td><td>none</td></tr>
+    <tr><td>system page / entry</td><td><code>saveSystemPage</code> / <code>saveSystemPageEntry</code></td><td>lib helpers (snake) → <code>upsertDocument</code>; entry needs <code>page_id</code></td><td><code>slugify(name)</code></td><td>—</td><td>none (cache bust)</td></tr>
+    <tr><td>spell rule</td><td><code>saveRule(...)</code> (raw <code>queryD1</code> INSERT…ON CONFLICT)</td><td><code>{name,description,query,manualSpells}</code></td><td>— (no column)</td><td>—</td><td>none</td></tr>
+  </table>
+  <p><small class="note">* <strong>Verify at build:</strong> one survey pass reported <code>FeatsEditor</code> calls <code>rebakeNow('feat')</code> after save; the verbatim pass reported no rebake for feats/items. I'll read <code>FeatsEditor.tsx</code> directly when wiring the feat path and match whatever it actually does — not guess. Universal idioms confirmed across all editors: <code>id</code> is always a <em>separate positional arg</em> (never inside <code>data</code>); id minting is always <code>existingId ?? crypto.randomUUID()</code>; batch paths pass <code>id:null</code> and let <code>upsertDocumentBatch</code> mint.</small></p>
+
+  <h2>Required fields (what a candidate must carry)</h2>
+  <p>The only universally hard-required field is <strong><code>name</code></strong>. The window auto-fills <code>id</code> and <code>identifier</code>; everything else defaults. Parents that must exist first: <strong>subclass→class</strong> (hard FK), and soft links (feature→parent, option-item→group, subspecies→species, background-feature→background) which the window resolves to a row already in the DB <em>or</em> another staged candidate.</p>
+  <table>
+    <tr><th>Hard-required beyond name</th><th>Types</th></tr>
+    <tr><td>+ <code>class</code> (parent)</td><td>subclass</td></tr>
+    <tr><td>+ <code>slug</code></td><td>source</td></tr>
+    <tr><td>+ <code>page</code> (parent)</td><td>system page entry</td></tr>
+    <tr><td><em>name only</em></td><td>class, feature, spell, feat, item, facility, background, species, species option, background feature, unique option group/item, system page, spell rule</td></tr>
+  </table>
+
+  <h2>The marking interaction</h2>
+  <ol>
+    <li><strong>Load source.</strong> Paste text into the source pane (or drop a <code>.txt</code>). PDF&rarr;text extraction stays out of scope — paste the text. (We can layer extraction on later without touching the window.)</li>
+    <li><strong>Start an entity.</strong> Select the title span &rarr; "Mark as &rarr; New <em>class</em>" (pick the type). A staged entity appears with its <code>name</code> filled from the span.</li>
+    <li><strong>Mark fields.</strong> Select more spans &rarr; "Mark as &rarr; <em>description</em> of Warden," "&rarr; <em>new feature</em> under Warden," etc. Each mark routes the span text into the chosen entity's field, or spawns a child entity with the right parent link pre-set.</li>
+    <li><strong>Re-tag freely.</strong> "Mark a section as something else" — re-assign a span you tagged wrong; the old assignment is cleared and the field updates. Marks are non-destructive to the source text.</li>
+    <li><strong>Fill the rest by hand.</strong> The field inspector is a live form — type anything the source didn't give you, pick a source book, attach an image. Required-field gaps are flagged.</li>
+    <li><strong>Create.</strong> Per-entity (or "Create All," parent-first) &rarr; the registry's <code>commit()</code> runs the verified write call. Idempotent (<code>ON CONFLICT(id)</code>), so re-running is safe.</li>
+  </ol>
+
+  <h2>Composites (a whole class)</h2>
+  <p>A class is a parent row plus features/subclasses/scaling — each its own write. In the window you stage the class, then mark child features/subclasses whose parent is the staged class; on "Create All" the registry writes parent-first so soft FK links resolve, firing <code>queueRebake('class'|'subclass'|'feature', id)</code> exactly as the editors do. (For a complete, well-formed class-export JSON specifically, the existing <code>importClassSemantic()</code> remains a one-click shortcut — but the marking path is what makes partial/skeleton class-building from raw text work.)</p>
+
+  <h2>Build phases</h2>
+  <div class="card">
+    <div class="phase"><span class="n">1</span><div><strong>Registry + commit fidelity</strong> — <code>src/lib/import/registry.ts</code>: per-type descriptor whose <code>commit()</code> calls the verified write function with the verified payload. Start with <em>spell</em> (self-contained, exercises the helper path) + <em>class</em> (exercises direct <code>upsertDocument</code> + rebake). Read each editor's handler one more time as I wire it, to match verbatim.</div></div>
+    <div class="phase"><span class="n">2</span><div><strong>The window shell</strong> — new admin route, paste pane + staged-entities list + field inspector, cloned from the workbench layout. Manual entry first (no marking yet): pick a type, fill fields, Create. Proves the registry end-to-end against local D1.</div></div>
+    <div class="phase"><span class="n">3</span><div><strong>Span marking</strong> — selection &rarr; "Mark as" popover &rarr; route span text into a field / spawn a child entity. The actual "tag a section as something else" mechanic.</div></div>
+    <div class="phase"><span class="n">4</span><div><strong>Breadth</strong> — fill in the remaining types' descriptors (feat, item, feature, subclass, background, species + options, unique options, facility, source, system pages, spell rules) + composites/parent-first ordering.</div></div>
+    <div class="phase"><span class="n">5</span><div><strong>Polish + docs</strong> — image attach, source bulk-assign (workbench idiom), validation surfacing; promote this draft into <code>docs/features/</code>.</div></div>
+  </div>
+
+  <h2>Deferred / out of scope</h2>
+  <ul>
+    <li><span class="todo">Out of scope:</span> PDF/text auto-extraction and any AI parsing. You (or the chat) supply the text; the window does faithful field-filling + saving.</li>
+    <li>Proposal-queue path — not used (direct write chosen). Swappable later by pointing <code>commit()</code> at the proposal writer.</li>
+    <li>Rich mechanics (advancements/activities/effects) — accepted if marked, but authored properly in the editors; v1 targets skeletons.</li>
+    <li>Auto-segmentation / "detect the features for me" — explicitly manual in v1 (matches "fill in fields," no automation).</li>
+  </ul>
+</body>
+</html>

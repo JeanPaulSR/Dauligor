@@ -222,6 +222,7 @@ export default function Sidebar({
             { label: 'Tags', path: '/compendium/tags' },
             { label: 'Spell Rules', path: '/compendium/spell-rules' },
             { label: 'Spell Lists', path: '/compendium/spell-lists' },
+            { label: 'Import / Mark', path: '/compendium/import' },
           ] : []),
         ]
       },

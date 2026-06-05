@@ -56,6 +56,7 @@ import SkillsEditor from './pages/compendium/SkillsEditor';
 import SpellList from './pages/compendium/SpellList';
 import ToolsEditor from './pages/compendium/ToolsEditor';
 import SpellsEditor from './pages/compendium/SpellsEditor';
+import ImportMarkWindow from './pages/compendium/ImportMarkWindow';
 import SpellListManager from './pages/compendium/SpellListManager';
 import SpellRulesEditor from './pages/compendium/SpellRulesEditor';
 import FeatsEditor from './pages/compendium/FeatsEditor';
@@ -340,6 +341,7 @@ export default function App() {
                   <Route path="/compendium/spells/manage" element={<SpellsEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/spell-lists" element={<AdminOnly userProfile={effectiveProfile}><SpellListManager userProfile={effectiveProfile} /></AdminOnly>} />
                   <Route path="/compendium/spell-rules" element={<AdminOnly userProfile={effectiveProfile}><SpellRulesEditor userProfile={effectiveProfile} /></AdminOnly>} />
+                  <Route path="/compendium/import" element={<AdminOnly userProfile={effectiveProfile}><ImportMarkWindow userProfile={effectiveProfile} /></AdminOnly>} />
                   <Route path="/compendium/feats" element={<FeatList userProfile={effectiveProfile} />} />
                   <Route path="/compendium/feats/manage" element={<FeatsEditor userProfile={effectiveProfile} />} />
                   {/* Items — public list at /items, admin editor at
