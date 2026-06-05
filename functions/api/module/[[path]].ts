@@ -30,6 +30,8 @@
 import {
   buildClassBundleForIdentifier,
   buildSourceClassCatalog,
+  buildSourceBackgroundCatalog,
+  buildSourceSpeciesCatalog,
   buildTopLevelCatalog,
   rebakeBundle,
 } from "../../../api/_lib/module-export-pipeline.js";
@@ -475,6 +477,37 @@ export const onRequest = async (context: any): Promise<Response> => {
     ) {
       const slug = pathParts[0].toLowerCase();
       const result = await buildSourceFeatListBundle(slug, SERVER_EXPORT_FETCHERS);
+      if (result) return serveLive(result);
+      // Fall through to 404 if the source slug didn't match.
+    }
+
+    // Per-source background list catalog — live read-through, no R2. URL:
+    //   /api/module/<source>/backgrounds.json
+    // Restores enumeration after backgrounds moved to their own table (only
+    // detail endpoints shipped). `dbId` bridges to /backgrounds/<dbId>.json.
+    // Placed after the `pathParts[0] === "backgrounds"` detail arm so
+    // `/backgrounds/<dbId>.json` still routes to the per-background handler.
+    else if (
+      pathParts.length === 2
+      && pathParts[1] === "backgrounds.json"
+    ) {
+      const slug = pathParts[0].toLowerCase();
+      const result = await buildSourceBackgroundCatalog(slug);
+      if (result) return serveLive(result);
+      // Fall through to 404 if the source slug didn't match.
+    }
+
+    // Per-source species list catalog — live read-through, no R2. URL:
+    //   /api/module/<source>/species.json
+    // Sibling of backgrounds.json. `dbId` bridges to /races/<dbId>.json (the
+    // existing species detail segment). Named `species.json` per the handoff's
+    // 2024-term preference; the module consumes whichever path we ship.
+    else if (
+      pathParts.length === 2
+      && pathParts[1] === "species.json"
+    ) {
+      const slug = pathParts[0].toLowerCase();
+      const result = await buildSourceSpeciesCatalog(slug);
       if (result) return serveLive(result);
       // Fall through to 404 if the source slug didn't match.
     }

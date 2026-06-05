@@ -313,6 +313,111 @@ export async function buildSourceClassCatalog(sourceSlug: string) {
   };
 }
 
+// Per-source background / species *list* catalogs — the enumeration endpoints
+// the Foundry module's creator (Species/Background sections) and the import
+// wizard's feat browser use. Backgrounds & species were promoted out of the
+// `feats` table into their own `backgrounds` / `species` tables (camelCase
+// columns), and only per-id detail endpoints shipped; this restores the list
+// path. Lightweight entries — the module fetches the full item from the detail
+// endpoint (`/backgrounds/<dbId>.json`, `/races/<dbId>.json`) on selection.
+// Mirrors `buildSourceClassCatalog`'s shape + source-resolution + tagIndex.
+// Handoff: foundry-module → compendium-editors, 2026-06-04.
+async function buildSourceEntityCatalog(
+  sourceSlug: string,
+  opts: { table: "backgrounds" | "species"; entity: string; kind: string; idSuffix: string },
+) {
+  const sourcesRes = await executeD1QueryInternal({ sql: "SELECT * FROM sources" });
+  const allSources = (sourcesRes.results || []).map(denormalizeSourceRow);
+  const slug = String(sourceSlug || "").toLowerCase();
+  const source = allSources.find((s: any) =>
+    (s.slug || "").toLowerCase() === slug
+    || String(s.id).toLowerCase() === slug
+    || (s.semanticId || "").toLowerCase() === slug
+  );
+  if (!source) return null;
+
+  // `backgrounds` / `species` store FK + image in camelCase columns
+  // (`sourceId`, `imageUrl`) — unlike the snake_case `classes`/`feats` tables.
+  const rowsRes = await executeD1QueryInternal({
+    sql: `SELECT id, name, sourceId, description, tags, imageUrl FROM ${opts.table} WHERE sourceId = ?`,
+    params: [source.id],
+  });
+  const rows = rowsRes.results || [];
+
+  const stripBbcode = (s: any) =>
+    String(s ?? "").replace(/\[\/?[^\]]+\]/g, "").replace(/\s+/g, " ").trim();
+  const parseTags = (val: any): string[] => {
+    if (Array.isArray(val)) return val.map(String);
+    if (typeof val !== "string" || !val) return [];
+    try {
+      const p = JSON.parse(val);
+      return Array.isArray(p) ? p.map(String) : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const entries = rows
+    .map((row: any) => ({
+      dbId: String(row.id),
+      name: String(row.name || ""),
+      img: row.imageUrl || "",
+      summary: stripBbcode(row.description).substring(0, 200),
+      tags: parseTags(row.tags),
+    }))
+    .sort((a: any, b: any) => a.name.localeCompare(b.name));
+
+  // Resolve referenced tag IDs → display names (filter-chip labels), exactly
+  // like the class catalog — only the tags actually used by these entries.
+  const referencedTagIds = Array.from(
+    new Set(entries.flatMap((e: any) => e.tags).map(String).filter(Boolean)),
+  );
+  const tagIndex: Record<string, string> = {};
+  if (referencedTagIds.length) {
+    const placeholders = referencedTagIds.map(() => "?").join(",");
+    const tagRes = await executeD1QueryInternal({
+      sql: `SELECT id, name FROM tags WHERE id IN (${placeholders})`,
+      params: referencedTagIds,
+    });
+    for (const row of tagRes.results || []) {
+      if (row.id && row.name) tagIndex[String(row.id)] = String(row.name);
+    }
+  }
+
+  return {
+    kind: opts.kind,
+    schemaVersion: 1,
+    source: {
+      system: "dauligor",
+      entity: opts.entity,
+      id: `${source.semanticId}-${opts.idSuffix}`,
+      sourceId: source.semanticId,
+    },
+    entries,
+    tagIndex,
+  };
+}
+
+/** Per-source background list catalog — served by `/api/module/<source>/backgrounds.json`. */
+export async function buildSourceBackgroundCatalog(sourceSlug: string) {
+  return buildSourceEntityCatalog(sourceSlug, {
+    table: "backgrounds",
+    entity: "background-catalog",
+    kind: "dauligor.background-catalog.v1",
+    idSuffix: "backgrounds",
+  });
+}
+
+/** Per-source species list catalog — served by `/api/module/<source>/species.json`. */
+export async function buildSourceSpeciesCatalog(sourceSlug: string) {
+  return buildSourceEntityCatalog(sourceSlug, {
+    table: "species",
+    entity: "species-catalog",
+    kind: "dauligor.species-catalog.v1",
+    idSuffix: "species",
+  });
+}
+
 export async function buildClassBundleForIdentifier(classIdentifier: string) {
   const lookup = classIdentifier.toLowerCase();
   const classesRes = await executeD1QueryInternal({
