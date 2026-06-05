@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Activity Editor — Foundry 5.3.1 fidelity audit</title>
+<style>
+  :root{
+    --parchment:#f4ecd8; --parchment-2:#ece2c8; --ink:#2b2419; --ink-soft:#5a4f3f;
+    --ink-faint:#8a7d68; --gold:#9a7d3b; --gold-bright:#b8923f; --blood:#6b2737;
+    --green:#4f6b42; --border:#c9b896; --card:#fbf6e9;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Iowan Old Style','Palatino Linotype','Book Antiqua',Palatino,Georgia,serif;
+    background:var(--parchment);color:var(--ink);line-height:1.62;padding:2.5rem 1.5rem;max-width:74rem;margin:0 auto}
+  h1{font-size:2.2rem;font-weight:700;letter-spacing:-.01em;margin-bottom:.3rem}
+  .subtitle{font-size:1.02rem;color:var(--ink-soft);font-style:italic;margin-bottom:1.8rem}
+  h2{font-size:1.5rem;margin-top:2.6rem;margin-bottom:.5rem;padding-bottom:.35rem;border-bottom:2px solid var(--gold)}
+  h3{font-size:1.18rem;margin-top:1.5rem;margin-bottom:.4rem;color:var(--gold-bright)}
+  p{margin-bottom:.7rem} ul,ol{margin:.3rem 0 .9rem 1.4rem} li{margin-bottom:.32rem}
+  code{background:var(--parchment-2);padding:.08rem .35rem;border-radius:3px;font-family:'SF Mono',Consolas,monospace;font-size:.82em}
+  pre{background:#2b2419;color:#e8dcc0;padding:.9rem 1.1rem;border-radius:6px;overflow-x:auto;font-family:'SF Mono',Consolas,monospace;font-size:.78rem;line-height:1.5;margin:.6rem 0}
+  pre .k{color:#cbb06a} pre .s{color:#9ec07a} pre .c{color:#8a7d68;font-style:italic}
+  table{width:100%;border-collapse:collapse;margin:.8rem 0;font-size:.86rem}
+  th,td{text-align:left;padding:.42rem .6rem;border-bottom:1px solid var(--border);vertical-align:top}
+  th{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-faint)}
+  td code{font-size:.82em}
+  .note{background:rgba(184,146,63,.1);border-left:4px solid var(--gold-bright);padding:.75rem 1.05rem;border-radius:3px;margin:1rem 0;font-size:.95rem}
+  .warn{background:rgba(107,39,55,.08);border-left:4px solid var(--blood);padding:.75rem 1.05rem;border-radius:3px;margin:1rem 0;font-size:.95rem}
+  .ok{background:rgba(79,107,66,.1);border-left:4px solid var(--green);padding:.75rem 1.05rem;border-radius:3px;margin:1rem 0;font-size:.95rem}
+  .tag{display:inline-block;font-size:.66rem;text-transform:uppercase;letter-spacing:.05em;padding:.1rem .5rem;border-radius:3px;background:var(--gold);color:var(--parchment);font-weight:700;vertical-align:middle}
+  .tag.green{background:var(--green)} .tag.blood{background:var(--blood)} .tag.soft{background:var(--ink-faint)}
+  .meta{font-size:.82rem;color:var(--ink-faint)}
+  .bad{color:var(--blood);font-weight:600}
+  .good{color:var(--green);font-weight:600}
+  .mono{font-family:'SF Mono',Consolas,monospace;font-size:.82em}
+</style>
+</head>
+<body>
+
+<h1>Activity Editor — Foundry 5.3.1 fidelity audit</h1>
+<p class="subtitle">Every dropdown &amp; window in <code>ActivityEditor.tsx</code> + its <code>activity/</code> siblings, measured against the real <strong>dnd5e 5.3.1</strong> — its <code>CONFIG.DND5E</code> lists, its <code>templates/activity/*.hbs</code> windows, and the activity JSON dumps in <code>Foundry-JSON\windows</code>. Cross-checked against the module team's <code>correcting-activities.md</code> contract. 2026-06-04.</p>
+
+<div class="ok"><strong>Bottom line:</strong> the activity <em>data structure</em> is correct <strong>on purpose</strong>. The app authors a <strong>semantic</strong> activity shape; the module normalizer (<code>class-import-service.js</code>) converts it to native Foundry <code>system.activities</code>. I confirmed the conversions in code. So we do <span class="bad">not</span> chase Foundry's native field shapes. The real gaps are exactly the two you named: <strong>(1)</strong> several <strong>dropdown option lists</strong> carry wrong / missing / mislabelled values vs Foundry's canonical config, and <strong>(2)</strong> a few <strong>windows</strong> don't mirror Foundry's conditional layout. This doc enumerates every verified item.</div>
+
+<h2>The semantic contract <span class="meta">— what NOT to touch</span></h2>
+<p>From <code>module/dauligor-pairing/notes-for-app-team/correcting-activities.md</code>, and verified in <code>class-import-service.js</code>: the app stays semantic, the module owns the native conversion. These mappings are <strong>deliberate</strong> — "fixing" the app side to look native would break the importer:</p>
+<table>
+  <thead><tr><th>Our semantic shape</th><th>→ Native Foundry</th><th>Confirmed in</th></tr></thead>
+  <tbody>
+    <tr><td><code>attack.type</code> + <code>attack.classification</code> <span class="meta">(flat strings)</span></td><td><code>attack.type:&nbsp;{value, classification}</code></td><td><code>normalizeSemanticAttack</code> L3088</td></tr>
+    <tr><td><code>save.abilities</code> <span class="meta">(string[])</span></td><td><code>save.ability</code></td><td><code>normalizeSemanticSave</code> L3109</td></tr>
+    <tr><td><code>healing.parts[0]</code></td><td><code>healing</code> <span class="meta">(single object)</span></td><td><code>normalizeSemanticHealing</code> L3143</td></tr>
+    <tr><td><code>enchant.restrictions</code></td><td>top-level <code>restrictions</code></td><td><code>normalizeSemanticEnchantRestrictions</code> L3195</td></tr>
+    <tr><td>summon / transform sub-fields</td><td>partly flattened onto activity root</td><td>per the contract note</td></tr>
+  </tbody>
+</table>
+<div class="warn"><strong>One thing to verify on the module side (not ours):</strong> <code>normalizeSemanticHealing</code> reads <code>healing.types</code>, <code>healing.number</code>, <code>healing.denomination</code>, <code>healing.bonus</code> from the <em>top level</em> of the healing object, while it also computes <code>firstPart = healing.parts.find(Boolean)</code>. Our editor writes those values <em>inside</em> <code>healing.parts[0]</code>. If the module doesn't fall back to <code>firstPart</code>, exported heal rolls land empty. Flag for the foundry-module branch — but it means our heal editor should also surface the type/number/bonus at the level the module actually reads.</div>
+
+<h2>1 · Dropdown option lists <span class="tag">primary</span> <span class="meta">— "many dropdowns aren't made correctly"</span></h2>
+<p>Every list below stores a Foundry slug (the semantic model reuses Foundry's enum slugs; only the <em>structure</em> differs). So these option lists should match <code>CONFIG.DND5E</code> exactly. All "Foundry 5.3.1" columns are taken verbatim from the embedded config in the JSON dumps.</p>
+
+<table>
+  <thead><tr><th>List / data path</th><th>Our current options</th><th>Foundry 5.3.1 canonical</th><th>Fix</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Duration units</strong><br><code>duration.units</code><br><span class="meta">ActivationDurationEditor</span></td>
+      <td>inst, turn, round, minute, hour, day, spec, disp, dstr, perm</td>
+      <td><code>timePeriods</code>: inst, spec, disp, dstr, perm, turn, round, minute, hour, day, <span class="bad">month</span>, <span class="bad">year</span></td>
+      <td>Add <strong>month</strong> + <strong>year</strong>. Reorder to Foundry's grouping (special / permanent / scalar).</td>
+    </tr>
+    <tr>
+      <td><strong>Activation cost</strong><br><code>activation.type</code></td>
+      <td>action, bonus, reaction, minute, hour, day, longRest, shortRest, encounter, turnStart, turnEnd, legendary, mythic, lair, crew, special, <span class="bad">none</span></td>
+      <td><code>activityActivationTypes</code>: same 16 — <em>no</em> <code>none</code></td>
+      <td>Drop non-canonical <strong>none</strong> (Foundry's activity list has no "none"). Otherwise ✓ incl. groups.</td>
+    </tr>
+    <tr>
+      <td><strong>Affected target type</strong><br><code>target.affects.type</code><br><span class="meta">RangeTargetingEditor</span></td>
+      <td>none, self, creature, ally, enemy, object, space</td>
+      <td><code>individualTargetTypes</code>: self, ally, enemy, creature, object, space, <span class="bad">creatureOrObject</span>, <span class="bad">any</span> (label "Any"), <span class="bad">willing</span> (label "Willing Creature") — <em>no</em> "none" (empty&nbsp;=&nbsp;none)</td>
+      <td>Add <strong>creatureOrObject</strong>, <strong>any</strong>, <strong>willing</strong>. Keep "none"→'' as the cleared state.</td>
+    </tr>
+    <tr>
+      <td><strong>Area / template shape</strong><br><code>target.template.type</code></td>
+      <td>none, radius, sphere, cylinder, cone, cube, square, <span class="bad">rect</span>, line, wall</td>
+      <td><code>areaTargetTypes</code>: <span class="bad">circle</span>, cone, cube, cylinder, radius&nbsp;(="<span class="bad">Emanation</span>"), line, sphere, square, wall</td>
+      <td>Drop bogus <strong>rect</strong>; add <strong>circle</strong>; relabel <code>radius</code> → <strong>"Emanation"</strong>. (Dimensions per shape → §3.)</td>
+    </tr>
+    <tr>
+      <td><strong>Healing type</strong><br><code>healing.parts[].types</code><br><span class="meta">DamagePartEditor (heal)</span></td>
+      <td>uses the 15-entry <em>damage</em> list (acid…thunder + healing + temphp)</td>
+      <td><code>healingTypes</code>: <strong>healing</strong>="Hit Points", <strong>temphp</strong>="Temp HP", <strong>maximum</strong>="Max HP"</td>
+      <td>Heal parts must pick from <strong>healingTypes</strong> (3), not damage types. New constant + thread a <code>typeOptions</code> prop into DamagePartEditor.</td>
+    </tr>
+    <tr>
+      <td><strong>Consumption-target scaling mode</strong><br><code>consumption.targets[].scaling.mode</code><br><span class="meta">ConsumptionTabEditor</span></td>
+      <td>'' (Off), whole, half <span class="meta">(SCALING_MODE_OPTIONS — borrowed from damage)</span></td>
+      <td>Per Foundry data: <strong>amount</strong> (generic) and <strong>level</strong> (spellSlots only); '' = none</td>
+      <td><span class="bad">whole/half is wrong here.</span> Use <strong>amount</strong> (+ <strong>level</strong> when type=spellSlots). Damage scaling keeps whole/half.</td>
+    </tr>
+    <tr>
+      <td><strong>Recovery type</strong><br><code>uses.recovery[].type</code></td>
+      <td>recoverAll, <span class="bad">recoverPartial</span>, <span class="bad">recovery</span>, formula, <span class="bad">loseAll?</span></td>
+      <td>Native recovery <code>type</code>: <strong>recoverAll</strong>, <strong>loseAll</strong>, <strong>formula</strong></td>
+      <td>Trim to the 3 canonical. <code>recoverPartial</code>/<code>recovery</code> aren't real Foundry types; keep the <code>formula</code>→<code>recovery</code> legacy alias note.</td>
+    </tr>
+    <tr>
+      <td><strong>Range units</strong><br><code>range.units</code></td>
+      <td>self, touch, ft, mi, spec, any</td>
+      <td><code>rangeTypes</code> (self, touch, spec, any) + <code>movementUnits</code> (ft, mi, <span class="bad">m</span>, <span class="bad">km</span>)</td>
+      <td>Add metric <strong>m</strong> + <strong>km</strong> (low-stakes but completes the list).</td>
+    </tr>
+    <tr>
+      <td><strong>Attack classification</strong><br><code>attack.classification</code></td>
+      <td>unarmed, weapon, spell, <span class="bad">none</span></td>
+      <td><code>attackClassifications</code>: weapon, spell, unarmed</td>
+      <td>Drop non-canonical <strong>none</strong>.</td>
+    </tr>
+    <tr>
+      <td><strong>Attack ability</strong><br><code>attack.ability</code></td>
+      <td>"" (Default) + str…cha</td>
+      <td>"" (Default) + <span class="bad">spellcasting</span> + str…cha <span class="meta">(test item used <code>"spellcasting"</code>)</span></td>
+      <td>Add a <strong>Spellcasting</strong> option above the six abilities.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Lists that are already correct <span class="tag green">✓ no change</span></h3>
+<ul>
+  <li><strong>Damage types</strong> (<code>damage.parts[].types</code>) — 13 canonical match; multi-select is right (the field is an array in the data).</li>
+  <li><strong>Damage scaling mode</strong> — <code>whole</code>="Every Level", <code>half</code>="Every Other Level" match Foundry's <code>damageScalingModes</code> labels exactly.</li>
+  <li><strong>Consumption target types</strong> — activityUses / itemUses / material / hitDice / spellSlots / attribute match <code>activityConsumptionTypes</code>.</li>
+  <li><strong>Recovery periods</strong> — the 9 canonical (lr, sr, day, dawn, dusk, initiative, turn, turnStart, turnEnd) are present; <code>round/recharge/charges</code> are flagged-legacy already.</li>
+  <li><strong>Creature sizes / types</strong>, <strong>abilities</strong>, <strong>attack type</strong> (melee/ranged), <strong>DC calc modes</strong> — all match.</li>
+</ul>
+
+<h2>2 · Store keys, not labels <span class="tag">primary</span></h2>
+<p>The module note is explicit: <em>"Foundry expects stored associated skill/tool keys, not just a label."</em></p>
+<table>
+  <thead><tr><th>Control</th><th>Today</th><th>Should be</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Check → Associated</strong><br><code>check.associated</code></td>
+      <td>comma-separated free text (e.g. <code>"arc, inv, thieves"</code>)</td>
+      <td>multi-select (EntityPicker) over <code>CONFIG.DND5E.skills</code> (18: acr, ani, arc, ath, dec, his, ins, itm, inv, med, nat, prc, prf, per, rel, slt, ste, sur) <strong>+</strong> <code>tools</code>, storing the keys.</td>
+    </tr>
+    <tr>
+      <td><strong>Enchant → Item Type / Categories / Properties</strong><br><code>enchant.restrictions.*</code></td>
+      <td>free text</td>
+      <td>Item Type → select over <code>itemTypes</code>; Properties → multi-select over <code>itemProperties</code>. <span class="meta">(lower priority — free text round-trips, just error-prone)</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>3 · Window layout fidelity <span class="tag soft">secondary</span> <span class="meta">— "windows aren't made like Foundry"</span></h2>
+<p>Mirror these from the real templates at <code>…\dnd5e\templates\activity\</code> so the windows match Foundry exactly.</p>
+<table>
+  <thead><tr><th>Window / section</th><th>Foundry behaviour</th><th>Ours today</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Activation "Value"</strong><br><span class="meta">activity-time.hbs</span></td>
+      <td>Number field shown <em>only</em> when the cost type is <code>scalar</code> (minute, hour, day, legendary, mythic, crew).</td>
+      <td>Always shown for every type.</td>
+    </tr>
+    <tr>
+      <td><strong>Duration "Value"</strong></td>
+      <td>Shown only for scalar periods (turn, round, minute, hour, day, month, year) — hidden for inst/spec/disp/dstr/perm.</td>
+      <td>Always shown.</td>
+    </tr>
+    <tr>
+      <td><strong>Area dimensions</strong><br><span class="meta">activity-targeting.hbs</span></td>
+      <td>Each shape shows only its <code>sizes</code> dims, with shape-specific labels:<br>cone→<em>Length</em>; cylinder→<em>Radius+Height</em>; line→<em>Length+Width</em>; wall→<em>Length+Thickness+Height</em>; circle/sphere→<em>Radius</em>; cube/square→<em>Width</em>; radius(Emanation)→<em>none</em>.</td>
+      <td>Always shows generic Count / Size / Units / Width / Height.</td>
+    </tr>
+    <tr>
+      <td><strong>Visibility level default</strong></td>
+      <td>min/max default to <code>null</code> (unbounded), max placeholder "∞".</td>
+      <td>Defaults to 0–20.</td>
+    </tr>
+  </tbody>
+</table>
+<div class="ok"><strong>Already Foundry-faithful:</strong> 3-tab Identity / Activation (Time·Consumption·Targeting) / Effect shell; heal uses a single healing roll (<code>singlePart</code>); save abilities are a multi-toggle (the data is an array); damage-part custom-formula toggle; require attunement/identification/magic checkboxes.</div>
+
+<h2>4 · Proposed execution order</h2>
+<ol>
+  <li><span class="tag">Batch 1</span> <strong>Option-list fixes</strong> — almost all in <code>activity/constants.ts</code> (+ tiny wiring): duration month/year, target types, area shapes, healing-types constant, consumption scaling mode, recovery types, range metric units, attack classification/ability. Low risk, highest payoff, kills most of "dropdowns aren't made correctly." <span class="meta">Verify each value against this doc's Foundry column.</span></li>
+  <li><span class="tag">Batch 2</span> <strong>Keyed pickers</strong> — Check → Associated as a skills+tools EntityPicker storing keys.</li>
+  <li><span class="tag">Batch 3</span> <strong>Window conditional-display</strong> — scalar-gate the Activation/Duration value fields; per-shape area dimensions + labels.</li>
+  <li><span class="tag soft">Batch 4 (opt)</span> Enchant restrictions selects; cast spell-properties review; heal type/number surfacing (paired with the module-side <code>firstPart</code> question).</li>
+  <li><span class="tag soft">Deferred</span> Summon &amp; Transform — complex, per your call.</li>
+</ol>
+
+<h2>Open questions for you</h2>
+<ol>
+  <li><strong>Recovery legacy slugs</strong> — drop <code>round / recharge / charges</code> from the period dropdown entirely, or keep them flagged "(legacy)" for old data? (They don't round-trip to native Foundry.)</li>
+  <li><strong>Metric range/distance units</strong> — worth adding <code>m / km</code>, or is this a feet-only campaign? (Cheap either way.)</li>
+  <li><strong>Heal type/number read path</strong> — should I also raise the module-side <code>normalizeSemanticHealing</code> top-level-vs-<code>parts[0]</code> question with the foundry-module branch, or just make our editor write where the module reads?</li>
+  <li><strong>Scope of "windows like Foundry"</strong> — do you want a faithful 1:1 of the conditional layouts (Batch 3), or is fixing the option lists (Batch 1–2) the main ask for now?</li>
+</ol>
+
+</body>
+</html>

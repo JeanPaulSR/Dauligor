@@ -2836,6 +2836,9 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                       activities={editingFeature.activities || {}}
                       onChange={(acts) => setEditingFeature({ ...editingFeature, activities: acts })}
                       availableEffects={editingFeature.effects || []}
+                      itemTargets={(features || [])
+                        .filter((f: any) => f?.uses?.max && String(f.id) !== String(editingFeature.id))
+                        .map((f: any) => ({ id: f.identifier || f.id, name: f.name || f.identifier || String(f.id) }))}
                     />
                   </div>
                 )}
@@ -2884,9 +2887,9 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                 )}
               </div>
 
-              <div className="p-4 border-t border-gold/10 bg-background flex justify-end shrink-0 gap-3">
-                <Button type="button" variant="ghost" onClick={() => setIsFeatureModalOpen(false)} className="label-text opacity-70 hover:opacity-100">Cancel</Button>
-                <Button onClick={handleSaveFeature} className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2 px-8 label-text">
+              <div className="px-5 py-2 border-t border-gold/15 bg-gold/[0.03] flex justify-end shrink-0 gap-2">
+                <Button type="button" variant="ghost" onClick={() => setIsFeatureModalOpen(false)} className="label-text opacity-70 hover:opacity-100 h-8">Cancel</Button>
+                <Button onClick={handleSaveFeature} className="bg-primary hover:bg-primary/90 text-primary-foreground px-6 label-text h-8">
                   Save Feature
                 </Button>
               </div>

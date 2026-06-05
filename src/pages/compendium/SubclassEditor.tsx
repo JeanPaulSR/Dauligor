@@ -1746,7 +1746,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
             </>
           )}
 
-          <div className="dialog-footer shrink-0 flex items-center justify-end gap-3">
+          <div className="px-5 py-2 border-t border-gold/15 bg-gold/[0.03] shrink-0 flex items-center justify-end gap-2">
             <Button type="button" variant="ghost" onClick={() => setIsFeatureModalOpen(false)} className="label-text opacity-70 hover:opacity-100 h-8">
               Cancel
             </Button>

@@ -53,6 +53,13 @@ interface ActivityEditorProps {
   onChange: (activities: SemanticActivity[]) => void;
   context?: 'feature' | 'spell' | 'item' | 'feat';
   availableEffects?: FoundryActiveEffect[];
+  /**
+   * Candidate entities an "Item Uses" consumption target can draw from —
+   * forwarded to ConsumptionTabEditor. Hosts supply the context-appropriate
+   * list (class features with uses in ClassEditor; sibling option items in
+   * the option-group editor; …). Omitted ⇒ the target stays a free-text path.
+   */
+  itemTargets?: { id: string; name: string; hint?: string }[];
 }
 
 const ACTIVITY_KINDS: { kind: ActivityKind; label: string; icon: any }[] = [
@@ -151,7 +158,7 @@ const sanitizeActivity = (activity: SemanticActivity): SemanticActivity => {
   return sanitized;
 };
 
-export default function ActivityEditor({ activities, onChange, context = 'feature', availableEffects = [] }: ActivityEditorProps) {
+export default function ActivityEditor({ activities, onChange, context = 'feature', availableEffects = [], itemTargets = [] }: ActivityEditorProps) {
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('identity');
@@ -211,7 +218,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
       },
       visibility: {
         identifier: '',
-        level: { min: 0, max: 20 }
+        level: { min: null, max: null }
       },
       consumption: { spellSlot: false, scaling: { allowed: false, max: '' }, targets: [] },
       uses: { spent: 0, max: '', recovery: [] }
@@ -552,17 +559,20 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
         </DialogContent>
       </Dialog>
 
-      {/* Fixed h-[720px] (capped at 90vh for small screens) so the
-          dialog doesn't resize when the user flips between Identity /
-          Activation / Effect tabs. Matches the stable-shell pattern
-          used in ActiveEffectEditor: the inner `flex-1 overflow-y-auto`
-          scroller fills the shell instead of growing it. */}
+      {/* Top-anchored auto-height shell. `top-[6vh] translate-y-0` overrides
+          the base dialog's vertical centering so the dialog's TOP edge stays
+          pinned ~6vh from the viewport top; it then grows downward to fit the
+          active tab's content, capped at max-h-[88vh]. Anchoring the top keeps
+          the title + tab bar in a fixed screen position, so flipping tabs never
+          shifts them out from under the cursor — only the content area below
+          resizes. The inner `flex-1 min-h-0 overflow-y-auto` scroller engages
+          only when a tab's content exceeds the cap. */}
       <Dialog open={!!editingId} onOpenChange={(open) => !open && setEditingId(null)}>
-        <DialogContent className="dialog-content sm:max-w-[95vw] lg:max-w-4xl flex flex-col h-[720px] max-h-[90vh]">
+        <DialogContent className="dialog-content sm:max-w-[95vw] lg:max-w-[600px] flex flex-col top-[6vh] translate-y-0 max-h-[88vh] min-h-[440px]">
           {editingActivity && (
             <>
-              <DialogHeader className="px-6 pt-5 pb-3 shrink-0 border-b border-gold/15">
-                <div className="flex flex-col gap-3">
+              <DialogHeader className="px-6 pt-4 pb-2.5 shrink-0 border-b border-gold/15">
+                <div className="flex flex-col gap-2">
                   <DialogTitle className="h1-title text-center text-ink">
                     {editingActivity.name}
                   </DialogTitle>
@@ -585,7 +595,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
               </DialogHeader>
 
               <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
-                <div className="max-w-2xl mx-auto px-8 py-5 pb-10">
+                <div className="px-5 py-2.5 pb-3">
                   
                   {activeTab === 'identity' && (
                     <div>
@@ -598,20 +608,21 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                             className="field-input border-gold/15 font-serif"
                           />
                         </FieldRow>
-                        <div className="flex gap-4 items-center py-2.5">
-                          <p className="text-xs font-semibold text-ink/75 flex-1">Icon</p>
-                          <div className="w-14 h-14 shrink-0">
+                        <div className="flex gap-4 items-center py-2">
+                          <p className="text-xs font-semibold text-ink/85 flex-1">Icon</p>
+                          <div className="w-12 h-12 shrink-0">
                             <ImageUpload
                               compact
                               imageType="icon"
                               storagePath="icons/activities/"
-                              currentImageUrl={editingActivity.img || ''}
+                              currentImageUrl={editingActivity.img && !editingActivity.img.startsWith('systems/') && !editingActivity.img.startsWith('icons/') ? editingActivity.img : ''}
+                              fallback={React.createElement(ACTIVITY_KINDS.find(k => k.kind === editingActivity.kind)?.icon || Info, { className: 'w-6 h-6 text-gold/65' })}
                               onUpload={url => handleUpdateActivity(editingId!, { img: url })}
                               className="w-full h-full"
                             />
                           </div>
                         </div>
-                        <FieldRow label="Chat Flavor" hint="Extra text appended to this activity's chat message">
+                        <FieldRow label="Chat Flavor" hint="Additional text displayed in the activation chat message">
                           <Input
                             value={editingActivity.chatFlavor || ''}
                             onChange={e => handleUpdateActivity(editingId!, { chatFlavor: e.target.value })}
@@ -626,137 +637,80 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                         <ActivitySection label="Attack">
                           <FieldRow label="Attack Type" hint="Is this a melee or ranged attack?">
                             <Select
-                              value={editingActivity.attack?.type}
-                              onValueChange={val => handleUpdateActivity(editingId!, { attack: { ...editingActivity.attack!, type: val as any } })}
+                              value={editingActivity.attack?.type || '__blank'}
+                              onValueChange={val => handleUpdateActivity(editingId!, { attack: { ...editingActivity.attack!, type: (val === '__blank' ? '' : val) as any } })}
                             >
                               <SelectTrigger className="field-input border-gold/15 text-xs">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
+                                <SelectItem value="__blank">{' '}</SelectItem>
                                 <SelectItem value="melee">Melee</SelectItem>
                                 <SelectItem value="ranged">Ranged</SelectItem>
                               </SelectContent>
                             </Select>
                           </FieldRow>
-                          <FieldRow label="Classification" hint="Unarmed, weapon, or spell attack?">
+                          <FieldRow label="Attack Classification" hint="Is this an unarmed, weapon, or spell attack?">
                             <Select
-                              value={editingActivity.attack?.classification}
-                              onValueChange={val => handleUpdateActivity(editingId!, { attack: { ...editingActivity.attack!, classification: val as any } })}
+                              value={editingActivity.attack?.classification || '__blank'}
+                              onValueChange={val => handleUpdateActivity(editingId!, { attack: { ...editingActivity.attack!, classification: (val === '__blank' ? '' : val) as any } })}
                             >
                               <SelectTrigger className="field-input border-gold/15 text-xs">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="unarmed">Unarmed Attack</SelectItem>
-                                <SelectItem value="weapon">Weapon Attack</SelectItem>
-                                <SelectItem value="spell">Spell Attack</SelectItem>
-                                <SelectItem value="none">None</SelectItem>
+                                <SelectItem value="__blank">{' '}</SelectItem>
+                                <SelectItem value="weapon">Weapon</SelectItem>
+                                <SelectItem value="spell">Spell</SelectItem>
+                                <SelectItem value="unarmed">Unarmed</SelectItem>
                               </SelectContent>
                             </Select>
-                          </FieldRow>
-                          <FieldRow label="Ability Score" hint="Override which ability drives attack and damage rolls">
-                            <Select
-                              value={editingActivity.attack?.ability || ''}
-                              onValueChange={val => handleUpdateActivity(editingId!, { attack: { ...editingActivity.attack!, ability: val || undefined } })}
-                            >
-                              <SelectTrigger className="field-input border-gold/15 text-xs">
-                                <SelectValue placeholder="Default" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="">Default</SelectItem>
-                                <SelectItem value="str">Strength</SelectItem>
-                                <SelectItem value="dex">Dexterity</SelectItem>
-                                <SelectItem value="con">Constitution</SelectItem>
-                                <SelectItem value="int">Intelligence</SelectItem>
-                                <SelectItem value="wis">Wisdom</SelectItem>
-                                <SelectItem value="cha">Charisma</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </FieldRow>
-                          <FieldRow label="Attack Bonus" hint="Flat bonus formula added on top of the derived roll">
-                            <Input
-                              value={editingActivity.attack?.bonus || ''}
-                              onChange={e => handleUpdateActivity(editingId!, { attack: { ...editingActivity.attack!, bonus: e.target.value } })}
-                              className="field-input border-gold/15 font-mono text-xs text-center"
-                              placeholder="e.g. +2 or @prof"
-                            />
-                          </FieldRow>
-                          <FieldRow label="Critical Threshold" hint="Minimum natural roll to score a critical hit (default 20)">
-                            <Input
-                              type="number"
-                              value={editingActivity.attack?.critical?.threshold ?? ''}
-                              onChange={e => handleUpdateActivity(editingId!, {
-                                attack: {
-                                  ...editingActivity.attack!,
-                                  critical: {
-                                    ...(editingActivity.attack?.critical ?? { threshold: null }),
-                                    threshold: parseNullableInteger(e.target.value)
-                                  }
-                                }
-                              })}
-                              className="field-input border-gold/15 text-center no-number-spin"
-                              placeholder="20"
-                            />
                           </FieldRow>
                         </ActivitySection>
                       )}
 
                       {/* ——— BEHAVIOR ——— */}
-                      {(editingActivity.kind === 'attack' || showsTemplatePrompt) && (
+                      {showsTemplatePrompt && (
                         <ActivitySection label="Behavior">
-                          {editingActivity.kind === 'attack' && (
-                            <FieldRow
-                              label="Flat Attack"
-                              hint="Treat the attack bonus as a complete flat formula rather than adding proficiency and ability"
-                              inline
-                            >
-                              <Checkbox
-                                checked={editingActivity.attack?.flat}
-                                onCheckedChange={checked => handleUpdateActivity(editingId!, {
-                                  attack: { ...editingActivity.attack!, flat: !!checked }
-                                })}
-                              />
-                            </FieldRow>
-                          )}
-                          {showsTemplatePrompt && (
-                            <FieldRow
-                              label="Template Prompt"
-                              hint="Ask the player to place a measured template before the activity resolves"
-                              inline
-                            >
-                              <Checkbox
-                                checked={editingActivity.target?.prompt}
-                                onCheckedChange={checked => updateTarget({ prompt: !!checked })}
-                              />
-                            </FieldRow>
-                          )}
+                          <FieldRow
+                            label="Measured Template Prompt"
+                            hint="Should the player be prompted to place a measured template? Players will still be able to place templates from the chat card if prompt is disabled."
+                            inline
+                          >
+                            <Checkbox
+                              checked={editingActivity.target?.prompt}
+                              onCheckedChange={checked => updateTarget({ prompt: !!checked })}
+                            />
+                          </FieldRow>
                         </ActivitySection>
                       )}
 
                       {/* ——— VISIBILITY ——— */}
                       <ActivitySection label="Visibility">
-                        <FieldRow label="Level Range" hint="Character levels at which this activity is available">
-                          <div className="flex items-center gap-2">
+                        <FieldRow label="Level Limit" hint="Range of levels required to use this activity.">
+                          <div className="flex items-center gap-2 w-full">
                             <Input
                               type="number"
-                              value={editingActivity.visibility?.level?.min ?? 0}
+                              value={editingActivity.visibility?.level?.min ?? ''}
+                              placeholder="0"
                               onChange={e => updateSection('visibility', {
-                                level: { min: parseInt(e.target.value, 10) || 0, max: editingActivity.visibility?.level?.max ?? 20 }
+                                level: { min: e.target.value === '' ? null : (parseInt(e.target.value, 10) || 0), max: editingActivity.visibility?.level?.max ?? null }
                               })}
-                              className="h-9 w-16 bg-background/40 border-gold/15 text-center text-xs no-number-spin"
+                              className="h-9 flex-1 min-w-0 bg-background/40 border-gold/15 text-center text-xs no-number-spin"
                             />
-                            <ArrowRight className="w-3 h-3 text-gold/25 shrink-0" />
+                            <span className="text-[10px] uppercase tracking-wider text-ink/40 shrink-0 select-none">to</span>
                             <Input
                               type="number"
-                              value={editingActivity.visibility?.level?.max ?? 20}
+                              value={editingActivity.visibility?.level?.max ?? ''}
+                              placeholder="∞"
                               onChange={e => updateSection('visibility', {
-                                level: { min: editingActivity.visibility?.level?.min ?? 0, max: parseInt(e.target.value, 10) || 20 }
+                                level: { min: editingActivity.visibility?.level?.min ?? null, max: e.target.value === '' ? null : (parseInt(e.target.value, 10) || 0) }
                               })}
-                              className="h-9 w-16 bg-background/40 border-gold/15 text-center text-xs no-number-spin"
+                              className="h-9 flex-1 min-w-0 bg-background/40 border-gold/15 text-center text-xs no-number-spin"
                             />
                           </div>
                         </FieldRow>
-                        <FieldRow label="Class Identifier" hint="Class whose level is checked for the visibility range. Leave blank to use total character level.">
+                        <FieldRow label="Class Identifier" hint="The identifier of the class that level limits apply to. If left blank, the character level is used.">
                           {/* Pulls from the same `classes` collection
                               the requirements editor uses; the stored
                               value is the class's `identifier` slug so
@@ -777,28 +731,32 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                         </FieldRow>
                         {/* The three require* flags mirror dnd5e v5's
                             `visibility.{requireAttunement, requireIdentification,
-                            requireMagic}`. They gate the activity on the parent
-                            item being attuned / identified / magical at use
-                            time — useful for magic items whose activities only
-                            fire while wielded properly. */}
-                        <FieldRow label="Requires Attunement" hint="Only available when the parent item is attuned to its wielder." inline>
-                          <Checkbox
-                            checked={!!editingActivity.visibility?.requireAttunement}
-                            onCheckedChange={checked => updateSection('visibility', { requireAttunement: !!checked })}
-                          />
-                        </FieldRow>
-                        <FieldRow label="Requires Identification" hint="Only available when the parent item has been identified." inline>
-                          <Checkbox
-                            checked={!!editingActivity.visibility?.requireIdentification}
-                            onCheckedChange={checked => updateSection('visibility', { requireIdentification: !!checked })}
-                          />
-                        </FieldRow>
-                        <FieldRow label="Requires Magic" hint="Only available when the parent item is magical (has the `mgc` property or non-`none` rarity)." inline>
-                          <Checkbox
-                            checked={!!editingActivity.visibility?.requireMagic}
-                            onCheckedChange={checked => updateSection('visibility', { requireMagic: !!checked })}
-                          />
-                        </FieldRow>
+                            requireMagic}`. Foundry only surfaces these on the
+                            Visibility section for ITEM-hosted activities (the
+                            attunement / identification / magical states are item
+                            concepts), so they're gated to item context here. */}
+                        {context === 'item' && (
+                          <>
+                            <FieldRow label="Requires Attunement" hint="Only available when the parent item is attuned to its wielder." inline>
+                              <Checkbox
+                                checked={!!editingActivity.visibility?.requireAttunement}
+                                onCheckedChange={checked => updateSection('visibility', { requireAttunement: !!checked })}
+                              />
+                            </FieldRow>
+                            <FieldRow label="Requires Identification" hint="Only available when the parent item has been identified." inline>
+                              <Checkbox
+                                checked={!!editingActivity.visibility?.requireIdentification}
+                                onCheckedChange={checked => updateSection('visibility', { requireIdentification: !!checked })}
+                              />
+                            </FieldRow>
+                            <FieldRow label="Requires Magic" hint="Only available when the parent item is magical (has the `mgc` property or non-`none` rarity)." inline>
+                              <Checkbox
+                                checked={!!editingActivity.visibility?.requireMagic}
+                                onCheckedChange={checked => updateSection('visibility', { requireMagic: !!checked })}
+                              />
+                            </FieldRow>
+                          </>
+                        )}
                       </ActivitySection>
                     </div>
                   )}
@@ -837,6 +795,8 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                           onConsumptionChange={(patch) => updateConsumption(patch)}
                           uses={editingActivity.uses}
                           onUsesChange={(nextUses) => handleUpdateActivity(editingId!, { uses: nextUses })}
+                          showSpellSlot={editingActivity.kind === 'cast'}
+                          itemTargets={itemTargets}
                         />
                       )}
 
@@ -1554,10 +1514,10 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                 </div>
               </div>
 
-              <div className="dialog-footer flex justify-end shrink-0">
+              <div className="flex justify-end shrink-0 px-5 py-2 border-t border-gold/15 bg-gold/[0.03]">
                  <Button
                   onClick={() => setEditingId(null)}
-                  className="btn-gold-solid gap-2 px-12 h-10"
+                  className="btn-gold-solid px-8 h-8 text-xs"
                  >
                    Done
                  </Button>
