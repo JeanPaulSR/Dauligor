@@ -63,7 +63,7 @@ The PUT branch handles **both create and update**:
 | PUT  | `/api/lore/articles/[id]/secrets/[secretId]` | `isWikiStaff` | `{ ok, articleId, secretId }`. Idempotent. |
 | DELETE | `/api/lore/articles/[id]/secrets/[secretId]` | `isWikiStaff` | `{ ok, id }`. FK cascade clears `lore_secret_*`. |
 | DELETE | `/api/lore/secrets/[secretId]` | `isWikiStaff` | Same as above but doesn't require the client to know the parent article id. Exists so the client doesn't need to round-trip a `SELECT article_id FROM lore_secrets` lookup first (that direct SELECT is now blocked by `PROTECTED_READ_TABLES`). |
-| PUT  | `/api/lore/system-metadata/wiki-settings` | `requireAdminAccess` | `{ ok, key }`. The legit write path for the `wiki_settings` singleton-config blob. Server caps the JSON at 64KB. The generic proxy refuses any non-bump write to `system_metadata`. |
+| PUT  | `/api/lore/system-metadata/wiki-settings` | `requireAdminAccess` | `{ ok, key }`. The legit write path for the `wiki_settings` singleton-config blob. Server caps the JSON at 64KB. The generic proxy refuses any non-bump write to `system_metadata`. _Note: its `defaultBackgroundImageUrl` was superseded by the world background cascade (`worlds.background_image_url`) and no UI currently writes this endpoint; the route is retained for any future singleton config._ |
 
 The proxy gate at [api/_lib/d1-proxy.ts](../../api/_lib/d1-proxy.ts) blocks direct writes to every `lore_*` table (`PROTECTED_WRITE_TABLES`) and direct SELECTs against `lore_secrets` (`PROTECTED_READ_TABLES`). All client-side lore writes flow through this dispatcher; raw SQL paths return 403 with a pointer at the per-route endpoint.
 

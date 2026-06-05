@@ -1,7 +1,7 @@
 # Table Structure: `eras`
 
 World timeline containers. Campaigns are associated with a single era, which provides
-a background image and narrative framing for the wiki and home page.
+narrative framing and a wiki background (the era step of the `campaign → era → world` cascade).
 
 ## Layout Specs
 
@@ -17,7 +17,9 @@ a background image and narrative framing for the wiki and home page.
 
 ## Implementation Notes
 - No FK dependencies — migrated before `campaigns`.
-- `background_image_url` is optional; pages fall back to a global default from the `config` collection.
+- `background_image_url` is the **era step** of the wiki background cascade
+  (`campaign → era → world`). It's optional; if unset the resolver falls back to the world's
+  background, then a built-in default. See [campaigns-eras.md → Background image cascade](../../features/campaigns-eras.md#background-image-cascade).
 
 ## Access
 Reads are public-among-signed-in (eras are a world-facing taxonomy) and still flow through `fetchCollection('eras', …)` on the generic proxy. Writes go through `POST` / `PATCH` / `DELETE /api/admin/eras[/id]` — admin-only, folded into `api/campaigns.ts` (the dispatcher sniffs the `/api/admin/eras` URL prefix). The proxy retains `eras` in `PROTECTED_WRITE_TABLES` as a defense-in-depth backstop, so any direct write that escapes the per-route path still gets admin-gated at the proxy. See [../../platform/api-endpoints.md](../../platform/api-endpoints.md) for the route table.

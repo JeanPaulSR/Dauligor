@@ -199,10 +199,13 @@ See [../architecture/reference-syntax.md](../architecture/reference-syntax.md) f
 ### `ImageUpload` (`src/components/ui/ImageUpload.tsx`)
 Reusable upload widget. Three image types (`standard` / `icon` / `token`) determine the resize behaviour. WebP conversion is automatic.
 
-Compact mode (`compact={true}`) renders an avatar-style square picker for feature icon slots.
+Compact mode (`compact={true}`) renders an avatar-style square picker for feature icon slots. Pass `browseRoot` to add a **Browse** button that opens `IconPickerModal` (select-only) rooted at that R2 prefix.
+
+### `FocalImageField` (`src/components/ui/FocalImageEditor.tsx`)
+The single "system image with focal positioning" control — preview + swap (upload) + browse + remove, with **optional** drag-to-pan / scroll-zoom (provide `display` + `onDisplayChange`) and an optional `backdrop` flag for faint full-bleed art. `ClassImageEditor` composes three of these; the campaign editor uses one for the Campaign Image (positionable) and one for the Wiki Background (static `backdrop`); world/era editors use one for their backgrounds. Exports `ImageDisplay` / `DEFAULT_DISPLAY` / `imageFocalStyle` (re-exported from `ClassImageEditor` as `ClassImageStyle` for back-compat). See [../features/image-manager.md](../features/image-manager.md).
 
 ### `IconPickerModal` (`src/components/ui/IconPickerModal.tsx`)
-Foundry-FilePicker-style browse-and-select modal for icon/token slots. Toolbar covers:
+Foundry-FilePicker-style browse-and-select modal. Originally icon/token-only; `rootFolder` now accepts **any** R2 prefix (e.g. `images`) so it doubles as a general system-image picker. Optional `title` overrides the heading; `allowUpload={false}` makes it a pure picker (no in-modal upload). Toolbar covers:
 - **Source tabs** — would switch between `icons/` and `tokens/`. Only shown when `AVAILABLE_SOURCES` lists more than one source; currently set to `['icons']` so the strip is hidden. Tokens remain wired up for the future creature/NPC system
 - **Path navigation** — up-arrow + editable path input (Enter to navigate); the `<source>/` prefix is shown as a non-editable hint
 - **Favorites** — star button pins the current path; saved per Firebase uid in `localStorage` (`dauligor.iconPicker.favorites.v1.<uid>`). Each user sees only their own pins. A chip strip below the toolbar lists pins for the active source, each with hover-X to remove
@@ -213,7 +216,7 @@ Foundry-FilePicker-style browse-and-select modal for icon/token slots. Toolbar c
 - **Upload** *(admin only)* — saves to current folder, or to `<source>/_temp/` for later sorting via the Image Manager
 - **Drag-and-drop** *(admin only)* — drop files from the OS onto the modal; uploads sequentially into the current folder
 
-The caller passes `rootFolder` as the *initial* source. Admin-only buttons read the role from [`src/lib/currentUser.ts`](../../src/lib/currentUser.ts) (set by App.tsx); the server proxy is the authoritative gate. Auto-cropped to 126² for icons / 400² for tokens; WebP conversion automatic.
+The caller passes `rootFolder` as the prefix to browse (default `icons`). Admin-only buttons read the role from [`src/lib/currentUser.ts`](../../src/lib/currentUser.ts) (set by App.tsx); the server proxy is the authoritative gate. Uploads auto-crop to 126² for the icons root / 400² for tokens, and **not at all** for general roots; WebP conversion automatic.
 
 See [../features/image-manager.md](../features/image-manager.md) for the wider image system.
 

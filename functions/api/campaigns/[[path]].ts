@@ -51,7 +51,7 @@ async function isCampaignMember(uid: string, campaignId: string): Promise<boolea
 async function handleList(uid: string, staff: boolean): Promise<Response> {
   const baseColumns = `
     c.id, c.name, c.slug, c.description, c.dm_id, c.era_id, c.image_url,
-    c.recommended_lore_id, c.settings, c.created_at, c.updated_at,
+    c.background_image_url, c.recommended_lore_id, c.settings, c.created_at, c.updated_at,
     (SELECT COUNT(*) FROM campaign_members cm2 WHERE cm2.campaign_id = c.id) AS member_count
   `;
 

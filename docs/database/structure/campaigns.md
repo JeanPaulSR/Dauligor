@@ -14,7 +14,10 @@ Campaign containers and their membership junction table.
 | `description` | TEXT | `description` | |
 | `dm_id` | TEXT (FK) | `dmId` | Links to `users.id`. |
 | `era_id` | TEXT (FK) | `eraId` | Links to `eras.id`. Nullable. |
-| `image_url` | TEXT | `imageUrl` | R2 URL for cover/background. Optional. |
+| `image_url` | TEXT | `imageUrl` | R2 URL for the **campaign-page header** (framed avatar + blurred hero). Optional. |
+| `image_display` | JSON | — | Focal position `{x,y,scale}` for `image_url`. Added in `0014_field_drift_fixes`. |
+| `background_image_url` | TEXT | — | **Wiki background — campaign step** of the `campaign → era → world` cascade (not the campaign page). Added in `0014`. See [campaigns-eras.md → Background image cascade](../../features/campaigns-eras.md#background-image-cascade). |
+| `card_image_url`, `preview_image_url`, `card_display`, `preview_display` | TEXT / JSON | — | Added in `0014` from a copy of the class image pattern; **currently unused** — no surface reads them and the editor no longer writes them. |
 | `recommended_lore_id` | TEXT | `recommendedLoreId` | Soft reference to `lore_articles.id` (Phase 3). No FK constraint. |
 | `settings` | JSON | `settings` | Rules, visibility flags, and feature toggles. Optional. |
 | `created_at` | TEXT | `createdAt` | ISO 8601 string. |

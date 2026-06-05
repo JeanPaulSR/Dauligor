@@ -66,6 +66,8 @@ Per-table specs in [docs/database/structure/](database/structure/). Migration DD
 | `0014_field_drift_fixes.sql` | features.quantity_column_id / scaling_column_id / icon_url; attributes.description; languages.`order`; campaigns.preview_image_url / card_image_url / background_image_url |
 | `0015_options_created_at.sql` | `created_at` on `unique_option_groups` + `unique_option_items` (backfilled from `updated_at` on existing rows) |
 | `0017_map_markers.sql` | `maps`, `map_markers`, `map_highlights` for the Interactive Map page (era-scoped maps with submap navigation via `parent_marker_id`/`parent_highlight_id`; markers and highlights cascade-delete with their map; article-link FKs use SET NULL to keep regions when the article goes away) |
+| date-stamped `YYYYMMDD-HHMM_*.sql` | Post-0017 migrations switched to date-stamped names (e.g. `20260518-1100_worlds_and_user_permissions`, `20260601-1200_user_themes`, `20260603-1200_user_favorite_characters`). Not all are enumerated here — see [worker/migrations/](../worker/migrations/) for the authoritative chain. |
+| `20260604-1200_worlds_background_image.sql` | `worlds.background_image_url` (bottom of the wiki background cascade) + a one-time `UPDATE` carrying the legacy `system_metadata.wiki_settings.defaultBackgroundImageUrl` onto the default world. `ALTER … ADD COLUMN` — apply once per DB. |
 | `9999_cleanup.sql` | Drops everything (used to wipe local before re-migrating from a Firestore JSON dump) |
 
 `0016` was a stillborn JSON `map_coordinates` column that lived for ~10 minutes before being collapsed into 0017's relational design (the project rejects JSON-in-D1 carry-overs from the Firestore shape). The file is deleted and the migration chain skips from 0015 to 0017.

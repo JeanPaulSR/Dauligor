@@ -9,9 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from '@/components/ui/command';
-import { ClassImageEditor } from '@/components/compendium/ClassImageEditor';
+import { FocalImageField, DEFAULT_DISPLAY } from '@/components/ui/FocalImageEditor';
 import { ChevronLeft, Save, Sparkles, LayoutGrid, ImageIcon, Calendar, FileText, MapPin, Scroll, Users, History, Check, X, Home as HomeIcon } from 'lucide-react';
-import { ImageUpload } from '@/components/ui/ImageUpload';
 import { getSessionToken } from "../../lib/auth";
 
 export default function CampaignEditor({ userProfile }: { userProfile: any }) {
@@ -38,10 +37,6 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
     playerIds: [] as string[],
     imageUrl: '',
     imageDisplay: undefined as any,
-    cardImageUrl: '',
-    cardDisplay: undefined as any,
-    previewImageUrl: '',
-    previewDisplay: undefined as any,
     backgroundImageUrl: ''
   });
 
@@ -124,10 +119,6 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
               playerIds: memberUids,
               imageUrl: campData.image_url || '',
               imageDisplay: campData.image_display || undefined,
-              cardImageUrl: campData.card_image_url || '',
-              cardDisplay: campData.card_display || undefined,
-              previewImageUrl: campData.preview_image_url || '',
-              previewDisplay: campData.preview_display || undefined,
               backgroundImageUrl: campData.background_image_url || ''
             });
           }
@@ -165,10 +156,6 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
           recommended_lore_id: formData.recommendedLoreId,
           image_url: formData.imageUrl,
           image_display: formData.imageDisplay,
-          card_image_url: formData.cardImageUrl,
-          card_display: formData.cardDisplay,
-          preview_image_url: formData.previewImageUrl,
-          preview_display: formData.previewDisplay,
           background_image_url: formData.backgroundImageUrl,
         }),
       });
@@ -363,16 +350,6 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
                       </select>
                     </div>
                   </div>
-                   <div className="space-y-2 pt-2 border-t border-gold/15">
-                     <label className="field-label flex items-center gap-1.5">
-                       <ImageIcon className="w-3.5 h-3.5 text-gold shrink-0" /> Custom Background Image
-                     </label>
-                     <ImageUpload 
-                       currentImageUrl={formData.backgroundImageUrl || ''} 
-                       onUpload={url => setFormData({ ...formData, backgroundImageUrl: url })} 
-                       storagePath="images/campaigns"
-                     />
-                   </div>
                  </CardContent>
                </Card>
 
@@ -451,36 +428,52 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
                 </CardContent>
               </Card>
 
-              {/* Image Display Focusing Editor */}
+              {/* Imagery — the two images a campaign uses, on their actual surfaces */}
               <Card className="border-gold/15 bg-card/60 shadow-xl backdrop-blur-sm rounded">
                 <CardHeader>
                   <CardTitle className="label-text text-gold flex items-center gap-2">
-                    <ImageIcon className="w-4 h-4 shrink-0" /> Campaign Images
+                    <ImageIcon className="w-4 h-4 shrink-0" /> Imagery
                   </CardTitle>
-                  <p className="field-hint mt-0.5">Focus the imagery to match the aesthetic of your campaign views.</p>
+                  <p className="field-hint mt-0.5">Each image drives a different surface — see the previews below.</p>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="bg-background/60 rounded border border-gold/15 overflow-hidden p-4">
-                    <ClassImageEditor
-                      imageUrl={formData.imageUrl || ''}
-                      onImageUrlChange={(val) => setFormData({ ...formData, imageUrl: val })}
-                      imageDisplay={formData.imageDisplay}
-                      onImageDisplayChange={(val) => setFormData({ ...formData, imageDisplay: val })}
-                      cardImageUrl={formData.cardImageUrl || ''}
-                      onCardImageUrlChange={(val) => setFormData({ ...formData, cardImageUrl: val })}
-                      cardDisplay={formData.cardDisplay}
-                      onCardDisplayChange={(val) => setFormData({ ...formData, cardDisplay: val })}
-                      previewImageUrl={formData.previewImageUrl || ''}
-                      onPreviewImageUrlChange={(val) => setFormData({ ...formData, previewImageUrl: val })}
-                      previewDisplay={formData.previewDisplay}
-                      onPreviewDisplayChange={(val) => setFormData({ ...formData, previewDisplay: val })}
-                      storagePath={`images/campaigns/${id}`}
-                      panelLabels={{
-                        detail:  { label: 'Campaign Header', subtitle: 'Campaign manager view' },
-                        card:    { label: 'Sidebar Card',     subtitle: 'Sidebar active state' },
-                        preview: { label: 'Hover Preview',   subtitle: 'Campaign hover peak' },
-                      }}
-                    />
+                <CardContent>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+                    {/* Campaign Image → the campaign's own page */}
+                    <div className="space-y-2">
+                      <div>
+                        <p className="field-label">Campaign Image</p>
+                        <p className="field-hint">Shown as the header on the campaign's own page. Drag to position, scroll to zoom; swap or browse with the buttons.</p>
+                      </div>
+                      <FocalImageField
+                        className="max-w-xs"
+                        aspectClass="aspect-square"
+                        image={formData.imageUrl || ''}
+                        display={formData.imageDisplay || DEFAULT_DISPLAY}
+                        onDisplayChange={(val) => setFormData({ ...formData, imageDisplay: val })}
+                        onDisplayCommit={(val) => setFormData({ ...formData, imageDisplay: val })}
+                        overrideImageUrl={formData.imageUrl || ''}
+                        onOverrideChange={(url) => setFormData({ ...formData, imageUrl: url })}
+                        storagePath={`images/campaigns/${id}`}
+                        browseRoot="images"
+                      />
+                    </div>
+
+                    {/* Wiki Background → backdrop behind lore for this campaign's members */}
+                    <div className="space-y-2">
+                      <div>
+                        <p className="field-label">Wiki Background</p>
+                        <p className="field-hint">Backdrop behind lore pages for this campaign's members. Falls back to the era's, then the world's.</p>
+                      </div>
+                      <FocalImageField
+                        aspectClass="aspect-[16/9]"
+                        backdrop
+                        image={formData.backgroundImageUrl || ''}
+                        overrideImageUrl={formData.backgroundImageUrl || ''}
+                        onOverrideChange={url => setFormData({ ...formData, backgroundImageUrl: url })}
+                        storagePath="images/campaigns"
+                        browseRoot="images"
+                      />
+                    </div>
                   </div>
                 </CardContent>
               </Card>

@@ -1,6 +1,6 @@
 # Image Manager
 
-Admin tool for browsing, uploading, renaming, and deleting images stored in R2. The same image-handling primitives are reused throughout the app via `ImageUpload` and `IconPickerModal`.
+Admin tool for browsing, uploading, renaming, and deleting images stored in R2. The same image-handling primitives are reused throughout the app via `ImageUpload`, `FocalImageField`, and `IconPickerModal`.
 
 For the underlying R2 bucket structure and Worker endpoints, see [../platform/r2-storage.md](../platform/r2-storage.md).
 
@@ -78,6 +78,7 @@ Used in editors throughout the app for inline image inputs. Props:
 | `allowTypeSelection` | `boolean?` | false | Renders a Standard / Icon / Token toggle (Image Manager) |
 | `filename` | `string?` | — | Override auto-generated filename |
 | `compact` | `boolean?` | false | Avatar-style square picker (feature icon slots) |
+| `browseRoot` | `string?` | — | When set, shows a **Browse** button that opens `IconPickerModal` (select-only) rooted at this R2 prefix |
 | `className` | `string?` | — | Extra CSS |
 
 Resize behaviour (when `imageType` is `icon` or `token`): centre-crop to target canvas before WebP conversion. Source image is never distorted.
@@ -86,16 +87,46 @@ Compact mode (used in the 128px feature icon slot inside `ClassEditor` / `Subcla
 - **Click** → opens `IconPickerModal` to browse the icons library
 - **Hover** → reveals magnifier (open picker), upload (direct), and X (clear) overlay buttons
 
+### `FocalImageField` (`src/components/ui/FocalImageEditor.tsx`)
+
+The single "system image with focal positioning" control — one image slot you can swap (upload),
+browse, remove, and optionally pan/zoom. It is **the** image manager for entity art that needs
+framing or a backdrop; it is not class-specific.
+
+`ClassImageEditor` composes three of these (Detail / Card / Preview). The campaign editor uses one
+for the Campaign Image and one for the Wiki Background; the world and era editors use one for their
+backgrounds. (This replaced an earlier `ImageUpload variant="backdrop"`, which has been removed so
+there is exactly one backdrop manager.)
+
+| Prop | Type | Description |
+|---|---|---|
+| `image` | `string` | The URL shown in the preview |
+| `display` / `onDisplayChange` / `onDisplayCommit` | `ImageDisplay` / handlers | **Optional.** Provide them to enable drag-to-pan + scroll/±-zoom (a framed avatar). Omit for a static cover preview (a page background that always renders centered) |
+| `overrideImageUrl` / `onOverrideChange` | `string` / `(url) => void` | The swap target — provides the upload + reset controls |
+| `storagePath` | `string` | R2 prefix for uploads |
+| `aspectClass` | `string?` | Preview aspect (default `aspect-square`; backgrounds use `aspect-[16/9]`) |
+| `backdrop` | `boolean?` | Dim + "Page backdrop" hint, for faint full-bleed art |
+| `browseRoot` | `string?` | When set, a **Browse** button opens `IconPickerModal` (select-only) rooted here |
+| `label` / `subtitle` | `string?` | Header text; omit when the surrounding section already labels it |
+| `overlay` / `usingDefault` | node / boolean | Decorative overlay + "default" badge (used by the class card/preview panels) |
+
+`ImageDisplay`, `DEFAULT_DISPLAY`, and the `imageFocalStyle` helper (aliased as `ClassImageStyle`
+for back-compat) are exported from this file and re-exported from `ClassImageEditor` for existing callers.
+
 ### `IconPickerModal` (`src/components/ui/IconPickerModal.tsx`)
 
-Foundry-FilePicker-style modal for browsing and selecting from R2. Props:
+Foundry-FilePicker-style modal for browsing and selecting from R2. Originally an icon/token picker,
+now generalized to browse **any** R2 prefix (so the image fields above can pick general system
+images). Props:
 
 | Prop | Type | Description |
 |---|---|---|
 | `open` | `boolean` | Controls visibility |
 | `onClose` | `() => void` | Dismiss |
 | `onSelect` | `(url: string) => void` | Selection — modal closes automatically |
-| `rootFolder` | `'icons'\|'tokens'?` | **Initial** source tab (default `'icons'`); user can switch in-modal |
+| `rootFolder` | `string?` | R2 prefix to browse (default `'icons'`). Widened from `'icons'\|'tokens'` — pass e.g. `'images'` to browse general system art |
+| `title` | `string?` | Override the dialog title (default derived from the root) |
+| `allowUpload` | `boolean?` | Default `true`. `false` = pure picker — hides in-modal upload / drag-drop (used when a field's own uploader handles new files) |
 | `imageType` | `'icon'\|'token'?` | Kept for back-compat; runtime resize is derived from the active source tab |
 
 **Source tabs** — strip below the title toggles between enabled sources. The machinery supports both `icons/` and `tokens/`, but the `AVAILABLE_SOURCES` constant currently exposes only `icons` — the tab strip is hidden when only one source is active. Add `'tokens'` to that const to re-enable when the creature/NPC system needs it.
@@ -120,7 +151,8 @@ Foundry-FilePicker-style modal for browsing and selecting from R2. Props:
 
 **Upload queue** — both drag-drop and Choose-File uploads enqueue into the same per-file progress panel below the toolbar. Each row shows filename + queued/uploading%/done/failed state with a real percent driven by `r2Upload`'s XHR `onProgress`. Above the rows sits an aggregate bar (`settled/total` plus the in-flight item's progress) so a 50-file batch reads as a single number; only the top 10 rows are rendered to avoid blowing up the modal — overflow is summarised as "…and N more · K queued · J done · M failed". The panel auto-clears 3 seconds after the last upload settles, so the Done/Failed badges are visible long enough to read.
 
-Resize on upload: 126² for the Icons source, 400² for Tokens.
+Resize on upload: 126² for the Icons source, 400² for Tokens, and **no crop** for any general
+(non-icon/token) root — so browsing/uploading campaign or background art keeps full dimensions.
 
 **Admin gate** — Upload, Create Folder, and Hide-Private are gated to `role === 'admin'` (read from the module-level cache in [src/lib/currentUser.ts](../../src/lib/currentUser.ts), fed by `App.tsx`). Non-admins (co-dm, lore-writer, user) see a read-only browser. The server proxy is the authoritative gate; the client gate is a UX hint.
 

@@ -22,7 +22,8 @@ import SystemPageView from './pages/system/SystemPageView';
 import Map from './pages/core/Map';
 import AdminUsers from './pages/admin/AdminUsers';
 import AdminCampaigns from './pages/admin/AdminCampaigns';
-import AdminWorlds from './pages/admin/AdminWorlds';
+import WorldEditor from './pages/admin/WorldEditor';
+import EraEditor from './pages/admin/EraEditor';
 import AdminProposals from './pages/admin/AdminProposals';
 import MyProposals from './pages/core/MyProposals';
 import AdminProficiencies from './pages/admin/AdminProficiencies';
@@ -384,7 +385,14 @@ export default function App() {
                   
                   <Route path="/map" element={<Map userProfile={effectiveProfile} />} />
                   <Route path="/admin/users" element={<AdminUsers userProfile={effectiveProfile} />} />
-                  <Route path="/admin/worlds" element={<AdminWorlds userProfile={effectiveProfile} />} />
+                  {/* Worlds / Eras / Campaigns / Global-settings are tabs of one
+                      management console; each tab is its own route so the whole
+                      console is reachable from any entity's path. Per-entity
+                      detail editors keep their own routes. */}
+                  <Route path="/admin/worlds" element={<AdminCampaigns userProfile={effectiveProfile} tab="worlds" />} />
+                  <Route path="/admin/worlds/edit/:id" element={<WorldEditor userProfile={effectiveProfile} />} />
+                  <Route path="/admin/eras" element={<AdminCampaigns userProfile={effectiveProfile} tab="eras" />} />
+                  <Route path="/admin/eras/edit/:id" element={<EraEditor userProfile={effectiveProfile} />} />
                   <Route path="/admin/proposals" element={<AdminProposals userProfile={effectiveProfile} />} />
                   <Route path="/my-proposals" element={<MyProposals userProfile={effectiveProfile} />} />
                   {/* Phase 4.5 — per-entity proposal-editor routes. Each one
@@ -493,7 +501,7 @@ export default function App() {
                   } />
                   {/* Catch-all placeholder for editors not yet wired. */}
                   <Route path="/proposals/edit/*" element={<ProposalEditorComingSoon />} />
-                  <Route path="/admin/campaigns" element={<AdminCampaigns userProfile={effectiveProfile} />} />
+                  <Route path="/admin/campaigns" element={<AdminCampaigns userProfile={effectiveProfile} tab="campaigns" />} />
                   <Route path="/campaign/:id" element={<CampaignManager userProfile={effectiveProfile} />} />
                   <Route path="/campaign/edit/:id" element={<CampaignEditor userProfile={effectiveProfile} />} />
                   <Route path="/campaign/edit/:id/homepage" element={<CampaignHomeEditorPage userProfile={effectiveProfile} />} />

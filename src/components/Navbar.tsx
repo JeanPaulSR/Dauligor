@@ -6,7 +6,7 @@ import { useWikiPreview } from '../lib/wikiPreviewContext';
 import { Button } from './ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from './ui/dropdown-menu';
-import { Shield, Book, BookOpen, Map as MapIcon, Users, Bookmark, LogOut, LogIn, Eye, EyeOff, Settings, LayoutGrid, UserCircle, ChevronDown, Swords, Menu, Wrench, Globe2, Inbox, ScrollText, Package } from 'lucide-react';
+import { Shield, Book, BookOpen, Map as MapIcon, Users, Bookmark, LogOut, LogIn, Eye, EyeOff, Settings, LayoutGrid, UserCircle, ChevronDown, Swords, Menu, Wrench, Globe2, Inbox, ScrollText, Package, Calendar } from 'lucide-react';
 import { useBlock } from '../lib/proposalBlock';
 import { Badge } from './ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
@@ -260,6 +260,12 @@ export default function Navbar({
                       <Link to="/admin/campaigns" className="w-full flex items-center px-2 py-1.5 cursor-pointer">
                         <LayoutGrid className="mr-2 h-4 w-4" />
                         <span>Manage Campaigns</span>
+                      </Link>
+                    } />
+                    <DropdownMenuItem nativeButton={false} render={
+                      <Link to="/admin/eras" className="w-full flex items-center px-2 py-1.5 cursor-pointer">
+                        <Calendar className="mr-2 h-4 w-4" />
+                        <span>Manage Eras</span>
                       </Link>
                     } />
                     {userProfile?.role === 'admin' && (

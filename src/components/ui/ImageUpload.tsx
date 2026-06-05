@@ -34,6 +34,7 @@ interface ImageUploadProps {
   allowTypeSelection?: boolean; // show type picker (only when imageType is not set)
   filename?: string;            // override auto-generated filename (no extension)
   compact?: boolean;            // avatar-style picker for icon slots in editors
+  browseRoot?: string;          // R2 prefix to browse for an existing image (omit → no browse button)
 }
 
 // ── component ─────────────────────────────────────────────────────────────────
@@ -47,12 +48,14 @@ export function ImageUpload({
   allowTypeSelection,
   filename,
   compact,
+  browseRoot,
 }: ImageUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<ImageType>('standard');
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // When authoring inside a proposal block, let a content-creator upload into
   // their own block (the server allows it for the active bundle's owner).
@@ -261,14 +264,26 @@ export function ImageUpload({
                 {effectiveType !== 'standard' && ` · resized to ${TYPE_SIZES[effectiveType]!.width}×${TYPE_SIZES[effectiveType]!.height}`}
               </p>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              className="border-gold/25 hover:bg-gold/15 gap-2"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Upload className="h-4 w-4" /> Choose File
-            </Button>
+            <div className="flex items-center justify-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="border-gold/25 hover:bg-gold/15 gap-2"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload className="h-4 w-4" /> Choose File
+              </Button>
+              {browseRoot && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-gold/25 hover:bg-gold/15 gap-2"
+                  onClick={() => setLibraryOpen(true)}
+                >
+                  <Search className="h-4 w-4" /> Browse
+                </Button>
+              )}
+            </div>
           </div>
         )}
 
@@ -286,6 +301,16 @@ export function ImageUpload({
       </div>
 
       {error && <p className="text-sm text-destructive font-medium">{error}</p>}
+      {browseRoot && (
+        <IconPickerModal
+          open={libraryOpen}
+          onClose={() => setLibraryOpen(false)}
+          onSelect={(url) => { onUpload(url); setLibraryOpen(false); }}
+          rootFolder={browseRoot}
+          title="Browse Images"
+          allowUpload={false}
+        />
+      )}
     </div>
   );
 }

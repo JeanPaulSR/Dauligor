@@ -19,7 +19,9 @@ import { getIdentity } from "../../lib/auth";
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
-type Source = 'icons' | 'tokens';
+// Historically 'icons' | 'tokens'; widened to any R2 prefix so this same
+// browser can pick general system images (campaign / background art, etc.).
+type Source = string;
 
 // Sources currently surfaced as tabs in the picker UI. The source machinery
 // supports both 'icons' and 'tokens', but tokens are reserved for the future
@@ -61,6 +63,8 @@ export interface IconPickerModalProps {
   onSelect: (url: string) => void;
   rootFolder?: Source;
   imageType?: 'icon' | 'token';
+  title?: string;          // override the dialog title
+  allowUpload?: boolean;   // false = pure picker (no in-browser upload/resize)
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -110,7 +114,7 @@ const loadFavorites = (): Favorite[] => {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     return parsed.filter((f): f is Favorite =>
-      f && typeof f.path === 'string' && (f.source === 'icons' || f.source === 'tokens'),
+      f && typeof f.path === 'string' && typeof f.source === 'string',
     );
   } catch { return []; }
 };
@@ -130,6 +134,8 @@ export function IconPickerModal({
   onClose,
   onSelect,
   rootFolder = 'icons',
+  title: propTitle,
+  allowUpload = true,
 }: IconPickerModalProps) {
   const [activeSource, setActiveSource] = useState<Source>(rootFolder);
 
@@ -167,6 +173,13 @@ export function IconPickerModal({
   const [isDraggingOver, setIsDraggingOver] = useState(false);
 
   const canManage = isAdmin();
+  const canUpload = canManage && allowUpload;
+  // Only icon/token roots have fixed crop sizes; general image roots upload as-is.
+  const uploadTargetSize =
+    activeSource === 'tokens' ? { width: 400, height: 400 }
+      : activeSource === 'icons' ? { width: 126, height: 126 }
+        : undefined;
+  const itemNoun = activeSource === 'tokens' ? 'tokens' : activeSource === 'icons' ? 'icons' : 'images';
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const newFolderInputRef = useRef<HTMLInputElement>(null);
@@ -307,8 +320,7 @@ export function IconPickerModal({
       prev.map((q) => q.id === queueId ? { ...q, status: 'uploading', progress: 0 } : q),
     );
     try {
-      const targetSize = activeSource === 'tokens' ? { width: 400, height: 400 } : { width: 126, height: 126 };
-      const converted = await convertToWebP(file, 1.0, targetSize);
+      const converted = await convertToWebP(file, 1.0, uploadTargetSize);
       const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}.webp`;
       const uploadPath = opts.toTemp
         ? `${activeSource}/_temp/${fileName}`
@@ -469,7 +481,7 @@ export function IconPickerModal({
 
   // ── render helpers ────────────────────────────────────────────────────────
 
-  const title = activeSource === 'tokens' ? 'Browse Tokens' : 'Browse Icons';
+  const title = propTitle ?? (activeSource === 'tokens' ? 'Browse Tokens' : 'Browse Icons');
   const sizeLabel = activeSource === 'tokens' ? '400×400' : '126×126';
   const atRoot = currentPath === activeSource;
 
@@ -487,13 +499,13 @@ export function IconPickerModal({
         // content count (it doesn't grow/shrink as you navigate).
         className="dialog-content sm:max-w-[95vw] lg:max-w-5xl flex flex-col h-[720px] max-h-[90vh] gap-0"
         onDragEnter={(e) => {
-          if (!canManage) return;
+          if (!canUpload) return;
           if (!e.dataTransfer.types.includes('Files')) return;
           e.preventDefault();
           setIsDraggingOver(true);
         }}
         onDragOver={(e) => {
-          if (!canManage) return;
+          if (!canUpload) return;
           if (e.dataTransfer.types.includes('Files')) e.preventDefault();
         }}
         onDragLeave={(e) => {
@@ -504,7 +516,7 @@ export function IconPickerModal({
           }
         }}
         onDrop={(e) => {
-          if (!canManage) return;
+          if (!canUpload) return;
           if (!e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
           e.preventDefault();
           setIsDraggingOver(false);
@@ -512,7 +524,7 @@ export function IconPickerModal({
         }}
       >
         {/* Drag-over overlay (admin only) */}
-        {canManage && isDraggingOver && (
+        {canUpload && isDraggingOver && (
           <div className="absolute inset-0 z-30 rounded-xl border-2 border-dashed border-gold bg-gold/15 backdrop-blur-sm flex flex-col items-center justify-center gap-3 pointer-events-none">
             <Upload className="w-10 h-10 text-gold" />
             <p className="text-sm font-semibold text-gold">
@@ -753,7 +765,7 @@ export function IconPickerModal({
             </button>
           </div>
 
-          {canManage && (
+          {canUpload && (
             <Button
               size="sm"
               variant="ghost"
@@ -769,7 +781,7 @@ export function IconPickerModal({
         </div>
 
         {/* Upload panel (admin only) */}
-        {canManage && showUpload && (
+        {canUpload && showUpload && (
           <div className="px-4 py-3 border-b border-gold/15 shrink-0 bg-gold/5 space-y-2.5">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="label-text shrink-0">Upload to:</span>
@@ -939,7 +951,7 @@ export function IconPickerModal({
               <div className="empty-state">
                 <Search className="w-10 h-10 text-gold/25 mb-3" />
                 <p className="text-sm text-ink/45 italic">
-                  No {activeSource === 'tokens' ? 'tokens' : 'icons'} match "{search}"
+                  No {itemNoun} match "{search}"
                 </p>
               </div>
             ) : (
@@ -989,8 +1001,8 @@ export function IconPickerModal({
                 <div className="empty-state">
                   <ImageIcon className="w-10 h-10 text-gold/25 mb-3" />
                   <p className="text-sm text-ink/45 italic">
-                    No {activeSource === 'tokens' ? 'tokens' : 'icons'} here yet
-                    {canManage ? ' — upload one to get started.' : '.'}
+                    No {itemNoun} here yet
+                    {canUpload ? ' — upload one to get started.' : '.'}
                   </p>
                 </div>
               ) : null}

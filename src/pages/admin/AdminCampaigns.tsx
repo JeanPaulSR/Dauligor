@@ -1,627 +1,431 @@
-import { useState, useEffect } from 'react';
+// =============================================================================
+// Admin management console — shared page for Worlds / Eras / Campaigns.
+// =============================================================================
+//
+// One console, three tabs — each its own route (/admin/worlds, /admin/eras,
+// /admin/campaigns) so the whole thing is reachable from any entity's path
+// with that tab active. The active tab is the `tab` prop from the route.
+//
+//   • Worlds (admin) / Eras — rendered as embedded list managers (AdminWorlds /
+//     AdminEras with embedded). Each row opens that entity's dedicated editor.
+//   • Campaigns — sortable table; create / open / edit / delete. Era and
+//     Recommended-Lore are DISPLAY-ONLY here (badges/text); they're edited on
+//     the campaign editor (/campaign/edit/:id), which owns those fields.
+//
+// Eras are loaded here (read-only) to drive the campaign era filter + badge.
+// =============================================================================
+
+import { useState, useEffect, useMemo } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { auth, OperationType, reportClientError } from '../../lib/firebase';
-import { fetchCollection, getSystemMetadata } from '../../lib/d1';
+import { fetchCollection } from '../../lib/d1';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
+import { Textarea } from '../../components/ui/textarea';
 import { Badge } from '../../components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../../components/ui/dialog';
-import { Plus, Trash2, LayoutGrid, Calendar, Users, Sparkles } from 'lucide-react';
-import { ImageUpload } from '../../components/ui/ImageUpload';
-import { getSessionToken } from "../../lib/auth";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
+} from '../../components/ui/dialog';
+import { Plus, Trash2, Pencil, ExternalLink, Search } from 'lucide-react';
+import { getSessionToken } from '../../lib/auth';
+import { ImageThumb, SortHead, makeToggle, type Dir } from '../../components/admin/consoleTable';
+import AdminEras from './AdminEras';
+import AdminWorlds from './AdminWorlds';
 
-export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
+type TabKey = 'campaigns' | 'eras' | 'worlds';
+type SortKey = 'name' | 'era' | 'players' | 'updated';
+
+// Each tab is its own admin route, so the whole console is reachable from any
+// entity's path with that tab active.
+const TAB_PATHS: Record<TabKey, string> = {
+  campaigns: '/admin/campaigns',
+  eras: '/admin/eras',
+  worlds: '/admin/worlds',
+};
+
+function initials(name?: string): string {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  return ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || name[0].toUpperCase();
+}
+function relTime(iso?: string): string {
+  if (!iso) return '—';
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return '—';
+  return new Date(t).toLocaleDateString();
+}
+
+export default function AdminCampaigns({ userProfile, tab: routeTab = 'campaigns' }: { userProfile: any; tab?: TabKey }) {
+  const navigate = useNavigate();
+
+  const isAdmin = userProfile?.role === 'admin';
+  const isStaff = isAdmin || userProfile?.role === 'co-dm';
+
+  // The active tab comes straight from the matched route. The admin-only
+  // Worlds tab falls back to Campaigns for non-admin staff who land on it.
+  const tab: TabKey = routeTab === 'worlds' && !isAdmin ? 'campaigns' : routeTab;
+  const selectTab = (k: TabKey) => navigate(TAB_PATHS[k]);
+
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [lorePages, setLorePages] = useState<any[]>([]);
   const [eras, setEras] = useState<any[]>([]);
-  const [isAddOpen, setIsAddOpen] = useState(false);
-  const [isEraOpen, setIsEraOpen] = useState(false);
-  const [newCampaign, setNewCampaign] = useState({ name: '', description: '', eraId: '' });
-  const [newEra, setNewEra] = useState({ name: '', description: '', order: 0, backgroundImageUrl: '' });
-  const [wikiSettings, setWikiSettings] = useState<{ defaultBackgroundImageUrl?: string }>({});
 
-  // Eras live as foundation data — the docs at permissions-rbac.md mark
-  // era CRUD as admin-only. The d1-proxy gate now enforces that
-  // server-side (writes to the `eras` table require admin), so co-dm
-  // viewers of this page need their era buttons hidden to avoid a
-  // confusing 403. Co-dm still sees the era LIST (it's useful context
-  // for the campaign-era dropdown); only the create / delete / image
-  // upload controls are admin-gated.
-  const isAdmin = userProfile?.role === 'admin';
+  const [query, setQuery] = useState('');
+  const [eraFilter, setEraFilter] = useState('');
+  const [sort, setSort] = useState<{ key: SortKey; dir: Dir }>({ key: 'updated', dir: 'desc' });
+  const toggleSort = makeToggle<SortKey>(setSort);
+
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [newCampaign, setNewCampaign] = useState({ name: '', description: '', eraId: '' });
+
+  const authedFetch = async (input: string, init?: RequestInit) => {
+    const idToken = await getSessionToken();
+    return fetch(input, {
+      ...init,
+      headers: {
+        ...(init?.headers || {}),
+        ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      },
+    });
+  };
+
+  const remapCampaign = (c: any) => ({
+    ...c,
+    eraId: c.era_id,
+    dmId: c.dm_id,
+    recommendedLoreId: c.recommended_lore_id,
+    imageUrl: c.image_url,
+    cardImageUrl: c.card_image_url,
+    createdAt: c.created_at,
+    updatedAt: c.updated_at,
+  });
+
+  const loadCampaigns = async () => {
+    const res = await authedFetch('/api/campaigns');
+    if (!res.ok) throw new Error(`Failed to load campaigns (HTTP ${res.status})`);
+    const body = await res.json();
+    setCampaigns((Array.isArray(body?.campaigns) ? body.campaigns : []).map(remapCampaign));
+  };
 
   useEffect(() => {
-    if (userProfile?.role !== 'admin' && userProfile?.role !== 'co-dm') return;
-
-    // D1 returns snake_case columns; the rest of this page reads camelCase.
-    // Remap on load so the existing JSX/handlers don't need to change.
-    const remapCampaign = (c: any) => ({
-      ...c,
-      eraId: c.era_id,
-      dmId: c.dm_id,
-      recommendedLoreId: c.recommended_lore_id,
-      imageUrl: c.image_url,
-      previewImageUrl: c.preview_image_url,
-      cardImageUrl: c.card_image_url,
-      backgroundImageUrl: c.background_image_url,
-      createdAt: c.created_at,
-      updatedAt: c.updated_at,
-    });
-    const remapEra = (e: any) => ({
-      ...e,
-      backgroundImageUrl: e.background_image_url,
-      createdAt: e.created_at,
-      updatedAt: e.updated_at,
-    });
-    const remapLore = (l: any) => ({
-      ...l,
-      parentId: l.parent_id,
-      authorId: l.author_id,
-      imageUrl: l.image_url,
-    });
-
-    const loadAllAdminData = async () => {
+    if (!isStaff) return;
+    const load = async () => {
       try {
-        // /api/campaigns gives admins every campaign with
-        // `memberCount` pre-computed, so we no longer need the
-        // separate `fetchCollection('campaignMembers')` enumeration
-        // for the dashboard counts. That was the worst single source
-        // of H7 leakage on admin pages (and still leaked even on
-        // staff-only routes since the network call fires before any
-        // role check).
-        const idToken = await getSessionToken();
-        const authHeaders = idToken ? { Authorization: `Bearer ${idToken}` } : {};
-        const campRes = await fetch('/api/campaigns', { headers: authHeaders });
-        if (!campRes.ok) throw new Error(`Failed to load campaigns (HTTP ${campRes.status})`);
-        const campBody = await campRes.json();
-        const campaignsData: any[] = Array.isArray(campBody?.campaigns) ? campBody.campaigns : [];
-        setCampaigns(campaignsData.map(remapCampaign));
+        await loadCampaigns();
 
-        const erasData = await fetchCollection<any>('eras', { orderBy: '"order" ASC' });
-        setEras(erasData.map(remapEra));
+        const data = await fetchCollection<any>('eras', { orderBy: '"order" ASC' });
+        setEras(data);
 
-        // Per-route admin endpoint — returns rows column-scoped by
-        // viewer role (recovery_email only goes to admin), and each
-        // row already carries campaign_ids joined server-side, so the
-        // legacy `fetchCollection('campaignMembers')` enumeration is
-        // gone. Closes M2 here.
-        const usersIdToken = await getSessionToken();
-        const usersRes = await fetch('/api/admin/users', {
-          headers: usersIdToken ? { Authorization: `Bearer ${usersIdToken}` } : {},
-        });
-        if (!usersRes.ok) throw new Error(`Failed to load users (HTTP ${usersRes.status})`);
-        const usersBody = await usersRes.json();
-        const usersData: any[] = Array.isArray(usersBody?.users) ? usersBody.users : [];
-        setUsers(usersData.map((u: any) => ({
-          ...u,
-          displayName: u.display_name,
-          campaignIds: Array.isArray(u.campaign_ids) ? u.campaign_ids : [],
-        })));
+        const usersRes = await authedFetch('/api/admin/users');
+        if (usersRes.ok) {
+          const usersBody = await usersRes.json();
+          const usersData: any[] = Array.isArray(usersBody?.users) ? usersBody.users : [];
+          setUsers(usersData.map((u: any) => ({
+            ...u,
+            displayName: u.display_name,
+            campaignIds: Array.isArray(u.campaign_ids) ? u.campaign_ids : [],
+          })));
+        }
 
-        // Per-route lore endpoint — admin context, server still strips
-        // dm_notes (admin doesn't need it for the recommended-article
-        // picker; if they ever do, the dedicated dm-notes route can
-        // serve it).
-        const idTokenLore = await getSessionToken();
-        const loreRes = await fetch('/api/lore/articles?orderBy=title%20ASC', {
-          headers: idTokenLore ? { Authorization: `Bearer ${idTokenLore}` } : {},
-        });
-        if (!loreRes.ok) throw new Error(`Failed to load lore (HTTP ${loreRes.status})`);
-        const loreBody = await loreRes.json();
-        const loreData: any[] = Array.isArray(loreBody?.articles) ? loreBody.articles : [];
-        setLorePages(loreData.map(remapLore));
-
-        const settings = await getSystemMetadata<{ defaultBackgroundImageUrl?: string }>('wiki_settings');
-        if (settings) setWikiSettings(settings);
+        const loreRes = await authedFetch('/api/lore/articles?orderBy=title%20ASC');
+        if (loreRes.ok) {
+          const loreBody = await loreRes.json();
+          setLorePages(Array.isArray(loreBody?.articles) ? loreBody.articles : []);
+        }
       } catch (err) {
-        console.error("Error loading admin data:", err);
+        console.error('Error loading campaigns:', err);
+        toast.error('Failed to load campaign data');
       }
     };
-
-    loadAllAdminData();
+    void load();
   }, [userProfile]);
 
+  // Derived lookups
+  const eraName = useMemo(() => {
+    const m = new Map<string, string>();
+    eras.forEach((e) => m.set(e.id, e.name));
+    return m;
+  }, [eras]);
+  const loreTitle = useMemo(() => {
+    const m = new Map<string, string>();
+    lorePages.forEach((p) => m.set(p.id, p.title));
+    return m;
+  }, [lorePages]);
+  const playersByCampaign = useMemo(() => {
+    const m = new Map<string, any[]>();
+    campaigns.forEach((c) => m.set(c.id, []));
+    users.forEach((u) => {
+      (u.campaignIds || []).forEach((cid: string) => {
+        if (m.has(cid)) m.get(cid)!.push(u);
+      });
+    });
+    return m;
+  }, [campaigns, users]);
+
+  const visibleCampaigns = useMemo(() => {
+    let rows = campaigns.slice();
+    const q = query.trim().toLowerCase();
+    if (q) rows = rows.filter((c) =>
+      (c.name || '').toLowerCase().includes(q) || (c.description || '').toLowerCase().includes(q));
+    if (eraFilter) rows = rows.filter((c) => c.eraId === eraFilter);
+    const dir = sort.dir === 'asc' ? 1 : -1;
+    rows.sort((a, b) => {
+      let av: any; let bv: any;
+      switch (sort.key) {
+        case 'name': av = (a.name || '').toLowerCase(); bv = (b.name || '').toLowerCase(); break;
+        case 'era': av = (eraName.get(a.eraId) || '').toLowerCase(); bv = (eraName.get(b.eraId) || '').toLowerCase(); break;
+        case 'players': av = (playersByCampaign.get(a.id)?.length || 0); bv = (playersByCampaign.get(b.id)?.length || 0); break;
+        case 'updated': default: av = Date.parse(a.updatedAt || a.createdAt || '') || 0; bv = Date.parse(b.updatedAt || b.createdAt || '') || 0; break;
+      }
+      if (av < bv) return -1 * dir;
+      if (av > bv) return 1 * dir;
+      return 0;
+    });
+    return rows;
+  }, [campaigns, query, eraFilter, sort, eraName, playersByCampaign]);
+
+  // ---- campaign handlers ----
   const handleCreateCampaign = async () => {
+    if (!newCampaign.name.trim()) { toast.error('Campaign name is required'); return; }
     try {
       const id = crypto.randomUUID();
       const slug = newCampaign.name.toLowerCase().replace(/\s+/g, '-');
-      // Per-route POST /api/campaigns — generic proxy refuses
-      // direct campaigns writes now (audit #8). Server defaults
-      // dm_id to the verified token's uid if omitted; we pass the
-      // current user's uid explicitly to preserve legacy behavior.
-      const createToken = await getSessionToken();
-      const createRes = await fetch('/api/campaigns', {
+      const res = await authedFetch('/api/campaigns', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(createToken ? { Authorization: `Bearer ${createToken}` } : {}),
-        },
         body: JSON.stringify({
-          id,
-          name: newCampaign.name,
-          description: newCampaign.description,
-          era_id: newCampaign.eraId || null,
-          slug,
-          dm_id: userProfile.id,
+          id, name: newCampaign.name, description: newCampaign.description,
+          era_id: newCampaign.eraId || null, slug, dm_id: userProfile.id,
         }),
       });
-      if (!createRes.ok) {
-        const err = await createRes.json().catch(() => ({}));
-        throw new Error((err as any).error || `Create failed (HTTP ${createRes.status})`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as any).error || `Create failed (HTTP ${res.status})`);
       }
       setIsAddOpen(false);
       setNewCampaign({ name: '', description: '', eraId: '' });
       toast.success('Campaign created');
-
-      // Refresh list through the per-route endpoint (server filters
-      // by role + emits memberCount, same as the initial load).
-      const refreshIdToken = await getSessionToken();
-      const refreshRes = await fetch('/api/campaigns', {
-        headers: refreshIdToken ? { Authorization: `Bearer ${refreshIdToken}` } : {},
-      });
-      const refreshBody = refreshRes.ok ? await refreshRes.json() : { campaigns: [] };
-      const campaignsData: any[] = Array.isArray(refreshBody?.campaigns) ? refreshBody.campaigns : [];
-      setCampaigns(campaignsData.map((c: any) => ({
-        ...c,
-        eraId: c.era_id,
-        dmId: c.dm_id,
-        recommendedLoreId: c.recommended_lore_id,
-        imageUrl: c.image_url,
-        previewImageUrl: c.preview_image_url,
-        cardImageUrl: c.card_image_url,
-        backgroundImageUrl: c.background_image_url,
-        createdAt: c.created_at,
-        updatedAt: c.updated_at,
-      })));
+      await loadCampaigns();
     } catch (err) {
       console.error(err);
       toast.error('Failed to create campaign');
     }
   };
 
-  const handleCreateEra = async () => {
+  const handleDeleteCampaign = async (id: string, name: string) => {
+    if (!confirm(`Delete "${name}"? Players stay, but will no longer be associated with it.`)) return;
     try {
-      const id = crypto.randomUUID();
-      // Per-route POST /api/admin/eras — admin-only, folded into the
-      // campaigns dispatcher (audit #9). Generic proxy still admits
-      // admin writes to `eras` via PROTECTED_WRITE_TABLES as defense
-      // in depth, but the per-route is the documented path.
-      const createToken = await getSessionToken();
-      const createRes = await fetch('/api/admin/eras', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(createToken ? { Authorization: `Bearer ${createToken}` } : {}),
-        },
-        body: JSON.stringify({
-          id,
-          name: newEra.name,
-          description: newEra.description,
-          order: newEra.order,
-          background_image_url: newEra.backgroundImageUrl || '',
-        }),
-      });
-      if (!createRes.ok) {
-        const err = await createRes.json().catch(() => ({}));
-        throw new Error((err as any).error || `Create failed (HTTP ${createRes.status})`);
-      }
-      setNewEra({ name: '', description: '', order: eras.length + 1, backgroundImageUrl: '' });
-      toast.success('Era created');
-
-      // Refresh list (with same camelCase remap so the campaign cards' eras
-      // dropdown reflects the new entry without needing a page reload).
-      const erasData = await fetchCollection<any>('eras', { orderBy: '"order" ASC' });
-      setEras(erasData.map((e: any) => ({
-        ...e,
-        backgroundImageUrl: e.background_image_url,
-        createdAt: e.created_at,
-        updatedAt: e.updated_at,
-      })));
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to create era');
-    }
-  };
-
-  const handleDeleteEra = async (id: string) => {
-    if (confirm('Are you sure? This will remove the Era but not the campaigns assigned to it.')) {
-      try {
-        // DELETE /api/admin/eras/[id] — admin-only via the campaigns
-        // dispatcher (audit #9). campaigns.era_id rows are deliberately
-        // left dangling (the confirm prompt warns about this).
-        const token = await getSessionToken();
-        const res = await fetch(`/api/admin/eras/${encodeURIComponent(id)}`, {
-          method: 'DELETE',
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error((err as any).error || `Delete failed (HTTP ${res.status})`);
-        }
-        toast.success('Era deleted');
-        setEras(prev => prev.filter(e => e.id !== id));
-      } catch (err) {
-        console.error(err);
-        toast.error('Failed to delete era');
-      }
-    }
-  };
-
-  const handleSetCampaignEra = async (campaignId: string, eraId: string) => {
-    try {
-      // PATCH /api/campaigns/[id] — server does a real UPDATE so we
-      // don't need to resupply NOT NULL columns (the legacy
-      // upsertDocument path required `name` + `slug` even on a partial
-      // patch because its ON CONFLICT DO UPDATE first validated the
-      // INSERT-side row).
-      const token = await getSessionToken();
-      const res = await fetch(`/api/campaigns/${encodeURIComponent(campaignId)}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ era_id: eraId || null }),
-      });
+      const res = await authedFetch(`/api/campaigns/${encodeURIComponent(id)}`, { method: 'DELETE' });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error((err as any).error || `Update failed (HTTP ${res.status})`);
+        throw new Error((err as any).error || `Delete failed (HTTP ${res.status})`);
       }
-      setCampaigns(prev => prev.map(c => c.id === campaignId ? { ...c, era_id: eraId, eraId } : c));
-      toast.success('Campaign era updated');
+      toast.success('Campaign deleted');
+      setCampaigns((prev) => prev.filter((c) => c.id !== id));
     } catch (err) {
       console.error(err);
-      toast.error('Failed to update campaign era');
+      toast.error('Failed to delete campaign');
     }
   };
 
-  const handleDeleteCampaign = async (id: string) => {
-    if (confirm('Are you sure? This will not remove users from the campaign, but they will no longer be associated with it.')) {
-      try {
-        // DELETE /api/campaigns/[id] — admin-only per audit spec
-        // (the per-route handler does the role recheck server-side).
-        // Co-dm can edit but not delete; the button visibility on
-        // this page should already gate-check too.
-        const token = await getSessionToken();
-        const res = await fetch(`/api/campaigns/${encodeURIComponent(id)}`, {
-          method: 'DELETE',
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error((err as any).error || `Delete failed (HTTP ${res.status})`);
-        }
-        toast.success('Campaign deleted');
-        setCampaigns(prev => prev.filter(c => c.id !== id));
-      } catch (err) {
-        console.error(err);
-        toast.error('Failed to delete campaign');
-      }
-    }
-  };
-
-  const handleSetRecommendedLore = async (campaignId: string, loreId: string) => {
-    try {
-      // PATCH /api/campaigns/[id] — partial update via the per-route
-      // endpoint (audit #8). Same pattern as handleSetCampaignEra.
-      const token = await getSessionToken();
-      const res = await fetch(`/api/campaigns/${encodeURIComponent(campaignId)}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ recommended_lore_id: loreId || null }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error((err as any).error || `Update failed (HTTP ${res.status})`);
-      }
-      setCampaigns(prev => prev.map(c => c.id === campaignId
-        ? { ...c, recommended_lore_id: loreId, recommendedLoreId: loreId }
-        : c
-      ));
-      toast.success('Recommended lore updated');
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to update recommended lore');
-    }
-  };
-
-  if (userProfile?.role !== 'admin' && userProfile?.role !== 'co-dm') {
+  if (!isStaff) {
     return <div className="text-center py-20 font-serif italic">Access Denied</div>;
   }
 
+  const TABS: { key: TabKey; label: string; show: boolean }[] = [
+    { key: 'worlds', label: 'Worlds', show: isAdmin },
+    { key: 'eras', label: 'Eras', show: true },
+    { key: 'campaigns', label: 'Campaigns', show: true },
+  ];
+
   return (
-    <div className="space-y-8">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-4xl font-serif font-bold text-ink">Campaign Management</h1>
-          <p className="text-ink/65">Organize your players into adventure groups and historical eras.</p>
-        </div>
-
-        <Card className="border-gold/15 bg-card/80 backdrop-blur-md p-4 max-w-sm w-full">
-          <CardHeader className="p-0 pb-2 border-b border-gold/15">
-            <CardTitle className="text-sm font-serif text-gold flex items-center gap-2">
-              <Sparkles className="w-4 h-4 shrink-0" /> Default Wiki Fallback Background
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0 pt-2">
-            <ImageUpload 
-              currentImageUrl={wikiSettings.defaultBackgroundImageUrl || ''}
-              storagePath="images/wiki/background"
-              onUpload={async (url) => {
-                try {
-                  const next = { ...wikiSettings, defaultBackgroundImageUrl: url };
-                  // Per-route admin endpoint. The proxy gate at
-                  // api/_lib/d1-proxy.ts now refuses non-bump writes
-                  // to system_metadata, so the previous
-                  // `setSystemMetadata('wiki_settings', next)` path
-                  // (which went through the generic /api/d1/query
-                  // proxy) would 403. Closes M3.
-                  const token = await getSessionToken();
-                  const res = await fetch('/api/lore/system-metadata/wiki-settings', {
-                    method: 'PUT',
-                    headers: {
-                      'Content-Type': 'application/json',
-                      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                    },
-                    body: JSON.stringify(next),
-                  });
-                  if (!res.ok) {
-                    const err = await res.json().catch(() => ({}));
-                    throw new Error((err as any).error || `Save failed (HTTP ${res.status})`);
-                  }
-                  setWikiSettings(next);
-                } catch (error) {
-                  console.error("Error setting default background image:", error);
-                }
-              }}
-            />
-          </CardContent>
-        </Card>
-
-        <div className="flex gap-2">
-          <Dialog open={isEraOpen} onOpenChange={setIsEraOpen}>
-            <DialogTrigger render={
-              <Button variant="outline" className="border-gold/25 text-gold hover:bg-gold/5 gap-2">
-                <Calendar className="w-4 h-4" /> Manage Eras
-              </Button>
-            } />
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle className="font-serif text-2xl">World Eras</DialogTitle>
-                <CardDescription>Define the time periods of your world.</CardDescription>
-              </DialogHeader>
-              <div className="space-y-6 py-4">
-                <div className="p-4 rounded-lg bg-gold/5 border border-gold/15 space-y-3">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold uppercase">Era Name</label>
-                      <Input value={newEra.name} onChange={e => setNewEra({...newEra, name: e.target.value})} placeholder="e.g. The Second Age" className="h-8 text-xs" />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold uppercase">Order</label>
-                      <Input type="number" value={newEra.order} onChange={e => setNewEra({...newEra, order: parseInt(e.target.value)})} className="h-8 text-xs" />
-                    </div>
-                  </div>
-                  {/* Admin-only — era CRUD is admin-gated server-side
-                      (d1-proxy PROTECTED_WRITE_TABLES). Co-dm viewers
-                      see the era list below but not these controls. */}
-                  {isAdmin && (
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase block">Background Image</label>
-                      <div className="flex gap-4 items-end">
-                        <div className="flex-grow">
-                          <ImageUpload
-                            currentImageUrl={newEra.backgroundImageUrl || ''}
-                            storagePath="images/wiki/eras"
-                            onUpload={(url) => setNewEra({...newEra, backgroundImageUrl: url})}
-                          />
-                        </div>
-                        <Button onClick={handleCreateEra} className="h-10 bg-gold text-[var(--primary-foreground)] text-xs px-4">Add Era</Button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2">
-                  {eras.map(era => (
-                    <div key={era.id} className="p-3 rounded-md border border-gold/15 bg-card space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <Badge variant="outline" className="text-gold border-gold/25 font-mono">{era.order}</Badge>
-                          <span className="font-serif font-bold">{era.name}</span>
-                        </div>
-                        {/* Admin-only — server-side d1-proxy gate
-                            rejects co-dm writes to the eras table. */}
-                        {isAdmin && (
-                          <Button variant="ghost" size="icon" className="btn-danger h-8 w-8" onClick={() => handleDeleteEra(era.id)}>
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        )}
-                      </div>
-                      {isAdmin && (
-                        <div className="pt-2 border-t border-gold/5 space-y-1">
-                          <label className="text-[9px] text-ink/45 uppercase tracking-wider block">Background Image</label>
-                          <ImageUpload
-                            currentImageUrl={era.backgroundImageUrl || ''}
-                            storagePath="images/wiki/eras"
-                            onUpload={async (url) => {
-                              try {
-                                // PATCH /api/admin/eras/[id] — partial update,
-                                // admin-only (audit #9). Real UPDATE so we don't
-                                // resupply name + other NOT NULL columns like
-                                // the legacy upsertDocument path did.
-                                const token = await getSessionToken();
-                                const res = await fetch(`/api/admin/eras/${encodeURIComponent(era.id)}`, {
-                                  method: 'PATCH',
-                                  headers: {
-                                    'Content-Type': 'application/json',
-                                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                                  },
-                                  body: JSON.stringify({ background_image_url: url }),
-                                });
-                                if (!res.ok) {
-                                  const err = await res.json().catch(() => ({}));
-                                  throw new Error((err as any).error || `Update failed (HTTP ${res.status})`);
-                                }
-                                setEras(prev => prev.map(e => e.id === era.id ? { ...e, background_image_url: url } : e));
-                                toast.success('Era background updated');
-                              } catch (err) {
-                                console.error(err);
-                                toast.error('Failed to update background');
-                              }
-                            }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
-
-          <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-          <DialogTrigger render={
-            <Button className="btn-gold-solid gap-2">
-              <Plus className="w-4 h-4" /> New Campaign
-            </Button>
-          } />
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle className="font-serif text-2xl">Create Campaign</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Campaign Name</label>
-                <Input value={newCampaign.name} onChange={e => setNewCampaign({...newCampaign, name: e.target.value})} placeholder="e.g. The Shattered Isles" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Description</label>
-                <textarea 
-                  className="w-full min-h-[100px] p-3 rounded-md border border-input bg-background text-sm"
-                  value={newCampaign.description}
-                  onChange={e => setNewCampaign({...newCampaign, description: e.target.value})}
-                  placeholder="A brief overview of the adventure..."
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Era</label>
-                <select 
-                  className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
-                  value={newCampaign.eraId}
-                  onChange={e => setNewCampaign({...newCampaign, eraId: e.target.value})}
-                >
-                  <option value="">Select an Era...</option>
-                  {eras.map(era => (
-                    <option key={era.id} value={era.id}>{era.name}</option>
-                  ))}
-                </select>
-              </div>
-              <Button onClick={handleCreateCampaign} className="w-full bg-gold text-[var(--primary-foreground)]">Create Campaign</Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+    <div className="max-w-6xl mx-auto space-y-6 pb-20">
+      {/* Header */}
+      <div>
+        <div className="text-[11px] font-bold uppercase tracking-[0.25em] text-gold mb-1">Administration</div>
+        <h1 className="text-4xl font-serif font-bold text-ink">Campaign Management</h1>
+        <p className="text-ink/65">Organize players into adventure groups, historical eras, and worlds.</p>
       </div>
-    </div>
 
-    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {campaigns.map(campaign => {
-          const campaignPlayers = users.filter(u => u.campaignIds?.includes(campaign.id) || u.campaignId === campaign.id);
+      {/* Tab strip */}
+      <div className="flex items-center gap-1 border-b border-gold/15">
+        {TABS.filter((t) => t.show).map((t) => {
+          const active = tab === t.key;
           return (
-            <Card key={campaign.id} className="border-gold/15 hover:border-gold/35 transition-colors">
-              <CardHeader>
-                <div className="flex justify-between items-start">
-                  <div className="bg-gold/15 p-2 rounded-lg">
-                    <LayoutGrid className="w-5 h-5 text-gold" />
-                  </div>
-                  <Button variant="ghost" size="icon" className="btn-danger h-8 w-8" onClick={() => handleDeleteCampaign(campaign.id)}>
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-                <CardTitle className="text-2xl font-serif mt-4">{campaign.name}</CardTitle>
-                <Badge variant="outline" className="w-fit mt-1 border-gold/25 text-gold/65">
-                  {eras.find(e => e.id === campaign.eraId)?.name || 'No Era Assigned'}
-                </Badge>
-                <CardDescription className="line-clamp-2 mt-2">{campaign.description || 'No description provided.'}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="flex items-center gap-4 text-sm text-ink/65">
-                  <div className="flex items-center gap-1">
-                    <Users className="w-4 h-4" />
-                    <span>{campaignPlayers.length} Players</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Calendar className="w-4 h-4" />
-                    <span>{new Date(campaign.createdAt).toLocaleDateString()}</span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-ink/45">
-                      <Calendar className="w-3 h-3 text-gold" />
-                      <span>Era</span>
-                    </div>
-                    <select 
-                      className="w-full h-9 px-3 rounded-md border border-gold/15 bg-background text-sm font-serif italic"
-                      value={campaign.eraId || ''}
-                      onChange={(e) => handleSetCampaignEra(campaign.id, e.target.value)}
-                    >
-                      <option value="">No Era</option>
-                      {eras.map(era => (
-                        <option key={era.id} value={era.id}>{era.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-ink/45">
-                      <Sparkles className="w-3 h-3 text-gold" />
-                      <span>Recommended Lore</span>
-                    </div>
-                    <select 
-                      className="w-full h-9 px-3 rounded-md border border-gold/15 bg-background text-sm font-serif italic"
-                      value={campaign.recommendedLoreId || ''}
-                      onChange={(e) => handleSetRecommendedLore(campaign.id, e.target.value)}
-                    >
-                      <option value="">No article</option>
-                      {lorePages.map(page => (
-                        <option key={page.id} value={page.id}>{page.title}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="pt-2">
-                  <p className="text-xs font-bold uppercase tracking-wider text-ink/45 mb-2">Active Players</p>
-                  <div className="flex flex-wrap gap-1">
-                    {campaignPlayers.length > 0 ? (
-                      campaignPlayers.map(p => (
-                        <Badge key={p.id} variant="secondary" className="text-[10px]">
-                          {p.displayName}
-                        </Badge>
-                      ))
-                    ) : (
-                      <span className="text-xs text-ink/25 italic">No players assigned</span>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => selectTab(t.key)}
+              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold transition-colors border-b-2 -mb-px ${
+                active ? 'border-gold text-gold' : 'border-transparent text-ink/55 hover:text-gold/85'
+              }`}
+            >
+              {t.label}
+              {(t.key === 'campaigns' || t.key === 'eras') && (
+                <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full ${active ? 'bg-gold/15 text-gold' : 'bg-ink/5 text-ink/45'}`}>
+                  {t.key === 'campaigns' ? campaigns.length : eras.length}
+                </span>
+              )}
+            </button>
           );
         })}
       </div>
 
-      {campaigns.length === 0 && (
-        <div className="text-center py-20 bg-card/50 rounded-xl border border-dashed border-gold/25">
-          <LayoutGrid className="w-12 h-12 text-gold/25 mx-auto mb-4" />
-          <p className="text-ink/45 font-serif italic">No campaigns created yet.</p>
+      {/* ============ WORLDS TAB ============ */}
+      {tab === 'worlds' && isAdmin && <AdminWorlds userProfile={userProfile} embedded />}
+
+      {/* ============ ERAS TAB ============ */}
+      {tab === 'eras' && <AdminEras userProfile={userProfile} embedded />}
+
+      {/* ============ CAMPAIGNS TAB ============ */}
+      {tab === 'campaigns' && (
+        <div className="space-y-4 animate-in fade-in duration-200">
+          {/* toolbar */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 h-10 px-3 rounded-md border border-gold/15 bg-background/50 min-w-[240px] flex-1 max-w-sm">
+              <Search className="w-4 h-4 text-ink/45 shrink-0" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search campaigns…"
+                className="bg-transparent border-0 outline-none text-sm w-full text-ink placeholder:text-ink/40"
+              />
+            </div>
+            <select
+              className="h-10 px-3 rounded-md border border-gold/15 bg-background/50 text-sm font-serif italic text-ink/85"
+              value={eraFilter}
+              onChange={(e) => setEraFilter(e.target.value)}
+            >
+              <option value="">All Eras</option>
+              {eras.map((era) => (<option key={era.id} value={era.id}>{era.name}</option>))}
+            </select>
+            <div className="flex-1" />
+            <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+              <DialogTrigger render={<Button className="btn-gold-solid gap-2"><Plus className="w-4 h-4" /> New Campaign</Button>} />
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle className="font-serif text-2xl">Create Campaign</DialogTitle>
+                  <DialogDescription>Era and recommended lore can be set on the campaign editor after creation.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-2">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Campaign Name</label>
+                    <Input value={newCampaign.name} onChange={(e) => setNewCampaign({ ...newCampaign, name: e.target.value })} placeholder="e.g. The Shattered Isles" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Description</label>
+                    <Textarea rows={3} value={newCampaign.description} onChange={(e) => setNewCampaign({ ...newCampaign, description: e.target.value })} placeholder="A brief overview of the adventure…" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Era <span className="text-ink/45">(optional)</span></label>
+                    <select
+                      className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
+                      value={newCampaign.eraId}
+                      onChange={(e) => setNewCampaign({ ...newCampaign, eraId: e.target.value })}
+                    >
+                      <option value="">Select an Era…</option>
+                      {eras.map((era) => (<option key={era.id} value={era.id}>{era.name}</option>))}
+                    </select>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsAddOpen(false)}>Cancel</Button>
+                  <Button onClick={handleCreateCampaign} className="btn-gold-solid">Create Campaign</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+
+          {/* table */}
+          {campaigns.length === 0 ? (
+            <div className="text-center py-20 bg-card/50 rounded-xl border border-dashed border-gold/25">
+              <p className="text-ink/45 font-serif italic">No campaigns created yet.</p>
+            </div>
+          ) : (
+            <div className="border border-gold/15 rounded-xl overflow-hidden bg-card/60 shadow-sm">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortHead label="Campaign" active={sort.key === 'name'} dir={sort.dir} onClick={() => toggleSort('name')} />
+                    <SortHead label="Era" active={sort.key === 'era'} dir={sort.dir} onClick={() => toggleSort('era')} />
+                    <SortHead label="Players" active={sort.key === 'players'} dir={sort.dir} onClick={() => toggleSort('players')} />
+                    <TableHead>Recommended Lore</TableHead>
+                    <SortHead label="Updated" active={sort.key === 'updated'} dir={sort.dir} onClick={() => toggleSort('updated')} />
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {visibleCampaigns.map((c) => {
+                    const players = playersByCampaign.get(c.id) || [];
+                    const shown = players.slice(0, 3);
+                    const extra = players.length - shown.length;
+                    return (
+                      <TableRow key={c.id} className="group">
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <ImageThumb url={c.imageUrl} className="w-9 h-9 rounded-md shrink-0" />
+                            <div className="min-w-0">
+                              <Link to={`/campaign/${c.id}`} className="font-serif font-bold text-[15px] text-ink hover:text-gold transition-colors block truncate">
+                                {c.name}
+                              </Link>
+                              {c.description && <div className="text-xs text-ink/45 truncate max-w-[34ch]">{c.description}</div>}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {c.eraId && eraName.get(c.eraId)
+                            ? <Badge variant="outline" className="border-gold/25 text-gold/85 font-normal">{eraName.get(c.eraId)}</Badge>
+                            : <span className="text-xs text-ink/35 italic">No era</span>}
+                        </TableCell>
+                        <TableCell>
+                          {players.length === 0
+                            ? <span className="text-xs text-ink/35 italic">None</span>
+                            : (
+                              <div className="flex items-center">
+                                {shown.map((p) => (
+                                  <span key={p.id} title={p.displayName}
+                                    className="w-6 h-6 rounded-full border-2 border-card -ml-1.5 first:ml-0 bg-gold/15 text-gold text-[9px] font-bold flex items-center justify-center">
+                                    {initials(p.displayName)}
+                                  </span>
+                                ))}
+                                {extra > 0 && <span className="w-6 h-6 rounded-full border-2 border-card -ml-1.5 bg-ink/10 text-ink/55 text-[9px] font-bold flex items-center justify-center">+{extra}</span>}
+                              </div>
+                            )}
+                        </TableCell>
+                        <TableCell>
+                          {c.recommendedLoreId && loreTitle.get(c.recommendedLoreId)
+                            ? <span className="text-xs text-ink/75">{loreTitle.get(c.recommendedLoreId)}</span>
+                            : <span className="text-xs text-ink/35 italic">—</span>}
+                        </TableCell>
+                        <TableCell className="text-xs text-ink/55 whitespace-nowrap">{relTime(c.updatedAt || c.createdAt)}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button variant="ghost" size="icon" className="h-8 w-8" title="Open campaign" onClick={() => navigate(`/campaign/${c.id}`)}>
+                              <ExternalLink className="w-4 h-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit campaign" onClick={() => navigate(`/campaign/edit/${c.id}`)}>
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="btn-danger h-8 w-8" title="Delete" onClick={() => handleDeleteCampaign(c.id, c.name)}>
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+              {visibleCampaigns.length === 0 && (
+                <p className="text-center py-10 text-sm text-ink/45 font-serif italic">No campaigns match your search.</p>
+              )}
+            </div>
+          )}
         </div>
       )}
+
     </div>
   );
 }

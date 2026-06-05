@@ -1,248 +1,33 @@
-import React, { useRef, useEffect, useState } from 'react';
-import { ImageUpload } from '../ui/ImageUpload';
+// =============================================================================
+// ClassImageEditor — the three image variants a class/subclass uses, each with
+// focal positioning: Detail (ClassView), Card (grid), Preview (quick-view).
+// =============================================================================
+//
+// Built on the generic FocalImageField (../ui/FocalImageEditor). The image
+// primitive lives there so non-class surfaces (campaigns, etc.) can reuse it
+// without depending on this class-specific layout.
+//
+// Re-exports ImageDisplay / ClassImageStyle / DEFAULT_DISPLAY for the many
+// existing callers that import them from here.
+// =============================================================================
+
+import { useState, useEffect } from 'react';
 import { Button } from '../ui/button';
-import { Image as ImageIcon, X, ZoomIn, ZoomOut, Info } from 'lucide-react';
-import { cn } from '../../lib/utils';
+import { Info } from 'lucide-react';
 import { ImageMetadataModal } from '../ui/ImageMetadataModal';
+import {
+  FocalImageField,
+  imageFocalStyle,
+  DEFAULT_DISPLAY,
+  type ImageDisplay,
+} from '../ui/FocalImageEditor';
 
-// ── types ─────────────────────────────────────────────────────────────────────
+// Back-compat re-exports (callers historically import these from ClassImageEditor).
+export { DEFAULT_DISPLAY };
+export type { ImageDisplay };
+export const ClassImageStyle = imageFocalStyle;
 
-export interface ImageDisplay {
-  x: number;     // 0–100 objectPosition x
-  y: number;     // 0–100 objectPosition y
-  scale: number; // 1.0+  zoom multiplier
-}
-
-export const DEFAULT_DISPLAY: ImageDisplay = { x: 50, y: 50, scale: 1 };
-
-// ── shared image renderer ─────────────────────────────────────────────────────
-// Use this helper anywhere you render a class image so every site looks identical.
-
-interface ClassImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
-  src: string;
-  display: ImageDisplay;
-}
-export function ClassImageStyle({ display }: { display?: ImageDisplay | null }): React.CSSProperties {
-  const cur = display || DEFAULT_DISPLAY;
-  return {
-    objectPosition: `${cur.x}% ${cur.y}%`,
-    ...(cur.scale !== 1 && {
-      transform: `scale(${cur.scale})`,
-      transformOrigin: `${cur.x}% ${cur.y}%`,
-    }),
-  };
-}
-
-// ── context panel ─────────────────────────────────────────────────────────────
-
-interface ContextPanelProps {
-  label: string;
-  subtitle: string;
-  aspectClass: string;
-  image: string;
-  display: ImageDisplay;
-  onDisplayChange: (d: ImageDisplay) => void;
-  onDisplayCommit: (d: ImageDisplay) => void;
-  overlay?: React.ReactNode;
-  // Override controls (omit = no override for this panel)
-  overrideImageUrl?: string;
-  onOverrideChange?: (url: string) => void;
-  storagePath?: string;
-  usingDefault?: boolean;
-}
-
-function ContextPanel({
-  label, subtitle, aspectClass,
-  image, display, onDisplayChange, onDisplayCommit, overlay,
-  overrideImageUrl, onOverrideChange, storagePath, usingDefault,
-}: ContextPanelProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
-  const dragDistance = useRef(0);
-
-  const validDisplay = display || DEFAULT_DISPLAY;
-
-  // Keep refs to latest values so the wheel listener (added once) can read them
-  const displayRef = useRef(validDisplay);
-  displayRef.current = validDisplay;
-  const onDisplayChangeRef = useRef(onDisplayChange);
-  onDisplayChangeRef.current = onDisplayChange;
-  const onDisplayCommitRef = useRef(onDisplayCommit);
-  onDisplayCommitRef.current = onDisplayCommit;
-
-  const [showUpload, setShowUpload] = useState(false);
-  const canOverride = !!onOverrideChange;
-  const hasOverride = !!overrideImageUrl;
-
-  const wheelTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Non-passive wheel listener for zoom
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const handler = (e: WheelEvent) => {
-      e.preventDefault();
-      const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-      const cur = displayRef.current || DEFAULT_DISPLAY;
-      const newScale = parseFloat(Math.max(0.1, Math.min(5, cur.scale * factor)).toFixed(2));
-      const next = { ...cur, scale: newScale };
-      onDisplayChangeRef.current(next);
-      
-      // Debounce the commit to prevent massive re-renders in the parent editor
-      if (wheelTimeoutRef.current) clearTimeout(wheelTimeoutRef.current);
-      wheelTimeoutRef.current = setTimeout(() => {
-        onDisplayCommitRef.current(next);
-      }, 500);
-    };
-    el.addEventListener('wheel', handler, { passive: false });
-    return () => {
-      el.removeEventListener('wheel', handler);
-      if (wheelTimeoutRef.current) clearTimeout(wheelTimeoutRef.current);
-    };
-  }, []);
-
-  const handlePointerDown = (e: React.PointerEvent) => {
-    e.currentTarget.setPointerCapture(e.pointerId);
-    lastPointerRef.current = { x: e.clientX, y: e.clientY };
-  };
-
-  const handlePointerMove = (e: React.PointerEvent) => {
-    if (!lastPointerRef.current || e.buttons === 0) return;
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-
-    const dx = e.clientX - lastPointerRef.current.x;
-    const dy = e.clientY - lastPointerRef.current.y;
-    lastPointerRef.current = { x: e.clientX, y: e.clientY };
-
-    const cur = displayRef.current || DEFAULT_DISPLAY;
-    const dxPct = (dx / rect.width) * 100 / cur.scale;
-    const dyPct = (dy / rect.height) * 100 / cur.scale;
-
-    onDisplayChangeRef.current({
-      ...cur,
-      x: parseFloat(Math.max(0, Math.min(100, cur.x - dxPct)).toFixed(1)),
-      y: parseFloat(Math.max(0, Math.min(100, cur.y - dyPct)).toFixed(1)),
-    });
-  };
-
-  const handlePointerUp = () => {
-    if (lastPointerRef.current !== null) {
-      onDisplayCommitRef.current(displayRef.current || DEFAULT_DISPLAY);
-    }
-    lastPointerRef.current = null;
-  };
-
-  const step = (delta: number) => {
-    const cur = displayRef.current || DEFAULT_DISPLAY;
-    const newScale = parseFloat(Math.max(0.1, Math.min(5, cur.scale + delta)).toFixed(2));
-    const next = { ...cur, scale: newScale };
-    onDisplayChange(next);
-    onDisplayCommit(next);
-  };
-
-  return (
-    <div className="space-y-2">
-      {/* header */}
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <span className="label-text text-gold/85 uppercase block">{label}</span>
-          <span className="label-text text-ink/45">{subtitle}</span>
-        </div>
-        {canOverride && (
-          <div className="flex items-center gap-1.5 shrink-0">
-            {hasOverride && (
-              <button
-                type="button"
-                onClick={() => { onOverrideChange!(''); setShowUpload(false); }}
-                className="label-text text-ink/45 hover:text-blood flex items-center gap-1"
-              >
-                <X className="w-2.5 h-2.5" /> Reset
-              </button>
-            )}
-            <Button
-              type="button" size="sm" variant="ghost"
-              className={cn('h-6 w-6 p-0', showUpload ? 'btn-gold-solid' : 'btn-gold')}
-              onClick={() => setShowUpload(v => !v)}
-              title="Use a different image for this view"
-            >
-              <ImageIcon className="w-3 h-3" />
-            </Button>
-          </div>
-        )}
-      </div>
-
-      {/* draggable / zoomable preview */}
-      <div
-        ref={containerRef}
-        className={cn(
-          'relative overflow-hidden rounded-lg select-none border border-gold/15',
-          image ? 'cursor-grab active:cursor-grabbing' : '',
-          aspectClass
-        )}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerLeave={handlePointerUp}
-      >
-        {image ? (
-          <>
-            <img
-              src={image}
-              className="absolute inset-0 w-full h-full object-cover pointer-events-none"
-              style={ClassImageStyle({ display })}
-              referrerPolicy="no-referrer"
-              draggable={false}
-              alt=""
-            />
-            {overlay}
-            {usingDefault && (
-              <div className="absolute top-1.5 left-1.5 pointer-events-none z-10">
-                <span className="text-[8px] font-black uppercase tracking-widest bg-black/50 text-white/50 px-1.5 py-0.5 rounded">
-                  default
-                </span>
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="absolute inset-0 bg-ink/5 flex items-center justify-center">
-            <ImageIcon className="w-8 h-8 text-gold/15" />
-          </div>
-        )}
-      </div>
-
-      {/* zoom controls */}
-      {image && (
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 bg-background/50 rounded-md border border-gold/15 px-1 py-0.5">
-            <Button type="button" size="sm" variant="ghost" className="h-6 w-6 p-0 btn-gold" onClick={() => step(-0.1)}>
-              <ZoomOut className="w-3 h-3" />
-            </Button>
-            <span className="label-text text-ink/45 w-8 text-center text-[10px]">
-              {Math.round(validDisplay.scale * 100)}%
-            </span>
-            <Button type="button" size="sm" variant="ghost" className="h-6 w-6 p-0 btn-gold" onClick={() => step(0.1)}>
-              <ZoomIn className="w-3 h-3" />
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* inline override upload */}
-      {canOverride && showUpload && (
-        <div className="border border-gold/15 rounded-md p-3 bg-card/30">
-          <ImageUpload
-            currentImageUrl={overrideImageUrl}
-            storagePath={storagePath!}
-            onUpload={(url) => { onOverrideChange!(url); if (url) setShowUpload(false); }}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── main export ───────────────────────────────────────────────────────────────
+// ── panel labels ────────────────────────────────────────────────────────────
 
 export interface PanelLabels {
   detail: { label: string; subtitle: string };
@@ -286,14 +71,13 @@ export function ClassImageEditor({
   previewDisplay: propPreviewDisplay, onPreviewDisplayChange,
   storagePath, panelLabels, className,
 }: ClassImageEditorProps) {
-  // Local state for interactive editing — only commits to parent on pointer-up / wheel tick
+  // Local state for interactive editing — commit to parent on pointer-up / wheel tick.
   const [imageDisplay, setImageDisplay] = useState(propImageDisplay);
   const [cardImageUrl, setCardImageUrl] = useState(propCardImageUrl);
   const [cardDisplay, setCardDisplay] = useState(propCardDisplay);
   const [previewImageUrl, setPreviewImageUrl] = useState(propPreviewImageUrl);
   const [previewDisplay, setPreviewDisplay] = useState(propPreviewDisplay);
 
-  // Sync from parent when props change (e.g. dialog reopened with fresh data)
   useEffect(() => { setImageDisplay(propImageDisplay); }, [propImageDisplay]);
   useEffect(() => { setCardDisplay(propCardDisplay); }, [propCardDisplay]);
   useEffect(() => { setCardImageUrl(propCardImageUrl); }, [propCardImageUrl]);
@@ -308,14 +92,13 @@ export function ClassImageEditor({
   const [modalImageUrl, setModalImageUrl] = useState<string | null>(null);
 
   return (
-    <div className={cn('space-y-2', className)}>
+    <div className={`space-y-2 ${className ?? ''}`}>
       <p className="label-text text-ink/45">
         Drag to pan · Scroll or use ± to zoom · <span className="text-gold/65">Camera icon</span> overrides the image for that view
       </p>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
-
         {/* Detail View (primary, no override) */}
-        <ContextPanel
+        <FocalImageField
           label={labels.detail.label}
           subtitle={labels.detail.subtitle}
           aspectClass="aspect-square"
@@ -329,7 +112,7 @@ export function ClassImageEditor({
         />
 
         {/* Card View */}
-        <ContextPanel
+        <FocalImageField
           label={labels.card.label}
           subtitle={labels.card.subtitle}
           aspectClass="aspect-[4/5]"
@@ -352,7 +135,7 @@ export function ClassImageEditor({
         />
 
         {/* Preview Header */}
-        <ContextPanel
+        <FocalImageField
           label={labels.preview.label}
           subtitle={labels.preview.subtitle}
           aspectClass="aspect-[3/1]"
@@ -374,7 +157,6 @@ export function ClassImageEditor({
             </>
           }
         />
-
       </div>
 
       {/* Metadata Buttons Row */}

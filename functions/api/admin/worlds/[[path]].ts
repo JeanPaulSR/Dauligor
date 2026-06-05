@@ -33,6 +33,7 @@ const ALLOWED_WORLD_FIELDS = new Set([
   "description",
   "owner_user_id",
   "sort_order",
+  "background_image_url",
 ]);
 
 function slugify(input: string): string {
@@ -47,7 +48,7 @@ function slugify(input: string): string {
 async function handleList(): Promise<Response> {
   const result = await executeD1QueryInternal({
     sql: `SELECT id, name, slug, description, owner_user_id, is_default,
-                 sort_order, created_at, updated_at
+                 sort_order, background_image_url, created_at, updated_at
             FROM worlds
         ORDER BY is_default DESC, sort_order ASC, name ASC`,
     params: [],

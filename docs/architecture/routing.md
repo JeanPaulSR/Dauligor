@@ -32,7 +32,9 @@
 | `/sources/:id` | `SourceDetail.tsx` | All authenticated |
 | `/sources/edit/:id` | `SourceEditor.tsx` | Staff |
 | `/admin/users` | `AdminUsers.tsx` | Admin |
-| `/admin/campaigns` | `AdminCampaigns.tsx` | Staff |
+| `/admin/campaigns`, `/admin/eras`, `/admin/worlds` | `AdminCampaigns.tsx` (one console, three tabs) | `campaigns`/`eras` Staff · `worlds` Admin |
+| `/admin/eras/edit/:id`, `/admin/worlds/edit/:id` | `EraEditor.tsx` / `WorldEditor.tsx` | Admin |
+| `/campaign/:id`, `/campaign/edit/:id` | `CampaignManager.tsx` / `CampaignEditor.tsx` | Member / Staff |
 | `/admin/images` | `ImageManager.tsx` | Image-manager-eligible (admin/co-dm/lore-writer) |
 | `/admin/skills`, `/admin/tools`, `/admin/weapons`, `/admin/armor`, … | category editors | Admin |
 | `/profile/settings` | `Settings.tsx` | Self |
@@ -40,6 +42,11 @@
 | `/images/view` | `ImageViewer.tsx` | Public |
 
 This table is illustrative — for the canonical list, search `App.tsx` for `<Route path=`.
+
+**Tab-as-route console.** `/admin/campaigns`, `/admin/eras`, and `/admin/worlds` all render the
+same component (`AdminCampaigns`) with a different `tab` prop set by the route, so one console is
+reachable (and bookmarkable) from each entity's path with that tab active. Clicking a tab
+`navigate()`s to the sibling route. See [../features/campaigns-eras.md](../features/campaigns-eras.md#management-console).
 
 ## RBAC at the route boundary
 
@@ -90,6 +97,7 @@ The catch-all dispatcher pattern uses Pages Functions' native double-bracket syn
 | `/api/campaigns/*` | [functions/api/campaigns/[[path]].ts](../../functions/api/campaigns/[[path]].ts) |
 | `/api/admin/users/*` | [functions/api/admin/users/[[path]].ts](../../functions/api/admin/users/[[path]].ts) |
 | `/api/admin/eras/*` | [functions/api/admin/eras/[[path]].ts](../../functions/api/admin/eras/[[path]].ts) |
+| `/api/admin/worlds/*` | [functions/api/admin/worlds/[[path]].ts](../../functions/api/admin/worlds/[[path]].ts) |
 | `/api/module/*` | [functions/api/module/[[path]].ts](../../functions/api/module/[[path]].ts) |
 
 Single-segment endpoints use the single-bracket form (`[id].ts`, `[username].ts`, `[action].ts`) instead. Static endpoints have plain filenames (`spell-favorites.ts`, `admin/characters.ts`).

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { auth, OperationType, reportClientError } from '../../lib/firebase';
-import { fetchCollection, getSystemMetadata } from '../../lib/d1';
+import { fetchCollection } from '../../lib/d1';
 import { fetchLoreArticle, upsertLoreSecret, deleteLoreArticle } from '../../lib/lore';
 import BBCodeRenderer from '@/components/BBCodeRenderer';
 import { useWikiPreview } from '@/lib/wikiPreviewContext';
@@ -85,7 +85,9 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
   const [hoveredArticleId, setHoveredArticleId] = useState<string | null>(null);
   const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
   const [hoveredArticleData, setHoveredArticleData] = useState<any>(null);
-  const [wikiSettings, setWikiSettings] = useState<{ defaultBackgroundImageUrl?: string }>({});
+  // Bottom of the background cascade (campaign → era → world). Holds the
+  // default world's background_image_url.
+  const [worldBg, setWorldBg] = useState<string>('');
   const [isMetadataExpanded, setIsMetadataExpanded] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -106,18 +108,6 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
       isStaff: false
     };
   })();
-
-  useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        const data = await getSystemMetadata<{ defaultBackgroundImageUrl?: string }>('wiki_settings');
-        if (data) setWikiSettings(data);
-      } catch (e) {
-        console.error("Failed to load wiki settings", e);
-      }
-    };
-    loadSettings();
-  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -188,9 +178,10 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
         // a player-filtered list is the right shape.
         const foundationIdToken = await getSessionToken();
         const foundationAuth = foundationIdToken ? { Authorization: `Bearer ${foundationIdToken}` } : {};
-        const [campRes, erasData] = await Promise.all([
+        const [campRes, erasData, worldsData] = await Promise.all([
           fetch('/api/campaigns', { headers: foundationAuth }),
           fetchCollection<any>('eras', { orderBy: '"order" ASC' }),
+          fetchCollection<any>('worlds'),
         ]);
         const campaignsData: any[] = campRes.ok
           ? (await campRes.json())?.campaigns ?? []
@@ -199,6 +190,11 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
         setCampaigns(campaignsData);
         setAllCampaigns(campaignsData);
         setEras(erasData);
+
+        // World background = bottom of the cascade. Until per-entity world_id
+        // scoping lands, "the world" is the default world.
+        const defaultWorld = (worldsData || []).find((w: any) => Number(w.is_default) === 1) || (worldsData || [])[0];
+        setWorldBg(defaultWorld?.background_image_url || '');
 
         if (!isStaff && userProfile?.active_campaign_id) {
           const active = campaignsData.find((c: any) => c.id === userProfile.active_campaign_id);
@@ -415,18 +411,18 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
     return activeCid && secret.revealedCampaignIds?.includes(activeCid);
   });
 
-  // Resolve Background Image:
-  let backgroundImageUrl = wikiSettings.defaultBackgroundImageUrl || 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=2000&auto=format&fit=crop';
-  
+  // Resolve background image — cascade: campaign → era → world → hard fallback.
+  let backgroundImageUrl = worldBg || 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=2000&auto=format&fit=crop';
+
   const effectiveCampaignId = isStaff && previewCampaign ? previewCampaign.id : (userProfile?.active_campaign_id ?? null);
   const activeCamp = allCampaigns.find((c: any) => c.id === effectiveCampaignId);
   const activeEraId = activeCamp ? activeCamp.era_id : (isStaff && previewCampaign ? previewCampaign.eraId : activeCampaignEraId);
   const activeEra = eras.find((e: any) => e.id === activeEraId);
 
-  if (activeCamp?.backgroundImageUrl) {
-    backgroundImageUrl = activeCamp.backgroundImageUrl;
-  } else if (activeEra?.backgroundImageUrl) {
-    backgroundImageUrl = activeEra.backgroundImageUrl;
+  if (activeCamp?.background_image_url) {
+    backgroundImageUrl = activeCamp.background_image_url;
+  } else if (activeEra?.background_image_url) {
+    backgroundImageUrl = activeEra.background_image_url;
   }
 
   const hasMetadata = article.metadata && Object.values(article.metadata).some(val => !!val);
