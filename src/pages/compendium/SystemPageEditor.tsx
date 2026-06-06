@@ -358,9 +358,9 @@ export default function SystemPageEditor({ userProfile }: { userProfile?: any })
               onIdentifierChange={(v) => { setIdentifierTouched(true); setIdentifier(v); }}
               icon={icon}
               setIcon={setIcon}
-              description={description}
-              setDescription={setDescription}
               isNew={isNew}
+              canDesign={!isNew}
+              onDesignBody={() => navigate(`/compendium/system-pages/edit/${pageId}/body`)}
             />
           ) : selectedEntry ? (
             <EntryForm
@@ -390,13 +390,13 @@ interface PageMetaFormProps {
   onIdentifierChange: (v: string) => void;
   icon: string;
   setIcon: (v: string) => void;
-  description: string;
-  setDescription: (v: string) => void;
   isNew: boolean;
+  canDesign: boolean;
+  onDesignBody: () => void;
 }
 
 function PageMetaForm({
-  name, setName, effectiveIdentifier, onIdentifierChange, icon, setIcon, description, setDescription, isNew,
+  name, setName, effectiveIdentifier, onIdentifierChange, icon, setIcon, isNew, canDesign, onDesignBody,
 }: PageMetaFormProps) {
   return (
     <div className="max-w-3xl space-y-6">
@@ -442,13 +442,20 @@ function PageMetaForm({
         />
       </div>
 
-      <MarkdownEditor
-        value={description}
-        onChange={setDescription}
-        label="Description"
-        placeholder="Authored in BBCode. Shown at the top of the page; also the content a page-level reference cites."
-        minHeight="260px"
-      />
+      <div className="space-y-1.5 pt-2 border-t border-gold/15">
+        <label className="field-label">Page Body</label>
+        <p className="field-hint">
+          The intro shown above the entries is now a block layout (text, images, callouts,
+          references, …). It's authored in the fullscreen body designer.
+        </p>
+        {canDesign ? (
+          <Button onClick={onDesignBody} className="btn-gold gap-2 mt-1">
+            <Layers className="w-4 h-4" /> Design Page Body
+          </Button>
+        ) : (
+          <p className="text-xs text-ink/45 italic mt-1">Save the page first to design its body.</p>
+        )}
+      </div>
     </div>
   );
 }

@@ -59,7 +59,7 @@ export default function SystemPageView() {
           </Link>
         </div>
       ) : (
-        <SystemPageGlossary page={detail.page} entries={detail.entries} />
+        <SystemPageGlossary page={detail.page} entries={detail.entries} blocks={detail.blocks} />
       )}
     </div>
   );

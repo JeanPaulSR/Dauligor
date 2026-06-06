@@ -8,8 +8,9 @@
 // its text is pulled live with no duplication). A stored field on a backed entry
 // still wins over the source — lets an author override a name/summary.
 
-import { fetchCollection, upsertDocument, deleteDocument, queryD1 } from './d1';
+import { fetchCollection, upsertDocument, deleteDocument, queryD1, batchQueryD1 } from './d1';
 import { slugify } from './utils';
+import { makeBlock, parseLayoutBlock, serializeLayoutBlock, type LayoutBlock } from './layoutBlocks';
 
 export interface SystemPage {
   id: string;
@@ -45,6 +46,9 @@ export interface ResolvedEntry {
 export interface SystemPageDetail {
   page: SystemPage;
   entries: ResolvedEntry[];
+  /** The page body as a block layout (Stage 2). Falls back to one text block
+   *  wrapping `page.description` when a page has no block rows yet. */
+  blocks: LayoutBlock[];
 }
 
 // Maps a stored `source_kind` to the canonical table its `source_id` points at.
@@ -170,7 +174,72 @@ export async function fetchSystemPageDetail(identifier: string): Promise<SystemP
   if (!page) return null;
   const rawEntries = await fetchSystemPageEntries(page.id);
   const entries = await resolveEntries(rawEntries);
-  return { page, entries };
+  const blocks = await fetchSystemPageBlocks(page.id, page.description ?? '');
+  return { page, entries, blocks };
+}
+
+// --- Page body blocks (Stage 2) ----------------------------------------------
+
+/** Concatenate text-block BBCode bodies (depth-first) — the description mirror
+ *  kept in `system_pages.description` for the page-level `&kind[]` ref + search. */
+function deriveBlocksText(blocks: LayoutBlock[]): string {
+  const out: string[] = [];
+  const visit = (b: any) => {
+    if (!b || typeof b !== 'object') return;
+    if (b.blockType === 'text' && typeof b.body === 'string' && b.body.trim()) out.push(b.body.trim());
+    if (Array.isArray(b.children)) b.children.forEach(visit);
+  };
+  blocks.forEach(visit);
+  return out.join('\n\n');
+}
+
+/**
+ * The page body as blocks. When a page has no block rows yet, fall back to one
+ * text block wrapping its existing `description` (so pre-Stage-2 pages render +
+ * edit losslessly with no bulk migration). Pass the page's description for the
+ * fallback; omit it to get the raw stored blocks only.
+ */
+export async function fetchSystemPageBlocks(pageId: string, descriptionFallback = ''): Promise<LayoutBlock[]> {
+  const rows = await queryD1<any>(
+    `SELECT id, page_id, block_type, "order", config FROM system_page_blocks WHERE page_id = ? ORDER BY "order" ASC`,
+    [pageId],
+    { noCache: true },
+  );
+  const parsed = rows.map(parseLayoutBlock).filter((b): b is LayoutBlock => Boolean(b));
+  if (parsed.length > 0) return parsed;
+  if (descriptionFallback.trim()) {
+    const tb = makeBlock('text', `${pageId}:body`) as any;
+    tb.body = descriptionFallback;
+    return [tb];
+  }
+  return [];
+}
+
+/**
+ * Replace a page's entire body layout (replace-all: DELETE then re-insert in
+ * array order, `order` from index) and refresh the `description` mirror from the
+ * text blocks. Staff-only (the d1 proxy enforces write auth). Mirrors the lore /
+ * campaign block save idiom.
+ */
+export async function saveSystemPageBlocks(pageId: string, blocks: LayoutBlock[]): Promise<void> {
+  const now = new Date().toISOString();
+  const queries: { sql: string; params: any[] }[] = [
+    { sql: 'DELETE FROM system_page_blocks WHERE page_id = ?', params: [pageId] },
+  ];
+  blocks.forEach((b, i) => {
+    const s = serializeLayoutBlock(b);
+    queries.push({
+      sql: `INSERT INTO system_page_blocks (id, page_id, block_type, "order", config, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      params: [s.id, pageId, s.block_type, i, JSON.stringify(s.config ?? {}), now, now],
+    });
+  });
+  queries.push({
+    sql: 'UPDATE system_pages SET description = ?, updated_at = ? WHERE id = ?',
+    params: [deriveBlocksText(blocks), now, pageId],
+  });
+  await batchQueryD1(queries);
+  invalidateSystemPageCache();
 }
 
 /**

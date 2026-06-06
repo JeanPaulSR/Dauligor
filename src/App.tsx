@@ -49,6 +49,7 @@ import UniqueOptionGroupEditor from './pages/compendium/UniqueOptionGroupEditor'
 import UniqueOptionGroupBrowser from './pages/compendium/UniqueOptionGroupBrowser';
 import SystemPagesList from './pages/compendium/SystemPagesList';
 import SystemPageEditor from './pages/compendium/SystemPageEditor';
+import SystemPageDesigner from './pages/compendium/SystemPageDesigner';
 import TagsExplorer from './pages/compendium/TagsExplorer';
 import TagClassifications from './pages/compendium/TagClassifications';
 import SkillsEditor from './pages/compendium/SkillsEditor';
@@ -384,6 +385,7 @@ export default function App() {
                   <Route path="/compendium/system-pages" element={<SystemPagesList userProfile={effectiveProfile} />} />
                   <Route path="/compendium/system-pages/new" element={<AdminOnly userProfile={effectiveProfile}><SystemPageEditor userProfile={effectiveProfile} /></AdminOnly>} />
                   <Route path="/compendium/system-pages/edit/:id" element={<AdminOnly userProfile={effectiveProfile}><SystemPageEditor userProfile={effectiveProfile} /></AdminOnly>} />
+                  <Route path="/compendium/system-pages/edit/:id/body" element={<AdminOnly userProfile={effectiveProfile}><SystemPageDesigner userProfile={effectiveProfile} /></AdminOnly>} />
                   <Route path="/compendium/tags" element={<AdminOnly userProfile={effectiveProfile}><TagsExplorer userProfile={effectiveProfile} /></AdminOnly>} />
                   <Route path="/compendium/tags/classifications" element={<AdminOnly userProfile={effectiveProfile}><TagClassifications userProfile={effectiveProfile} /></AdminOnly>} />
                   <Route path="/compendium/tags/:id" element={<AdminOnly userProfile={effectiveProfile}><TagsExplorer userProfile={effectiveProfile} /></AdminOnly>} />

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import BBCodeRenderer from '../BBCodeRenderer';
+import LayoutBlocks from '../layout/LayoutBlocks';
+import type { LayoutBlock } from '../../lib/layoutBlocks';
 import type { SystemPage, ResolvedEntry } from '../../lib/systemPages';
 
 /**
@@ -14,9 +16,13 @@ import type { SystemPage, ResolvedEntry } from '../../lib/systemPages';
 interface SystemPageGlossaryProps {
   page: SystemPage;
   entries: ResolvedEntry[];
+  /** Page body as blocks (Stage 2). When present, renders instead of the raw
+   *  `page.description` BBCode (the lib falls back to wrapping description into a
+   *  text block, so this is normally non-empty when there's any intro). */
+  blocks?: LayoutBlock[];
 }
 
-export default function SystemPageGlossary({ page, entries }: SystemPageGlossaryProps) {
+export default function SystemPageGlossary({ page, entries, blocks = [] }: SystemPageGlossaryProps) {
   const [activeId, setActiveId] = useState<string | null>(entries[0]?.identifier ?? null);
   // Suppresses the scroll-spy briefly after a click, so intermediate entries
   // don't steal the active state mid smooth-scroll. Stores an epoch ms cutoff.
@@ -105,9 +111,12 @@ export default function SystemPageGlossary({ page, entries }: SystemPageGlossary
           <h1 className="h1-title">{page.name}</h1>
         </header>
 
-        {/* Description — rendered straight from the admin's BBCode, no wrapper
-            styling. They control the styling via BBCode. */}
-        {page.description ? <BBCodeRenderer content={page.description} /> : null}
+        {/* Page body — a block layout (Stage 2). Falls back to the raw description
+            BBCode if there are somehow no blocks. The admin shapes styling via the
+            blocks / BBCode. */}
+        {blocks.length > 0
+          ? <LayoutBlocks blocks={blocks} className="space-y-6 max-w-none" />
+          : page.description ? <BBCodeRenderer content={page.description} /> : null}
 
         {entries.length === 0 ? (
           <div className="empty-state">
