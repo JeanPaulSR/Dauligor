@@ -261,10 +261,13 @@ export function parseClassText(text: string): ParseResult {
     fields.primaryAbility = lo(abM[1], 'Inferred from the spellcasting ability — confirm.');
   }
 
-  // Proficiencies (catalog-bound) → surfaced for the grid, not auto-resolved.
+  // Proficiency lines (resolved into the grid by the window) + a feature summary
+  // are surfaced as review NOTES — everything here WAS placed; the note just
+  // says where to double-check. (NOT "couldn't place" leftovers.)
+  const notes: string[] = [];
   for (const [label, re] of [['Armor', /Armor/], ['Weapons', /Weapons/], ['Tools', /Tools/], ['Skills', /Skills?/]] as [string, RegExp][]) {
     const g = grabLabel(text, re);
-    if (g && g.value && !/^none$/i.test(g.value)) leftovers.push(`${label} (parsed): ${g.value}  → auto-filled into the grid; review`);
+    if (g && g.value && !/^none$/i.test(g.value)) notes.push(`${label}: “${g.value.replace(/\s+/g, ' ').trim()}” → filled into the proficiency grid — review.`);
   }
 
   // Features → the organizer panel (merge / edit / re-route there).
@@ -279,11 +282,15 @@ export function parseClassText(text: string): ParseResult {
       body: s.body,
     }));
     fields._features = hi(drafts);
-    const n = drafts.filter((d) => d.kind === 'feature').length;
-    leftovers.push(`Parsed ${n} feature${n === 1 ? '' : 's'} + routings — organize them in the Features panel below.`);
+    const counts = drafts.reduce((m, d) => { m[d.kind] = (m[d.kind] || 0) + 1; return m; }, {} as Record<string, number>);
+    const featCount = counts.feature || 0;
+    const routeLabels: Record<string, string> = { spellcasting: 'Spellcasting', asi: 'ASI', subclass: 'Subclass' };
+    const routings = ['spellcasting', 'asi', 'subclass'].filter((k) => counts[k]).map((k) => routeLabels[k]);
+    const summary = [`${featCount} feature${featCount === 1 ? '' : 's'}`].concat(routings.length ? [routings.join(' + ')] : []).join(' + ');
+    notes.push(`Parsed ${drafts.length} section${drafts.length === 1 ? '' : 's'} (${summary}) — organize them in the Features panel below.`);
   }
 
-  return { fields, leftovers };
+  return { fields, leftovers, notes };
 }
 
 // ───────────────────────── Proficiency resolver ─────────────────────────────
@@ -351,11 +358,22 @@ function resolveGrouped(text: string, items: any[], categories: any[]) {
   if (!text || /^none\b/i.test(text.trim())) return { choiceCount: 0, optionIds: [] as string[], fixedIds: [] as string[], categoryIds: [] as string[] };
   const { choose, list } = parseChoose(text);
   const fixed: string[] = [], cats: string[] = [], opts: string[] = [];
+  // Grant a whole category the way the editor's category checkbox does: drop
+  // EVERY member item id into the target list. The grid keys a category's
+  // checked state off whether its item ids are present (NOT off categoryIds),
+  // so emitting categoryIds alone left the grant invisible — that was the
+  // "weapons weren't marked" bug. We still record the category id for the
+  // class export's whole-category note.
+  const grantCategory = (cat: any) => {
+    const memberIds = items.filter((i) => String(i?.categoryId) === String(cat?.id)).map((i) => String(i.id));
+    if (choose) opts.push(...memberIds);
+    else { fixed.push(...memberIds); cats.push(String(cat?.id)); }
+  };
   for (const term of splitTerms(list)) {
     // "All armor" / "all weapons" → every category of this kind.
-    if (/^all\b/i.test(term)) { categories.forEach((c) => (choose ? opts : cats).push(String(c?.id))); continue; }
+    if (/^all\b/i.test(term)) { categories.forEach(grantCategory); continue; }
     const cat = matchByName(term, categories);
-    if (cat) { (choose ? opts : cats).push(String(cat.id)); continue; }
+    if (cat) { grantCategory(cat); continue; }
     const item = matchByName(term, items);
     if (item) (choose ? opts : fixed).push(String(item.id));
   }

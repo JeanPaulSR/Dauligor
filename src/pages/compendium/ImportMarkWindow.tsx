@@ -49,7 +49,7 @@ type FieldFlag = { confidence: 'low' | 'none'; note?: string };
 type Span = { start: number; end: number };
 type ActiveSelection = { start: number; end: number; text: string; top: number; left: number };
 /** The editable state of one entity in the workspace. */
-type EntityState = { values: Record<string, any>; spans: Record<string, Span>; provenance: Record<string, FieldFlag>; leftovers: string[] };
+type EntityState = { values: Record<string, any>; spans: Record<string, Span[]>; provenance: Record<string, FieldFlag>; leftovers: string[]; notes: string[] };
 
 /** Proficiency catalogs (skills/armor/weapons/tools/languages + their category
  * tables + grouped-by-category maps) loaded once and shared with any
@@ -88,7 +88,7 @@ function emptyState(descriptor?: ImportDescriptor): EntityState {
     if (f.kind === 'source') continue;
     values[f.key] = f.default ?? (f.kind === 'boolean' ? false : '');
   }
-  return { values, spans: {}, provenance: {}, leftovers: [] };
+  return { values, spans: {}, provenance: {}, leftovers: [], notes: [] };
 }
 
 // ── Format templates ────────────────────────────────────────────────────────
@@ -113,18 +113,43 @@ function lineStartsOf(text: string): number[] { const s: number[] = []; let o = 
 function lineOfOffset(starts: number[], offset: number): number { let i = 0; while (i + 1 < starts.length && starts[i + 1] <= offset) i++; return i; }
 function firstContentLineIndex(lines: string[]): number { const i = lines.findIndex((l) => l.trim() !== ''); return i < 0 ? 0 : i; }
 
+// ── source-text interval partition (mark-up panel) ─────────────────────────
+// Each field owns a set of non-overlapping [start,end) spans. Assigning a span
+// to one field subtracts it from the others, so text belongs to exactly ONE
+// field and re-assignments decouple cleanly instead of silently overlapping.
+function subtractInterval(a: Span, b: Span): Span[] {
+  if (b.end <= a.start || b.start >= a.end) return [a];            // disjoint
+  const out: Span[] = [];
+  if (b.start > a.start) out.push({ start: a.start, end: b.start });
+  if (b.end < a.end) out.push({ start: b.end, end: a.end });
+  return out;                                                       // [] when b covers a
+}
+function mergeSpans(list: Span[]): Span[] {
+  const sorted = [...list].filter((s) => s.end > s.start).sort((a, b) => a.start - b.start);
+  const out: Span[] = [];
+  for (const s of sorted) {
+    const last = out[out.length - 1];
+    if (last && s.start <= last.end) last.end = Math.max(last.end, s.end);
+    else out.push({ ...s });
+  }
+  return out;
+}
+function sameSpanList(x: Span[], y: Span[]): boolean {
+  return x.length === y.length && x.every((s, i) => s.start === y[i].start && s.end === y[i].end);
+}
+
 // Capture target → relative line index from the current spans (skips description,
 // which is the multi-line tail the heuristic always owns).
-function buildFormatTemplate(type: string, text: string, spans: Record<string, Span>): FormatTemplate {
+function buildFormatTemplate(type: string, text: string, spans: Record<string, Span[]>): FormatTemplate {
   const lines = text.split('\n');
   const starts = lineStartsOf(text);
   const base = firstContentLineIndex(lines);
   const tpl: FormatTemplate = {};
   for (const t of getAssignTargets(type)) {
     if (t.key === 'description') continue;
-    const fk = t.fieldKeys.find((k) => spans[k]);
+    const fk = t.fieldKeys.find((k) => spans[k]?.length);
     if (!fk) continue;
-    const rel = lineOfOffset(starts, spans[fk].start) - base;
+    const rel = lineOfOffset(starts, spans[fk][0].start) - base;
     if (rel >= 0) tpl[t.key] = rel;
   }
   return tpl;
@@ -144,7 +169,7 @@ function applyFormatTemplate(state: EntityState, type: string, text: string, tpl
     for (const [fk, v] of Object.entries(result)) {
       state.values[fk] = v;
       delete state.provenance[fk]; // user-defined layout → confident, no flag
-      state.spans[fk] = { start: starts[lineIdx], end: starts[lineIdx] + line.length };
+      state.spans[fk] = [{ start: starts[lineIdx], end: starts[lineIdx] + line.length }];
     }
   }
 }
@@ -160,9 +185,10 @@ function parseToState(type: string, text: string, template?: FormatTemplate | nu
     for (const [key, pf] of Object.entries(result.fields)) {
       state.values[key] = pf.value;
       if (pf.confidence !== 'high') state.provenance[key] = { confidence: pf.confidence, note: pf.note };
-      if (pf.span) state.spans[key] = pf.span;
+      if (pf.span) state.spans[key] = [pf.span];
     }
     state.leftovers = result.leftovers;
+    state.notes = result.notes ?? [];
   }
   if (template) applyFormatTemplate(state, type, text, template);
   if (descriptor && 'identifier' in state.values) {
@@ -833,22 +859,77 @@ function EntityWorkspace({
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     setSelection({ start, end, text: rawText.slice(start, end), top: rect.bottom, left: rect.left });
   };
+  // Carve [iv] out of every assign target NOT in `keep`, re-deriving each
+  // trimmed target's value from the text that REMAINS. This is what makes a
+  // re-assignment actually DECOUPLE: peel a line out of Description and the rest
+  // of Description reflows; the peeled text is now free to belong elsewhere.
+  const repartition = (
+    prev: EntityState,
+    values: Record<string, any>,
+    spans: Record<string, Span[]>,
+    provenance: Record<string, FieldFlag>,
+    iv: Span,
+    keep: Set<string>,
+  ) => {
+    for (const u of assignTargets) {
+      if (keep.has(u.key)) continue;
+      let cur: Span[] | undefined;
+      for (const fk of u.fieldKeys) if (prev.spans[fk]?.length) { cur = prev.spans[fk]; break; }
+      if (!cur) continue;
+      const trimmed = cur.flatMap((s) => subtractInterval(s, iv));
+      if (sameSpanList(trimmed, cur)) continue; // this target didn't overlap iv
+      const remaining = trimmed.map((s) => rawText.slice(s.start, s.end)).join('\n').trim();
+      if (remaining) {
+        const re = assignFieldText(type, u.key, remaining);
+        for (const [k, v] of Object.entries(re)) { values[k] = v; delete provenance[k]; }
+      }
+      for (const fk of u.fieldKeys) { if (trimmed.length) spans[fk] = trimmed; else delete spans[fk]; }
+    }
+  };
+  // A "block" target (all textarea fields) ACCUMULATES selections; an atomic
+  // target REPLACES — so several flavour paragraphs all feed Lore, but
+  // re-marking the Name just swaps it.
+  const isBlockTarget = (t?: ImportAssignTarget) =>
+    !!t && t.fieldKeys.length > 0 && t.fieldKeys.every((fk) => descriptor.fields.find((f) => f.key === fk)?.kind === 'textarea');
   const handleAssign = (targetKey: string) => {
     if (!selection) return;
-    const result = assignFieldText(type, targetKey, selection.text);
-    if (!Object.keys(result).length) { toast.error('Nothing to assign from that selection.'); return; }
+    const probe = assignFieldText(type, targetKey, selection.text);
+    if (!Object.keys(probe).length) { toast.error('Nothing to assign from that selection.'); return; }
     const target = assignTargets.find((t) => t.key === targetKey);
-    const keys = target?.fieldKeys ?? Object.keys(result);
+    const keys = target?.fieldKeys ?? Object.keys(probe);
+    const iv: Span = { start: selection.start, end: selection.end };
     onChange((prev) => {
-      const values = { ...prev.values, ...result };
+      const values = { ...prev.values };
       const spans = { ...prev.spans };
-      for (const fk of keys) spans[fk] = { start: selection.start, end: selection.end };
       const provenance = { ...prev.provenance };
-      for (const fk of Object.keys(result)) delete provenance[fk];
+      // 1. decouple iv from every OTHER target (re-derives the losers)
+      repartition(prev, values, spans, provenance, iv, new Set([targetKey]));
+      // 2. union (block) or replace (atomic) iv into this target, then re-derive
+      let prior: Span[] = [];
+      if (isBlockTarget(target)) for (const fk of keys) if (prev.spans[fk]?.length) { prior = prev.spans[fk]; break; }
+      const list = mergeSpans([...prior, iv]);
+      const text = list.map((s) => rawText.slice(s.start, s.end)).join('\n').trim();
+      const result = assignFieldText(type, targetKey, text);
+      for (const [k, v] of Object.entries(result)) { values[k] = v; delete provenance[k]; }
+      for (const fk of keys) spans[fk] = list;
       return { ...prev, values, spans, provenance };
     });
     setSelection(null); window.getSelection()?.removeAllRanges();
     toast.success(`Assigned to ${target?.label ?? targetKey}`);
+  };
+  // "This text isn't any field" — carve the selection out of everything.
+  const handleClearSelection = () => {
+    if (!selection) return;
+    const iv: Span = { start: selection.start, end: selection.end };
+    onChange((prev) => {
+      const values = { ...prev.values };
+      const spans = { ...prev.spans };
+      const provenance = { ...prev.provenance };
+      repartition(prev, values, spans, provenance, iv, new Set());
+      return { ...prev, values, spans, provenance };
+    });
+    setSelection(null); window.getSelection()?.removeAllRanges();
+    toast.success('Cleared that selection');
   };
   const dismissSelection = () => { setSelection(null); window.getSelection()?.removeAllRanges(); };
 
@@ -856,9 +937,9 @@ function EntityWorkspace({
   const targetSpans = useMemo(() => {
     const out: { key: string; label: string; start: number; end: number }[] = [];
     for (const t of assignTargets) {
-      let s: Span | undefined;
-      for (const fk of t.fieldKeys) if (state.spans[fk]) { s = state.spans[fk]; break; }
-      if (s) out.push({ key: t.key, label: t.label, start: s.start, end: s.end });
+      let list: Span[] | undefined;
+      for (const fk of t.fieldKeys) if (state.spans[fk]?.length) { list = state.spans[fk]; break; }
+      if (list) for (const s of list) out.push({ key: t.key, label: t.label, start: s.start, end: s.end });
     }
     return out.sort((a, b) => a.start - b.start);
   }, [assignTargets, state.spans]);
@@ -900,6 +981,12 @@ function EntityWorkspace({
           <div className="mt-2 rounded border border-blood/30 bg-blood/10 p-2 text-blood">
             <div className="mb-1 flex items-center gap-1 text-[10px] font-black uppercase tracking-widest"><AlertTriangle className="h-3 w-3" /> Couldn’t place — carry these over in the editor</div>
             <ul className="space-y-0.5 pl-1 text-xs">{state.leftovers.map((l, i) => (<li key={i}>• {l}</li>))}</ul>
+          </div>
+        ) : null}
+        {state.notes.length > 0 ? (
+          <div className="mt-2 rounded border border-gold/20 bg-gold/5 p-2 text-ink/70">
+            <div className="mb-1 flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-gold/60"><Sparkles className="h-3 w-3" /> Auto-filled — review</div>
+            <ul className="space-y-0.5 pl-1 text-xs">{state.notes.map((l, i) => (<li key={i}>• {l}</li>))}</ul>
           </div>
         ) : null}
       </div>
@@ -958,6 +1045,7 @@ function EntityWorkspace({
                 <button key={t.key} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => handleAssign(t.key)} className="filter-tag btn-gold">{t.label}</button>
               ))}
             </div>
+            <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={handleClearSelection} className="mt-1 w-full rounded border border-gold/10 py-0.5 text-[10px] uppercase tracking-widest text-ink/40 hover:text-blood" title="Decouple this text — belongs to no field">Clear — not a field</button>
           </div>
         </>
       ) : null}

@@ -84,6 +84,10 @@ export interface ParseResult {
   /** Text the parser recognized but has no field for (e.g. a reaction trigger,
    * an area template) — surfaced so the user can add it in the editor. */
   leftovers: string[];
+  /** Informational "here's what I auto-filled / where to double-check" notes —
+   * distinct from `leftovers` (text that COULDN'T be placed). Rendered in a
+   * neutral box, not the red warning. */
+  notes?: string[];
 }
 
 export interface ImportContext {

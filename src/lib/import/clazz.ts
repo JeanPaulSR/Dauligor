@@ -27,7 +27,7 @@ import { upsertFeature } from '../compendium';
 import { queueRebake } from '../moduleExport';
 import { slugify } from '../utils';
 import { sanitizeProficiencySelection } from '../proficiencySelection';
-import { parseClassText, type FeatureDraft } from './classParse';
+import { parseClassText, classifyHitDie, normalizeClassName, type FeatureDraft } from './classParse';
 import type { ImportDescriptor, ImportContext, ImportFieldOption } from './types';
 
 const toOptions = (pairs: [string, string][]): ImportFieldOption[] =>
@@ -66,6 +66,17 @@ function parseAbilities(text: unknown): string[] {
       .filter(Boolean),
   ));
 }
+
+// 3-letter ability key → full name, for the saving-throw / primary-ability TEXT
+// fields (which display "Constitution, Intelligence").
+const ABILITY_FULL: Record<string, string> = {
+  str: 'Strength', dex: 'Dexterity', con: 'Constitution', int: 'Intelligence', wis: 'Wisdom', cha: 'Charisma',
+};
+const abilitiesToNames = (text: unknown): string =>
+  parseAbilities(text).map((c) => ABILITY_FULL[c]).filter(Boolean).join(', ');
+// Drop a leading "Label:" prefix from a marked selection ("Saving Throws: …").
+const stripLeadingLabel = (text: string): string =>
+  String(text || '').replace(/^\s*(?:saving throws?|hit (?:dice|points)|armou?r|weapons?|tools?|skills?|languages?|equipment|primary abilit(?:y|ies))\b\s*:?\s*/i, '').trim();
 
 // Sanitize a (possibly partial) proficiency collection into the EXACT shape
 // ClassEditor's `sanitizeProficiencyCollection` produces — byte-identical, so an
@@ -249,7 +260,42 @@ export const clazzDescriptor: ImportDescriptor = {
 
   // Interpret a pasted class write-up into the identity fields (name, hit die,
   // saving throws, equipment, + a primary-ability hint). Proficiency lines and a
-  // parsed-feature summary are surfaced as leftovers; the features themselves are
-  // organized in the workspace's features panel. No automation is parsed.
+  // parsed-feature summary are surfaced as review NOTES; the features themselves
+  // are organized in the workspace's features panel. No automation is parsed.
   parseText: parseClassText,
+
+  // Mark-up panel: select any span of the pasted write-up and assign it to a
+  // field. Block fields (description/lore/equipment/multiclassing) ACCUMULATE
+  // across selections (several flavour blocks all feed Lore); atomic fields
+  // replace. Assigning a span also DECOUPLES it from whatever field held it (the
+  // window re-derives the loser from what's left) — so "this paragraph is Lore,
+  // not the overview" is one click.
+  assignTargets: [
+    { key: 'name', label: 'Name', fieldKeys: ['name'] },
+    { key: 'hitDie', label: 'Hit Die', fieldKeys: ['hitDie'] },
+    { key: 'savingThrows', label: 'Saving Throws', fieldKeys: ['savingThrows'] },
+    { key: 'primaryAbility', label: 'Primary Ability', fieldKeys: ['primaryAbility'] },
+    { key: 'description', label: 'Description', fieldKeys: ['description'] },
+    { key: 'lore', label: 'Lore / Flavour', fieldKeys: ['lore'] },
+    { key: 'startingEquipment', label: 'Equipment', fieldKeys: ['startingEquipment'] },
+    { key: 'multiclassing', label: 'Multiclassing', fieldKeys: ['multiclassing'] },
+  ],
+
+  assignField(target: string, text: string): Record<string, unknown> {
+    const clean = String(text ?? '').trim();
+    // Collapse the blank-line gaps left when a middle span is peeled out of a
+    // block field (the window joins the remaining pieces with newlines).
+    const tidy = (s: string) => s.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+    switch (target) {
+      case 'name': return clean ? { name: normalizeClassName(clean) } : {};
+      case 'hitDie': { const n = classifyHitDie(clean); return n != null ? { hitDie: String(n) } : {}; }
+      case 'savingThrows': { const s = abilitiesToNames(stripLeadingLabel(clean)); return s ? { savingThrows: s } : {}; }
+      case 'primaryAbility': { const s = abilitiesToNames(stripLeadingLabel(clean)); return clean ? { primaryAbility: s || stripLeadingLabel(clean) } : {}; }
+      case 'description': return clean ? { description: tidy(clean) } : {};
+      case 'lore': return clean ? { lore: tidy(clean) } : {};
+      case 'startingEquipment': { const s = stripLeadingLabel(clean); return s ? { startingEquipment: tidy(s) } : {}; }
+      case 'multiclassing': return clean ? { multiclassing: tidy(clean) } : {};
+      default: return {};
+    }
+  },
 };
