@@ -200,6 +200,16 @@
   font-size: 13px;
 }
 .dauligor-character-creator__loading i { margin-right: 6px; }
+/* Recoverable detail-fetch failure (transient 5xx from the live site) — shown in
+   the picker detail pane in place of a stuck "Loading…"; clicking retries. */
+.dauligor-character-creator__detail-error {
+  margin: 0;
+  padding: 18px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--dauligor-warning);
+}
+.dauligor-character-creator__detail-error i { margin-right: 6px; }
 
 /* ── Buttons (appearance from base.css; only layout + variants here) ── */
 

@@ -173,6 +173,33 @@ function resolveApiHost() {
   }
 }
 
+// fetch() with a few retries on transient failures (5xx / 429 / network error).
+// The creator talks to the LIVE site, so a cold-started Cloudflare Pages
+// Function can briefly 503 — and its 503 error page drops the CORS headers, so
+// the browser then reports a misleading "blocked by CORS policy" error when the
+// real cause is the 503. One or two retries clears it. Returns a Response in all
+// non-throwing cases (success, a non-retryable 4xx, or the last response after
+// exhausting retries); throws only on a network error that never resolved.
+// Always no-store, like every fetch in this file.
+async function fetchWithRetry(url, { retries = 2, backoffMs = 350 } = {}) {
+  let lastRes = null;
+  let lastErr = null;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      const res = await fetch(url, { cache: "no-store" });
+      if (res.ok || (res.status < 500 && res.status !== 429)) return res;
+      lastRes = res;
+      lastErr = null;
+    } catch (err) {
+      lastErr = err;
+      lastRes = null;
+    }
+    if (attempt < retries) await new Promise((resolve) => setTimeout(resolve, backoffMs * (attempt + 1)));
+  }
+  if (lastRes) return lastRes;
+  throw lastErr ?? new Error("fetch failed");
+}
+
 function escapeHtml(s) {
   return String(s ?? "")
     .replace(/&/g, "&amp;")
@@ -273,6 +300,9 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     this._bgDetailCache = new Map();
     this._raceDetailCache = new Map();
     this._featDetailCache = new Map();
+    // dbIds whose detail fetch failed (after retries) — drives a recoverable
+    // "couldn't load, click again" message instead of a stuck "Loading…".
+    this._detailErrors = new Set();
     // Full class-bundle cache for the rich class preview, keyed by bundle URL.
     this._classBundleCache = new Map();
     this._classBundleInFlight = new Set();
@@ -443,7 +473,7 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     if (Array.isArray(this._sourcesCache)) return this._sourcesCache;
     const host = resolveApiHost();
     try {
-      const res = await fetch(`${host}/api/module/sources/catalog.json`, { cache: "no-store" });
+      const res = await fetchWithRetry(`${host}/api/module/sources/catalog.json`);
       if (!res.ok) return [];
       const payload = await res.json();
       if (payload?.kind !== "dauligor.source-catalog.v1") return [];
@@ -500,7 +530,7 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     const fetchCatalog = async (slug, file, expectKind, sink) => {
       const url = `${host}/api/module/${encodeURIComponent(slug)}/${file}`;
       try {
-        const res = await fetch(url, { cache: "no-store" });
+        const res = await fetchWithRetry(url);
         if (!res.ok) { errors.push(`${slug}/${file}: HTTP ${res.status}`); return; }
         const payload = await res.json();
         if (payload?.kind !== expectKind) return;
@@ -527,7 +557,7 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     const fetchFeats = async (slug) => {
       const url = `${host}/api/module/${encodeURIComponent(slug)}/feats.json`;
       try {
-        const res = await fetch(url, { cache: "no-store" });
+        const res = await fetchWithRetry(url);
         if (!res.ok) { errors.push(`${slug}/feats.json: HTTP ${res.status}`); return; }
         const payload = await res.json();
         if (payload?.kind !== "dauligor.source-feat-list.v1") return;
@@ -578,7 +608,7 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     await Promise.all(sources.map(async ({ slug, sourceId }) => {
       const url = `${host}/api/module/${encodeURIComponent(slug)}/classes/catalog.json`;
       try {
-        const res = await fetch(url, { cache: "no-store" });
+        const res = await fetchWithRetry(url);
         if (!res.ok) { errors.push(`${slug}: HTTP ${res.status}`); return; }
         const payload = await res.json();
         if (payload?.kind !== "dauligor.class-catalog.v1") return;
@@ -634,15 +664,16 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     if (cache.has(dbId)) return cache.get(dbId);
     const host = resolveApiHost();
     try {
-      const res = await fetch(`${host}/api/module/${segment}/${encodeURIComponent(dbId)}.json`, { cache: "no-store" });
-      if (!res.ok) return null;
+      const res = await fetchWithRetry(`${host}/api/module/${segment}/${encodeURIComponent(dbId)}.json`);
+      if (!res.ok) { this._detailErrors.add(dbId); return null; }
       const payload = await res.json();
-      if (payload?.kind !== expectKind) return null;
+      if (payload?.kind !== expectKind) { this._detailErrors.add(dbId); return null; }
       const full = payload[key] ?? null;
-      if (full) cache.set(dbId, full);
+      if (full) { cache.set(dbId, full); this._detailErrors.delete(dbId); }
       return full;
     } catch (err) {
       log("character-creator: detail fetch failed", { kind, dbId, err });
+      this._detailErrors.add(dbId);
       return null;
     }
   }
@@ -1144,7 +1175,9 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     // placeholder until the detail fetch lands.
     const bodyHtml = full
       ? (renderDescription(full?.system?.description?.value ?? "") || "<p><em>No description.</em></p>")
-      : "<p><em>Loading details…</em></p>";
+      : this._detailErrors.has(chosen.dbId)
+        ? `<p class="dauligor-character-creator__detail-error"><i class="fas fa-triangle-exclamation"></i> Couldn't load details — the live site returned a temporary error. Click <strong>${escapeHtml(chosen.name)}</strong> again to retry.</p>`
+        : "<p><em>Loading details…</em></p>";
 
     const headInner = `
       <h3 class="dauligor-detail__name">${escapeHtml(chosen.name)}</h3>
@@ -2017,6 +2050,7 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     const list = kind === "background" ? data.backgrounds : kind === "race" ? data.races : (data.feats || []);
     const row = list.find((r) => r.dbId === dbId);
     if (!row) return;
+    this._detailErrors.delete(dbId); // a fresh (re)pick starts clean → shows "Loading…"
     const choice = { dbId: row.dbId, name: row.name, img: row.img };
     if (kind === "background") this._choices.background = choice;
     else if (kind === "race") this._choices.race = choice;
@@ -2024,8 +2058,12 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     this._renderBody();
     this._renderFooter();
     // Lazy-fetch detail for the preview pane (and to warm the embed cache).
-    const full = await this._fetchDetail(kind, dbId);
-    if (full && (this._tab === "background" || this._tab === "species" || this._tab === "feat")) this._renderBody();
+    // Re-render whether it succeeds OR fails (failure shows a retry message),
+    // as long as we're still on a list-picker tab and this is still the pick.
+    await this._fetchDetail(kind, dbId);
+    const chosenNow = kind === "background" ? this._choices.background : kind === "race" ? this._choices.race : this._choices.feat;
+    const stillRelevant = this._tab === "background" || this._tab === "species" || this._tab === "feat";
+    if (stillRelevant && chosenNow?.dbId === dbId) this._renderBody();
   }
 
   _pickClass(entryId, sourceSlug) {
