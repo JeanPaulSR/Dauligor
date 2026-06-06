@@ -246,6 +246,18 @@ function freshFilterUi() {
   };
 }
 
+// One tag-filter state per picker scope (class / background / species / feat).
+function freshFilterState() {
+  return {
+    open: false,
+    tagStates: {},
+    groupCombineModes: {},
+    groupExclusionModes: {},
+    ui: freshFilterUi(),
+    snapshot: null,
+  };
+}
+
 // ── Application ─────────────────────────────────────────────────────────
 
 export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(ApplicationV2) {
@@ -328,19 +340,19 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     // preservation to same-view re-renders (so clicks don't jump to top).
     this._lastBodyKey = null;
 
-    // Class tag filter — the shared section-filter panel from the import
-    // wizard, applied to the class picker. `tagStates` is the flat tagId→state
-    // record (1 include / 2 exclude); group combine/exclude modes mirror it.
+    // Tag filters — the shared section-filter panel from the import wizard,
+    // applied to the class / background / species / feat pickers. One filter
+    // state per scope; the `_classFilter` getter returns the active tab's so the
+    // whole filter machinery below stays generic. `tagStates` is the flat
+    // tagId→state record (1 include / 2 exclude); group combine/exclude mirror it.
     this._tagIndex = {};            // tagId → display name, merged from class catalogs
     this._tagCatalog = null;        // { tagsById, tagGroups, tagsByGroup } | null
     this._tagCatalogInFlight = false;
-    this._classFilter = {
-      open: false,
-      tagStates: {},
-      groupCombineModes: {},
-      groupExclusionModes: {},
-      ui: freshFilterUi(),
-      snapshot: null,
+    this._filters = {
+      class: freshFilterState(),
+      background: freshFilterState(),
+      species: freshFilterState(),
+      feat: freshFilterState(),
     };
 
     // Ephemeral per-step UI state.
@@ -459,6 +471,7 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     if (family && this._featFamily[family].status === "idle") {
       this._loadFamily(family);
     }
+    if (family) this._ensureTagCatalog(); // grouped tag axes for the family's filter
     if (id === "class") {
       if (this._classes.status === "idle") this._loadClasses();
       this._ensureTagCatalog();
@@ -584,7 +597,7 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
               name,
               img: feat?.img ?? null,
               summary: String(flags.summary ?? flags.requirements ?? ""),
-              tags: [], // feats.json doesn't surface tag ids yet; filter parity is deferred
+              tags: Array.isArray(flags.tagIds) ? flags.tagIds.map(String) : [],
               sourceSlug: slug,
             });
           }
@@ -1149,8 +1162,9 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
       return `<div class="dauligor-character-creator__empty">No ${noun}s available from the current sources.${chosen ? ` Currently chosen: <strong>${escapeHtml(chosen.name)}</strong>.` : ""}</div>`;
     }
 
+    const base = this._filterClassEntries(list);
     const q = (this._ui[searchKey] || "").toLowerCase();
-    const filtered = q ? list.filter((r) => r.name.toLowerCase().includes(q)) : list;
+    const filtered = q ? base.filter((r) => r.name.toLowerCase().includes(q)) : base;
     const rows = filtered.map((r) => {
       const sel = chosen?.dbId === r.dbId ? "dauligor-character-creator__row--selected" : "";
       const img = r.img
@@ -1167,13 +1181,25 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
       ? this._renderFeatDetail(kind, chosen)
       : `<div class="dauligor-detail"><div class="dauligor-detail__pane dauligor-detail__empty">Select a ${noun} to preview it.</div></div>`;
 
+    const activeFilters = Object.keys(this._classFilter?.tagStates || {}).length;
+    // Only surface the Filter when the pool actually carries tags — much of the
+    // bg/species/feat compendium is currently untagged, and an empty filter modal
+    // reads as broken. Lights up automatically once content is tagged.
+    const hasTags = this._availableClassTags().length > 0;
+    const filterBtn = hasTags
+      ? `<button type="button" class="dauligor-character-creator__filter-btn ${this._classFilter?.open ? "dauligor-character-creator__filter-btn--active" : ""}" data-action="class-filter"><i class="fas fa-filter"></i> Filter${activeFilters ? ` <span class="dauligor-character-creator__filter-count">${activeFilters}</span>` : ""}</button>`
+      : "";
     return `
       <div class="dauligor-character-creator__picker">
         <div class="dauligor-character-creator__picker-list-col">
-          <input type="search" class="dauligor-character-creator__search" data-action="feat-search" data-kind="${kind}" placeholder="Search ${noun}s…" value="${escapeHtml(this._ui[searchKey])}" />
+          <div class="dauligor-character-creator__list-toolbar">
+            ${filterBtn}
+            <input type="search" class="dauligor-character-creator__search" data-action="feat-search" data-kind="${kind}" placeholder="Search ${noun}s…" value="${escapeHtml(this._ui[searchKey])}" />
+          </div>
           <div class="dauligor-character-creator__picker-list" data-scroll-id="picker-list">${rows || `<p class="dauligor-character-creator__empty">No matches.</p>`}</div>
         </div>
         <div class="dauligor-character-creator__picker-detail" data-scroll-id="ff-detail">${detail}</div>
+        ${hasTags && this._classFilter?.open ? this._renderClassFilterModal() : ""}
       </div>`;
   }
 
@@ -1293,6 +1319,28 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
 
   // ── class tag filter (the import wizard's section-filter panel) ──────
 
+  // The active tab's filter state (class / background / species / feat), or null
+  // on a non-filterable tab. The historical `_classFilter` name is kept so the
+  // whole section-filter machinery below works generically across all four
+  // pickers without per-scope duplication.
+  get _classFilter() {
+    return this._filters[this._tab] ?? null;
+  }
+
+  // Entries (each carrying `.tags`) backing the active filterable tab.
+  _filterEntries() {
+    if (this._tab === "class") return this._classes.entries || [];
+    if (this._tab === "background") return this._featFamily.backgrounds.items;
+    if (this._tab === "species") return this._featFamily.races.items;
+    if (this._tab === "feat") return this._featFamily.feats.items;
+    return [];
+  }
+
+  // tagId → display-name map for the active tab (class catalog vs. family pools).
+  _filterTagIndex() {
+    return this._tab === "class" ? (this._tagIndex || {}) : (this._featFamily.tagIndex || {});
+  }
+
   // Fetch the tag catalog once (grouped tag axes). Falls back silently to the
   // flat `_tagIndex`-derived axis if it can't load. Mirrors the importer.
   _ensureTagCatalog() {
@@ -1321,7 +1369,7 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
         }
         const tagGroups = (payload.tagGroups ?? []).map((g) => ({ id: String(g.id), name: String(g.name ?? "") }));
         this._tagCatalog = { tagsById, tagGroups, tagsByGroup };
-        if (this._tab === "class" && this._classFilter.open) this._renderBody();
+        if (this._classFilter?.open) this._renderBody();
       } catch (err) {
         log("character-creator: tag catalog fetch failed", err);
         this._tagCatalog = { tagsById: new Map(), tagGroups: [], tagsByGroup: new Map() };
@@ -1331,9 +1379,9 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     })();
   }
 
-  // Tag ids actually carried by some class in the current catalog.
+  // Tag ids actually carried by some entry in the active picker's pool.
   _availableClassTags() {
-    return [...new Set((this._classes.entries || []).flatMap((e) => e.tags || []))].sort();
+    return [...new Set((this._filterEntries() || []).flatMap((e) => e.tags || []))].sort();
   }
 
   // FilterSection[] for the panel: one axis per tag group (with subtag
@@ -1363,7 +1411,7 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
       for (const ax of axes) for (const v of ax.values) accounted.add(v.value);
       const orphans = [...available].filter((id) => !accounted.has(id));
       if (orphans.length) {
-        const ti = this._tagIndex ?? {};
+        const ti = this._filterTagIndex();
         axes.push({
           key: "tag:__orphan__",
           name: "Other",
@@ -1397,12 +1445,12 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
       const accounted = new Set();
       for (const ids of Object.values(tagsByGroup)) for (const t of ids) accounted.add(t.id);
       const orphans = new Set();
-      for (const e of this._classes.entries) for (const id of (e.tags ?? [])) if (!accounted.has(String(id))) orphans.add(String(id));
+      for (const e of this._filterEntries()) for (const id of (e.tags ?? [])) if (!accounted.has(String(id))) orphans.add(String(id));
       if (orphans.size) { tagGroups.push({ id: "__orphan__" }); tagsByGroup["__orphan__"] = [...orphans].map((id) => ({ id })); }
     } else {
       tagGroups.push({ id: "__flat__" });
       const flat = new Set();
-      for (const e of this._classes.entries) for (const id of (e.tags ?? [])) flat.add(String(id));
+      for (const e of this._filterEntries()) for (const id of (e.tags ?? [])) flat.add(String(id));
       tagsByGroup["__flat__"] = [...flat].map((id) => ({ id }));
     }
     return { tagGroups, tagsByGroup };
@@ -1440,13 +1488,14 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
   }
 
   _renderClassFilterModal() {
+    const scopeLabel = { class: "Class", background: "Background", species: "Species", feat: "Feat" }[this._tab] || "";
     const panel = renderSectionFilterPanel({
       axes: this._buildClassFilterAxes(),
       tagStates: this._classFilter.tagStates,
       groupCombineModes: this._classFilter.groupCombineModes,
       groupExclusionModes: this._classFilter.groupExclusionModes,
       uiState: this._classFilter.ui,
-      title: "Class Filters",
+      title: `${scopeLabel} Filters`.trim(),
       searchPlaceholder: "Filter tags…",
       resetLabel: "Reset Filters",
       showCloseButton: true,
@@ -1454,7 +1503,7 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     return `
       <div class="dauligor-character-creator__filter-overlay">
         <div class="dauligor-character-creator__filter-backdrop" data-action="class-filter-backdrop"></div>
-        <div class="dauligor-character-creator__filter-card" role="dialog" aria-label="Class filters">${panel}</div>
+        <div class="dauligor-character-creator__filter-card" role="dialog" aria-label="${escapeHtml(scopeLabel)} filters">${panel}</div>
       </div>`;
   }
 
@@ -2018,7 +2067,7 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     });
 
     // Class tag-filter button + modal (only present on the class tab).
-    if (this._tab === "class") this._bindClassFilter();
+    if (this._tab === "class" || this._isFamilyTab()) this._bindClassFilter();
   }
 
   _adjustPointBuy(key, delta) {
