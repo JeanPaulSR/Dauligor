@@ -264,7 +264,7 @@ export function parseClassText(text: string): ParseResult {
   // Proficiencies (catalog-bound) → surfaced for the grid, not auto-resolved.
   for (const [label, re] of [['Armor', /Armor/], ['Weapons', /Weapons/], ['Tools', /Tools/], ['Skills', /Skills?/]] as [string, RegExp][]) {
     const g = grabLabel(text, re);
-    if (g && g.value && !/^none$/i.test(g.value)) leftovers.push(`${label}: ${g.value}  → set in the proficiencies grid`);
+    if (g && g.value && !/^none$/i.test(g.value)) leftovers.push(`${label} (parsed): ${g.value}  → auto-filled into the grid; review`);
   }
 
   // Features → the organizer panel (merge / edit / re-route there).
@@ -284,4 +284,97 @@ export function parseClassText(text: string): ParseResult {
   }
 
   return { fields, leftovers };
+}
+
+// ───────────────────────── Proficiency resolver ─────────────────────────────
+// Catalog-aware (but otherwise pure): resolve the parsed proficiency LINES into
+// the grid's {choiceCount, fixedIds, optionIds, categoryIds} shape. Skills →
+// row IDs (how the importer + views key them); armor/weapons/tools/languages →
+// categoryIds (category names like "Simple weapons") + fixedIds (item names).
+// The window calls this after Interpret — it holds the loaded catalogs.
+
+export interface ResolveCatalogs {
+  allSkills: any[];
+  allArmor: any[]; allArmorCategories: any[];
+  allWeapons: any[]; allWeaponCategories: any[];
+  allTools: any[]; allToolCategories: any[];
+  allLanguages: any[]; allLanguageCategories: any[];
+}
+
+const WORD_NUM: Record<string, number> = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 };
+
+export function extractProficiencyLines(text: string) {
+  const g = (re: RegExp) => grabLabel(text, re)?.value ?? '';
+  return { armor: g(/Armor/), weapons: g(/Weapons/), tools: g(/Tools/), languages: g(/Languages/), skills: g(/Skills?/) };
+}
+
+// "Choose two from A, B" / "Choose any two skills from A, B" → { choose: 2, list }
+function parseChoose(text: string): { choose: number | null; list: string } {
+  const m = text.match(/choose\s+(?:any\s+)?([a-z]+)\b\s*(?:skills?\s+)?(?:from\s+|of\s+)?(.*)/i);
+  if (m && WORD_NUM[m[1].toLowerCase()] != null) return { choose: WORD_NUM[m[1].toLowerCase()], list: m[2] };
+  return { choose: null, list: text };
+}
+
+function splitTerms(list: string): string[] {
+  return list
+    .replace(/\b(and|or)\b/gi, ',')
+    .split(',')
+    .map((t) => t.replace(/[.;:]/g, '').replace(/^(the|a|an|any|your)\s+/i, '').trim())
+    .filter(Boolean);
+}
+
+// Loose name key: lowercase, drop apostrophes + trailing plural 's' (on both the
+// term and the catalog name) so "Simple weapons" matches the "Simple Weapon"
+// category and "Athletics" matches the "Athletics" skill.
+function normName(s: string): string {
+  return String(s || '').toLowerCase().replace(/['’]/g, '').replace(/s\b/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function matchByName(term: string, items: any[]): any | null {
+  const t = normName(term);
+  if (t.length < 2) return null;
+  return items.find((i) => normName(i?.name) === t)
+    || items.find((i) => { const n = normName(i?.name); return n.length > 2 && (n.startsWith(t) || t.startsWith(n)); })
+    || null;
+}
+
+const uniq = (a: string[]): string[] => Array.from(new Set(a));
+
+function resolveFlat(text: string, items: any[]) {
+  if (!text || /^none\b/i.test(text.trim())) return { choiceCount: 0, optionIds: [] as string[], fixedIds: [] as string[] };
+  const { choose, list } = parseChoose(text);
+  const ids = uniq(splitTerms(list).map((t) => matchByName(t, items)).filter(Boolean).map((i: any) => String(i.id)));
+  return choose ? { choiceCount: choose, optionIds: ids, fixedIds: [] } : { choiceCount: 0, optionIds: [], fixedIds: ids };
+}
+
+function resolveGrouped(text: string, items: any[], categories: any[]) {
+  if (!text || /^none\b/i.test(text.trim())) return { choiceCount: 0, optionIds: [] as string[], fixedIds: [] as string[], categoryIds: [] as string[] };
+  const { choose, list } = parseChoose(text);
+  const fixed: string[] = [], cats: string[] = [], opts: string[] = [];
+  for (const term of splitTerms(list)) {
+    // "All armor" / "all weapons" → every category of this kind.
+    if (/^all\b/i.test(term)) { categories.forEach((c) => (choose ? opts : cats).push(String(c?.id))); continue; }
+    const cat = matchByName(term, categories);
+    if (cat) { (choose ? opts : cats).push(String(cat.id)); continue; }
+    const item = matchByName(term, items);
+    if (item) (choose ? opts : fixed).push(String(item.id));
+  }
+  return choose
+    ? { choiceCount: choose, optionIds: uniq(opts), fixedIds: [], categoryIds: [] }
+    : { choiceCount: 0, optionIds: [], fixedIds: uniq(fixed), categoryIds: uniq(cats) };
+}
+
+/** Resolve the pasted proficiency lines into the class proficiency grid object.
+ * Saving throws are filled from the dedicated text field, not here. */
+export function resolveClassProficiencies(text: string, cat: ResolveCatalogs) {
+  const p = extractProficiencyLines(text);
+  return {
+    armor: resolveGrouped(p.armor, cat.allArmor || [], cat.allArmorCategories || []),
+    weapons: resolveGrouped(p.weapons, cat.allWeapons || [], cat.allWeaponCategories || []),
+    tools: resolveGrouped(p.tools, cat.allTools || [], cat.allToolCategories || []),
+    skills: resolveFlat(p.skills, cat.allSkills || []),
+    languages: resolveGrouped(p.languages, cat.allLanguages || [], cat.allLanguageCategories || []),
+    savingThrows: { choiceCount: 0, optionIds: [] as string[], fixedIds: [] as string[] },
+    armorDisplayName: '', weaponsDisplayName: '', toolsDisplayName: '', skillsDisplayName: '',
+  };
 }

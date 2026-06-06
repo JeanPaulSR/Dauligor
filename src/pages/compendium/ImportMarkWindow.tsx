@@ -37,6 +37,7 @@ import {
   getAssignTargets,
   assignFieldText,
   splitEntityBlocks,
+  resolveClassProficiencies,
   type ImportDescriptor,
   type ImportFieldDef,
   type ImportAssignTarget,
@@ -419,7 +420,14 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
       setBoundaries(b); setEdits({}); setSelected(new Set(b.map((_, i) => i))); setReviewIndex(null);
       setPhase('batch');
     } else {
-      setSingle(parseToState(type, text, formatTemplate));
+      let st = parseToState(type, text, formatTemplate);
+      // Class proficiency lines are catalog-bound (names → ids), so they're
+      // resolved here in the window (which holds the catalogs) rather than in
+      // the pure parser. Fills the grid; the user reviews/tweaks.
+      if (type === 'class' && catalogsValue) {
+        st = { ...st, values: { ...st.values, proficiencies: resolveClassProficiencies(text, catalogsValue) } };
+      }
+      setSingle(st);
       setPhase('single');
     }
   };
