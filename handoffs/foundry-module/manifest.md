@@ -86,6 +86,14 @@ append-only / non-clobbering where both branches touch the same file.
 
 ## Open requests to other branches
 
+- [ ] `(2026-06-06)` **`dauligor-applications`: CORS on `/api/auth` + `/api/lore` + `/api/campaigns`
+  for the Foundry module login.** The module's new native-auth login client + the page-system viewer
+  call these cross-origin with a Bearer token, but they send no `Access-Control-Allow-Origin` and
+  OPTIONS 405s (verified on prod) → the cross-origin Foundry client can't read the responses or
+  complete a JSON POST preflight. Ask: mirror the `/api/module/*` CORS (`*` is safe — Bearer tokens,
+  no cookies) + short-circuit OPTIONS. `dauligor-applications` owns the auth + lore/article work this
+  feeds. Module side committed (`7e3436c`) but BLOCKED for live use until this lands. Full contract:
+  [2026-06-06-to-app-team-cors-for-module-login.md](2026-06-06-to-app-team-cors-for-module-login.md).
 - [ ] `(2026-05-30)` Notify `system-applications` that the project owner granted `foundry-module`
   **joint ownership** of the Phase 2 viewer files (above). No edits made yet; recording the grant
   so neither branch is surprised. Coordinate before structural changes.
