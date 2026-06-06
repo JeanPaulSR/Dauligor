@@ -26,6 +26,7 @@ import { upsertDocument } from '../d1';
 import { queueRebake } from '../moduleExport';
 import { slugify } from '../utils';
 import { sanitizeProficiencySelection } from '../proficiencySelection';
+import { parseClassText } from './classParse';
 import type { ImportDescriptor, ImportContext, ImportFieldOption } from './types';
 
 const toOptions = (pairs: [string, string][]): ImportFieldOption[] =>
@@ -173,9 +174,9 @@ export const clazzDescriptor: ImportDescriptor = {
     await queueRebake('class', id);
   },
 
-  // No `parseText` / `assignTargets` / `splitBlocks` yet — the class importer is
-  // manual-entry for now (the window gracefully hides the Interpret panel,
-  // select-to-assign, and batch division for parser-less types). A
-  // `classParse.ts` can be added later to interpret pasted class text; see the
-  // recipe in docs/architecture/import-system.md.
+  // Interpret a pasted class write-up into the identity fields (name, hit die,
+  // saving throws, equipment, + a primary-ability hint). Proficiency lines and a
+  // parsed-feature summary are surfaced as leftovers; the features themselves are
+  // organized in the workspace's features panel. No automation is parsed.
+  parseText: parseClassText,
 };
