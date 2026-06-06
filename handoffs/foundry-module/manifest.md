@@ -100,6 +100,23 @@ append-only / non-clobbering where both branches touch the same file.
   `functions/api/module/[[path]].ts`. Additive, no existing arms touched. **They control the local
   dev server (needs reload to serve it) + this must reach `main` for prod.** Full handoff:
   [2026-06-02-to-compendium-editors-spellcasting-chart.md](2026-06-02-to-compendium-editors-spellcasting-chart.md). Commit `f02fd41`.
+- [x] `(2026-06-04)` **`compendium-editors`: add `category` to the per-source class catalog — DONE.**
+  Requested for the creator's Core / Alternate / New class picker. **They applied it exactly
+  (catalog `category` + the self-healing `isValidCache` validator) and pushed to `main` —
+  live on prod** (verified: `www.dauligor.com` `ll` → alternate/new, `phb` → core). Local
+  `:3000` still stale until its dev-server checkout pulls `main` + restarts (server owner's
+  call). Module auto-groups when `category` is present — no further module change. Request:
+  [2026-06-04-to-compendium-editors-class-category.md](2026-06-04-to-compendium-editors-class-category.md);
+  reply: [2026-06-04-reply-class-category.md](2026-06-04-reply-class-category.md).
+- [ ] `(2026-06-04)` **`compendium-editors`: backgrounds & species LIST endpoints (request).**
+  bg/race were promoted out of `feats` into their own tables (detail endpoints shipped) but
+  `feats.json` no longer carries them and **no list endpoint exists** → the creator's
+  Species/Background sections AND the import wizard's feat browser both enumerate via
+  `feats.json` + `featType` and come up empty ("none available"). Asked for per-source
+  `/<source>/backgrounds.json` + `/species.json` (lightweight entries; `dbId` bridges to the
+  existing `/backgrounds/<id>` + `/races/<id>` detail). Module follow-up (mine, once live):
+  repoint `_loadFeatFamily` + the feat browser. Full contract:
+  [2026-06-04-to-compendium-editors-bg-species-list-endpoints.md](2026-06-04-to-compendium-editors-bg-species-list-endpoints.md).
 
 ## Incoming requests (from other branches)
 
@@ -118,6 +135,10 @@ append-only / non-clobbering where both branches touch the same file.
 
 Newest at the top.
 
+- `2026-06-05` — [2026-06-05-session-state-precompaction.md](2026-06-05-session-state-precompaction.md) — **pre-compaction pickup.** Big Character Creator pass (per-option tabs, scroll-preserve, class Select/Cancel, wheel art fill + class-view framing, class tag-filter, Core/Alternate/New grouping, Starting Feat picker, description-render refactor to reuse `normalizeHtmlBlock` + `formatFoundryLabel`). All UNCOMMITTED; branch 11 behind / 2 ahead of main. Pending: Foundry eyeball, bg/species list endpoints (blocked), Image section (stub), commit the batch.
+- `2026-06-04` — [2026-06-04-to-compendium-editors-bg-species-list-endpoints.md](2026-06-04-to-compendium-editors-bg-species-list-endpoints.md) — request: add per-source **backgrounds/species LIST endpoints** (`dauligor.background-catalog.v1` / `dauligor.species-catalog.v1`). bg/race left `feats.json` (now feats-only) with no list replacement, so the creator + importer can't enumerate them. Module follow-up: repoint `_loadFeatFamily` + the feat browser once live.
+- `2026-06-04` — [2026-06-04-reply-class-category.md](2026-06-04-reply-class-category.md) — **reply from `compendium-editors`: DONE + pushed to `main`.** Catalog `category` + self-healing cache validator applied; live on prod (verified). The creator's Core/Alternate/New grouping now activates wherever the catalog ships `category` (prod now; local `:3000` after its server restarts).
+- `2026-06-04` — [2026-06-04-to-compendium-editors-class-category.md](2026-06-04-to-compendium-editors-class-category.md) — request: please add `category` to per-source class-catalog entries so the creator's class picker can group Core/Alternate/New like the website. Exact one-line change + R2-cache note inline; `foundry-module` did not modify app-side files. Module degrades to a flat list until it ships.
 - `2026-06-04` — [2026-06-04-session-state-precompaction.md](2026-06-04-session-state-precompaction.md) — full pickup state after the Character Creator (radial hub + tabs), styled launcher, and the ClassView-style class preview. Git state, what's on main vs branch (`175fce8` class-view is branch-only), the "needs a Foundry eyeball" list, how the class preview pulls data, open follow-ups, and the window-model / div-button gotchas.
 - `2026-06-02` — [2026-06-02-to-compendium-editors-spellcasting-chart.md](2026-06-02-to-compendium-editors-spellcasting-chart.md) — heads-up + asks for the new app-side `/api/module/spellcasting/multiclass-chart.json` endpoint (master multiclass slot chart) that the creator's class preview consumes for spell-slot columns. Additive; they own the dev server + must take it to main.
 - `2026-05-30` — [2026-05-30-session-state-precompaction.md](2026-05-30-session-state-precompaction.md) — full branch state before a context compaction: doc-reconciliation + modularization, export-first bg/race/creature exporters, CSS split + dedup, three import bug fixes, bundled-data deletion. Includes the "can't test in Foundry — verify these" list + operational gotchas (junction, manifest reload).

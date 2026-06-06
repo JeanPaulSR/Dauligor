@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Module API — Backgrounds &amp; Species: Current Remote State</title>
+<style>
+  :root { --ink:#e9dcc2; --gold:#cBA85a; --gold2:#e7d49a; --bg:#1c1813; --panel:#262019; --line:#43382a; --bad:#d98a6a; --good:#9bbf7a; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:radial-gradient(1200px 700px at 50% -10%, #2a2318, #15110c); color:var(--ink);
+         font:15px/1.6 "Iowan Old Style","Palatino Linotype",Georgia,serif; padding:40px 18px; }
+  .wrap { max-width:860px; margin:0 auto; }
+  h1 { font-size:27px; color:var(--gold2); margin:0 0 4px; letter-spacing:.3px; }
+  .sub { color:#b9a988; font-style:italic; margin:0 0 22px; }
+  h2 { font-size:18px; color:var(--gold2); border-bottom:1px solid var(--line); padding-bottom:6px; margin:28px 0 12px; }
+  .card { background:linear-gradient(180deg,var(--panel),#211b14); border:1px solid var(--line);
+          border-radius:10px; padding:16px 18px; margin:14px 0; box-shadow:0 2px 0 #0d0a07 inset; }
+  .verdict { border-left:4px solid var(--bad); }
+  table { width:100%; border-collapse:collapse; margin:6px 0; font-size:13.5px; }
+  th,td { text-align:left; padding:7px 9px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--gold); font-variant:small-caps; letter-spacing:.5px; font-size:12.5px; }
+  code { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:12.5px;
+         background:#15110b; border:1px solid var(--line); border-radius:4px; padding:1px 5px; color:#e7d9b8; }
+  .ok { color:var(--good); font-weight:600; }
+  .no { color:var(--bad); font-weight:600; }
+  ul { margin:6px 0 6px 2px; padding-left:20px; } li { margin:4px 0; }
+  .pill { display:inline-block; font-size:11px; padding:1px 8px; border-radius:10px; border:1px solid var(--line);
+          color:var(--gold2); background:#1a150f; }
+  .foot { color:#9c8f72; font-size:12.5px; margin-top:26px; border-top:1px solid var(--line); padding-top:10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Module API — Backgrounds &amp; Species</h1>
+  <p class="sub">Current remote state on <code>www.dauligor.com</code> · checked 2026-06-04</p>
+
+  <div class="card verdict">
+    <strong style="color:var(--gold2)">Verdict.</strong> The module has <span class="no">no way to list</span>
+    backgrounds or species from the remote. They were migrated out of the <code>feats</code> table into their own
+    tables; <b>detail</b> endpoints shipped, but <b>no list endpoint</b> did, and <code>feats.json</code> no longer
+    carries them. The creator's Species/Background sections — and the import wizard's feat browser — both enumerate
+    via <code>/&lt;source&gt;/feats.json</code> + <code>featType</code>, so both come up empty. Hence "none available."
+  </div>
+
+  <h2>What I measured</h2>
+  <table>
+    <tr><th>Probe (prod)</th><th>Result</th></tr>
+    <tr><td><code>GET /api/module/phb/feats.json</code></td><td>200 · 38 entries, <b>all <code>featType: "feat"</code></b> — <span class="no">0 background, 0 race</span></td></tr>
+    <tr><td><code>/phb/backgrounds.json</code>, <code>/phb/species.json</code>, <code>/phb/races.json</code></td><td><span class="no">404</span></td></tr>
+    <tr><td><code>/backgrounds/catalog.json</code>, <code>/species/catalog.json</code>, <code>/races/catalog.json</code></td><td><span class="no">404</span></td></tr>
+    <tr><td><code>_sourceFeatList.ts</code> SELECT</td><td><code>FROM feats</code> only — <code>feat_type</code> is now <code>"feat"</code> for every row</td></tr>
+  </table>
+
+  <h2>Endpoints that DO exist (per the router)</h2>
+  <table>
+    <tr><th>Kind</th><th>Endpoint</th><th>List or detail</th></tr>
+    <tr><td>Background</td><td><code>/api/module/backgrounds/&lt;dbId&gt;.json</code> → <code>dauligor.background-item.v1</code></td><td><span class="ok">detail</span></td></tr>
+    <tr><td>Background feature</td><td><code>/api/module/background-features/&lt;dbId&gt;.json</code></td><td><span class="ok">detail</span></td></tr>
+    <tr><td>Species / Race</td><td><code>/api/module/races/&lt;dbId&gt;.json</code> → <code>dauligor.race-item.v1</code></td><td><span class="ok">detail</span></td></tr>
+    <tr><td>Species option</td><td><code>/api/module/species-options/&lt;dbId&gt;.json</code></td><td><span class="ok">detail</span></td></tr>
+    <tr><td colspan="2"><b>A list for either</b> — <code>/&lt;source&gt;/backgrounds.json</code>, <code>/species.json</code>, a catalog…</td><td><span class="no">MISSING</span></td></tr>
+  </table>
+  <p style="font-size:13.5px;color:#c9bb98">The data itself is fine — the website's compendium lists backgrounds &amp; species, so the
+  <code>backgrounds</code>/<code>races</code> tables are populated and the detail endpoints read through to them. The gap is purely the
+  <b>enumeration</b> step: nothing tells the module <em>which</em> dbIds exist.</p>
+
+  <h2>Why this happened</h2>
+  <p>This is a <span class="pill">cross-branch contract drift</span>. The module side (this branch) still assumes
+  "backgrounds &amp; races live in the <code>feats</code> table and ride <code>feats.json</code> tagged by <code>featType</code>"
+  (the comment is right there in <code>feat-browser-app.js</code>). The compendium-editors side promoted them to dedicated
+  <code>backgrounds</code>/<code>races</code> tables and shipped per-item detail endpoints — but the feat list stopped including
+  them and no replacement list endpoint was added. So the module's list source silently went empty.</p>
+
+  <h2>The fix (app-side — compendium-editors)</h2>
+  <p>Either restores both the creator and the importer; the module's detail-routing already knows how to fetch
+  <code>backgrounds/&lt;id&gt;</code> &amp; <code>races/&lt;id&gt;</code> once it has the ids.</p>
+  <ul>
+    <li><b>Option A — re-include in <code>feats.json</code> (smallest):</b> have <code>_sourceFeatList.ts</code> UNION the
+      <code>backgrounds</code> + <code>races</code> rows back into the source feat list, tagged <code>featType:"background"</code> /
+      <code>"race"</code> with a <code>dbId</code>. Zero module changes — the existing <code>featType</code> routing just works again.</li>
+    <li><b>Option B — dedicated list endpoints:</b> add <code>GET /api/module/&lt;source&gt;/backgrounds.json</code> and
+      <code>…/species.json</code> (mirroring the class catalog). Cleaner long-term, but the module would switch its two
+      loaders (creator <code>_loadFeatFamily</code> + the feat browser) to read them.</li>
+  </ul>
+  <p style="font-size:13.5px;color:#c9bb98">Per our cross-branch rule this is a <b>request-handoff</b> to compendium-editors,
+  not something this branch edits. Recommend Option A for the fastest restore.</p>
+
+  <p class="foot">Probed: feats.json featType counts, eight list-endpoint candidates (all 404), the router's full GET arm list,
+  and <code>_sourceFeatList.ts</code>. D1 direct-query is auth-gated, so item counts come from the public compendium, not a row count.</p>
+</div>
+</body>
+</html>
