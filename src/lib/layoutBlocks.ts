@@ -28,6 +28,7 @@ export type LayoutBlockType =
   | 'divider'
   | 'recommended'
   | 'callout'          // a styled call-to-action box (heading + text + optional button)
+  | 'reference'        // embed ONE referenced entity inline / as a card / as a link
   | 'entity-row'       // a row/grid of entity cards (articles, classes, items, …)
   | 'entity-feature'   // one large highlighted entity
   | 'group'            // container: a titled card holding children
@@ -182,6 +183,16 @@ export interface EntityFeatureBlock extends BlockBase {
   imageSide: 'left' | 'right';
   excerpt: boolean;
 }
+/** Embed ONE referenced entity (article, condition, spell, system entry, …),
+ *  resolved live via `resolveReference`. `inline` renders its summary/body text
+ *  in-flow (the new capability — e.g. show a rule's text inside an article);
+ *  `card` is the image+name+summary tile; `link` is an inline link/chip. This is
+ *  the generic primitive that system-page entity-backed entries will reuse. */
+export interface ReferenceBlock extends BlockBase {
+  blockType: 'reference';
+  ref: EntityRef | null;
+  display: 'inline' | 'card' | 'link';
+}
 export interface GroupBlock extends BlockBase {
   blockType: 'group';
   title: string;
@@ -215,6 +226,7 @@ export type LayoutBlock =
   | DividerBlock
   | RecommendedBlock
   | CalloutBlock
+  | ReferenceBlock
   | EntityRowBlock
   | EntityFeatureBlock
   | GroupBlock
@@ -239,6 +251,7 @@ export const BLOCK_TYPE_META: Record<
   'entity-feature': { label: 'Featured',         icon: 'Star',       description: 'One large highlighted entity.',             group: 'content' },
   recommended:      { label: 'Recommended',      icon: 'BookMarked', description: "The campaign's recommended article.",       group: 'content' },
   callout:          { label: 'Callout',          icon: 'Megaphone',  description: 'A highlighted box with text + an optional button.', group: 'content' },
+  reference:        { label: 'Reference',         icon: 'Link2',      description: 'Embed another entity (article, condition, spell, system entry…) inline, as a card, or as a link.', group: 'content' },
   text:             { label: 'Text',             icon: 'Type',       description: 'Free BBCode prose.',                        group: 'content' },
   note:             { label: 'Storyteller Note', icon: 'Lock',       description: 'A staff-only note — shown only to staff, never to players.', group: 'content' },
   secret:           { label: 'Secret',           icon: 'EyeOff',     description: 'Hidden content revealed only to chosen campaigns (staff always see it).', group: 'content' },
@@ -291,6 +304,8 @@ export function makeBlock(type: LayoutBlockType, id: string): LayoutBlock {
       return { id, blockType: 'recommended', title: '', source: 'auto', ref: null, layout: 'side' };
     case 'callout':
       return { id, blockType: 'callout', title: '', body: '', buttonLabel: '', buttonLink: '', style: 'soft' };
+    case 'reference':
+      return { id, blockType: 'reference', ref: null, display: 'inline' };
     case 'entity-row':
       return { id, blockType: 'entity-row', title: '', showHeading: true, source: 'manual', refs: [], category: '', count: 3, columns: 3, card: 'image', excerpt: true };
     case 'entity-feature':
@@ -379,6 +394,9 @@ export function parseLayoutBlock(row: any): LayoutBlock | null {
       return { id, blockType: 'callout', title: s(config.title), body: s(config.body),
         buttonLabel: s(config.buttonLabel), buttonLink: s(config.buttonLink),
         style: config.style === 'plain' ? 'plain' : 'soft' };
+    case 'reference':
+      return { id, blockType: 'reference', ref: asRef(config.ref),
+        display: config.display === 'card' ? 'card' : config.display === 'link' ? 'link' : 'inline' };
     case 'entity-row':
       return { id, blockType: 'entity-row', title: s(config.title), showHeading: config.showHeading !== false,
         source: config.source === 'auto' ? 'auto' : 'manual', refs: asRefArray(config.refs),

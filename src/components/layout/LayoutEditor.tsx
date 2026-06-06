@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
-  Sparkles, LayoutGrid, Star, BookMarked, Type, ImageIcon, Minus, Square, Columns3, Megaphone, Lock, EyeOff,
+  Sparkles, LayoutGrid, Star, BookMarked, Type, ImageIcon, Minus, Square, Columns3, Megaphone, Lock, EyeOff, Link2,
   ChevronUp, ChevronDown, Trash2, Copy, X, GripVertical, Search, ChevronLeft,
 } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -18,7 +18,7 @@ import {
   type LayoutBlock, type LayoutBlockType, type ContainerBlock, type EntityRef,
 } from '../../lib/layoutBlocks';
 
-const ICONS: Record<string, any> = { Sparkles, LayoutGrid, Star, BookMarked, Type, ImageIcon, Minus, Square, Columns3, Megaphone, Lock, EyeOff };
+const ICONS: Record<string, any> = { Sparkles, LayoutGrid, Star, BookMarked, Type, ImageIcon, Minus, Square, Columns3, Megaphone, Lock, EyeOff, Link2 };
 
 /** Visible text overrides — defaults are surface-neutral; a host (campaign,
  *  article, …) passes its own wording so the editor reads naturally there. */
@@ -761,6 +761,12 @@ function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onA
         <Field label="Featured entity"><EntityRefPicker mode="single" value={block.ref} onChange={(ref) => set({ ref })} /></Field>
         <Seg label="Image side" value={block.imageSide} options={[['left', 'Left'], ['right', 'Right']]} onChange={(v) => set({ imageSide: v })} />
         <Toggle label="Show excerpt" value={block.excerpt} onChange={(v) => set({ excerpt: v })} />
+      </>)}
+
+      {block.blockType === 'reference' && (<>
+        <Field label="Referenced entity"><EntityRefPicker mode="single" value={block.ref} onChange={(ref) => set({ ref })} /></Field>
+        <Seg label="Display" value={block.display} options={[['inline', 'Inline'], ['card', 'Card'], ['link', 'Link']]} onChange={(v) => set({ display: v })} />
+        <p className="field-hint">Inline shows the entity's text in-flow; Card shows an image tile; Link shows just a link.</p>
       </>)}
 
       {block.blockType === 'entity-row' && (<>

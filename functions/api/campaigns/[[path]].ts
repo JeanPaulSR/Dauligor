@@ -195,6 +195,7 @@ const ALLOWED_HOME_BLOCK_TYPES = new Set([
   "divider",
   "recommended",
   "callout",
+  "reference",
   "entity-row",
   "entity-feature",
   "group",

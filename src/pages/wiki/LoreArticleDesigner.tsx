@@ -103,6 +103,19 @@ function newTextBlock(): LayoutBlock {
   return makeBlock('text', crypto.randomUUID());
 }
 
+/** Article ids/slugs referenced by `reference` blocks (depth-first) — folded into
+ *  linkedArticleIds so the mention graph (lore_links) includes block references. */
+function collectReferenceArticleIds(blocks: LayoutBlock[]): string[] {
+  const out: string[] = [];
+  const visit = (b: any) => {
+    if (!b || typeof b !== 'object') return;
+    if (b.blockType === 'reference' && b.ref && b.ref.kind === 'article' && b.ref.id) out.push(b.ref.id);
+    if (Array.isArray(b.children)) b.children.forEach(visit);
+  };
+  blocks.forEach(visit);
+  return out;
+}
+
 export default function LoreArticleDesigner({ userProfile }: { userProfile: any }) {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -304,11 +317,19 @@ export default function LoreArticleDesigner({ userProfile }: { userProfile: any 
     const now = new Date().toISOString();
     // Always persist against the real UUID — never the route token (which may be a slug).
     const articleId = realId || id || crypto.randomUUID();
+    // Mentions (lore_links) key off the target article's UUID. Links/refs may use
+    // the slug, so normalize slug → UUID via the loaded article list.
+    const slugToId = new Map<string, string>(allArticles.map((a: any) => [a.slug, a.id]));
+    const idSet = new Set<string>(allArticles.map((a: any) => a.id));
+    const normalizeArticleId = (x: string) => (idSet.has(x) ? x : slugToId.get(x) ?? x);
+    const linkedArticleIds = Array.from(new Set(
+      [...extractLinkedIds(content), ...collectReferenceArticleIds(blocks)].map(normalizeArticleId),
+    ));
     const payload = {
       ...formData,
       content,
       tags: formData.tags || [],
-      linkedArticleIds: extractLinkedIds(content),
+      linkedArticleIds,
       updatedAt: now,
       authorId: userProfile?.id,
       createdAt: formData.createdAt || now,

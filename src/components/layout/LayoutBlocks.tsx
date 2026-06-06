@@ -61,6 +61,7 @@ function collectRefs(blocks: LayoutBlock[]): EntityRef[] {
     if (!b || typeof b !== 'object') return;
     if (b.blockType === 'entity-row' && b.source === 'manual') (b.refs || []).forEach(push);
     if (b.blockType === 'entity-feature') push(b.ref);
+    if (b.blockType === 'reference') push(b.ref);
     if (b.blockType === 'recommended' && b.source === 'specific') push(b.ref);
     if (isContainer(b)) (b.children || []).forEach(visit);
   };
@@ -382,6 +383,58 @@ export default function LayoutBlocks({ blocks, recommendedLore = null, campaignN
                 </Link>
               )}
             </div>
+          </section>
+        );
+      }
+
+      case 'reference': {
+        if (!block.ref || isPlaceholderRef(block.ref)) return null;
+        const d = resolved[refKey(block.ref)];
+        if (!d) return null; // unresolved (target missing or still resolving)
+        const name = d.name || block.ref.name || block.ref.id;
+
+        if (block.display === 'link') {
+          return (
+            <p key={block.id} className="max-w-4xl">
+              {d.route
+                ? <Link to={d.route} className="text-gold hover:underline font-serif">{name}</Link>
+                : <span className="font-serif">{name}</span>}
+            </p>
+          );
+        }
+
+        if (block.display === 'card') {
+          const card = (
+            <div className="border border-gold/25 bg-gold/5 hover:border-gold/45 transition-all overflow-hidden flex flex-col md:flex-row">
+              {d.imageUrl && (
+                <div className="md:w-1/3 h-40 md:h-auto overflow-hidden">
+                  <img src={d.imageUrl} alt={name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" referrerPolicy="no-referrer" />
+                </div>
+              )}
+              <div className="p-6 flex-grow">
+                {d.sourceLabel && <span className="label-text">{d.sourceLabel}</span>}
+                <h3 className="h3-title group-hover:text-gold transition-colors mb-2">{name}</h3>
+                {d.summary && <BBCodeRenderer content={d.summary} viewContext={viewContext} className="description-text text-sm line-clamp-3" />}
+                {d.route && <div className="flex items-center text-gold font-bold uppercase tracking-widest text-xs mt-3">View <ChevronRight className="w-4 h-4 ml-1" /></div>}
+              </div>
+            </div>
+          );
+          return (
+            <section key={block.id} className="max-w-4xl">
+              {d.route ? <Link to={d.route} className="group block">{card}</Link> : <div className="group">{card}</div>}
+            </section>
+          );
+        }
+
+        // inline (default) — the referenced entity's text rendered in-flow.
+        return (
+          <section key={block.id} className="max-w-4xl border-l-2 border-gold/35 pl-4 py-1 space-y-1">
+            <div className="flex items-baseline gap-2">
+              <h3 className="h3-title">{name}</h3>
+              {d.sourceLabel && <span className="label-text">{d.sourceLabel}</span>}
+              {d.route && <Link to={d.route} className="label-text text-gold hover:underline ml-auto shrink-0">View →</Link>}
+            </div>
+            {d.summary && <BBCodeRenderer content={d.summary} viewContext={viewContext} className="description-text" />}
           </section>
         );
       }

@@ -112,6 +112,7 @@ const ALLOWED_ARTICLE_BLOCK_TYPES = new Set([
   "image",
   "divider",
   "callout",
+  "reference",
   "entity-row",
   "entity-feature",
   "group",
