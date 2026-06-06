@@ -258,6 +258,23 @@ function freshFilterState() {
   };
 }
 
+// Synthetic filter "tags" injected into entries so the shared tri-state tag
+// matcher can also drive non-tag axes: a Source axis (every entry carries its
+// `__src__:<slug>`) and a feat Properties axis. They flow through the exact same
+// pipeline as real tags — no parallel matcher needed.
+const SOURCE_TAG_PREFIX = "__src__:";
+const PROP_TAG_PREFIX = "__prop__:";
+// Feat Properties axis — mirrors src/lib/featFilters.ts. `flag` is the feat flag
+// (flags.dauligor-pairing.<flag>); `id` is the synthetic tag id added on load.
+const FEAT_PROPERTY_AXIS = [
+  { id: `${PROP_TAG_PREFIX}repeatable`, label: "Repeatable", flag: "repeatable" },
+  { id: `${PROP_TAG_PREFIX}hasUses`, label: "Limited Uses", flag: "hasUses" },
+  { id: `${PROP_TAG_PREFIX}hasActivities`, label: "Activities", flag: "hasActivities" },
+  { id: `${PROP_TAG_PREFIX}hasEffects`, label: "Effects", flag: "hasEffects" },
+  { id: `${PROP_TAG_PREFIX}hasAdvancements`, label: "Advancements", flag: "hasAdvancements" },
+  { id: `${PROP_TAG_PREFIX}hasPrereqs`, label: "Prerequisites", flag: "hasPrereqs" },
+];
+
 // ── Application ─────────────────────────────────────────────────────────
 
 export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(ApplicationV2) {
@@ -574,12 +591,14 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
             const dbId = String(e?.dbId ?? "");
             const name = String(e?.name ?? "");
             if (!dbId || !name) continue;
+            const tags = Array.isArray(e?.tags) ? e.tags.map(String) : [];
+            tags.push(`${SOURCE_TAG_PREFIX}${slug}`); // synthetic Source axis
             items.push({
               dbId,
               name,
               img: e?.img || null,
               summary: String(e?.summary ?? ""),
-              tags: Array.isArray(e?.tags) ? e.tags.map(String) : [],
+              tags,
               sourceSlug: slug,
             });
           }
@@ -592,12 +611,15 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
             const dbId = String(flags.dbId ?? "");
             const name = String(feat?.name ?? "");
             if (!dbId || !name) continue;
+            const tags = Array.isArray(flags.tagIds) ? flags.tagIds.map(String) : [];
+            tags.push(`${SOURCE_TAG_PREFIX}${slug}`); // synthetic Source axis
+            for (const p of FEAT_PROPERTY_AXIS) if (flags[p.flag]) tags.push(p.id); // Properties axis
             items.push({
               dbId,
               name,
               img: feat?.img ?? null,
               summary: String(flags.summary ?? flags.requirements ?? ""),
-              tags: Array.isArray(flags.tagIds) ? flags.tagIds.map(String) : [],
+              tags,
               sourceSlug: slug,
             });
           }
@@ -661,8 +683,8 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
             // list). Empty until the catalog ships `category`; the picker then
             // falls back to a flat list.
             category: entry.category ? String(entry.category).toLowerCase() : "",
-            // Tag ids — drive the section-filter panel's pills.
-            tags: Array.isArray(entry.tags) ? entry.tags.map(String) : [],
+            // Tag ids (+ synthetic Source tag) — drive the section-filter pills.
+            tags: [...(Array.isArray(entry.tags) ? entry.tags.map(String) : []), `${SOURCE_TAG_PREFIX}${slug}`],
           });
         }
         // Merge this catalog's resolved tag id→name map (for the filter pills).
@@ -1182,10 +1204,10 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
       : `<div class="dauligor-detail"><div class="dauligor-detail__pane dauligor-detail__empty">Select a ${noun} to preview it.</div></div>`;
 
     const activeFilters = Object.keys(this._classFilter?.tagStates || {}).length;
-    // Only surface the Filter when the pool actually carries tags — much of the
-    // bg/species/feat compendium is currently untagged, and an empty filter modal
-    // reads as broken. Lights up automatically once content is tagged.
-    const hasTags = this._availableClassTags().length > 0;
+    // Only surface the Filter when there's actually an axis to show (Source needs
+    // >1 source; Properties is feat-only; real tags may be absent). Avoids an
+    // empty filter modal that reads as broken.
+    const hasTags = this._buildClassFilterAxes().length > 0;
     const filterBtn = hasTags
       ? `<button type="button" class="dauligor-character-creator__filter-btn ${this._classFilter?.open ? "dauligor-character-creator__filter-btn--active" : ""}" data-action="class-filter"><i class="fas fa-filter"></i> Filter${activeFilters ? ` <span class="dauligor-character-creator__filter-count">${activeFilters}</span>` : ""}</button>`
       : "";
@@ -1390,8 +1412,11 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
   _buildClassFilterAxes() {
     const available = new Set(this._availableClassTags());
     if (available.size === 0) return [];
+    const axes = [];
+    const accounted = new Set();
+
+    // Real tag-group axes from the catalog (subtag hierarchy preserved).
     if (this._tagCatalog && this._tagCatalog.tagGroups.length > 0) {
-      const axes = [];
       for (const group of this._tagCatalog.tagGroups) {
         const groupTags = (this._tagCatalog.tagsByGroup.get(group.id) ?? []).filter((t) => available.has(String(t.id)));
         if (!groupTags.length) continue;
@@ -1406,30 +1431,55 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
             return { value: String(t.id), label: t.name, parentValue: parent && idSet.has(parent) ? parent : undefined };
           }),
         });
+        for (const t of groupTags) accounted.add(String(t.id));
       }
-      const accounted = new Set();
-      for (const ax of axes) for (const v of ax.values) accounted.add(v.value);
-      const orphans = [...available].filter((id) => !accounted.has(id));
-      if (orphans.length) {
-        const ti = this._filterTagIndex();
-        axes.push({
-          key: "tag:__orphan__",
-          name: "Other",
-          kind: "tag",
-          groupId: "__orphan__",
-          values: orphans.map((id) => ({ value: id, label: ti[id] ?? id })).sort((a, b) => a.label.localeCompare(b.label)),
-        });
-      }
-      return axes;
     }
-    const ti = this._tagIndex ?? {};
-    return [{
-      key: "tag:__flat__",
-      name: "Tags",
-      kind: "tag",
-      groupId: "__flat__",
-      values: [...available].map((id) => ({ value: id, label: ti[id] ?? id })).sort((a, b) => a.label.localeCompare(b.label)),
-    }];
+
+    // Synthetic Source axis — every entry carries `__src__:<slug>`. Only worth
+    // showing when the pool spans more than one source.
+    const srcIds = [...available].filter((id) => id.startsWith(SOURCE_TAG_PREFIX));
+    if (srcIds.length > 1) {
+      axes.push({
+        key: "tag:__src__",
+        name: "Source",
+        kind: "tag",
+        groupId: "__src__",
+        values: srcIds.map((id) => ({ value: id, label: id.slice(SOURCE_TAG_PREFIX.length).toUpperCase() })).sort((a, b) => a.label.localeCompare(b.label)),
+      });
+      for (const id of srcIds) accounted.add(id);
+    }
+
+    // Synthetic Properties axis — feat scope only (repeatable / uses / …).
+    if (this._tab === "feat") {
+      const props = FEAT_PROPERTY_AXIS.filter((p) => available.has(p.id));
+      if (props.length) {
+        axes.push({
+          key: "tag:__prop__",
+          name: "Properties",
+          kind: "tag",
+          groupId: "__prop__",
+          values: props.map((p) => ({ value: p.id, label: p.label })),
+        });
+        for (const p of props) accounted.add(p.id);
+      }
+    }
+
+    // Real tags present but not in any catalog group → "Other" (synthetic
+    // source/prop are already accounted, so they never leak in here). "Tags"
+    // when no catalog loaded — the old flat-axis label.
+    const ti = this._filterTagIndex();
+    const orphans = [...available].filter((id) => !accounted.has(id) && !id.startsWith(SOURCE_TAG_PREFIX) && !id.startsWith(PROP_TAG_PREFIX));
+    if (orphans.length) {
+      const hasCatalog = !!(this._tagCatalog && this._tagCatalog.tagGroups.length > 0);
+      axes.push({
+        key: "tag:__orphan__",
+        name: hasCatalog ? "Other" : "Tags",
+        kind: "tag",
+        groupId: "__orphan__",
+        values: orphans.map((id) => ({ value: id, label: ti[id] ?? id })).sort((a, b) => a.label.localeCompare(b.label)),
+      });
+    }
+    return axes;
   }
 
   // The { tagGroups, tagsByGroup } shape the tri-state matcher needs — built
@@ -1437,22 +1487,28 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
   _classFilterGroups() {
     const tagGroups = [];
     const tagsByGroup = {};
+    const accounted = new Set();
     if (this._tagCatalog && this._tagCatalog.tagGroups.length > 0) {
       for (const g of this._tagCatalog.tagGroups) {
         tagGroups.push({ id: g.id });
         tagsByGroup[g.id] = (this._tagCatalog.tagsByGroup.get(g.id) ?? []).map((t) => ({ id: String(t.id) }));
       }
-      const accounted = new Set();
       for (const ids of Object.values(tagsByGroup)) for (const t of ids) accounted.add(t.id);
-      const orphans = new Set();
-      for (const e of this._filterEntries()) for (const id of (e.tags ?? [])) if (!accounted.has(String(id))) orphans.add(String(id));
-      if (orphans.size) { tagGroups.push({ id: "__orphan__" }); tagsByGroup["__orphan__"] = [...orphans].map((id) => ({ id })); }
-    } else {
-      tagGroups.push({ id: "__flat__" });
-      const flat = new Set();
-      for (const e of this._filterEntries()) for (const id of (e.tags ?? [])) flat.add(String(id));
-      tagsByGroup["__flat__"] = [...flat].map((id) => ({ id }));
     }
+    // Synthetic Source group (all scopes).
+    const srcIds = new Set();
+    for (const e of this._filterEntries()) for (const id of (e.tags ?? [])) { const s = String(id); if (s.startsWith(SOURCE_TAG_PREFIX)) srcIds.add(s); }
+    if (srcIds.size) { tagGroups.push({ id: "__src__" }); tagsByGroup["__src__"] = [...srcIds].map((id) => ({ id })); for (const id of srcIds) accounted.add(id); }
+    // Synthetic Properties group (feat scope).
+    if (this._tab === "feat") {
+      const propIds = new Set();
+      for (const e of this._filterEntries()) for (const id of (e.tags ?? [])) { const s = String(id); if (s.startsWith(PROP_TAG_PREFIX)) propIds.add(s); }
+      if (propIds.size) { tagGroups.push({ id: "__prop__" }); tagsByGroup["__prop__"] = [...propIds].map((id) => ({ id })); for (const id of propIds) accounted.add(id); }
+    }
+    // Real orphan tags (present, not in any catalog group, not synthetic).
+    const orphans = new Set();
+    for (const e of this._filterEntries()) for (const id of (e.tags ?? [])) { const s = String(id); if (!accounted.has(s) && !s.startsWith(SOURCE_TAG_PREFIX) && !s.startsWith(PROP_TAG_PREFIX)) orphans.add(s); }
+    if (orphans.size) { tagGroups.push({ id: "__orphan__" }); tagsByGroup["__orphan__"] = [...orphans].map((id) => ({ id })); }
     return { tagGroups, tagsByGroup };
   }
 
@@ -1474,11 +1530,12 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
   // Tag ids governed by a given axis (for its All / None / Clear buttons).
   _classTagsForAxis(axisKey) {
     const available = new Set(this._availableClassTags());
-    if (axisKey === "tag:__flat__") return [...available];
-    if (axisKey === "tag:__orphan__") {
+    if (axisKey === "tag:__src__") return [...available].filter((id) => id.startsWith(SOURCE_TAG_PREFIX));
+    if (axisKey === "tag:__prop__") return FEAT_PROPERTY_AXIS.map((p) => p.id).filter((id) => available.has(id));
+    if (axisKey === "tag:__orphan__" || axisKey === "tag:__flat__") {
       const accounted = new Set();
       if (this._tagCatalog) for (const g of this._tagCatalog.tagGroups) for (const t of (this._tagCatalog.tagsByGroup.get(g.id) ?? [])) accounted.add(String(t.id));
-      return [...available].filter((id) => !accounted.has(id));
+      return [...available].filter((id) => !accounted.has(id) && !id.startsWith(SOURCE_TAG_PREFIX) && !id.startsWith(PROP_TAG_PREFIX));
     }
     if (axisKey.startsWith("tag:") && this._tagCatalog) {
       const gid = axisKey.slice(4);
