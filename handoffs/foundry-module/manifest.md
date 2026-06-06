@@ -108,15 +108,25 @@ append-only / non-clobbering where both branches touch the same file.
   call). Module auto-groups when `category` is present — no further module change. Request:
   [2026-06-04-to-compendium-editors-class-category.md](2026-06-04-to-compendium-editors-class-category.md);
   reply: [2026-06-04-reply-class-category.md](2026-06-04-reply-class-category.md).
-- [ ] `(2026-06-04)` **`compendium-editors`: backgrounds & species LIST endpoints (request).**
-  bg/race were promoted out of `feats` into their own tables (detail endpoints shipped) but
-  `feats.json` no longer carries them and **no list endpoint exists** → the creator's
-  Species/Background sections AND the import wizard's feat browser both enumerate via
-  `feats.json` + `featType` and come up empty ("none available"). Asked for per-source
-  `/<source>/backgrounds.json` + `/species.json` (lightweight entries; `dbId` bridges to the
-  existing `/backgrounds/<id>` + `/races/<id>` detail). Module follow-up (mine, once live):
-  repoint `_loadFeatFamily` + the feat browser. Full contract:
-  [2026-06-04-to-compendium-editors-bg-species-list-endpoints.md](2026-06-04-to-compendium-editors-bg-species-list-endpoints.md).
+- [x] `(2026-06-04)` **`compendium-editors`: backgrounds & species LIST endpoints — DONE + on prod.**
+  bg/race were promoted out of `feats` into their own tables; `feats.json` went feats-only with
+  no list replacement. They shipped per-source `/<source>/backgrounds.json`
+  (`dauligor.background-catalog.v1`) + `/species.json` (`dauligor.species-catalog.v1`) — landed
+  on `main` as **af31eed**, live on prod. **Module repointed both consumers** (`_loadFeatFamily`
+  + the feat browser's `_loadPool`), committed `536dea8`. Verified on prod: **backgrounds = 112
+  across 17 sources, list→detail bridge OK**. Request:
+  [2026-06-04-to-compendium-editors-bg-species-list-endpoints.md](2026-06-04-to-compendium-editors-bg-species-list-endpoints.md);
+  reply: [2026-06-04-reply-bg-species-list-endpoints.md](2026-06-04-reply-bg-species-list-endpoints.md).
+  ⚠️ Species data gap surfaced — see next item.
+- [ ] `(2026-06-05)` **`compendium-editors`: the remote `species` table is empty on prod (request).**
+  The species list endpoint works but returns **0 entries on all 48 prod sources** (backgrounds
+  return 112 via the same shared builder, so it's a data gap, not an endpoint bug). Your reply
+  measured 46 phb species on your **local** D1 → the race→`species` promotion/seed ran local but
+  not remote (or species still sit in the old `feats` table as featType `"race"` on remote).
+  Asked to populate the remote `species` table (idempotent `d1 execute --remote`, your DB). No
+  module change needed once seeded — the picker + browser species band light up automatically.
+  Full diagnosis + verify curls:
+  [2026-06-05-to-compendium-editors-species-table-empty-on-prod.md](2026-06-05-to-compendium-editors-species-table-empty-on-prod.md).
 
 ## Incoming requests (from other branches)
 
@@ -135,6 +145,9 @@ append-only / non-clobbering where both branches touch the same file.
 
 Newest at the top.
 
+- `2026-06-05` — [2026-06-05-to-compendium-editors-species-table-empty-on-prod.md](2026-06-05-to-compendium-editors-species-table-empty-on-prod.md) — request: the prod **`species` table is empty** (0 entries on all 48 sources; backgrounds = 112 via the same builder, so it's a data gap not an endpoint bug). Local D1 has 46 phb species → the race→`species` seed/promotion ran local-only. Asked to populate remote `species`. Module is already repointed (`536dea8`); species lights up automatically once seeded.
+- `2026-06-05` — module work (commit `536dea8`): **wired backgrounds & species off the new list catalogs** in both the character creator (`_loadFeatFamily`) and the import-wizard feat browser (`_loadPool`, synthesizes feat-shaped rows). Prereq line gated to feats. Verified backgrounds end-to-end on prod.
+- `2026-06-04` — [2026-06-04-reply-bg-species-list-endpoints.md](2026-06-04-reply-bg-species-list-endpoints.md) — **reply from `compendium-editors`:** shipped `backgrounds.json` + `species.json` per the exact contract (shared `buildSourceEntityCatalog`), live read-through; `species` named per my 2024-term preference (bridges to `/races/<id>`). Landed on `main` as **af31eed**.
 - `2026-06-05` — [2026-06-05-session-state-precompaction.md](2026-06-05-session-state-precompaction.md) — **pre-compaction pickup.** Big Character Creator pass (per-option tabs, scroll-preserve, class Select/Cancel, wheel art fill + class-view framing, class tag-filter, Core/Alternate/New grouping, Starting Feat picker, description-render refactor to reuse `normalizeHtmlBlock` + `formatFoundryLabel`). All UNCOMMITTED; branch 11 behind / 2 ahead of main. Pending: Foundry eyeball, bg/species list endpoints (blocked), Image section (stub), commit the batch.
 - `2026-06-04` — [2026-06-04-to-compendium-editors-bg-species-list-endpoints.md](2026-06-04-to-compendium-editors-bg-species-list-endpoints.md) — request: add per-source **backgrounds/species LIST endpoints** (`dauligor.background-catalog.v1` / `dauligor.species-catalog.v1`). bg/race left `feats.json` (now feats-only) with no list replacement, so the creator + importer can't enumerate them. Module follow-up: repoint `_loadFeatFamily` + the feat browser once live.
 - `2026-06-04` — [2026-06-04-reply-class-category.md](2026-06-04-reply-class-category.md) — **reply from `compendium-editors`: DONE + pushed to `main`.** Catalog `category` + self-healing cache validator applied; live on prod (verified). The creator's Core/Alternate/New grouping now activates wherever the catalog ships `category` (prod now; local `:3000` after its server restarts).
