@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Class &amp; Subclass Editors — Importer Field Catalog</title>
+<style>
+  :root {
+    --ink: #2b2117; --gold: #9c7a3c; --gold-soft: #c8a55e;
+    --parch: #f4ecd9; --parch2: #efe6cf; --line: #d8c9a6; --blood: #7c2d2d;
+    --green: #3f6f3f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 2.4rem clamp(1rem, 4vw, 4rem);
+    background: #efe6cf;
+    background-image: radial-gradient(circle at 20% 0%, #f7f0dd, #e7dcc1);
+    color: #2b2117;
+    font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    line-height: 1.6; max-width: 72rem; margin-inline: auto;
+  }
+  h1, h2, h3 { font-family: inherit; color: #6f561f; letter-spacing: .01em; }
+  h1 { font-size: 2.1rem; margin: 0 0 .2rem; border-bottom: 3px double #c8a55e; padding-bottom: .5rem; }
+  .sub { color: #8a7a52; font-style: italic; margin: 0 0 1.6rem; }
+  h2 { font-size: 1.35rem; margin: 2.1rem 0 .6rem; border-bottom: 1px solid #d8c9a6; padding-bottom: .25rem; }
+  h3 { font-size: 1.05rem; margin: 1.3rem 0 .35rem; color: #7c5e26; }
+  code, .mono { font-family: "SF Mono", "Consolas", monospace; font-size: .85em; background: #e4d8b8; padding: .08em .35em; border-radius: 4px; color: #5a4420; }
+  pre { background: #2b2117; color: #f0e6cd; padding: 1rem 1.1rem; border-radius: 8px; overflow-x: auto; font-size: .76rem; line-height: 1.5; border-left: 4px solid #9c7a3c; }
+  pre code { background: none; color: inherit; padding: 0; }
+  .card { background: #f7f1e1; border: 1px solid #d8c9a6; border-radius: 10px; padding: 1rem 1.2rem; margin: .8rem 0; box-shadow: 0 1px 0 #fff inset, 0 2px 8px rgba(120,90,40,.08); }
+  .card.accent { border-left: 4px solid #9c7a3c; }
+  .card.warn { border-left: 4px solid #7c2d2d; background: #f6ece1; }
+  .card.good { border-left: 4px solid #3f6f3f; }
+  .pill { display: inline-block; background: #9c7a3c; color: #fff; font-size: .68rem; text-transform: uppercase; letter-spacing: .12em; padding: .18em .6em; border-radius: 999px; vertical-align: middle; }
+  .pill.dim { background: #b9a878; }
+  ul, ol { margin: .4rem 0 .8rem; padding-left: 1.4rem; }
+  li { margin: .25rem 0; }
+  table { border-collapse: collapse; width: 100%; margin: .6rem 0 1rem; font-size: .8rem; }
+  th, td { border: 1px solid #d8c9a6; padding: .4rem .55rem; text-align: left; vertical-align: top; }
+  th { background: #e7dcc1; color: #6f561f; }
+  tr:nth-child(even) td { background: #faf5e9; }
+  .lede { font-size: 1.05rem; }
+  small.note { color: #8a7a52; }
+  .rev { font-size: .72rem; color: #8a7a52; }
+  /* difficulty tiers */
+  .t { display:inline-block; min-width: 4.6rem; text-align:center; color:#fff; font-size:.66rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; padding:.12em .5em; border-radius:5px; }
+  .t.easy { background:#3f6f3f; }
+  .t.med  { background:#9c7a3c; }
+  .t.hard { background:#7c2d2d; }
+  .t.skip { background:#9b8a63; }
+  .have { color:#3f6f3f; font-weight:700; }
+  .have.no { color:#9b8a63; font-weight:400; }
+  /* plan verbs inside Notes */
+  .go  { color:#3f6f3f; font-weight:700; }
+  .man { color:#5a6b7c; font-weight:700; }
+  .no  { color:#7c2d2d; font-weight:700; }
+  .stat { display:inline-flex; flex-direction:column; align-items:center; background:#f7f1e1; border:1px solid #d8c9a6; border-radius:8px; padding:.5rem .8rem; min-width:6.5rem; }
+  .stat b { font-size:1.5rem; color:#6f561f; line-height:1.1; }
+  .stat span { font-size:.66rem; text-transform:uppercase; letter-spacing:.08em; color:#8a7a52; }
+  .stats { display:flex; gap:.6rem; flex-wrap:wrap; margin:.8rem 0; }
+  .legend { display:flex; gap:1.2rem; flex-wrap:wrap; margin:.4rem 0 0; font-size:.82rem; }
+  .legend div { display:flex; gap:.4rem; align-items:center; }
+  .cols2 { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+  @media (max-width:48rem){ .cols2 { grid-template-columns:1fr; } }
+  .col-part { width: 22%; } .col-col { width: 16%; } .col-tier { width: 7rem; } .col-have { width: 4.5rem; }
+</style>
+</head>
+<body>
+  <h1>Class &amp; Subclass Editors — Importer Field Catalog <span class="pill">survey</span></h1>
+  <p class="sub">Every part of the two editors, rated by how easily it can be added to the Mark&nbsp;&amp;&nbsp;Build importer — now annotated with the build decisions of 2026-06-05. branch <code>manual-uploads</code> · <span class="rev">grounded in the live editor code + the production-seeded D1</span></p>
+
+  <p class="lede">The class importer already exists as a <strong>manual-entry skeleton</strong> (steps 1–2). This catalog maps what to add next: every field, tab, and sub-system of <code>ClassEditor</code> and <code>SubclassEditor</code>, what the importer captures <span class="have">today</span>, the import-difficulty of the rest — and, after a review pass, <strong>which ones we're taking on vs. leaving to a manual picker or the editor</strong>. Everything imported stays fully editable afterward, which lowers the bar: a best-effort parse you can tweak beats no parse at all.</p>
+
+  <h2>The guiding principle <span class="pill dim">decided</span></h2>
+  <div class="card accent">
+    <p class="lede" style="margin:0;">The real line isn't "easy field vs. hard field" — it's <strong>"is the data actually in the source text?"</strong></p>
+    <p style="margin:.5rem 0 0;">Proficiencies, features, the plain spellcasting fields, subclass→class linking — that information <em>is</em> in a pasted class write-up, so we parse it (and let you fix it after). Spell-slot grids, scaling tables, automation, images, bespoke advancement logic — that data is <em>not</em> in the prose, so it stays a manual picker or an editor job. A 🔴 tier means "id-bound / structurally hard," not "forbidden": several 🔴s are in scope because an existing editor component already solves the hard part.</p>
+  </div>
+
+  <h2>How to read the tiers</h2>
+  <div class="card">
+    <div class="legend">
+      <div><span class="t easy">Easy</span> scalar / enum / free-text — text-derivable or a single field.</div>
+      <div><span class="t med">Medium</span> a small parser, a simple select, or by-<em>name</em> resolution.</div>
+    </div>
+    <div class="legend" style="margin-top:.5rem;">
+      <div><span class="t hard">Hard</span> bound to internal DB <strong>ids</strong>, a nested child entity, or a deep authored tree.</div>
+      <div><span class="t skip">Editor</span> images/focal points, danger zone, automation — not text.</div>
+    </div>
+    <p style="margin:.7rem 0 .2rem;">Tier = intrinsic difficulty of the <em>data shape</em>. The <strong>plan</strong> for each is the separate decision, flagged in the Notes:</p>
+    <div class="legend">
+      <div><span class="go">In scope</span> we'll parse it (tweak after)</div>
+      <div><span class="man">Manual</span> a picker / leave to the editor, by design</div>
+      <div><span class="no">Editor-only</span> not in the text — author by hand</div>
+      <div><span class="have">✓</span> already in the importer</div>
+    </div>
+  </div>
+
+  <h2>At a glance <span class="pill dim">live production data</span></h2>
+  <div class="stats">
+    <div class="stat"><b>82</b><span>classes</span></div>
+    <div class="stat"><b>177</b><span>subclasses</span></div>
+    <div class="stat"><b>185</b><span>class features</span></div>
+    <div class="stat"><b>918</b><span>subclass features</span></div>
+    <div class="stat"><b>46</b><span>scaling columns</span></div>
+    <div class="stat"><b>4</b><span>features w/ automation</span></div>
+  </div>
+  <p><small class="note">Hit dice seen: d6 / d8 / d10 / d12. Categories: <code>core</code> / <code>alternate</code> / <code>new</code>. A "complete" class carries <strong>~14–17 advancement nodes</strong>; the import skeleton carries <strong>0</strong> until proficiencies + features fill it in. 86 of 177 subclasses have authored <code>lore</code>. <strong>Crucially: only 4 of 1,103 features use automation (activities), 0 use their own advancements</strong> — so a feature is almost always just name + level + description + a uses formula.</small></p>
+
+  <h2>What the importer captures today <span class="pill">steps 1–2</span></h2>
+  <div class="card good">
+    <p>The <code>class</code> descriptor already writes a faithful, byte-identical skeleton through the editor's real <code>upsertDocument('classes',…)</code> + <code>queueRebake('class',…)</code>. The <span class="have">green</span> rows below are <strong>done</strong>:</p>
+    <p><code>name</code> · <code>identifier</code> · <code>source</code> · <code>category</code> · <code>hit_die</code> · <code>description</code> · <code>preview</code> · <code>lore</code> · <code>primary_ability</code> · <code>saving_throws</code> (kept in sync with <code>proficiencies.savingThrows</code>) · <code>starting_equipment</code> · <code>wealth</code> · <code>multiclassing</code> · <code>subclass_title</code>. Everything else is written as the same empty-default shape a pristine class saves.</p>
+  </div>
+
+  <h2>Decisions <span class="pill">2026-06-05</span></h2>
+  <div class="cols2">
+    <div class="card good">
+      <p style="margin:0 0 .3rem;"><strong class="go">In scope — we parse these</strong></p>
+      <ul style="margin:0;">
+        <li><strong>Proficiencies.</strong> Embed the existing <code>ProficienciesEditor</code> component; pre-fill via the existing <code>resolveLegacyProficiencyIds</code> name→id matcher; you tweak after. <em>Bonus:</em> the base advancement tree is built <em>from</em> the proficiency object, so this also populates the progression base.</li>
+        <li><strong>Class &amp; subclass features.</strong> Import the textual skeleton — name · level · description · requirements · subtype · properties · uses formula. Features are <strong>granted automatically by their level</strong> (no advancement wiring), and automation is 0.4% of features → manual. Biggest work-saver (esp. the 918 subclass features).</li>
+        <li><strong>Subclass importer</strong> with a <strong>parent-class picker</strong> (fills <code>class_id</code> + <code>class_identifier</code>).</li>
+        <li><strong>Spellcasting "lite"</strong> — <code>hasSpellcasting</code>, ability, type, level, description, formula, spellbook counts.</li>
+        <li><strong>Small parses</strong> — <code>asi_levels</code>, <code>subclass_feature_levels</code>, <code>primary_ability_choice</code> split, tags by name.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <p style="margin:0 0 .3rem;"><strong class="man">Stays manual / picker — by design</strong></p>
+      <ul style="margin:0 0 .6rem;">
+        <li><strong>Spellcasting slot / known scaling tables</strong> (<code>progressionId</code>, <code>spellsKnownId</code>) — pick an existing scaling row; we do <em>not</em> parse the 20-level slot grid.</li>
+        <li><strong>Scaling columns</strong> (Rage uses, Sneak Attack dice…) — authored in their own editor; a feature keeps its <code>@scale…</code> reference text.</li>
+        <li><strong>Unique option groups / excluded options / mappings</strong> — id-bound; linked in the editor like scaling.</li>
+      </ul>
+      <p style="margin:0 0 .3rem;"><strong class="no">Won't auto-import — not in the source text</strong></p>
+      <ul style="margin:0;">
+        <li><strong>Automation</strong> — activities &amp; effects (rolls, DCs, templates, active effects).</li>
+        <li><strong>Images &amp; focal points</strong> — a URL is trivial; the drag-to-frame focal needs the editor.</li>
+        <li><strong>Bespoke advancement nodes</strong> — <code>ScaleValue</code>, curated "choose one of these" pools, conditional grants. (Base + by-level feature grants <em>are</em> automatic.)</li>
+        <li><strong>ID cross-references</strong> — feature prerequisite <em>item</em> links, option-group wiring. (The numeric prereq <em>level</em> is fine.)</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ===================== CLASS ===================== -->
+  <h2>Class editor — full part catalog</h2>
+  <p>Grouped by the editor's tabs. <strong>In?</strong> = captured by the importer today; the <strong>plan</strong> for the rest is flagged in Notes.</p>
+
+  <h3>Basic Info</h3>
+  <table>
+    <tr><th class="col-part">Part</th><th class="col-col">DB column</th><th>Shape</th><th class="col-tier">Tier</th><th class="col-have">In?</th><th>Notes</th></tr>
+    <tr><td>Name</td><td><code>name</code></td><td>text (required)</td><td><span class="t easy">Easy</span></td><td class="have">✓</td><td>The only hard-required field.</td></tr>
+    <tr><td>Identifier</td><td><code>identifier</code></td><td>slug (UNIQUE)</td><td><span class="t easy">Easy</span></td><td class="have">✓</td><td>Auto <code>slugify(name)</code>; collisions rejected by the UNIQUE index.</td></tr>
+    <tr><td>Source</td><td><code>source_id</code></td><td>FK → sources</td><td><span class="t easy">Easy</span></td><td class="have">✓</td><td>Persistent picker. Source-less rows are hidden from the public browser.</td></tr>
+    <tr><td>Category</td><td><code>category</code></td><td>enum core/alternate/new</td><td><span class="t easy">Easy</span></td><td class="have">✓</td><td>Select.</td></tr>
+    <tr><td>Hit Die</td><td><code>hit_die</code></td><td>int 6/8/10/12</td><td><span class="t easy">Easy</span></td><td class="have">✓</td><td>Select.</td></tr>
+    <tr><td>Description</td><td><code>description</code></td><td>BBCode</td><td><span class="t easy">Easy</span></td><td class="have">✓</td><td>Overview prose; HTML paste → BBCode already handled.</td></tr>
+    <tr><td>Preview blurb</td><td><code>preview</code></td><td>BBCode (short)</td><td><span class="t easy">Easy</span></td><td class="have">✓</td><td>Card / hover teaser.</td></tr>
+    <tr><td>Lore</td><td><code>lore</code></td><td>BBCode</td><td><span class="t easy">Easy</span></td><td class="have">✓</td><td>Setting flavour.</td></tr>
+    <tr><td>Class art + focal</td><td><code>image_url</code>, <code>image_display</code></td><td>url + {x,y,scale}</td><td><span class="t skip">Editor</span></td><td class="have no">—</td><td><span class="no">Editor-only.</span> Upload + drag-to-frame; a pasted URL is trivial, the focal point needs the visual tool.</td></tr>
+    <tr><td>Card / preview art</td><td><code>card_image_url</code>/<code>card_display</code>, <code>preview_image_url</code>/<code>preview_display</code></td><td>url + focal</td><td><span class="t skip">Editor</span></td><td class="have no">—</td><td><span class="no">Editor-only.</span> Same as above.</td></tr>
+  </table>
+
+  <h3>Mechanics &amp; Proficiencies</h3>
+  <table>
+    <tr><th class="col-part">Part</th><th class="col-col">DB column</th><th>Shape</th><th class="col-tier">Tier</th><th class="col-have">In?</th><th>Notes</th></tr>
+    <tr><td>Primary ability</td><td><code>primary_ability</code></td><td>string[] (lowercase)</td><td><span class="t easy">Easy</span></td><td class="have">✓</td><td>Free text → ability codes (<code>"Constitution"</code>→<code>con</code>).</td></tr>
+    <tr><td>Primary ability choice</td><td><code>primary_ability_choice</code></td><td>string[]</td><td><span class="t med">Medium</span></td><td class="have no">~</td><td><span class="go">In scope.</span> "Strength <em>or</em> Dexterity" should land here, not all in <code>primary_ability</code> — a small split.</td></tr>
+    <tr><td>Saving throws</td><td><code>saving_throws</code> <small class="note">(+ <code>proficiencies.savingThrows.fixedIds</code>)</small></td><td>string[] (uppercase)</td><td><span class="t easy">Easy</span></td><td class="have">✓</td><td>The two save profs; importer keeps the column and the proficiency sub-object in sync.</td></tr>
+    <tr><td>Armor / weapon / tool / skill / language proficiencies</td><td><code>proficiencies</code></td><td>per-kind {choiceCount, fixedIds[], optionIds[], categoryIds[]}</td><td><span class="t med">Medium</span></td><td class="have no">~</td><td><span class="go">In scope.</span> id-bound, but the reusable <code>ProficienciesEditor</code> + the existing <code>resolveLegacyProficiencyIds</code> matcher (name/identifier/foundry_alias) make it tractable: best-effort parse → embedded editor → tweak. Feeds the base advancement Traits.</td></tr>
+  </table>
+  <pre><code>// Fighter.proficiencies.armor — every grant is a DB id, not a label:
+"armor": { "choiceCount":0, "optionIds":[],
+  "fixedIds":["u4Sweau5rNbWyF342xye","DflI9zGujcXXePKbGxY0", … 13 ids …],
+  "categoryIds":["TQIPCbs8FymGrlSUdQQD", … 4 category ids …] }
+// Wizard.proficiencies.skills — a "choose 2" pool, again by id:
+"skills": { "choiceCount":2, "optionIds":["6VCyBI18…","Pm1ml2…", … 6 ids …], "fixedIds":[] }
+// The matcher already exists — resolveLegacyProficiencyIds("Athletics, Perception", allSkills) → ids.</code></pre>
+
+  <h3>Spellcasting <small class="note">(stored as one JSON object; <code>null</code> when the class doesn't cast)</small></h3>
+  <table>
+    <tr><th class="col-part">Part</th><th class="col-col">Key</th><th>Shape</th><th class="col-tier">Tier</th><th class="col-have">In?</th><th>Notes</th></tr>
+    <tr><td>Has spellcasting</td><td><code>hasSpellcasting</code></td><td>bool</td><td><span class="t med">Medium</span></td><td class="have no">—</td><td><span class="go">In scope.</span> Toggles the whole object; detectable from the text.</td></tr>
+    <tr><td>Ritual caster</td><td><code>isRitualCaster</code></td><td>bool</td><td><span class="t med">Medium</span></td><td class="have no">—</td><td><span class="go">In scope.</span> "ritual" keyword.</td></tr>
+    <tr><td>Ability</td><td><code>ability</code></td><td>enum STR…CHA</td><td><span class="t med">Medium</span></td><td class="have no">—</td><td><span class="go">In scope.</span> "Intelligence is your spellcasting ability" → <code>INT</code>.</td></tr>
+    <tr><td>Type</td><td><code>type</code></td><td>prepared / known / spellbook</td><td><span class="t med">Medium</span></td><td class="have no">—</td><td><span class="go">In scope.</span> Select; strong text hints.</td></tr>
+    <tr><td>Level gained</td><td><code>level</code></td><td>int</td><td><span class="t med">Medium</span></td><td class="have no">—</td><td><span class="go">In scope.</span> Number (class 1, subclass usually 3).</td></tr>
+    <tr><td>Spellcasting description</td><td><code>description</code></td><td>BBCode</td><td><span class="t easy">Easy</span></td><td class="have no">—</td><td><span class="go">In scope.</span> Pure prose — often the largest single field (the Wizard's runs many paragraphs).</td></tr>
+    <tr><td>Spells-known formula</td><td><code>spellsKnownFormula</code></td><td>formula DSL</td><td><span class="t med">Medium</span></td><td class="have no">—</td><td><span class="go">In scope.</span> e.g. <code>@abilities.int.mod + @level</code>. Free text, captured verbatim.</td></tr>
+    <tr><td>Spellbook counts</td><td><code>startingSpellbookCount</code>, <code>spellbookAdditionsPerLevel</code></td><td>int</td><td><span class="t med">Medium</span></td><td class="have no">—</td><td><span class="go">In scope.</span> Wizard 6 / 2. Numbers.</td></tr>
+    <tr><td>Slot / known scaling tables</td><td><code>progressionId</code>, <code>altProgressionId</code>, <code>spellsKnownId</code></td><td>FK → scaling tables</td><td><span class="t hard">Hard</span></td><td class="have no">—</td><td><span class="man">Manual pick.</span> The slot grid isn't reliable data in prose and must map to an existing scaling row. Reuse the editor's scaling dropdown; don't parse the table.</td></tr>
+  </table>
+  <pre><code>// Wizard.spellcasting — the simple half is text (in scope); the *Id fields are FKs (manual):
+{ "hasSpellcasting":true, "isRitualCaster":false, "ability":"INT",
+  "type":"spellbook", "level":1, "spellsKnownFormula":"@abilities.int.mod + @level",
+  "startingSpellbookCount":6, "spellbookAdditionsPerLevel":2,
+  "description":"As a student of arcane magic, you have a spellbook…",  // huge BBCode
+  "progressionId":"miGlG3j1K31lq6j9a08i", "spellsKnownId":"4c93c6a3-…" }  // ← manual pick</code></pre>
+
+  <h3>Subclasses · Equipment · Multiclassing · Tags</h3>
+  <table>
+    <tr><th class="col-part">Part</th><th class="col-col">DB column</th><th>Shape</th><th class="col-tier">Tier</th><th class="col-have">In?</th><th>Notes</th></tr>
+    <tr><td>Subclass title</td><td><code>subclass_title</code></td><td>text</td><td><span class="t easy">Easy</span></td><td class="have">✓</td><td>e.g. "Sorcerous Origin", "Martial Archetype".</td></tr>
+    <tr><td>Subclass feature levels</td><td><code>subclass_feature_levels</code></td><td>number[]</td><td><span class="t med">Medium</span></td><td class="have no">default</td><td><span class="go">In scope.</span> "at 3rd, 6th, 10th, and 14th level" → <code>[3,6,10,14]</code>. Importer leaves <code>[]</code> today.</td></tr>
+    <tr><td>The subclasses themselves</td><td><code>subclasses</code> table</td><td>child entities (class_id)</td><td><span class="t hard">Hard</span></td><td class="have no">—</td><td><span class="go">In scope.</span> Their own importer type, with a parent-class picker (catalogued below).</td></tr>
+    <tr><td>Starting equipment</td><td><code>starting_equipment</code></td><td>BBCode</td><td><span class="t easy">Easy</span></td><td class="have">✓</td><td></td></tr>
+    <tr><td>Starting wealth</td><td><code>wealth</code></td><td>text</td><td><span class="t easy">Easy</span></td><td class="have">✓</td><td>e.g. "5d4 × 10 gp".</td></tr>
+    <tr><td>Multiclassing</td><td><code>multiclassing</code></td><td>BBCode</td><td><span class="t easy">Easy</span></td><td class="have">✓</td><td>Prerequisites + proficiencies prose.</td></tr>
+    <tr><td>Multiclass proficiencies</td><td><code>multiclass_proficiencies</code></td><td>proficiency object</td><td><span class="t med">Medium</span></td><td class="have no">empty</td><td><span class="go">In scope.</span> Same shape as <code>proficiencies</code> → same editor + matcher.</td></tr>
+    <tr><td>Tags</td><td><code>tag_ids</code></td><td>string[] FK → tags</td><td><span class="t med">Medium</span></td><td class="have no">empty</td><td><span class="go">In scope.</span> Best-effort name-match against the <code>tags</code> table; unmatched → manual.</td></tr>
+  </table>
+
+  <h3>Progression (the advancement tree)</h3>
+  <table>
+    <tr><th class="col-part">Part</th><th class="col-col">DB column</th><th>Shape</th><th class="col-tier">Tier</th><th class="col-have">In?</th><th>Notes</th></tr>
+    <tr><td>Advancements — base</td><td><code>advancements</code></td><td>typed node tree[]</td><td><span class="t med">Medium</span></td><td class="have no">empty</td><td><span class="go">Auto-derived.</span> HP / save+armor+weapon+skill+tool Traits / subclass slot / ASIs are built <em>from</em> proficiencies + hit die + asi_levels by <code>buildCanonicalBaseClassAdvancements</code>. Capture profs → the base fills itself.</td></tr>
+    <tr><td>Advancements — feature grants</td><td><code>advancements</code></td><td>ItemGrant nodes</td><td><span class="t med">Medium</span></td><td class="have no">auto</td><td><span class="go">Automatic.</span> Features are granted by their <code>level</code> via the inherent-grant builder — Fighter stores <em>zero</em> ItemGrants yet grants all its features. Import features → grants come for free.</td></tr>
+    <tr><td>Advancements — bespoke</td><td><code>advancements</code></td><td>ScaleValue / curated ItemChoice / conditional</td><td><span class="t hard">Hard</span></td><td class="have no">—</td><td><span class="no">Editor-only.</span> Encodes design choices not in prose. Rare — Fighter has none.</td></tr>
+    <tr><td>ASI levels</td><td><code>asi_levels</code></td><td>number[]</td><td><span class="t med">Medium</span></td><td class="have no">default</td><td><span class="go">In scope.</span> Importer defaults <code>[4,8,12,16,19]</code>; text-parseable for the exceptions.</td></tr>
+    <tr><td>Excluded option ids · unique option mappings</td><td><code>excluded_option_ids</code>, <code>unique_option_mappings</code></td><td>id-bound map / array</td><td><span class="t hard">Hard</span></td><td class="have no">empty</td><td><span class="man">Manual.</span> Linked in the editor like scaling. Rare.</td></tr>
+  </table>
+  <pre><code>// advancements[] — each node is typed with its own configuration:
+[ { "_id":"base-hp",   "type":"HitPoints",  "level":1, "isBase":true, "configuration":{"hitDie":10} },
+  { "_id":"base-saves","type":"Trait", "level":1, "isBase":true, "configuration":{"type":"saves","fixed":["STR","CON"]} },
+  … base-armor / base-weapons / base-skills / base-tools Traits (← built from proficiencies) …,
+  … base-asi-* (← from asi_levels), base-subclass (← subclass_title) … ]
+// Feature ItemGrants are NOT stored — buildInherentFeatureGrantAdvancements() adds them by feature.level.</code></pre>
+
+  <h3>Class Features <span class="pill">in scope</span></h3>
+  <div class="card good">
+    <p>The "Class Features" tab edits rows in a <strong>separate <code>features</code> table</strong> (<code>parent_id</code> = the class, <code>parent_type='class'</code>) — 185 of them across the 82 classes. A <strong>feature importer</strong> (its own descriptor, with a parent picker) captures the textual skeleton and is the single biggest work-saver:</p>
+    <ul style="margin:.2rem 0;">
+      <li><span class="go">In scope:</span> <code>name</code> · <code>level</code> · <code>description</code> · <code>requirements</code> · <code>subtype</code> · <code>properties</code> · <code>uses_max</code> (the formula string, verbatim) · <code>prerequisites_level</code> · <code>source</code>/<code>page</code>. Granted to characters <strong>by level automatically</strong> — no advancement wiring.</li>
+      <li><span class="no">Editor-only:</span> <code>activities</code> &amp; <code>effects</code> (automation) — but only <strong>4 of 1,103</strong> features use them. <code>prerequisites_items</code> (id links) and <code>scaling_column_id</code> (2 of 1,103) stay manual.</li>
+    </ul>
+  </div>
+
+  <!-- ===================== SUBCLASS ===================== -->
+  <h2>Subclass editor — full part catalog</h2>
+  <p>A subclass writes through <code>upsertDocument('subclasses',…)</code> + <code>queueRebake('subclass',…)</code>. Shape mirrors the class but lighter — its defining content is its <em>features</em>. <span class="go">In scope</span> as its own importer type.</p>
+
+  <h3>Basic Info</h3>
+  <table>
+    <tr><th class="col-part">Part</th><th class="col-col">DB column</th><th>Shape</th><th class="col-tier">Tier</th><th>Notes</th></tr>
+    <tr><td>Name</td><td><code>name</code></td><td>text (required)</td><td><span class="t easy">Easy</span></td><td>e.g. "Battle Master".</td></tr>
+    <tr><td>Identifier</td><td><code>identifier</code></td><td>slug</td><td><span class="t easy">Easy</span></td><td>Auto <code>slugify(name)</code>.</td></tr>
+    <tr><td>Parent class</td><td><code>class_id</code> + <code>class_identifier</code></td><td>FK → classes (required)</td><td><span class="t med">Medium</span></td><td><span class="go">In scope — a class picker.</span> A subclass must attach to a class; the picker fills both columns. The one genuinely subclass-specific control.</td></tr>
+    <tr><td>Source</td><td><code>source_id</code></td><td>FK (required in save)</td><td><span class="t easy">Easy</span></td><td>The subclass save <em>rejects</em> a missing source (stricter than class).</td></tr>
+    <tr><td>Description</td><td><code>description</code></td><td>BBCode</td><td><span class="t easy">Easy</span></td><td></td></tr>
+    <tr><td>Preview</td><td><code>preview</code></td><td>BBCode</td><td><span class="t easy">Easy</span></td><td>Card / hover teaser.</td></tr>
+    <tr><td>Lore</td><td><code>lore</code></td><td>BBCode</td><td><span class="t easy">Easy</span></td><td>86 of 177 subclasses use it.</td></tr>
+    <tr><td>Art (image / card / preview + focals)</td><td><code>image_*</code>, <code>*_display</code></td><td>url + focal</td><td><span class="t skip">Editor</span></td><td><span class="no">Editor-only.</span> Same upload+frame tooling as the class.</td></tr>
+  </table>
+
+  <h3>Spellcasting · Progression · Features · Tags · Other</h3>
+  <table>
+    <tr><th class="col-part">Part</th><th class="col-col">Column / key</th><th>Shape</th><th class="col-tier">Tier</th><th>Notes</th></tr>
+    <tr><td>Spellcasting (simple half)</td><td><code>spellcasting.{hasSpellcasting, ability, type, level, progression, isRitualCaster, description, spellsKnownFormula}</code></td><td>JSON object</td><td><span class="t med">Medium</span></td><td><span class="go">In scope.</span> Same object as the class, plus a <code>progression</code> enum (none/full/half/third/pact/artificer). 58 of 177 subclasses cast.</td></tr>
+    <tr><td>Spellcasting (scaling tables)</td><td><code>spellcasting.{progressionId, spellsKnownId, altProgressionId}</code></td><td>FK ids</td><td><span class="t hard">Hard</span></td><td><span class="man">Manual pick.</span> Same FK problem as the class.</td></tr>
+    <tr><td>Advancements</td><td><code>advancements</code></td><td>typed tree[]</td><td><span class="t med">Medium</span></td><td><span class="go">Auto.</span> <code>buildCanonicalSubclassProgression</code> + by-level feature grants; bespoke nodes stay <span class="no">editor-only</span>.</td></tr>
+    <tr><td>Subclass features</td><td><code>features</code> table (parent_type='subclass')</td><td>child entities</td><td><span class="t med">Medium</span></td><td><span class="go">In scope.</span> <strong>918 rows</strong> — the bulk of every subclass's content. Same feature importer + parent picker; automation stays manual.</td></tr>
+    <tr><td>Tags</td><td><code>tag_ids</code></td><td>string[] FK</td><td><span class="t med">Medium</span></td><td><span class="go">In scope.</span> By-name resolution.</td></tr>
+    <tr><td>Excluded options / option groups</td><td><code>excluded_option_ids</code>, <code>unique_option_group_ids</code></td><td>id-bound</td><td><span class="t hard">Hard</span></td><td><span class="man">Manual.</span> 0 of 177 subclasses use exclusions today — safe to leave empty.</td></tr>
+  </table>
+
+  <!-- ===================== SYNTHESIS ===================== -->
+  <h2>The four id-bound systems — two we take on, two stay manual</h2>
+  <div class="cols2">
+    <div class="card good">
+      <p style="margin:0 0 .3rem;"><strong class="go">Taking on</strong></p>
+      <p style="margin:0 0 .5rem;"><strong>1 · Proficiency grids.</strong> Every grant is an FK id across five catalogs, but the <code>ProficienciesEditor</code> component and the <code>resolveLegacyProficiencyIds</code> matcher already exist — so it's <em>wire + best-effort parse + tweak</em>, not a from-scratch resolver. And it feeds the advancement base.</p>
+      <p style="margin:0;"><strong>2 · Child entities</strong> (<code>features</code>; a class's <code>subclasses</code>). Their own importer descriptors. Features are granted by level automatically, and automation — the only truly hard slice — is 0.4% of them. The 1,103 features are where the real authoring time goes, so this is the highest-leverage piece.</p>
+    </div>
+    <div class="card">
+      <p style="margin:0 0 .3rem;"><strong class="man">Staying manual</strong></p>
+      <p style="margin:0 0 .5rem;"><strong>3 · Spellcasting scaling tables</strong> (<code>progressionId</code>, <code>spellsKnownId</code>). The slot progression isn't prose data and must reconcile to an existing scaling row. Pick it in the editor; parse the <em>rest</em> of the spellcasting object (booleans, ability, type, formula, description).</p>
+      <p style="margin:0;"><strong>4 · Scaling columns &amp; unique-option wiring.</strong> The 46 per-level value tables (Rage uses, Sneak Attack dice…) and the option-group links are authored in their own editors. A feature still carries its <code>@scale…</code> reference text; the scale itself is built separately.</p>
+    </div>
+  </div>
+
+  <h2>Recommended build order</h2>
+  <div class="card accent">
+    <p><span class="pill">1 · Proficiencies</span> &nbsp;Highest structural payoff: embed <code>ProficienciesEditor</code>, pre-fill via <code>resolveLegacyProficiencyIds</code>, tweak after — and it lights up the base advancement tree (HP/saves/profs/subclass/ASI) at the same time. Turns the import skeleton into a functional class.</p>
+    <p><span class="pill">2 · Feature importer</span> &nbsp;The big work-saver (1,103 features). Skeleton fields + parent picker; granted by level automatically; automation left to the editor. Serves both class and subclass features.</p>
+    <p><span class="pill">3 · Subclass importer</span> &nbsp;Parent-class picker + the same field set as the class (lighter), reusing the feature importer for its features.</p>
+    <p><span class="pill">4 · Spellcasting "lite" + small parses</span> &nbsp;The prose-derivable spellcasting fields (scaling tables picked manually), plus <code>asi_levels</code>, <code>subclass_feature_levels</code>, <code>primary_ability_choice</code>, tags-by-name.</p>
+    <p style="margin:.7rem 0 0;"><small class="note">Each step is a descriptor (+ a resolver or picker) of its own; none blocks the others, and everything imported stays editable. The only parts that never come from text are automation, images, bespoke advancement logic, and the id-wiring above — exactly the parts the editor exists to author by hand.</small></p>
+  </div>
+
+  <p class="sub" style="margin-top:2rem;">Draft · <code>docs/_drafts/class-subclass-importer-parts-2026-06-05.html</code> · rev 2 (decisions folded in) · companion to <code>docs/architecture/import-system.md</code></p>
+</body>
+</html>
