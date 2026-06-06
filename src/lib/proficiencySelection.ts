@@ -148,6 +148,14 @@ export function buildGroupedProficiencyDisplayName(
   const choiceCount = Math.max(normalizeChoiceCount(selection?.choiceCount), 1);
   const categoryList = Array.isArray(categories) ? categories : [];
   const itemList = Array.isArray(items) ? items : [];
+  // A skill row carries two ids — `id` (UUID) and `identifier` (the dnd5e key,
+  // e.g. "acrobatics"). The picker stores selected skills by `identifier` (needed
+  // for the Foundry export), whereas grouped kinds (armor/weapons/tools/languages)
+  // store by `id`. Match EITHER so the skills display name resolves instead of
+  // coming back '' (the "blank skillsDisplayName" bug). No data migration needed —
+  // existing selections already hold identifiers; they just render now.
+  const isSelected = (set: Set<unknown>, item: any): boolean =>
+    set.has(item?.id) || (item?.identifier != null && set.has(String(item.identifier)));
   const itemsByCategory = new Map<string, any[]>();
 
   for (const item of itemList) {
@@ -164,8 +172,8 @@ export function buildGroupedProficiencyDisplayName(
     if (!categoryId) continue;
     const categoryItems = itemsByCategory.get(categoryId) || [];
     if (categoryItems.length === 0) continue;
-    if (categoryItems.every((item) => fixedIds.has(item.id))) { fixedCategoryIds.add(categoryId); continue; }
-    if (categoryItems.every((item) => optionIds.has(item.id))) optionCategoryIds.add(categoryId);
+    if (categoryItems.every((item) => isSelected(fixedIds, item))) { fixedCategoryIds.add(categoryId); continue; }
+    if (categoryItems.every((item) => isSelected(optionIds, item))) optionCategoryIds.add(categoryId);
   }
 
   const fixedSegments = categoryList
@@ -173,7 +181,7 @@ export function buildGroupedProficiencyDisplayName(
     .map((category) => String(category?.name || '').trim())
     .filter(Boolean);
   const fixedItemSegments = itemList
-    .filter((item) => fixedIds.has(item.id) && !fixedCategoryIds.has(String(item?.categoryId || '')))
+    .filter((item) => isSelected(fixedIds, item) && !fixedCategoryIds.has(String(item?.categoryId || '')))
     .map((item) => String(item?.name || '').trim())
     .filter(Boolean);
   const optionEntries = [
@@ -182,7 +190,7 @@ export function buildGroupedProficiencyDisplayName(
       .map((category) => String(category?.name || '').trim())
       .filter(Boolean),
     ...itemList
-      .filter((item) => optionIds.has(item.id) && !fixedIds.has(item.id) && !optionCategoryIds.has(String(item?.categoryId || '')))
+      .filter((item) => isSelected(optionIds, item) && !isSelected(fixedIds, item) && !optionCategoryIds.has(String(item?.categoryId || '')))
       .map((item) => String(item?.name || '').trim())
       .filter(Boolean),
   ];
