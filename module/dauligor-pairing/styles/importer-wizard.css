@@ -22,6 +22,68 @@
   flex-direction: column;
 }
 
+/* Campaign Sources picker — DialogV2 launched from Dauligor Tools (module
+ * settings). Reuses the dauligor-importer-app window theme (dark panel chrome +
+ * --dauligor-* tokens); this styles the picker body + checkbox grid so it reads
+ * as one of our windows rather than a stock Foundry dialog. */
+.dauligor-source-picker {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--dauligor-text);
+}
+.dauligor-source-picker__hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--dauligor-text-muted);
+}
+.dauligor-source-picker__tools {
+  display: flex;
+  gap: 8px;
+}
+.dauligor-source-picker__tools button {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--dauligor-btn-border);
+  border-radius: 0;
+  background: var(--dauligor-btn-bg);
+  color: var(--dauligor-text);
+  font: 600 12px var(--font-primary);
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.dauligor-source-picker__tools button:hover {
+  border-color: var(--dauligor-btn-border-hover);
+  background: var(--dauligor-btn-hover-bg);
+}
+.dauligor-source-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1px 14px;
+  max-height: 46vh;
+  overflow: auto;
+  padding: 6px 8px;
+  border: 1px solid var(--dauligor-border);
+  background: var(--dauligor-panel-alt);
+}
+.dauligor-source-picker__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 0;
+  font-size: 12px;
+  cursor: pointer;
+}
+.dauligor-source-picker__name {
+  color: var(--dauligor-text);
+}
+.dauligor-source-picker__slug {
+  margin-left: auto;
+  font-size: 11px;
+  opacity: 0.5;
+}
+
 .dauligor-importer {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;

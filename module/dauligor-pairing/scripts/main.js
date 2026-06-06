@@ -691,9 +691,10 @@ async function openCampaignSourcesDialog() {
   const current = new Set((game.settings.get(MODULE_ID, SETTINGS.enabledSources) || []).map(String));
   const allEnabled = current.size === 0; // empty setting = all sources
   const checkboxes = sources.map((s) => `
-    <label style="display:flex; align-items:center; gap:.4rem; padding:1px 0;">
+    <label class="dauligor-source-picker__row">
       <input type="checkbox" name="src" value="${foundry.utils.escapeHTML(s.slug)}" ${allEnabled || current.has(s.slug) ? "checked" : ""} />
-      <span>${foundry.utils.escapeHTML(s.name)} <span class="hint" style="opacity:.6;">${foundry.utils.escapeHTML(s.slug)}</span></span>
+      <span class="dauligor-source-picker__name">${foundry.utils.escapeHTML(s.name)}</span>
+      <span class="dauligor-source-picker__slug">${foundry.utils.escapeHTML(s.slug)}</span>
     </label>`).join("");
 
   // Wire the Select all / none helpers once the next DialogV2 renders.
@@ -709,14 +710,18 @@ async function openCampaignSourcesDialog() {
   try {
     result = await foundry.applications.api.DialogV2.prompt({
       window: { title: "Campaign Sources" },
+      classes: ["dauligor-importer-app", "dauligor-importer-app--campaign-sources"],
+      position: { width: 540 },
       content: `
-        <p class="hint">Choose which sources the Character Creator offers (backgrounds, species, feats, classes). Fewer sources load faster. Leaving every source checked includes everything (the default) and auto-includes sources added later.</p>
-        <div class="form-fields" style="gap:.5rem; margin:.25rem 0 .5rem;">
-          <button type="button" data-act="all"><i class="fas fa-check-double"></i> Select all</button>
-          <button type="button" data-act="none"><i class="fas fa-xmark"></i> Select none</button>
-        </div>
-        <div style="max-height:50vh; overflow:auto; display:grid; grid-template-columns:1fr 1fr; gap:0 14px; border:1px solid var(--color-border-light-tertiary, #666); padding:.4rem;">
-          ${checkboxes}
+        <div class="dauligor-source-picker">
+          <p class="dauligor-source-picker__hint">Choose which sources the Character Creator offers (backgrounds, species, feats, classes). Fewer sources load faster. Leaving every source checked includes everything (the default) and auto-includes sources added later.</p>
+          <div class="dauligor-source-picker__tools">
+            <button type="button" data-act="all"><i class="fas fa-check-double"></i> Select all</button>
+            <button type="button" data-act="none"><i class="fas fa-xmark"></i> Select none</button>
+          </div>
+          <div class="dauligor-source-picker__grid">
+            ${checkboxes}
+          </div>
         </div>
       `,
       ok: {
