@@ -15,16 +15,18 @@
 // write call (spell → `upsertSpell`), so entities made here are byte-identical
 // to ones saved from the hand editor. Activities/automation are NOT parsed.
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { AlertTriangle, ChevronUp, FileText, Library, ListChecks, Pencil, ScanText, Scissors, Sparkles, Wand2 } from 'lucide-react';
 import { fetchCollection } from '../../lib/d1';
+import { denormalizeCompendiumData } from '../../lib/compendium';
 import { slugify } from '../../lib/utils';
 import { htmlToBbcode } from '../../lib/bbcode';
 import { cleanFoundryHtml } from '../../lib/foundryHtmlCleanup';
 import { reportClientError, OperationType } from '../../lib/firebase';
 import SingleSelectSearch from '../../components/ui/SingleSelectSearch';
 import SpellDetailPanel from '../../components/compendium/SpellDetailPanel';
+import ProficienciesEditor, { type ProficiencyType } from '../../components/compendium/ProficienciesEditor';
 import {
   listImportDescriptors,
   getImportDescriptor,
@@ -46,6 +48,30 @@ type Span = { start: number; end: number };
 type ActiveSelection = { start: number; end: number; text: string; top: number; left: number };
 /** The editable state of one entity in the workspace. */
 type EntityState = { values: Record<string, any>; spans: Record<string, Span>; provenance: Record<string, FieldFlag>; leftovers: string[] };
+
+/** Proficiency catalogs (skills/armor/weapons/tools/languages + their category
+ * tables + grouped-by-category maps) loaded once and shared with any
+ * `proficiencies` field's embedded ProficienciesEditor via context. */
+type ProfCatalogs = {
+  allSkills: any[];
+  allArmor: any[]; allArmorCategories: any[]; groupedArmor: Record<string, any[]>;
+  allWeapons: any[]; allWeaponCategories: any[]; groupedWeapons: Record<string, any[]>;
+  allTools: any[]; allToolCategories: any[]; groupedTools: Record<string, any[]>;
+  allLanguages: any[]; allLanguageCategories: any[]; groupedLanguages: Record<string, any[]>;
+};
+const ImportCatalogsContext = createContext<ProfCatalogs | null>(null);
+
+// Group catalog items by their category NAME — the shape ClassEditor builds and
+// the ProficienciesEditor consumes. Weapons append the melee/ranged type to the
+// category name the same way the editor does.
+function groupByCategory(items: any[], cats: any[], weaponType = false): Record<string, any[]> {
+  return (items || []).reduce((acc: Record<string, any[]>, item: any) => {
+    let cat = cats.find((c) => c.id === item.categoryId)?.name || item.category || 'Other';
+    if (weaponType && item.weaponType) cat = String(cat).replace(/ Weapons?/i, '') + ` ${item.weaponType}`;
+    (acc[cat] = acc[cat] || []).push(item);
+    return acc;
+  }, {});
+}
 
 const PLACEHOLDER =
   'Fireball\n3rd-level evocation\nCasting Time: 1 action\nRange: 150 feet\n' +
@@ -261,6 +287,12 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
   const [sourceId, setSourceId] = useState(''); // persists across creates + type changes
   const [sources, setSources] = useState<SourceRow[]>([]);
   const [saving, setSaving] = useState(false);
+  // Proficiency catalogs — loaded lazily only when a descriptor has a
+  // `proficiencies` field (skipped for spell-only sessions).
+  const [rawCatalogs, setRawCatalogs] = useState<{
+    skills: any[]; armor: any[]; armorCats: any[]; weapons: any[]; weaponCats: any[];
+    tools: any[]; toolCats: any[]; languages: any[]; languageCats: any[];
+  } | null>(null);
 
   // Workspace
   const [rawText, setRawText] = useState('');
@@ -288,6 +320,54 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // Load the proficiency catalogs the moment any registered type needs them
+  // (class does). Mirrors ClassEditor's foundation fetch + denormalize.
+  const needsProficiencyCatalogs = useMemo(
+    () => descriptors.some((d) => d.fields.some((f) => f.kind === 'proficiencies')),
+    [descriptors],
+  );
+  useEffect(() => {
+    if (!needsProficiencyCatalogs || rawCatalogs) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [skills, armor, armorCats, weapons, weaponCats, tools, toolCats, languages, languageCats] = await Promise.all([
+          fetchCollection('skills', { orderBy: 'name ASC' }),
+          fetchCollection('armor', { orderBy: 'name ASC' }),
+          fetchCollection('armorCategories', { orderBy: 'name ASC' }),
+          fetchCollection('weapons', { orderBy: 'name ASC' }),
+          fetchCollection('weaponCategories', { orderBy: 'name ASC' }),
+          fetchCollection('tools', { orderBy: 'name ASC' }),
+          fetchCollection('toolCategories', { orderBy: 'name ASC' }),
+          fetchCollection('languages', { orderBy: 'name ASC' }),
+          fetchCollection('languageCategories', { orderBy: 'name ASC' }),
+        ]);
+        if (cancelled) return;
+        const d = (rows: any[]) => (rows || []).map((r) => denormalizeCompendiumData(r));
+        setRawCatalogs({
+          skills: d(skills), armor: d(armor), armorCats: d(armorCats),
+          weapons: d(weapons), weaponCats: d(weaponCats),
+          tools: d(tools), toolCats: d(toolCats),
+          languages: d(languages), languageCats: d(languageCats),
+        });
+      } catch (err) { console.error('[ImportMarkWindow] proficiency catalogs load failed:', err); }
+    })();
+    return () => { cancelled = true; };
+  }, [needsProficiencyCatalogs, rawCatalogs]);
+
+  // Derive the grouped-by-category maps the ProficienciesEditor consumes.
+  const catalogsValue = useMemo<ProfCatalogs | null>(() => {
+    if (!rawCatalogs) return null;
+    const c = rawCatalogs;
+    return {
+      allSkills: c.skills,
+      allArmor: c.armor, allArmorCategories: c.armorCats, groupedArmor: groupByCategory(c.armor, c.armorCats),
+      allWeapons: c.weapons, allWeaponCategories: c.weaponCats, groupedWeapons: groupByCategory(c.weapons, c.weaponCats, true),
+      allTools: c.tools, allToolCategories: c.toolCats, groupedTools: groupByCategory(c.tools, c.toolCats),
+      allLanguages: c.languages, allLanguageCategories: c.languageCats, groupedLanguages: groupByCategory(c.languages, c.languageCats),
+    };
+  }, [rawCatalogs]);
 
   const sourceOptions = useMemo(
     () => sources.map((s) => ({ id: s.id, name: (s.abbreviation ? `${s.abbreviation} — ` : '') + (s.name || s.id) })),
@@ -453,6 +533,7 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
   };
 
   return (
+    <ImportCatalogsContext.Provider value={catalogsValue}>
     <div className="mx-auto max-w-7xl px-4 py-6">
       {/* Header */}
       <div className="page-header">
@@ -607,6 +688,7 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
         </>
       ) : null}
     </div>
+    </ImportCatalogsContext.Provider>
   );
 }
 
@@ -872,6 +954,7 @@ function FieldControl({
   highlighted?: boolean;
   onHover?: (on: boolean) => void;
 }) {
+  const catalogs = useContext(ImportCatalogsContext);
   const id = `imp-${field.key}`;
   const stateRing = flag ? ' ring-1 ring-blood/50 border-blood/40' : highlighted ? ' ring-1 ring-gold/60' : '';
   const flagNote = flag ? (flag.note ?? (flag.confidence === 'none' ? 'Not found — please set this.' : 'Best guess — confirm.')) : '';
@@ -883,6 +966,34 @@ function FieldControl({
         <input id={id} type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} className={`h-4 w-4 accent-[var(--gold)]${flag ? ' ring-1 ring-blood/50' : ''}`} />
         {field.label}
       </label>
+    );
+  }
+
+  if (field.kind === 'proficiencies') {
+    const types = (field.proficiencyTypes as ProficiencyType[] | undefined) ?? ['armor', 'weapons', 'skills', 'tools', 'languages'];
+    const prof = value && typeof value === 'object' ? value : {};
+    return (
+      <div className="sm:col-span-2" {...hover}>
+        <label className="field-label mb-1 block">{field.label}</label>
+        {catalogs ? (
+          <div className="rounded border border-gold/10 bg-background/30 p-3">
+            <ProficienciesEditor
+              proficiencies={prof}
+              setProficiencies={onChange}
+              types={types}
+              showDisplayNames={false}
+              allSkills={catalogs.allSkills}
+              allArmor={catalogs.allArmor} allArmorCategories={catalogs.allArmorCategories} groupedArmor={catalogs.groupedArmor}
+              allWeapons={catalogs.allWeapons} allWeaponCategories={catalogs.allWeaponCategories} groupedWeapons={catalogs.groupedWeapons}
+              allTools={catalogs.allTools} allToolCategories={catalogs.allToolCategories} groupedTools={catalogs.groupedTools}
+              allLanguages={catalogs.allLanguages} allLanguageCategories={catalogs.allLanguageCategories} groupedLanguages={catalogs.groupedLanguages}
+            />
+          </div>
+        ) : (
+          <p className="field-hint">Loading proficiency catalogs…</p>
+        )}
+        {field.help ? <p className="field-hint mt-0.5">{field.help}</p> : null}
+      </div>
     );
   }
 

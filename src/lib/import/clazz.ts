@@ -65,22 +65,26 @@ function parseAbilities(text: unknown): string[] {
   ));
 }
 
-// The empty, sanitized proficiency collection a brand-new class saves — byte
-// for byte the output of ClassEditor's `sanitizeProficiencyCollection({})`,
-// with the captured saving throws seeded into `savingThrows.fixedIds` (the
-// editor keeps the top-level `saving_throws` column and this list in sync).
-function emptyProficiencyCollection(savingThrowIds: string[] = []) {
+// Sanitize a (possibly partial) proficiency collection into the EXACT shape
+// ClassEditor's `sanitizeProficiencyCollection` produces — byte-identical, so an
+// imported row matches a hand save. `raw` is the grid's value (empty for a fresh
+// class or for multiclass profs); `savingThrowIds` (from the saves text field)
+// win for the savingThrows section, which the grid doesn't render — the editor
+// keeps the top-level `saving_throws` column and this list in sync.
+function buildProficiencyCollection(raw: any = {}, savingThrowIds: string[] = []) {
+  const r = raw && typeof raw === 'object' ? raw : {};
+  const saves = savingThrowIds.length ? savingThrowIds : (r.savingThrows?.fixedIds ?? []);
   return {
-    armor: sanitizeProficiencySelection({}, { includeCategories: true }),
-    weapons: sanitizeProficiencySelection({}, { includeCategories: true, includeWeaponTypeFilters: true }),
-    tools: sanitizeProficiencySelection({}, { includeCategories: true }),
-    skills: sanitizeProficiencySelection({}, { includeCategories: false }),
-    savingThrows: sanitizeProficiencySelection({ fixedIds: savingThrowIds }, { uppercase: true, includeCategories: false }),
-    languages: sanitizeProficiencySelection({}, { includeCategories: true }),
-    armorDisplayName: '',
-    weaponsDisplayName: '',
-    toolsDisplayName: '',
-    skillsDisplayName: '',
+    armor: sanitizeProficiencySelection(r.armor, { includeCategories: true }),
+    weapons: sanitizeProficiencySelection(r.weapons, { includeCategories: true, includeWeaponTypeFilters: true }),
+    tools: sanitizeProficiencySelection(r.tools, { includeCategories: true }),
+    skills: sanitizeProficiencySelection(r.skills, { includeCategories: false }),
+    savingThrows: sanitizeProficiencySelection({ fixedIds: saves }, { uppercase: true, includeCategories: false }),
+    languages: sanitizeProficiencySelection(r.languages, { includeCategories: true }),
+    armorDisplayName: String(r.armorDisplayName || ''),
+    weaponsDisplayName: String(r.weaponsDisplayName || ''),
+    toolsDisplayName: String(r.toolsDisplayName || ''),
+    skillsDisplayName: String(r.skillsDisplayName || ''),
   };
 }
 
@@ -102,6 +106,7 @@ export const clazzDescriptor: ImportDescriptor = {
     { key: 'hitDie', label: 'Hit Die', kind: 'select', default: '8', options: HIT_DIE_OPTIONS, group: 'Mechanics' },
     { key: 'primaryAbility', label: 'Primary Ability', kind: 'text', group: 'Mechanics', placeholder: 'Charisma — or "Strength or Dexterity"', help: 'Full names or abbreviations; "or"/"and"/commas accepted.' },
     { key: 'savingThrows', label: 'Saving Throw Proficiencies', kind: 'text', group: 'Mechanics', placeholder: 'Constitution, Charisma', help: 'The two save proficiencies the class grants at level 1.' },
+    { key: 'proficiencies', label: 'Proficiencies', kind: 'proficiencies', group: 'Proficiencies', default: buildProficiencyCollection(), proficiencyTypes: ['armor', 'weapons', 'skills', 'tools', 'languages'], help: 'Armor / weapons / tools / skills / languages — authored through the same grid as the class editor. (Saving throws are set above.) Tweak freely.' },
     { key: 'description', label: 'Description', kind: 'textarea', group: 'Text', placeholder: 'BBCode — the class overview' },
     { key: 'preview', label: 'Preview blurb', kind: 'textarea', group: 'Text', placeholder: 'A short one-liner for cards/listings' },
     { key: 'lore', label: 'Lore', kind: 'textarea', group: 'Text', placeholder: 'BBCode — flavour / in-world lore' },
@@ -137,13 +142,13 @@ export const clazzDescriptor: ImportDescriptor = {
       category: String(f.category ?? 'core'),
       hit_die: asNum(f.hitDie, 8),
       saving_throws: savingThrows,
-      proficiencies: emptyProficiencyCollection(savingThrows),
+      proficiencies: buildProficiencyCollection(f.proficiencies, savingThrows),
       starting_equipment: String(f.startingEquipment ?? ''),
       primary_ability: primaryAbility,
       primary_ability_choice: [] as string[],
       wealth: String(f.wealth ?? ''),
       multiclassing: String(f.multiclassing ?? ''),
-      multiclass_proficiencies: emptyProficiencyCollection(),
+      multiclass_proficiencies: buildProficiencyCollection(),
       excluded_option_ids: {} as Record<string, string[]>,
       tag_ids: [] as string[],
       subclass_title: String(f.subclassTitle ?? 'Subclass') || 'Subclass',

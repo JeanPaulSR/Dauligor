@@ -17,7 +17,9 @@ export type ImportFieldKind =
   | 'number'
   | 'boolean'
   | 'select'
-  | 'source'; // a `<select>` populated from the `sources` table
+  | 'source' // a `<select>` populated from the `sources` table
+  | 'proficiencies'; // the reusable ProficienciesEditor grid; value is the class
+                     // proficiency object {armor,weapons,tools,skills,languages,…}
 
 export interface ImportFieldOption {
   value: string;
@@ -33,6 +35,9 @@ export interface ImportFieldDef {
   required?: boolean;
   default?: unknown;
   options?: ImportFieldOption[]; // for kind === 'select'
+  /** for kind === 'proficiencies' — which sub-grids to render (default
+   * armor/weapons/tools/skills/languages; a class keeps savingThrows as a text field). */
+  proficiencyTypes?: string[];
   placeholder?: string;
   help?: string;
   group?: string; // optional UI grouping ("Identity" | "Mechanics" | …)
