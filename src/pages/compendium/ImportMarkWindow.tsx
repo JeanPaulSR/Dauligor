@@ -345,8 +345,20 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
         ]);
         if (cancelled) return;
         const d = (rows: any[]) => (rows || []).map((r) => denormalizeCompendiumData(r));
+        // Skills (a flat column) are keyed by the FULL row id everywhere they're
+        // READ — ClassView and ClassPreviewPane both resolve `allSkills.find(s =>
+        // s.id === id)`, and real classes store the row id (Barbarian) sometimes
+        // alongside redundant codes (Ranger). The grid's `idOf` prefers an item's
+        // `identifier` when present, which would emit unresolvable codes ("ath").
+        // Drop `identifier` from the skills catalog so the grid emits row ids,
+        // matching how classes actually store skills. (Grouped kinds use item.id
+        // directly, so they're unaffected; saving throws aren't rendered here.)
+        const dSkills = (rows: any[]) => (rows || []).map((r) => {
+          const { identifier, ...rest } = denormalizeCompendiumData(r) as any;
+          return rest;
+        });
         setRawCatalogs({
-          skills: d(skills), armor: d(armor), armorCats: d(armorCats),
+          skills: dSkills(skills), armor: d(armor), armorCats: d(armorCats),
           weapons: d(weapons), weaponCats: d(weaponCats),
           tools: d(tools), toolCats: d(toolCats),
           languages: d(languages), languageCats: d(languageCats),
