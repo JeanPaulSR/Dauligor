@@ -44,6 +44,25 @@
   (<code>&amp;</code>-references, <code>#</code>-anchors, live entity-backed entries), so the move is
   staged, not a copy-paste.</p>
 
+  <div class="lock"><div>✅</div><div><b>Decisions since this was written (2026-06-05).</b>
+    <ul style="margin:.3em 0">
+      <li><b>Stage 2 (page body → blocks) shipped to local</b> (commit <code>f7fdec1</code>, not yet pushed):
+        <code>system_page_blocks</code> table + <code>SystemPageDesigner</code> reusing <code>LayoutEditor</code>;
+        the entries glossary stays as-is for now.</li>
+      <li><b>Full unification chosen for entries (Stage 3, in progress).</b> Entries become blocks:
+        an <b><code>definition</code> block</b> (free-prose) is the addressable ENTRY — it IS the
+        <code>&amp;kind[anchor]</code> / <code>#anchor</code> target. A <b><code>reference</code> block</b> is the
+        OPPOSITE — a pointer that embeds an entity defined elsewhere — so it is <b>not</b> an entry and is
+        <b>dropped from system pages</b>. (This corrects the earlier "reference block = entry" framing, which
+        made a reference both the pointer and the target.)</li>
+      <li><b>Approach: lazy + fallback</b> (like notes/secrets) — resolver reads blocks, falls back to the
+        <code>system_page_entries</code> table; pages convert on edit; the entries table is kept as a safety
+        net (not dropped); no bulk SQL data migration. Keeps imported Foundry <code>&amp;</code>-refs working
+        through the transition.</li>
+    </ul>
+    Sections below are the original investigation; where they say the entry-placement block is a "reference"
+    block, read "<b>definition</b> block" (entry) per the decisions above.</div></div>
+
   <h2>1 · What a system page is today</h2>
   <p>Source of truth: <code>src/lib/systemPages.ts</code>, tables <code>system_pages</code> /
   <code>system_page_entries</code>, reader <code>/system/:identifier</code> (<code>SystemPageView</code>),

@@ -29,6 +29,7 @@ export type LayoutBlockType =
   | 'recommended'
   | 'callout'          // a styled call-to-action box (heading + text + optional button)
   | 'reference'        // embed ONE referenced entity inline / as a card / as a link
+  | 'definition'       // a named, anchored prose entry (a system-page &-reference / glossary target)
   | 'entity-row'       // a row/grid of entity cards (articles, classes, items, …)
   | 'entity-feature'   // one large highlighted entity
   | 'group'            // container: a titled card holding children
@@ -193,6 +194,18 @@ export interface ReferenceBlock extends BlockBase {
   ref: EntityRef | null;
   display: 'inline' | 'card' | 'link';
 }
+/** A named, anchored prose entry — the block-world form of a system-page ENTRY
+ *  (a `&kind[anchor]` reference target + `#anchor` deep-link). The system page is
+ *  the canonical home; this block IS the entry, not a pointer to one. (`reference`
+ *  is the opposite: a pointer that embeds an entity defined elsewhere.) */
+export interface DefinitionBlock extends BlockBase {
+  blockType: 'definition';
+  /** Addressable id: the `&kind[anchor]` target + `#anchor`. */
+  anchor: string;
+  name: string;
+  /** BBCode body. */
+  body: string;
+}
 export interface GroupBlock extends BlockBase {
   blockType: 'group';
   title: string;
@@ -227,6 +240,7 @@ export type LayoutBlock =
   | RecommendedBlock
   | CalloutBlock
   | ReferenceBlock
+  | DefinitionBlock
   | EntityRowBlock
   | EntityFeatureBlock
   | GroupBlock
@@ -236,6 +250,21 @@ export type LayoutBlock =
 export type ContainerBlock = GroupBlock | ColumnsBlock | ColumnBlock;
 export function isContainer(b: LayoutBlock): b is ContainerBlock {
   return b.blockType === 'group' || b.blockType === 'columns' || b.blockType === 'column';
+}
+
+/** Definition blocks that carry an `anchor` — the addressable ENTRIES of a system
+ *  page (the `&kind[anchor]` + `#anchor` deep-link targets), depth-first in
+ *  document order. Used by the reader's Contents rail and the `&`-reference
+ *  resolver. (A `reference` block is a pointer, never an entry, so it's excluded.) */
+export function collectAnchoredBlocks(blocks: LayoutBlock[]): DefinitionBlock[] {
+  const out: DefinitionBlock[] = [];
+  const visit = (b: LayoutBlock) => {
+    if (!b || typeof b !== 'object') return;
+    if (b.blockType === 'definition' && b.anchor) out.push(b);
+    if (isContainer(b)) (b.children || []).forEach(visit);
+  };
+  blocks.forEach(visit);
+  return out;
 }
 
 /** Display metadata for the block-type picker. `icon` is a lucide icon NAME —
@@ -252,6 +281,7 @@ export const BLOCK_TYPE_META: Record<
   recommended:      { label: 'Recommended',      icon: 'BookMarked', description: "The campaign's recommended article.",       group: 'content' },
   callout:          { label: 'Callout',          icon: 'Megaphone',  description: 'A highlighted box with text + an optional button.', group: 'content' },
   reference:        { label: 'Reference',         icon: 'Link2',      description: 'Embed another entity (article, condition, spell, system entry…) inline, as a card, or as a link.', group: 'content' },
+  definition:       { label: 'Definition',        icon: 'Hash',       description: 'A named, anchored prose entry — a system-page glossary / reference target.', group: 'content' },
   text:             { label: 'Text',             icon: 'Type',       description: 'Free BBCode prose.',                        group: 'content' },
   note:             { label: 'Storyteller Note', icon: 'Lock',       description: 'A staff-only note — shown only to staff, never to players.', group: 'content' },
   secret:           { label: 'Secret',           icon: 'EyeOff',     description: 'Hidden content revealed only to chosen campaigns (staff always see it).', group: 'content' },
@@ -306,6 +336,8 @@ export function makeBlock(type: LayoutBlockType, id: string): LayoutBlock {
       return { id, blockType: 'callout', title: '', body: '', buttonLabel: '', buttonLink: '', style: 'soft' };
     case 'reference':
       return { id, blockType: 'reference', ref: null, display: 'inline' };
+    case 'definition':
+      return { id, blockType: 'definition', anchor: '', name: '', body: '' };
     case 'entity-row':
       return { id, blockType: 'entity-row', title: '', showHeading: true, source: 'manual', refs: [], category: '', count: 3, columns: 3, card: 'image', excerpt: true };
     case 'entity-feature':
@@ -397,6 +429,8 @@ export function parseLayoutBlock(row: any): LayoutBlock | null {
     case 'reference':
       return { id, blockType: 'reference', ref: asRef(config.ref),
         display: config.display === 'card' ? 'card' : config.display === 'link' ? 'link' : 'inline' };
+    case 'definition':
+      return { id, blockType: 'definition', anchor: s(config.anchor), name: s(config.name), body: s(config.body) };
     case 'entity-row':
       return { id, blockType: 'entity-row', title: s(config.title), showHeading: config.showHeading !== false,
         source: config.source === 'auto' ? 'auto' : 'manual', refs: asRefArray(config.refs),

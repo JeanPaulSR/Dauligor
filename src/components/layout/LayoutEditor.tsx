@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
-  Sparkles, LayoutGrid, Star, BookMarked, Type, ImageIcon, Minus, Square, Columns3, Megaphone, Lock, EyeOff, Link2,
+  Sparkles, LayoutGrid, Star, BookMarked, Type, ImageIcon, Minus, Square, Columns3, Megaphone, Lock, EyeOff, Link2, Hash,
   ChevronUp, ChevronDown, Trash2, Copy, X, GripVertical, Search, ChevronLeft,
+  ChevronsLeftRight, ChevronsRightLeft,
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -18,7 +19,7 @@ import {
   type LayoutBlock, type LayoutBlockType, type ContainerBlock, type EntityRef,
 } from '../../lib/layoutBlocks';
 
-const ICONS: Record<string, any> = { Sparkles, LayoutGrid, Star, BookMarked, Type, ImageIcon, Minus, Square, Columns3, Megaphone, Lock, EyeOff, Link2 };
+const ICONS: Record<string, any> = { Sparkles, LayoutGrid, Star, BookMarked, Type, ImageIcon, Minus, Square, Columns3, Megaphone, Lock, EyeOff, Link2, Hash };
 
 /** Visible text overrides — defaults are surface-neutral; a host (campaign,
  *  article, …) passes its own wording so the editor reads naturally there. */
@@ -93,6 +94,11 @@ function loadPaneWidths(key: string): { tree: number; insp: number } {
   } catch { /* ignore */ }
   return { tree: TREE_DEFAULT, insp: INSP_DEFAULT };
 }
+/* Whether the middle live-preview pane is collapsed (persisted per surface, so a
+   user who prefers a wide edit area keeps it that way across visits). */
+function loadPreviewCollapsed(key: string): boolean {
+  try { return localStorage.getItem(`${key}:previewCollapsed`) === '1'; } catch { return false; }
+}
 
 /* ── tree mutation helpers (operate on a deep clone, return new tree) ── */
 const clone = (blocks: LayoutBlock[]): LayoutBlock[] => JSON.parse(JSON.stringify(blocks));
@@ -163,6 +169,8 @@ export default function LayoutEditor({
   const [addAt, setAddAt] = useState<{ containerId: string | null } | null>(null);
   // Resizable pane widths (fullscreen mode only).
   const [paneW, setPaneW] = useState<{ tree: number; insp: number }>(() => loadPaneWidths(paneStorageKey));
+  // Collapse the middle live-preview pane to give the inspector the full edit width.
+  const [previewCollapsed, setPreviewCollapsed] = useState<boolean>(() => loadPreviewCollapsed(paneStorageKey));
 
   useUnsavedChangesWarning(!isControlled && dirty);
 
@@ -183,6 +191,10 @@ export default function LayoutEditor({
   useEffect(() => {
     try { localStorage.setItem(paneStorageKey, JSON.stringify(paneW)); } catch { /* ignore */ }
   }, [paneW, paneStorageKey]);
+  // Persist the preview-collapsed preference.
+  useEffect(() => {
+    try { localStorage.setItem(`${paneStorageKey}:previewCollapsed`, previewCollapsed ? '1' : '0'); } catch { /* ignore */ }
+  }, [previewCollapsed, paneStorageKey]);
 
   useEffect(() => {
     // Controlled / no-loader: the host supplies the blocks; nothing to fetch.
@@ -402,25 +414,53 @@ export default function LayoutEditor({
 
       {resizable && <ResizeHandle onPointerDown={(e) => startResize('tree', e)} />}
 
-      {/* Live preview */}
-      <div className="flex-1 min-w-0 flex flex-col bg-background/10">
-        <div className="pane-head">{L.previewLabel}</div>
-        <div className="flex-grow overflow-y-auto custom-scrollbar p-4">
-          {blocks.length === 0 ? (
-            <div className="empty-state h-full"><p className="description-text">{L.emptyPreviewTitle}</p><p className="label-text text-gold/45 mt-1">{L.emptyPreviewHint}</p></div>
-          ) : (
-            // Clicks are swallowed so preview links don't navigate away mid-edit.
-            <div onClickCapture={(e) => e.preventDefault()}>
-              {renderPreview(blocks)}
-            </div>
-          )}
+      {/* Live preview — collapsible to a thin rail so the inspector can take the
+          full edit width. Click the rail (or the header chevron) to toggle. */}
+      {previewCollapsed ? (
+        <button
+          type="button"
+          onClick={() => setPreviewCollapsed(false)}
+          title="Show live preview"
+          aria-label="Show live preview"
+          className="group shrink-0 w-9 flex flex-col items-center gap-2 py-3 border-l border-gold/25 bg-background/10 hover:bg-gold/10 transition-colors"
+        >
+          <ChevronsLeftRight className="w-4 h-4 text-ink/45 group-hover:text-gold" />
+          <span className="[writing-mode:vertical-rl] rotate-180 pane-head !p-0 select-none">{L.previewLabel}</span>
+        </button>
+      ) : (
+        <div className="flex-1 min-w-0 flex flex-col bg-background/10">
+          <div className="pane-head flex items-center justify-between pr-1">
+            <span>{L.previewLabel}</span>
+            <button
+              type="button"
+              onClick={() => setPreviewCollapsed(true)}
+              title="Collapse live preview"
+              aria-label="Collapse live preview"
+              className="p-1 text-ink/35 hover:text-gold transition-colors"
+            >
+              <ChevronsRightLeft className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <div className="flex-grow overflow-y-auto custom-scrollbar p-4">
+            {blocks.length === 0 ? (
+              <div className="empty-state h-full"><p className="description-text">{L.emptyPreviewTitle}</p><p className="label-text text-gold/45 mt-1">{L.emptyPreviewHint}</p></div>
+            ) : (
+              // Clicks are swallowed so preview links don't navigate away mid-edit.
+              <div onClickCapture={(e) => e.preventDefault()}>
+                {renderPreview(blocks)}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
-      {resizable && <ResizeHandle onPointerDown={(e) => startResize('insp', e)} />}
+      {resizable && !previewCollapsed && <ResizeHandle onPointerDown={(e) => startResize('insp', e)} />}
 
-      {/* Inspector */}
-      <div className="border-l border-gold/25 bg-gold/5 flex flex-col shrink-0" style={{ width: inspWidth }}>
+      {/* Inspector — grows to fill the freed space when the preview is collapsed. */}
+      <div
+        className={cn('border-l border-gold/25 bg-gold/5 flex flex-col', previewCollapsed ? 'flex-1 min-w-0' : 'shrink-0')}
+        style={previewCollapsed ? undefined : { width: inspWidth }}
+      >
         <div className="pane-head">Inspector</div>
         <div className="flex-grow overflow-y-auto custom-scrollbar">
           {selected ? (
@@ -767,6 +807,13 @@ function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onA
         <Field label="Referenced entity"><EntityRefPicker mode="single" value={block.ref} onChange={(ref) => set({ ref })} /></Field>
         <Seg label="Display" value={block.display} options={[['inline', 'Inline'], ['card', 'Card'], ['link', 'Link']]} onChange={(v) => set({ display: v })} />
         <p className="field-hint">Inline shows the entity's text in-flow; Card shows an image tile; Link shows just a link.</p>
+      </>)}
+
+      {block.blockType === 'definition' && (<>
+        <Field label="Name"><Input autoComplete="off" className="field-input" value={block.name} onChange={(e) => set({ name: e.target.value })} placeholder="Prone" /></Field>
+        <Field label="Anchor / reference id"><Input autoComplete="off" className="field-input font-mono" value={block.anchor} onChange={(e) => set({ anchor: e.target.value })} placeholder="prone" /></Field>
+        <Field label="Body (BBCode)"><MarkdownEditor value={block.body} onChange={(v) => set({ body: v })} placeholder="The entry's rules text…" /></Field>
+        <p className="field-hint">A system-page entry — the target a reference resolves to. The anchor is its <code>&amp;kind[anchor]</code> / <code>#anchor</code> id (lowercase slug).</p>
       </>)}
 
       {block.blockType === 'entity-row' && (<>

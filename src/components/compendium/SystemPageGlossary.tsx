@@ -1,40 +1,56 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import BBCodeRenderer from '../BBCodeRenderer';
 import LayoutBlocks from '../layout/LayoutBlocks';
-import type { LayoutBlock } from '../../lib/layoutBlocks';
+import { collectAnchoredBlocks, type LayoutBlock } from '../../lib/layoutBlocks';
 import type { SystemPage, ResolvedEntry } from '../../lib/systemPages';
 
 /**
- * Reader for a system page — a quiet article: title, the admin-authored
- * description (rendered straight, no imposed styling — the admin shapes it via
- * BBCode), and then each entry as a flat block. Blocks are chrome-free at rest;
- * a soft accent fill + left rule appears on hover or when an entry is targeted
- * (so a `&condition[prone]` deep-link lights its block up on arrival). The
- * right-hand Contents rail is pure typography — no border, no icons, the active
- * entry just resolves to the accent colour in serif.
+ * Reader for a system page. A system page is one block layout: prose/structure
+ * blocks for the body, plus `definition` blocks for the addressable entries (the
+ * `&kind[anchor]` / `#anchor` targets). When the page has definition blocks we
+ * render the whole layout and build the Contents rail + scroll-spy from those
+ * blocks. Pages not yet block-migrated fall back to the legacy flow: the block
+ * (or description) body, then the `system_page_entries` glossary below.
+ *
+ * The right-hand Contents rail is pure typography — no border, no icons; the
+ * active entry resolves to the accent colour in serif. `#anchor` deep-links from
+ * `&condition[prone]` light up the matching entry on arrival.
  */
 interface SystemPageGlossaryProps {
   page: SystemPage;
   entries: ResolvedEntry[];
-  /** Page body as blocks (Stage 2). When present, renders instead of the raw
-   *  `page.description` BBCode (the lib falls back to wrapping description into a
-   *  text block, so this is normally non-empty when there's any intro). */
+  /** Page content as a block layout. Includes `definition` blocks (entries) once
+   *  the page is block-authored; falls back to a text block of the description. */
   blocks?: LayoutBlock[];
 }
 
 export default function SystemPageGlossary({ page, entries, blocks = [] }: SystemPageGlossaryProps) {
-  const [activeId, setActiveId] = useState<string | null>(entries[0]?.identifier ?? null);
+  // Entries authored as `definition` blocks (the unified model). When present,
+  // they ARE the entries and the legacy `entries` glossary is suppressed.
+  const anchoredBlocks = useMemo(() => collectAnchoredBlocks(blocks), [blocks]);
+  const unified = anchoredBlocks.length > 0;
+
+  // The Contents rail / scroll-spy items — from definition blocks (unified) or
+  // the legacy entries table.
+  const railItems = useMemo(
+    () => (unified
+      ? anchoredBlocks.map((b) => ({ id: b.anchor, name: b.name || b.anchor }))
+      : entries.map((e) => ({ id: e.identifier, name: e.name }))),
+    [unified, anchoredBlocks, entries],
+  );
+  const railKey = railItems.map((r) => r.id).join('|');
+
+  const [activeId, setActiveId] = useState<string | null>(railItems[0]?.id ?? null);
   // Suppresses the scroll-spy briefly after a click, so intermediate entries
   // don't steal the active state mid smooth-scroll. Stores an epoch ms cutoff.
   const scrollLockRef = useRef(0);
 
   // Scroll-spy: highlight the entry whose vertical center is nearest the
-  // viewport's. Works for normal scrolling AND for centered clicks (a top-band
-  // spy would let the entry above a centered one steal the active state).
+  // viewport's. Works for normal scrolling AND for centered clicks.
   useEffect(() => {
-    if (entries.length === 0) return;
-    const sections = entries
-      .map((e) => document.getElementById(e.identifier))
+    if (railItems.length === 0) return;
+    const sections = railItems
+      .map((r) => document.getElementById(r.id))
       .filter((el): el is HTMLElement => !!el);
     if (sections.length === 0) return;
     const recompute = () => {
@@ -55,7 +71,8 @@ export default function SystemPageGlossary({ page, entries, blocks = [] }: Syste
     });
     sections.forEach((s) => observer.observe(s));
     return () => observer.disconnect();
-  }, [entries]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [railKey]);
 
   // Click handler for the Contents rail: instant active state + controlled
   // smooth scroll (respects the section's `scroll-mt-24`), with the spy locked
@@ -70,23 +87,14 @@ export default function SystemPageGlossary({ page, entries, blocks = [] }: Syste
     }
   };
 
-  // Deep-link from a URL hash (`/system/condition#incapacitated` arriving from
-  // a `&Reference[condition=incapacitated]` ref). Goes through the same path
-  // as a rail click — set active + lock the spy — so the entry we jump to is
-  // the one that ends up highlighted, even if it's short and the next entry
-  // would otherwise win the "closest to viewport center" race. Instant scroll
-  // (not smooth) since this is the initial landing, not an in-page nav.
-  //
-  // Subtle: the "done" ref is flipped INSIDE the rAF callback (not at effect
-  // entry) so React StrictMode's double-effect in dev — cleanup cancels the
-  // first rAF, then a second run schedules a fresh one — still completes the
-  // jump. Otherwise the cleanup would cancel the jump and the second pass
-  // would skip rescheduling, leaving the page wherever the browser's native
-  // anchor handling put it (often the wrong entry once the page rendered).
+  // Deep-link from a URL hash (`/system/condition#incapacitated` arriving from a
+  // `&condition[incapacitated]` ref). Goes through the same path as a rail click.
+  // The "done" ref flips INSIDE the rAF so React StrictMode's double-effect still
+  // completes the jump.
   const initialJumpDoneRef = useRef(false);
   useEffect(() => {
     if (initialJumpDoneRef.current) return;
-    if (entries.length === 0) return;
+    if (railItems.length === 0) return;
     if (typeof window === 'undefined' || !window.location.hash) return;
     const anchor = decodeURIComponent(window.location.hash.slice(1));
     if (!anchor) return;
@@ -100,7 +108,8 @@ export default function SystemPageGlossary({ page, entries, blocks = [] }: Syste
       el.scrollIntoView({ behavior: 'auto', block: 'center' });
     });
     return () => window.cancelAnimationFrame(raf);
-  }, [entries]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [railKey]);
 
   return (
     <div className="grid lg:grid-cols-[minmax(0,1fr)_180px] gap-12 items-start">
@@ -111,70 +120,74 @@ export default function SystemPageGlossary({ page, entries, blocks = [] }: Syste
           <h1 className="h1-title">{page.name}</h1>
         </header>
 
-        {/* Page body — a block layout (Stage 2). Falls back to the raw description
-            BBCode if there are somehow no blocks. The admin shapes styling via the
-            blocks / BBCode. */}
-        {blocks.length > 0
-          ? <LayoutBlocks blocks={blocks} className="space-y-6 max-w-none" />
-          : page.description ? <BBCodeRenderer content={page.description} /> : null}
-
-        {entries.length === 0 ? (
-          <div className="empty-state">
-            <p className="description-text">No entries yet.</p>
-          </div>
+        {unified ? (
+          /* Unified: the whole page IS the block layout — body + definition
+             entries (each rendered with its #anchor by LayoutBlocks). */
+          <LayoutBlocks blocks={blocks} className="space-y-6 max-w-none" />
         ) : (
-          <div className="flex flex-col">
-            {entries.map((entry) => {
-              const isActive = activeId === entry.identifier;
-              return (
-                <section
-                  key={entry.identifier}
-                  id={entry.identifier}
-                  className={
-                    'scroll-mt-24 px-5 py-4 border-l-2 transition-colors ' +
-                    (isActive
-                      ? 'bg-gold/[0.04] border-gold'
-                      : 'border-transparent hover:bg-gold/[0.04] hover:border-gold/45')
-                  }
-                >
-                  <div className="flex items-center gap-3 mb-1.5">
-                    {entry.imageUrl ? (
-                      <img
-                        src={entry.imageUrl}
-                        alt=""
-                        className="w-9 h-9 object-cover border border-gold/25 shrink-0"
-                      />
-                    ) : null}
-                    <h2 className="h2-title text-gold flex-1 min-w-0">{entry.name}</h2>
-                  </div>
-                  {entry.body ? (
-                    <BBCodeRenderer content={entry.body} />
-                  ) : (
-                    <p className="description-text text-ink/45">No description.</p>
-                  )}
-                </section>
-              );
-            })}
-          </div>
+          <>
+            {/* Legacy: block (or description) body, then the entries glossary. */}
+            {blocks.length > 0
+              ? <LayoutBlocks blocks={blocks} className="space-y-6 max-w-none" />
+              : page.description ? <BBCodeRenderer content={page.description} /> : null}
+
+            {entries.length === 0 ? (
+              <div className="empty-state">
+                <p className="description-text">No entries yet.</p>
+              </div>
+            ) : (
+              <div className="flex flex-col">
+                {entries.map((entry) => {
+                  const isActive = activeId === entry.identifier;
+                  return (
+                    <section
+                      key={entry.identifier}
+                      id={entry.identifier}
+                      className={
+                        'scroll-mt-24 px-5 py-4 border-l-2 transition-colors ' +
+                        (isActive
+                          ? 'bg-gold/[0.04] border-gold'
+                          : 'border-transparent hover:bg-gold/[0.04] hover:border-gold/45')
+                      }
+                    >
+                      <div className="flex items-center gap-3 mb-1.5">
+                        {entry.imageUrl ? (
+                          <img
+                            src={entry.imageUrl}
+                            alt=""
+                            className="w-9 h-9 object-cover border border-gold/25 shrink-0"
+                          />
+                        ) : null}
+                        <h2 className="h2-title text-gold flex-1 min-w-0">{entry.name}</h2>
+                      </div>
+                      {entry.body ? (
+                        <BBCodeRenderer content={entry.body} />
+                      ) : (
+                        <p className="description-text text-ink/45">No description.</p>
+                      )}
+                    </section>
+                  );
+                })}
+              </div>
+            )}
+          </>
         )}
       </div>
 
-      {/* Contents rail — pure typography, no chrome line, no icons. The active
-          entry resolves to the accent colour in serif; everything else is muted
-          ink and lifts on hover. */}
-      {entries.length > 0 ? (
+      {/* Contents rail — pure typography. */}
+      {railItems.length > 0 ? (
         <aside className="hidden lg:block sticky top-24 self-start">
           <p className="label-text text-gold/65 mb-3">Contents</p>
           <nav className="flex flex-col">
-            {entries.map((entry) => {
-              const isActive = activeId === entry.identifier;
+            {railItems.map((item) => {
+              const isActive = activeId === item.id;
               return (
                 <a
-                  key={entry.identifier}
-                  href={`#${entry.identifier}`}
+                  key={item.id}
+                  href={`#${item.id}`}
                   onClick={(e) => {
                     e.preventDefault();
-                    jumpTo(entry.identifier);
+                    jumpTo(item.id);
                   }}
                   className={
                     'font-serif text-[15px] leading-snug py-1.5 transition-colors ' +
@@ -183,7 +196,7 @@ export default function SystemPageGlossary({ page, entries, blocks = [] }: Syste
                       : 'text-ink/45 hover:text-ink/75')
                   }
                 >
-                  {entry.name}
+                  {item.name}
                 </a>
               );
             })}

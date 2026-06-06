@@ -439,6 +439,18 @@ export default function LayoutBlocks({ blocks, recommendedLore = null, campaignN
         );
       }
 
+      case 'definition': {
+        if (!block.name && !block.body) return null;
+        const aId = block.anchor || undefined;
+        const aCls = block.anchor ? ' scroll-mt-24' : '';
+        return (
+          <section key={block.id} id={aId} className={`max-w-4xl border-l-2 border-gold/35 pl-4 py-1 space-y-1${aCls}`}>
+            {block.name && <h3 className="h3-title text-gold">{block.name}</h3>}
+            {block.body && <BBCodeRenderer content={block.body} viewContext={viewContext} className="description-text" />}
+          </section>
+        );
+      }
+
       case 'entity-feature': {
         if (!block.ref) return null;
         const ph = isPlaceholderRef(block.ref);

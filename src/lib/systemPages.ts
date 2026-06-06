@@ -10,7 +10,7 @@
 
 import { fetchCollection, upsertDocument, deleteDocument, queryD1, batchQueryD1 } from './d1';
 import { slugify } from './utils';
-import { makeBlock, parseLayoutBlock, serializeLayoutBlock, type LayoutBlock } from './layoutBlocks';
+import { makeBlock, parseLayoutBlock, serializeLayoutBlock, collectAnchoredBlocks, type LayoutBlock } from './layoutBlocks';
 
 export interface SystemPage {
   id: string;
@@ -243,6 +243,44 @@ export async function saveSystemPageBlocks(pageId: string, blocks: LayoutBlock[]
 }
 
 /**
+ * Assemble the block list the designer should edit, lazy-migrating legacy data so
+ * a page that predates the block model opens with its content ready to edit:
+ *   - if the page has no blocks yet, seed the body from its `description` (one text block);
+ *   - if it has no `definition` blocks yet, append its existing `system_page_entries`
+ *     (resolved name/body) as definition blocks — so entries become editable blocks and
+ *     persist as blocks on the next save. The entries table is left intact (fallback).
+ */
+export async function assembleSystemPageEditorBlocks(
+  pageId: string,
+  description: string,
+): Promise<LayoutBlock[]> {
+  let blocks = await fetchSystemPageBlocks(pageId); // raw stored blocks (no fallback)
+
+  if (blocks.length === 0 && description.trim()) {
+    const tb = makeBlock('text', crypto.randomUUID()) as any;
+    tb.body = description;
+    blocks = [tb];
+  }
+
+  if (!blocks.some((b) => b.blockType === 'definition')) {
+    const rawEntries = await fetchSystemPageEntries(pageId);
+    if (rawEntries.length > 0) {
+      const resolved = await resolveEntries(rawEntries);
+      const defs: LayoutBlock[] = resolved.map((e) => {
+        const d = makeBlock('definition', crypto.randomUUID()) as any;
+        d.anchor = e.identifier;
+        d.name = e.name;
+        d.body = e.body;
+        return d;
+      });
+      blocks = [...blocks, ...defs];
+    }
+  }
+
+  return blocks;
+}
+
+/**
  * Page-level resolve — for a bare `&kind[]` reference that cites the page
  * itself (not an entry). Returns the page name + description (the content the
  * Description panel at the top of the reader renders).
@@ -277,15 +315,32 @@ export async function searchSystemPages(
   }));
 }
 
-/** Resolve a single entry by page + entry identifier — for reference hovers. */
+/** Resolve a single entry by page + entry identifier — for reference hovers.
+ *  Reads the page's `definition` blocks first (block-authored entries); falls
+ *  back to a legacy `system_page_entries` row for pages not yet block-migrated. */
 export async function resolveSystemEntry(
   pageIdentifier: string,
   entryIdentifier: string,
 ): Promise<ResolvedEntry | null> {
+  // Resolve the page (identifier, then name-slug alias via the kind map).
+  let page = await fetchSystemPageByIdentifier(pageIdentifier);
+  if (!page) {
+    const canonical = (await getSystemPageKindMap()).get(pageIdentifier.trim().toLowerCase());
+    if (canonical) page = await fetchSystemPageByIdentifier(canonical);
+  }
+  if (!page) return null;
+
+  // 1. Block-authored entry (`definition` block whose anchor matches).
+  const blocks = await fetchSystemPageBlocks(page.id);
+  const def = collectAnchoredBlocks(blocks).find((b) => b.anchor === entryIdentifier);
+  if (def) {
+    return { identifier: def.anchor, name: def.name, summary: def.body, body: def.body, imageUrl: null };
+  }
+
+  // 2. Legacy fallback: the system_page_entries row.
   const rows = await queryD1<any>(
-    `SELECT e.* FROM system_page_entries e JOIN system_pages p ON e.page_id = p.id
-     WHERE p.identifier = ? AND e.identifier = ? LIMIT 1`,
-    [pageIdentifier, entryIdentifier],
+    `SELECT * FROM system_page_entries WHERE page_id = ? AND identifier = ? LIMIT 1`,
+    [page.id, entryIdentifier],
   );
   if (!rows[0]) return null;
   const [resolved] = await resolveEntries([mapEntry(rows[0])]);
@@ -301,21 +356,51 @@ export async function searchSystemEntries(
   query: string,
   limit = 20,
 ): Promise<Array<{ kind: string; id: string; name: string; pageName: string }>> {
+  const q = query.trim().toLowerCase();
   const like = `%${query.trim().replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
-  const rows = await queryD1<any>(
+  const seen = new Set<string>(); // `${pageIdentifier}::${anchor}`
+  const out: Array<{ kind: string; id: string; name: string; pageName: string }> = [];
+
+  // 1. Block-authored entries (`definition` blocks across all pages). Config is
+  //    JSON in the row; filter by name/anchor in JS (the set is small).
+  const blockRows = await queryD1<any>(
+    `SELECT b.config, p.identifier AS page_identifier, p.name AS page_name
+     FROM system_page_blocks b JOIN system_pages p ON b.page_id = p.id
+     WHERE b.block_type = 'definition'`,
+    [],
+    { noCache: true },
+  );
+  for (const r of blockRows) {
+    let cfg: any = r.config;
+    if (typeof cfg === 'string') { try { cfg = JSON.parse(cfg); } catch { cfg = {}; } }
+    const anchor = String(cfg?.anchor ?? '').trim();
+    if (!anchor) continue;
+    const name = String(cfg?.name ?? '').trim();
+    if (q && !name.toLowerCase().includes(q) && !anchor.toLowerCase().includes(q)) continue;
+    const key = `${r.page_identifier}::${anchor}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ kind: String(r.page_identifier), id: anchor, name: name || anchor, pageName: String(r.page_name ?? '') });
+  }
+
+  // 2. Legacy entries-table rows (pages not yet block-migrated), skipping any
+  //    entry already covered by a definition block.
+  const entryRows = await queryD1<any>(
     `SELECT p.identifier AS page_identifier, p.name AS page_name,
             e.identifier AS entry_identifier, e.name AS entry_name
      FROM system_page_entries e JOIN system_pages p ON e.page_id = p.id
      WHERE e.name LIKE ? ESCAPE '\\' OR e.identifier LIKE ? ESCAPE '\\'
-     ORDER BY e.name LIMIT ?`,
-    [like, like, limit],
+     ORDER BY e.name`,
+    [like, like],
   );
-  return rows.map((r) => ({
-    kind: String(r.page_identifier),
-    id: String(r.entry_identifier),
-    name: String(r.entry_name ?? r.entry_identifier),
-    pageName: String(r.page_name ?? ''),
-  }));
+  for (const r of entryRows) {
+    const key = `${r.page_identifier}::${r.entry_identifier}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ kind: String(r.page_identifier), id: String(r.entry_identifier), name: String(r.entry_name ?? r.entry_identifier), pageName: String(r.page_name ?? '') });
+  }
+
+  return out.slice(0, limit);
 }
 
 // Cached kind → canonical-identifier map. A reference's `kind` might match a

@@ -124,6 +124,25 @@ navigation target `&` rule references resolve into. Data layer: **`src/lib/syste
   - Admin: `/compendium/system-pages` (list, player-visible) + `/new` & `/edit/:id`
     (admin only) — `SystemPagesList.tsx` + `SystemPageEditor.tsx`.
 
+### Pointers vs. targets (and the block direction)
+
+`&` and `@` are **links only — they never define content.** A reference always resolves to a
+*target that must already exist*:
+- an `@` entity is a stored row with its own page (a spell, class, article…);
+- an `&` entry is an item on a system page.
+
+The **system page is the canonical home** for its entries (Conditions, Skills, Magic…).
+`&condition[prone]` *points at* the prone entry — it doesn't create it. (This is the
+distinction to keep straight: the inline `&`/`@` sigil is the pointer; the system-page entry /
+the entity is the target.)
+
+There is in-progress work to author a system page's body + entries as a **block layout** (the
+same engine as lore articles). In that model the addressable entries are **`definition` blocks**
+(free-prose) — they *are* the `&kind[anchor]` / `#anchor` targets — while a **`reference` block**
+is the opposite: a pointer that embeds an entity defined elsewhere, and is therefore **not** an
+entry (and not offered on system pages). Until that ships, entries are `system_page_entries`
+rows exactly as described above. Design: `docs/_drafts/system-pages-block-system-2026-06-04.html`.
+
 ## Drift pair: `bbcode.ts` ↔ `_bbcode.ts`
 
 Reference rendering is **intentionally divergent** between the client renderer

@@ -2,13 +2,18 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import LayoutEditor from '../../components/layout/LayoutEditor';
 import LayoutBlocks from '../../components/layout/LayoutBlocks';
-import { fetchSystemPages, fetchSystemPageBlocks, saveSystemPageBlocks } from '../../lib/systemPages';
+import { fetchSystemPages, assembleSystemPageEditorBlocks, saveSystemPageBlocks } from '../../lib/systemPages';
 import { makeBlock, LAYOUT_BLOCK_TYPES, type LayoutBlock, type LayoutBlockType } from '../../lib/layoutBlocks';
 
-// System-page bodies get the shared block set minus the lore/campaign-specific
-// staff blocks: `recommended` (campaign), `note`/`secret` (lore campaign scope).
+// System pages are authored as one block layout: prose/structure blocks for the
+// body + `definition` blocks for the addressable entries (the &kind[anchor] /
+// #anchor targets). Excluded:
+//  - lore/campaign-only staff blocks: `recommended` (campaign), `note`/`secret` (lore);
+//  - `reference` — a pointer that embeds an entity defined elsewhere; the page is the
+//    canonical home for its entries, so an entry is a `definition`, never a pointer.
+const EXCLUDED_SYSTEM_BLOCKS = new Set(['recommended', 'note', 'secret', 'reference']);
 const SYSTEM_BLOCK_TYPES = LAYOUT_BLOCK_TYPES.filter(
-  (t) => t !== 'recommended' && t !== 'note' && t !== 'secret',
+  (t) => !EXCLUDED_SYSTEM_BLOCKS.has(t),
 ) as LayoutBlockType[];
 
 /**
@@ -47,15 +52,13 @@ export default function SystemPageDesigner({ userProfile }: { userProfile?: any 
     return () => { alive = false; };
   }, [id]);
 
-  const load = useCallback(() => fetchSystemPageBlocks(id!), [id]);
+  // Load lazily assembles the editing blocks: existing body blocks, plus a text
+  // block from the legacy description and definition blocks from legacy entries
+  // when the page hasn't been block-migrated yet (see assembleSystemPageEditorBlocks).
+  const load = useCallback(() => assembleSystemPageEditorBlocks(id!, description), [id, description]);
   const save = useCallback((blocks: LayoutBlock[]) => saveSystemPageBlocks(id!, blocks), [id]);
-  // Seed (when the page has no blocks yet) from the existing description, so the
-  // admin starts with their current intro rather than a blank canvas.
-  const seedDefault = useCallback((): LayoutBlock[] => {
-    const tb = makeBlock('text', crypto.randomUUID()) as any;
-    tb.body = description;
-    return [tb];
-  }, [description]);
+  // Only used for a truly empty page (no blocks, no description, no entries).
+  const seedDefault = useCallback((): LayoutBlock[] => [makeBlock('text', crypto.randomUUID())], []);
 
   if (!ready) return <div className="text-center py-20 font-serif italic text-ink/65">Loading…</div>;
   if (missing || !id) return <div className="text-center py-20 font-serif italic text-ink/65">System page not found.</div>;
@@ -72,19 +75,19 @@ export default function SystemPageDesigner({ userProfile }: { userProfile?: any 
       onBack={() => navigate(`/compendium/system-pages/edit/${id}`)}
       renderPreview={(b) => <LayoutBlocks blocks={b} viewContext={{ isStaff: true }} />}
       labels={{
-        title: 'Page Body',
+        title: 'System Page',
         titleSuffix: pageName || undefined,
         previewLabel: 'Live preview',
-        emptyPreviewTitle: 'No body blocks yet.',
-        emptyPreviewHint: 'Add a block to build the page body.',
-        saveLabel: 'Save Body',
-        restoreLabel: 'Reset to description',
+        emptyPreviewTitle: 'Nothing here yet.',
+        emptyPreviewHint: 'Add prose blocks for the body, and Definition blocks for entries.',
+        saveLabel: 'Save Page',
+        restoreLabel: 'Reset',
         backLabel: 'Back to Page',
-        noun: 'page body',
+        noun: 'system page',
         seedBanner: (
           <div className="px-3 py-2.5 border border-gold/25 bg-gold/5 shrink-0">
             <p className="text-[12px] text-ink/75 leading-snug">
-              Started from this page's existing <strong className="text-ink">description</strong>. Edit the blocks below, then <strong className="text-ink">Save</strong> — the description becomes a mirror of the body's text, and the page renders these blocks.
+              A system page is one block layout: prose/structure blocks for the body, plus <strong className="text-ink">Definition</strong> blocks for entries (each is a <code>&amp;kind[anchor]</code> reference target). Existing description + entries are loaded as blocks; <strong className="text-ink">Save</strong> to persist.
             </p>
           </div>
         ),
