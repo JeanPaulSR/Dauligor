@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>System Pages → Block System — Design Investigation</title>
+<style>
+  :root{--ink:#1a1a1a;--ink65:rgba(26,26,26,.65);--ink45:rgba(26,26,26,.45);--gold:#c5a059;--goldsoft:rgba(197,160,89,.15);--goldline:rgba(197,160,89,.3);--bg:#f0ece1;--card:#fffdf8;--blood:#8a2f2f;--green:#2f6b43;}
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1100px 500px at 85% -10%,rgba(197,160,89,.10),transparent 60%),var(--bg);color:var(--ink);font-family:-apple-system,"Segoe UI",Roboto,system-ui,sans-serif;line-height:1.6;}
+  .wrap{max-width:920px;margin:0 auto;padding:36px 28px 90px;}
+  h1{font-family:"Iowan Old Style",Georgia,serif;font-size:32px;margin:.2em 0 .1em;letter-spacing:-.01em}
+  h2{font-family:"Iowan Old Style",Georgia,serif;font-size:22px;margin:1.8em 0 .4em;border-bottom:1px solid var(--goldline);padding-bottom:.25em;color:var(--gold)}
+  h3{font-family:Georgia,serif;font-size:16px;margin:1.3em 0 .3em}
+  .eyebrow{font-size:10px;letter-spacing:.22em;text-transform:uppercase;font-weight:800;color:var(--gold)}
+  .sub{color:var(--ink65);font-size:15px;max-width:70ch}
+  code{background:var(--goldsoft);padding:1px 5px;border-radius:4px;font-size:.88em}
+  .card{background:var(--card);border:1px solid var(--goldline);border-radius:12px;padding:14px 18px;margin:12px 0}
+  .lock{display:flex;gap:10px;align-items:flex-start;background:rgba(47,107,67,.08);border:1px solid rgba(47,107,67,.3);border-radius:10px;padding:12px 16px;margin:10px 0}
+  .lock b{color:var(--green)}
+  .warn-box{display:flex;gap:10px;align-items:flex-start;background:rgba(138,47,47,.07);border:1px solid rgba(138,47,47,.3);border-radius:10px;padding:12px 16px;margin:10px 0}
+  table{border-collapse:collapse;width:100%;font-size:13.5px;margin:8px 0}
+  th,td{border:1px solid var(--goldline);padding:7px 10px;text-align:left;vertical-align:top}
+  th{background:var(--goldsoft);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--gold)}
+  ul,ol{padding-left:22px}
+  li{margin:.25em 0}
+  .phase{border-left:3px solid var(--gold);padding:4px 0 4px 16px;margin:14px 0}
+  .phase .n{font-size:10px;letter-spacing:.16em;text-transform:uppercase;font-weight:800;color:var(--gold)}
+  .phase h3{margin:.1em 0 .2em}
+  .tag{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:999px;border:1px solid var(--goldline);color:var(--gold);background:var(--goldsoft)}
+  .muted{color:var(--ink45)}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}
+  .rec{font-weight:700;color:var(--green)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">Design Investigation · Dauligor · 2026-06-04</div>
+  <h1>System Pages → the Block System</h1>
+  <p class="sub">Now that lore articles are authored as block layouts (the generic engine in
+  <code>src/lib/layoutBlocks.ts</code> + <code>LayoutEditor</code>/<code>LayoutBlocks</code>, shipped to
+  main), can system pages use the same blocks? Short answer: <b>yes for the page body, with one bespoke
+  block type for entity-backed entries</b> — but system pages carry machinery lore articles don't
+  (<code>&amp;</code>-references, <code>#</code>-anchors, live entity-backed entries), so the move is
+  staged, not a copy-paste.</p>
+
+  <h2>1 · What a system page is today</h2>
+  <p>Source of truth: <code>src/lib/systemPages.ts</code>, tables <code>system_pages</code> /
+  <code>system_page_entries</code>, reader <code>/system/:identifier</code> (<code>SystemPageView</code>),
+  editor <code>SystemPageEditor</code> (master-detail).</p>
+  <table>
+    <tr><th>Piece</th><th>What it is</th><th>Lore-article analogue</th></tr>
+    <tr><td><b>Page</b> (<code>system_pages</code>)</td><td><code>identifier</code> (doubles as the <code>&amp;kind</code>), <code>name</code>, <code>icon</code>, <code>order</code>, and a BBCode <code>description</code> shown in a panel at the top of the reader.</td><td>The article + its <code>content</code>.</td></tr>
+    <tr><td><b>Entries</b> (<code>system_page_entries</code>)</td><td>An ordered glossary. Each entry has an <code>identifier</code> (the <code>#anchor</code> + <code>&amp;kind[id]</code> target), <code>name</code>, <code>summary</code>, and is <b>either</b> free BBCode (<code>body</code>) <b>or</b> entity-backed (<code>source_kind</code>/<code>source_id</code> → a canonical row whose text is pulled live; a stored field still overrides the source).</td><td>No direct analogue — closest is the <code>entity-row</code>/<code>entity-feature</code> blocks, which already resolve system kinds.</td></tr>
+    <tr><td><b><code>&amp;</code>-references</b></td><td><code>&amp;kind[entry]</code> resolves via the page-identifier kind-map (<code>getSystemPageKindMap</code>) to <code>/system/kind#entry</code>. Page-level <code>&amp;kind[]</code> cites the page itself.</td><td>Lore uses <code>@kind[id]</code> entity refs + <code>[era]/[campaign]</code> conditionals — different sigil, different resolver.</td></tr>
+  </table>
+
+  <h2>2 · The core distinction that shapes everything</h2>
+  <div class="warn-box"><div>⚠️</div><div><b>Entries are addressable, live, and reference-targeted.</b> A lore article's body is a
+  self-contained blob. A system page's <i>entries</i> are not: each is a stable anchor
+  (<code>/system/condition#prone</code>), a <code>&amp;</code>-reference target, and may be a <b>live mirror</b>
+  of a canonical row (so editing the condition updates the glossary with zero duplication). Any block design
+  must preserve entry <code>identifier</code> stability + entity-backing, or it breaks every
+  <code>&amp;Reference[…]</code> in imported Foundry content and every hover card.</div></div>
+
+  <h2>3 · Two surfaces, two answers</h2>
+  <p>A system page has two distinct authoring surfaces. They don't have to move to blocks together.</p>
+  <h3>3a · The page <i>description</i> → blocks ✅ (clean, low-risk)</h3>
+  <p>The top-of-page <code>description</code> is free BBCode prose — exactly what a lore article body is. It
+  drops straight onto the existing generic engine: a <code>system_page_blocks</code> table mirroring
+  <code>lore_article_blocks</code>, the same <code>LayoutEditor</code>/<code>LayoutBlocks</code>, the same
+  replace-all API. The article block set already includes <code>entity-row</code>/<code>entity-feature</code>,
+  which <code>resolveReference</code> can already resolve to system pages/entries — so a page intro could embed
+  cards of its own entries or related content immediately. <span class="rec">This is the obvious first step and
+  reuses 100% of the shipped engine.</span></p>
+  <h3>3b · The <i>entries</i> → blocks ⚠️ (needs a bespoke block + ref/anchor care)</h3>
+  <p>Two ways to model entries as blocks:</p>
+  <table>
+    <tr><th>Model</th><th>How</th><th>Trade-off</th></tr>
+    <tr><td><b>B1 — keep entries; add an <code>entry</code> embed block</b></td><td>Entries stay in
+      <code>system_page_entries</code> (master-detail editor unchanged → anchors, <code>&amp;</code>-refs,
+      entity-backing all keep working). The page <i>body</i> becomes blocks, and a new <code>entry</code>
+      block <i>references</i> an entry id to place it inline (like the campaign <code>recommended</code> block
+      references an article). Reorder the glossary by reordering blocks; entries the author hasn't placed fall
+      to an auto-list at the end.</td><td><span class="rec">Lowest risk.</span> Preserves the entire
+      <code>&amp;</code>-ref/anchor/entity-backing backbone. The "entry" remains the unit of identity; the block
+      is just placement. Two stores (entries + blocks), but each owns a clear concern.</td></tr>
+    <tr><td><b>B2 — entries become <code>entry</code> blocks (full unification)</b></td><td>Collapse
+      <code>system_page_entries</code> into <code>entry</code> blocks in <code>system_page_blocks</code>: the
+      block config holds <code>identifier</code>, <code>name</code>, <code>summary</code>, and either
+      <code>body</code> or <code>{sourceKind, sourceId}</code>. One ordered block list IS the page.</td>
+      <td>Cleanest mental model, but rewires the <code>&amp;</code>-ref backbone:
+      <code>resolveSystemEntry</code>, <code>searchSystemEntries</code>, <code>getSystemPageKindMap</code>, and
+      the <code>#anchor</code> targets must all read entry identifiers out of block config instead of a table.
+      Higher blast radius (touches imported-content references). Defer until B1 proves the flow.</td></tr>
+  </table>
+
+  <h2>4 · Recommended path</h2>
+  <div class="lock"><div>✅</div><div><b>Stage it: description-as-blocks first, entry-embed block second, full
+  unification only if wanted.</b> Each stage is independently shippable and behavior-preserving, mirroring how
+  the lore designer rolled out (generalize → store/API/migrate → designer → viewer).</div></div>
+  <div class="phase"><div class="n">Phase S1 · Page body as blocks</div><h3>Reuse the engine for the description</h3>
+    <code>system_page_blocks</code> table (mirror <code>lore_article_blocks</code>); blocks sub-route on the
+    system-pages API + packet inclusion; one-time idempotent migration wrapping each page's <code>description</code>
+    into a <code>text</code> block (lossless, like the lore content→block seed). A <code>SystemPageDesigner</code>
+    reusing <code>LayoutEditor</code> (embedded + controlled, the modes already built) for the body; entries stay
+    in the existing master-detail panel for now. Reader renders <code>LayoutBlocks</code> for the body, then the
+    entries glossary below. <span class="tag">foundation · low risk</span></div>
+  <div class="phase"><div class="n">Phase S2 · <code>entry</code> embed block</div><h3>Place entries inline</h3>
+    Add an <code>entry</code> block type (references a <code>system_page_entries</code> id, like
+    <code>recommended</code> references an article). The reader resolves it via the existing
+    <code>resolveSystemEntry</code> and renders the entry card at that position; unplaced entries auto-list at the
+    end. Anchors + <code>&amp;</code>-refs unchanged (still keyed on entry rows). The block set for system pages =
+    article set − <code>note</code>/<code>secret</code> (no per-campaign mechanics here) + <code>entry</code>.
+    <span class="tag">UI · medium</span></div>
+  <div class="phase"><div class="n">Phase S3 · (optional) full unification</div><h3>Entries become blocks</h3>
+    Only if S1–S2 prove the model and the dual-store bookkeeping chafes. Migrate <code>system_page_entries</code>
+    → <code>entry</code> blocks and repoint <code>&amp;</code>-ref/anchor resolution at block config. Highest
+    blast radius (imported-content references) — gate behind a thorough ref audit. <span class="tag warn">DB +
+    ref-backbone change</span></div>
+
+  <h2>5 · What's reusable as-is vs new</h2>
+  <table>
+    <tr><th>Reuse unchanged</th><th>New for system pages</th></tr>
+    <tr><td>The whole generic engine: <code>layoutBlocks.ts</code> model/parse/serialize, generic
+      <code>fetch/saveLayoutBlocks(url)</code>, <code>LayoutEditor</code> (incl. <code>controlled</code>/
+      <code>embedded</code>/<code>renderInspectorExtras</code>), <code>LayoutBlocks</code> renderer,
+      <code>BBCodeRenderer</code>.</td>
+      <td><code>system_page_blocks</code> table + migration; <code>GET/PUT /api/system-pages/:id/blocks</code>
+      (mirror the lore handlers); a thin <code>systemPageBlocks.ts</code> adapter; a
+      <code>SystemPageDesigner</code> host; an <code>entry</code> block type + its inspector-extras (entry
+      picker / source binding) supplied via <code>renderInspectorExtras</code> (the hook secrets already use).</td></tr>
+  </table>
+  <p class="muted"><b>viewContext:</b> system pages are site-wide — no era/campaign conditionals — so the body's
+  <code>viewContext</code> is just <code>{ isStaff }</code> (drives <code>note</code> visibility if that block
+  is ever allowed here; by default it isn't). No per-campaign secret filtering needed.</p>
+
+  <h2>6 · Open questions for the owner</h2>
+  <ul>
+    <li><b>Scope of the ask:</b> just the page intro as blocks (S1), or inline entry placement too (S2)?</li>
+    <li><b>Entry identity:</b> keep entries as their own rows (recommended — protects <code>&amp;</code>-refs),
+      or pursue full unification (S3) down the line?</li>
+    <li><b>Do system pages want <code>note</code>/<code>secret</code> blocks?</b> Likely no (site-wide, not
+      campaign-scoped) — default: exclude both from the system-page <code>allowedTypes</code>.</li>
+    <li><b>Entity-backed <i>blocks</i>:</b> should an <code>entry</code> block that points at a canonical row
+      live-mirror it (zero duplication, current behavior) — yes, reuse <code>resolveEntries</code>'s merge.</li>
+  </ul>
+
+  <p class="muted" style="margin-top:2em">Companion to <code>docs/_drafts/lore-article-block-designer-2026-06-04.html</code>
+  (the shipped lore feature this builds on). No code written yet — this is the investigation requested before
+  committing to a phase.</p>
+</div>
+</body>
+</html>
