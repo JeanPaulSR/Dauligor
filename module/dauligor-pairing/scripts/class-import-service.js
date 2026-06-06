@@ -6816,7 +6816,12 @@ function renderNamedHtmlSection(title, content) {
 export function normalizeHtmlBlock(value) {
   const text = trimString(value);
   if (!text) return "";
-  if (looksLikeHtml(text)) return text;
+  if (looksLikeHtml(text)) {
+    // HTML prose can still carry embedded BBCode — the website authors tables as
+    // [table]…[/table] (and the odd inline [i]) even inside otherwise-HTML
+    // descriptions. Convert those tags in place; pure HTML returns unchanged.
+    return looksLikeBbcode(text) ? convertBbcodeTagsInHtml(text) : text;
+  }
   if (looksLikeBbcode(text)) return bbcodeToFoundryHtml(text);
   if (looksLikeMarkdown(text)) return markdownToFoundryHtml(text);
   return plainTextToHtml(text);
@@ -6861,9 +6866,12 @@ function plainTextToHtml(text) {
     .join("");
 }
 
-function bbcodeToFoundryHtml(text) {
-  let html = foundry.utils.escapeHTML(text);
-
+// BBCode tag → HTML replacements only (no escaping, no block/paragraph
+// wrapping). Shared by `bbcodeToFoundryHtml` (which escapes + wraps first) and
+// `convertBbcodeTagsInHtml` (which runs these in place over already-HTML content
+// that carries embedded BBCode — notably [table] tables the website authors in
+// BBCode even inside otherwise-HTML descriptions).
+function applyBbcodeTags(html) {
   html = html.replace(/\[b\]([\s\S]*?)\[\/b\]/gi, "<strong>$1</strong>");
   html = html.replace(/\[i\]([\s\S]*?)\[\/i\]/gi, "<em>$1</em>");
   html = html.replace(/\[u\]([\s\S]*?)\[\/u\]/gi, "<u>$1</u>");
@@ -6884,6 +6892,7 @@ function bbcodeToFoundryHtml(text) {
   html = html.replace(/\[small\]([\s\S]*?)\[\/small\]/gi, "<small>$1</small>");
   html = html.replace(/\[sub\]([\s\S]*?)\[\/sub\]/gi, "<sub>$1</sub>");
   html = html.replace(/\[sup\]([\s\S]*?)\[\/sup\]/gi, "<sup>$1</sup>");
+  html = html.replace(/\[spoiler\]([\s\S]*?)\[\/spoiler\]/gi, '<span class="spoiler">$1</span>');
   html = html.replace(/\[url=([^\]]+)\]([\s\S]*?)\[\/url\]/gi, '<a href="$1" target="_blank" rel="noopener noreferrer">$2</a>');
   html = html.replace(/\[url\]([\s\S]*?)\[\/url\]/gi, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
 
@@ -6899,6 +6908,21 @@ function bbcodeToFoundryHtml(text) {
     buildBbcodeTableCell("th", attrs, content));
   html = html.replace(/\[td(?:\s+([^\]]+))?\]([\s\S]*?)\[\/td\]/gi, (match, attrs, content) =>
     buildBbcodeTableCell("td", attrs, content));
+  return html;
+}
+
+// Convert BBCode that is embedded inside already-HTML content, in place —
+// without escaping the surrounding HTML or re-wrapping paragraphs. Then unwrap a
+// table an author parked inside a <p> (invalid nesting the browser auto-fixes,
+// but cleaner without it).
+function convertBbcodeTagsInHtml(html) {
+  let out = applyBbcodeTags(String(html ?? ""));
+  out = out.replace(/<p[^>]*>\s*(<table\b[\s\S]*?<\/table>)\s*<\/p>/gi, "$1");
+  return out;
+}
+
+function bbcodeToFoundryHtml(text) {
+  const html = applyBbcodeTags(foundry.utils.escapeHTML(text));
 
   const blocks = html
     .replace(/<(h[1-4]|p|div|blockquote|ul|ol|li|hr|table|tr|th|td)([^>]*)>([\s\S]*?)<\/\1>/gi, (match) => `\n\n${match.trim()}\n\n`)

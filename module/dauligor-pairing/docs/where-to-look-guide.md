@@ -72,8 +72,13 @@ NOT re-implement a BBCode / markdown / HTML converter or title-case slugs into
 names. Reuse:
 
 1. `scripts/class-import-service.js` → `normalizeHtmlBlock(value)` (exported) —
-   the single description → HTML transform. Detects HTML (passthrough) / BBCode /
-   markdown / plain text and returns Foundry-ready HTML.
+   the single description → HTML transform. Detects HTML / BBCode / markdown /
+   plain text and returns Foundry-ready HTML. HTML passes through, BUT BBCode
+   embedded inside HTML is still converted in place — the website authors tables
+   as `[table]…[/table]` (and the odd inline `[i]`) even inside otherwise-HTML
+   descriptions, so a naive "looks like HTML → return as-is" would render that
+   BBCode literally. The tag replacements live in `applyBbcodeTags()` (shared by
+   the escaped+wrapped path and the in-place `convertBbcodeTagsInHtml()`).
 2. `scripts/importer-base-features.js` → `formatFoundryLabel(slug)` (exported) —
    resolves a trait slug/key to its REAL display name via `CONFIG.DND5E`
    (skills, abilities, armor/weapon/tool profs, languages, damage types,
