@@ -8,7 +8,7 @@ import { openSpellPreparationManager } from "./spell-preparation-app.js";
 import { openDauligorGmConsole } from "./gm-app.js";
 import { openDauligorCharacterCreator } from "./character-creator-app.js";
 import { openDauligorLauncher } from "./launcher-app.js";
-import { log, notifyWarn } from "./utils.js";
+import { log, notifyInfo, notifyWarn } from "./utils.js";
 
 Hooks.once("init", () => {
   log("Initializing");
@@ -97,6 +97,17 @@ function registerSettings() {
     type: Array,
     default: [],
     onChange: () => Hooks.callAll(`${MODULE_ID}.rollPoolChanged`)
+  });
+
+  // GM allow-list of source slugs the Character Creator offers. Empty = all
+  // sources (default). config:false — managed by the Campaign Sources picker
+  // (Dauligor Tools), since Foundry's settings UI can't render a multi-source
+  // checkbox list. The creator re-reads it each open (it's a fresh instance).
+  game.settings.register(MODULE_ID, SETTINGS.enabledSources, {
+    scope: "world",
+    config: false,
+    type: Array,
+    default: []
   });
 }
 
@@ -644,6 +655,93 @@ async function openSpellPointsBehaviorDialog() {
   });
 }
 
+// GM picker for the campaign's enabled sources. Writes a slug allow-list to
+// SETTINGS.enabledSources; the Character Creator scopes its content to it (empty
+// = all). Mirrors how the import wizard loads only selected sources — keeps the
+// creator fast + reliable instead of fanning out across every source.
+async function openCampaignSourcesDialog() {
+  if (!game.user?.isGM) {
+    notifyWarn("Only the GM can configure campaign sources.");
+    return;
+  }
+  const mode = game.settings.get(MODULE_ID, SETTINGS.apiEndpointMode) || "local";
+  const host = mode === "production" ? "https://www.dauligor.com" : "http://localhost:3000";
+
+  let sources = [];
+  try {
+    const res = await fetch(`${host}/api/module/sources/catalog.json`, { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const payload = await res.json();
+    if (payload?.kind === "dauligor.source-catalog.v1") {
+      sources = (Array.isArray(payload.entries) ? payload.entries : [])
+        .map((e) => ({ slug: String(e?.slug ?? "").toLowerCase(), name: String(e?.name ?? e?.slug ?? "") }))
+        .filter((s) => s.slug)
+        .sort((a, b) => a.name.localeCompare(b.name));
+    }
+  } catch (err) {
+    log("campaign-sources: catalog fetch failed", err);
+    notifyWarn("Couldn't load the source catalog — check the API Endpoint Mode setting and that the app is reachable.");
+    return;
+  }
+  if (!sources.length) {
+    notifyWarn("No sources available from the catalog.");
+    return;
+  }
+
+  const current = new Set((game.settings.get(MODULE_ID, SETTINGS.enabledSources) || []).map(String));
+  const allEnabled = current.size === 0; // empty setting = all sources
+  const checkboxes = sources.map((s) => `
+    <label style="display:flex; align-items:center; gap:.4rem; padding:1px 0;">
+      <input type="checkbox" name="src" value="${foundry.utils.escapeHTML(s.slug)}" ${allEnabled || current.has(s.slug) ? "checked" : ""} />
+      <span>${foundry.utils.escapeHTML(s.name)} <span class="hint" style="opacity:.6;">${foundry.utils.escapeHTML(s.slug)}</span></span>
+    </label>`).join("");
+
+  // Wire the Select all / none helpers once the next DialogV2 renders.
+  Hooks.once("renderDialogV2", (_app, element) => {
+    const root = element instanceof HTMLElement ? element : (element?.[0] ?? element?.element ?? null);
+    if (!root?.querySelectorAll) return;
+    const setAll = (v) => root.querySelectorAll('input[name="src"]').forEach((c) => { c.checked = v; });
+    root.querySelector('[data-act="all"]')?.addEventListener("click", () => setAll(true));
+    root.querySelector('[data-act="none"]')?.addEventListener("click", () => setAll(false));
+  });
+
+  let result;
+  try {
+    result = await foundry.applications.api.DialogV2.prompt({
+      window: { title: "Campaign Sources" },
+      content: `
+        <p class="hint">Choose which sources the Character Creator offers (backgrounds, species, feats, classes). Fewer sources load faster. Leaving every source checked includes everything (the default) and auto-includes sources added later.</p>
+        <div class="form-fields" style="gap:.5rem; margin:.25rem 0 .5rem;">
+          <button type="button" data-act="all"><i class="fas fa-check-double"></i> Select all</button>
+          <button type="button" data-act="none"><i class="fas fa-xmark"></i> Select none</button>
+        </div>
+        <div style="max-height:50vh; overflow:auto; display:grid; grid-template-columns:1fr 1fr; gap:0 14px; border:1px solid var(--color-border-light-tertiary, #666); padding:.4rem;">
+          ${checkboxes}
+        </div>
+      `,
+      ok: {
+        label: "Save",
+        callback: (_event, button) =>
+          Array.from(button.form.querySelectorAll('input[name="src"]:checked')).map((i) => i.value)
+      },
+      rejectClose: false,
+      modal: true
+    });
+  } catch {
+    return;
+  }
+  if (result == null) return; // dismissed
+
+  const total = sources.length;
+  // All checked (or none) → store [] meaning "all sources": future-proof and
+  // never strands the creator with an empty pool.
+  const toSave = (result.length === 0 || result.length >= total) ? [] : result;
+  await game.settings.set(MODULE_ID, SETTINGS.enabledSources, toSave);
+  notifyInfo(toSave.length
+    ? `Campaign sources: ${toSave.length} of ${total} enabled. Reopen the Character Creator to apply.`
+    : "Campaign sources: all sources enabled.");
+}
+
 function injectControl(controls, {
   action,
   label,
@@ -687,15 +785,21 @@ function injectSettingsButtons(root) {
       <button type="button" data-action="open-importer">
         <i class="fas fa-book"></i> Open Importer
       </button>
+      <button type="button" data-action="campaign-sources">
+        <i class="fas fa-book-atlas"></i> Campaign Sources
+      </button>
       <button type="button" data-action="open-options">
         <i class="fas fa-screwdriver-wrench"></i> Open Options
       </button>
     </div>
-    <p class="hint">Import is live. The remaining tools are visible here as under-construction placeholders.</p>
+    <p class="hint">Campaign Sources controls which sourcebooks the Character Creator offers (fewer sources load faster).</p>
   `;
 
   wrapper.querySelector(`[data-action="open-importer"]`)?.addEventListener("click", async () => {
     await openDauligorImporter();
+  });
+  wrapper.querySelector(`[data-action="campaign-sources"]`)?.addEventListener("click", async () => {
+    await openCampaignSourcesDialog();
   });
   wrapper.querySelector(`[data-action="open-options"]`)?.addEventListener("click", async () => {
     await openLauncher();

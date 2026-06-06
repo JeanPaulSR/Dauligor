@@ -484,12 +484,22 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
       if (!res.ok) return [];
       const payload = await res.json();
       if (payload?.kind !== "dauligor.source-catalog.v1") return [];
-      const sources = (Array.isArray(payload.entries) ? payload.entries : [])
+      const all = (Array.isArray(payload.entries) ? payload.entries : [])
         .map((e) => ({
           slug: String(e?.slug ?? "").toLowerCase(),
           sourceId: String(e?.sourceId ?? ""),
         }))
         .filter((s) => s.slug);
+      // Scope to the campaign's enabled sources (GM-configured via the Campaign
+      // Sources picker — Dauligor Tools in module settings). Empty setting = all
+      // sources. This mirrors how the import wizard's spell/feat browsers load
+      // only the selected sources — far fewer list fetches + lighter detail load
+      // than blasting all ~48. Scopes families AND classes (both use this).
+      const enabled = (() => {
+        try { return new Set((game.settings.get(MODULE_ID, SETTINGS.enabledSources) || []).map(String)); }
+        catch { return new Set(); }
+      })();
+      const sources = enabled.size ? all.filter((s) => enabled.has(s.slug)) : all;
       this._sourcesCache = sources;
       return sources;
     } catch (err) {

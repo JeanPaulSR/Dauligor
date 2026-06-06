@@ -9,7 +9,12 @@ export const SETTINGS = {
   // Creator. Holds an array of roll-set entries (see ability-roll-pool.js).
   // Scope "world" so every connected client sees the same pool; non-GM
   // players contribute via a socketlib GM relay.
-  abilityRollPool: "ability-roll-pool"
+  abilityRollPool: "ability-roll-pool",
+  // World-scoped allow-list of source slugs the Character Creator offers
+  // (backgrounds / species / feats / classes). Empty = all sources. Managed by
+  // the "Campaign Sources" picker (Dauligor Tools in module settings), not the
+  // settings panel directly.
+  enabledSources: "enabled-sources"
 };
 
 export const SAMPLE_FILE = "modules/dauligor-pairing/data/sample-character.json";
