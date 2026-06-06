@@ -304,47 +304,60 @@ async function handleList(searchParams: URLSearchParams, staff: boolean): Promis
   return Response.json({ articles });
 }
 
-async function handleSingle(staff: boolean, uid: string, articleId: string): Promise<Response> {
-  const baseRes = await executeD1QueryInternal({
-    sql: "SELECT * FROM lore_articles WHERE id = ? LIMIT 1",
-    params: [articleId],
+/**
+ * Resolve an article addressed by EITHER its UUID id OR its slug. Article links
+ * across the app (homepage blocks, `@article[slug]` refs, `references.ts` uses
+ * `idCol: 'slug'`) point at `/wiki/article/<slug>`, so reads must accept a slug.
+ * Prefers an exact id match if both somehow collide. Returns the full row.
+ */
+async function resolveArticle(idOrSlug: string): Promise<{ id: string; row: any } | null> {
+  const res = await executeD1QueryInternal({
+    sql: "SELECT * FROM lore_articles WHERE id = ? OR slug = ? ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END LIMIT 1",
+    params: [idOrSlug, idOrSlug, idOrSlug],
   });
-  const baseRows = Array.isArray(baseRes?.results) ? baseRes.results : [];
-  if (baseRows.length === 0) {
+  const rows = Array.isArray(res?.results) ? res.results : [];
+  return rows.length > 0 ? { id: String((rows[0] as any).id), row: rows[0] } : null;
+}
+
+async function handleSingle(staff: boolean, uid: string, articleId: string): Promise<Response> {
+  const resolved = await resolveArticle(articleId);
+  if (!resolved) {
     throw new HttpError(404, "Article not found.");
   }
-  const baseRow = baseRows[0] as any;
+  const baseRow = resolved.row as any;
+  // All related rows key off the real UUID, not the route token (which may be a slug).
+  const realId = resolved.id;
 
   if (!staff && baseRow.status !== "published") {
     throw new HttpError(404, "Article not found.");
   }
 
   const [metadata, tagRes, eraRes, campRes, mentionsRes, blocksRes] = await Promise.all([
-    loadMetadata(articleId, baseRow.category),
+    loadMetadata(realId, baseRow.category),
     executeD1QueryInternal({
       sql: "SELECT tag_id FROM lore_article_tags WHERE article_id = ?",
-      params: [articleId],
+      params: [realId],
     }),
     executeD1QueryInternal({
       sql: "SELECT era_id FROM lore_article_eras WHERE article_id = ?",
-      params: [articleId],
+      params: [realId],
     }),
     executeD1QueryInternal({
       sql: "SELECT campaign_id FROM lore_article_campaigns WHERE article_id = ?",
-      params: [articleId],
+      params: [realId],
     }),
     executeD1QueryInternal({
       sql: `SELECT a.* FROM lore_articles a
             JOIN lore_links l ON a.id = l.article_id
             WHERE l.target_id = ?`,
-      params: [articleId],
+      params: [realId],
     }),
     executeD1QueryInternal({
       sql: `SELECT id, article_id, block_type, "order", config
               FROM lore_article_blocks
              WHERE article_id = ?
              ORDER BY "order" ASC`,
-      params: [articleId],
+      params: [realId],
     }),
   ]);
 
@@ -385,6 +398,10 @@ async function handleSingle(staff: boolean, uid: string, articleId: string): Pro
 }
 
 async function handleSecrets(staff: boolean, uid: string, articleId: string): Promise<Response> {
+  const resolved = await resolveArticle(articleId);
+  if (!resolved) {
+    return Response.json({ secrets: [] });
+  }
   const sql = `
     SELECT s.*,
            (SELECT GROUP_CONCAT(era_id) FROM lore_secret_eras WHERE secret_id = s.id) AS era_ids,
@@ -392,7 +409,7 @@ async function handleSecrets(staff: boolean, uid: string, articleId: string): Pr
     FROM lore_secrets s
     WHERE s.article_id = ?
   `;
-  const result = await executeD1QueryInternal({ sql, params: [articleId] });
+  const result = await executeD1QueryInternal({ sql, params: [resolved.id] });
   const rows = Array.isArray(result?.results) ? result.results : [];
 
   const all = rows.map((s: any) => ({
@@ -422,16 +439,12 @@ async function handleSecrets(staff: boolean, uid: string, articleId: string): Pr
 }
 
 async function handleArticleBlocks(staff: boolean, uid: string, articleId: string): Promise<Response> {
-  const check = await executeD1QueryInternal({
-    sql: "SELECT status FROM lore_articles WHERE id = ? LIMIT 1",
-    params: [articleId],
-  });
-  const rows = Array.isArray(check?.results) ? check.results : [];
-  if (rows.length === 0) {
+  const resolved = await resolveArticle(articleId);
+  if (!resolved) {
     throw new HttpError(404, "Article not found.");
   }
   // Same visibility rule as the article itself — non-staff see published only.
-  if (!staff && (rows[0] as any).status !== "published") {
+  if (!staff && (resolved.row as any).status !== "published") {
     throw new HttpError(404, "Article not found.");
   }
 
@@ -440,7 +453,7 @@ async function handleArticleBlocks(staff: boolean, uid: string, articleId: strin
             FROM lore_article_blocks
            WHERE article_id = ?
            ORDER BY "order" ASC`,
-    params: [articleId],
+    params: [resolved.id],
   });
   const blocks = await filterBlocksForViewer(Array.isArray(result?.results) ? result.results : [], staff, uid);
   return Response.json({ blocks });

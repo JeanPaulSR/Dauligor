@@ -114,6 +114,10 @@ export default function LoreArticleDesigner({ userProfile }: { userProfile: any 
   const [openSections, setOpenSections] = useState<Set<string>>(new Set(['details']));
 
   const [blocks, setBlocks] = useState<LayoutBlock[]>(() => [newTextBlock()]);
+  // The article's real UUID once loaded — the route param may be a slug, but
+  // saves MUST key off the UUID (else upsert would create a duplicate row and
+  // blocks would FK against the wrong id).
+  const [realId, setRealId] = useState<string | null>(null);
 
   const [allArticles, setAllArticles] = useState<any[]>([]);
   const [campaigns, setCampaigns] = useState<any[]>([]);
@@ -174,6 +178,7 @@ export default function LoreArticleDesigner({ userProfile }: { userProfile: any 
         try {
           const article = await fetchLoreArticle(id);
           if (article && !cancelled) {
+            setRealId(article.id);
             setFormData({
               title: article.title, excerpt: article.excerpt || '', category: article.category,
               folder: article.folder || '', parentId: article.parentId || '', status: article.status || 'draft',
@@ -297,7 +302,8 @@ export default function LoreArticleDesigner({ userProfile }: { userProfile: any 
     setSaving(true);
     const content = deriveContent(blocks);
     const now = new Date().toISOString();
-    const articleId = id || crypto.randomUUID();
+    // Always persist against the real UUID — never the route token (which may be a slug).
+    const articleId = realId || id || crypto.randomUUID();
     const payload = {
       ...formData,
       content,

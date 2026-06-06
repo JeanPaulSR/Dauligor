@@ -514,7 +514,7 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
             </Button>
             {canEdit && (
               <>
-                <Button variant="outline" onClick={() => navigate(`/wiki/edit/${id}`)} className="border-gold/25 text-gold hover:bg-gold/5">
+                <Button variant="outline" onClick={() => navigate(`/wiki/edit/${article?.id ?? id}`)} className="border-gold/25 text-gold hover:bg-gold/5">
                   <Edit className="w-4 h-4 mr-2" /> Edit Article
                 </Button>
                 {(userProfile?.role === 'admin' || userProfile?.role === 'co-dm') && (
