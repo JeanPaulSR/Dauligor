@@ -14,7 +14,11 @@ export const SETTINGS = {
   // (backgrounds / species / feats / classes). Empty = all sources. Managed by
   // the "Campaign Sources" picker (Dauligor Tools in module settings), not the
   // settings panel directly.
-  enabledSources: "enabled-sources"
+  enabledSources: "enabled-sources",
+  // Per-user Dauligor account session — JSON `{ token, profile }` (native auth),
+  // CLIENT-scoped so each user's login stays private to their own browser.
+  // Managed by auth-service.js / the account dialog, not the settings panel.
+  session: "dauligor-session"
 };
 
 export const SAMPLE_FILE = "modules/dauligor-pairing/data/sample-character.json";

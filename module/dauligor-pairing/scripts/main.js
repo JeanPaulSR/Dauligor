@@ -9,6 +9,7 @@ import { openDauligorGmConsole } from "./gm-app.js";
 import { openDauligorCharacterCreator } from "./character-creator-app.js";
 import { openDauligorLauncher } from "./launcher-app.js";
 import { log, notifyInfo, notifyWarn } from "./utils.js";
+import { isLoggedIn, getDisplayName, getProfile, login, logout } from "./auth-service.js";
 
 Hooks.once("init", () => {
   log("Initializing");
@@ -108,6 +109,16 @@ function registerSettings() {
     config: false,
     type: Array,
     default: []
+  });
+
+  // Per-user Dauligor account session (native-auth JWT + profile), stored as a
+  // JSON string. client scope = private to each user's browser, never
+  // world-shared. Managed by the account dialog / auth-service.js.
+  game.settings.register(MODULE_ID, SETTINGS.session, {
+    scope: "client",
+    config: false,
+    type: String,
+    default: ""
   });
 }
 
@@ -478,6 +489,14 @@ async function openLauncher({ actor = null } = {}) {
       hint: actorDoc ? "Guided walkthrough applied to this actor." : "Guided walkthrough that builds a new character.",
       status: "ready",
       onSelect: async () => openDauligorCharacterCreator(actorDoc ? { actor: actorDoc } : {})
+    },
+    {
+      id: "dauligor-account",
+      label: isLoggedIn() ? `Account: ${getDisplayName() || "signed in"}` : "Log in to Dauligor",
+      icon: "fas fa-user-lock",
+      hint: isLoggedIn() ? "Manage your Dauligor account or log out." : "Log in to load references, articles, and campaign content.",
+      status: "ready",
+      onSelect: async () => openDauligorAccountDialog()
     }
   ];
 
@@ -745,6 +764,77 @@ async function openCampaignSourcesDialog() {
   notifyInfo(toSave.length
     ? `Campaign sources: ${toSave.length} of ${total} enabled. Reopen the Character Creator to apply.`
     : "Campaign sources: all sources enabled.");
+}
+
+// Dauligor account login / status — per-user, native auth. Opened from the
+// launcher. Logged out → username+password → POST /api/auth/login (auth-service).
+// Logged in → status + Log out. Reuses the dauligor-importer-app window theme.
+async function openDauligorAccountDialog() {
+  const DialogV2 = foundry.applications.api.DialogV2;
+  const themeClasses = ["dauligor-importer-app", "dauligor-importer-app--campaign-sources"];
+
+  if (isLoggedIn()) {
+    const who = getDisplayName() || "your account";
+    const role = getProfile()?.role;
+    let out = null;
+    try {
+      out = await DialogV2.prompt({
+        window: { title: "Dauligor Account" },
+        classes: themeClasses,
+        position: { width: 440 },
+        content: `<div class="dauligor-source-picker">
+          <p class="dauligor-source-picker__hint">Logged in as <strong>${foundry.utils.escapeHTML(who)}</strong>${role ? ` <span style="opacity:.6;">(${foundry.utils.escapeHTML(String(role))})</span>` : ""}. Close this to stay signed in, or log out below.</p>
+        </div>`,
+        ok: { label: "Log out", icon: "fas fa-right-from-bracket", callback: () => "logout" },
+        rejectClose: false,
+        modal: true,
+      });
+    } catch {
+      return;
+    }
+    if (out === "logout") {
+      await logout();
+      notifyInfo("Logged out of Dauligor.");
+    }
+    return;
+  }
+
+  let result;
+  try {
+    result = await DialogV2.prompt({
+      window: { title: "Log in to Dauligor" },
+      classes: themeClasses,
+      position: { width: 440 },
+      content: `<div class="dauligor-source-picker">
+        <p class="dauligor-source-picker__hint">Log in with your Dauligor account to load references, articles, and campaign content inside Foundry.</p>
+        <label style="display:flex; flex-direction:column; gap:3px; font-size:12px;">Username
+          <input type="text" name="username" autofocus autocomplete="username" />
+        </label>
+        <label style="display:flex; flex-direction:column; gap:3px; font-size:12px;">Password
+          <input type="password" name="password" autocomplete="current-password" />
+        </label>
+      </div>`,
+      ok: {
+        label: "Log in",
+        icon: "fas fa-right-to-bracket",
+        callback: (_event, button) => ({
+          username: button.form.elements.username.value,
+          password: button.form.elements.password.value,
+        }),
+      },
+      rejectClose: false,
+      modal: true,
+    });
+  } catch {
+    return;
+  }
+  if (!result || !result.username || !result.password) return;
+  try {
+    const profile = await login(result.username, result.password);
+    notifyInfo(`Logged in as ${profile?.display_name || profile?.username || result.username}.`);
+  } catch (err) {
+    notifyWarn(err?.message || "Login failed.");
+  }
 }
 
 function injectControl(controls, {
