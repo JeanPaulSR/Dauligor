@@ -331,6 +331,16 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
     }
   };
 
+  // Parser-less (manual-entry) types have no Interpret step — jump straight to
+  // the structured form. Any pasted reference text is still normalized
+  // (HTML→BBCode) and kept beside the fields in the workspace for reference.
+  const handleManualEntry = () => {
+    const text = normalizeInput(rawText);
+    if (text !== rawText) setRawText(text);
+    setSingle(parseToState(type, text, formatTemplate));
+    setPhase('single');
+  };
+
   // A <textarea> only receives the clipboard's `text/plain` flavour, so copying
   // RENDERED formatted text (a spell off a web page) loses its <em>/<strong>
   // before we'd ever see it. Intercept the paste, grab the `text/html` flavour
@@ -496,8 +506,12 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
             onPaste={handlePaste}
           />
           <div className="mt-2 flex items-center gap-2">
-            <button type="button" className="btn-gold-solid h-9 px-4 disabled:opacity-50" disabled={!rawText.trim() || !hasParser} onClick={handleInterpret}>Interpret</button>
-            <span className="field-hint">{hasParser ? 'Paste plain text or HTML; multiple stat blocks auto-split into a batch. Activities aren’t parsed — add them in the editor.' : 'This type is manual-entry only.'}</span>
+            {hasParser ? (
+              <button type="button" className="btn-gold-solid h-9 px-4 disabled:opacity-50" disabled={!rawText.trim()} onClick={handleInterpret}>Interpret</button>
+            ) : (
+              <button type="button" className="btn-gold-solid h-9 px-4" onClick={handleManualEntry}>Enter details →</button>
+            )}
+            <span className="field-hint">{hasParser ? 'Paste plain text or HTML; multiple stat blocks auto-split into a batch. Activities aren’t parsed — add them in the editor.' : 'Manual-entry type — paste reference text to keep beside the form (optional), then enter the details.'}</span>
           </div>
         </div>
       ) : null}
@@ -518,11 +532,13 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
             ) : (<span className="label-text text-gold">Ready to create</span>)}
             <div className="ml-auto flex items-center gap-2">
               <button type="button" className="btn-gold inline-flex h-9 items-center gap-1 px-3 text-[11px]" onClick={() => setPhase('input')}><Pencil className="h-3 w-3" /> Edit text</button>
-              <button type="button" className="btn-gold inline-flex h-9 items-center gap-1 px-3 text-[11px]" onClick={enterBatch}><Scissors className="h-3 w-3" /> Divide</button>
+              {hasParser ? (
+                <button type="button" className="btn-gold inline-flex h-9 items-center gap-1 px-3 text-[11px]" onClick={enterBatch}><Scissors className="h-3 w-3" /> Divide</button>
+              ) : null}
               <button type="button" className="btn-gold-solid h-9 px-5 disabled:opacity-50" disabled={saving || !singleResolved || singleResolved.errors.length > 0} onClick={handleCreateSingle}>{saving ? 'Creating…' : `Create ${descriptor.label}`}</button>
             </div>
           </div>
-          <EntityWorkspace type={type} descriptor={descriptor} rawText={rawText} state={single} onChange={setSingle} assignTargets={assignTargets} renderPreview={renderPreview} onSaveFormat={handleSaveFormat} />
+          <EntityWorkspace type={type} descriptor={descriptor} rawText={rawText} state={single} onChange={setSingle} assignTargets={assignTargets} renderPreview={renderPreview} onSaveFormat={hasParser ? handleSaveFormat : undefined} />
           {singleResolved ? <ResolvedPayload payload={singleResolved.payload} /> : null}
         </>
       ) : null}
@@ -586,7 +602,7 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
             onChange={(updater) => setEdits((prev) => ({ ...prev, [reviewIndex]: updater(stateFor(reviewIndex)) }))}
             assignTargets={assignTargets}
             renderPreview={renderPreview}
-            onSaveFormat={handleSaveFormat}
+            onSaveFormat={hasParser ? handleSaveFormat : undefined}
           />
         </>
       ) : null}

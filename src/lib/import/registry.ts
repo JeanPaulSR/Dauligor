@@ -6,10 +6,12 @@
 
 import type { ImportDescriptor, ResolvedEntity, ImportContext, ParseResult, ImportAssignTarget } from './types';
 import { spellDescriptor } from './spell';
+import { clazzDescriptor } from './clazz';
 
 const DESCRIPTORS: Record<string, ImportDescriptor> = {
   [spellDescriptor.type]: spellDescriptor,
-  // feat, item, feature, class, subclass, … land here as their descriptors ship.
+  [clazzDescriptor.type]: clazzDescriptor,
+  // feat, item, feature, subclass, … land here as their descriptors ship.
 };
 
 export function listImportDescriptors(): ImportDescriptor[] {
