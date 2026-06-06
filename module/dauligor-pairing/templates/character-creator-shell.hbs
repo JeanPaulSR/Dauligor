@@ -1,19 +1,21 @@
 <section class="dauligor-character-creator__shell">
   {{!--
-    Tab bar: "Create" (the radial wheel hub) and "Character" (review).
-    Rendered by DauligorCharacterCreatorApp._renderTabs().
+    Tab bar: "Create" (the radial wheel hub), one tab per build option
+    (Class / Species / Background / Starting Feat / Image), and "Character"
+    (review). Rendered by DauligorCharacterCreatorApp._renderTabs().
   --}}
   <header class="dauligor-character-creator__tabbar" data-region="tabs"></header>
 
   {{!--
-    Body. _renderBody() swaps the markup: the wheel hub, a chosen section
-    panel (abilities / class / species / background / feat / image), or the
-    Character review — depending on the active tab + view.
+    Body. _renderBody() swaps the markup by active tab: the wheel hub (or its
+    Ability Scores sub-view), an option picker (class / species / background /
+    feat / image), or the Character review.
   --}}
   <div class="dauligor-character-creator__body" data-region="body"></div>
 
   {{!--
-    Footer — status text on the left, the Build Character action on the right.
+    Footer — status on the left; the action on the right is contextual:
+    Cancel + Select Class on the Class tab, Build Character elsewhere.
     Rendered by _renderFooter().
   --}}
   <footer class="dauligor-character-creator__footer" data-region="footer"></footer>

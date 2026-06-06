@@ -6813,7 +6813,7 @@ function renderNamedHtmlSection(title, content) {
   return `<h2>${foundry.utils.escapeHTML(title)}</h2>${body}`;
 }
 
-function normalizeHtmlBlock(value) {
+export function normalizeHtmlBlock(value) {
   const text = trimString(value);
   if (!text) return "";
   if (looksLikeHtml(text)) return text;

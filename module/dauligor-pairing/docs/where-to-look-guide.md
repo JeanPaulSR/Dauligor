@@ -63,3 +63,24 @@ Read in this order:
 3. `docs/item-import-contract.md`
 4. `docs/spell-import-contract.md`
 5. `docs/class-feature-activity-contract.md`
+
+## 6. Rendering Descriptions And References In The UI
+
+When a UI surface (character creator, browsers, sheets) needs to render a stored
+description (class / feature / feat / background / species) as display HTML, do
+NOT re-implement a BBCode / markdown / HTML converter or title-case slugs into
+names. Reuse:
+
+1. `scripts/class-import-service.js` → `normalizeHtmlBlock(value)` (exported) —
+   the single description → HTML transform. Detects HTML (passthrough) / BBCode /
+   markdown / plain text and returns Foundry-ready HTML.
+2. `scripts/importer-base-features.js` → `formatFoundryLabel(slug)` (exported) —
+   resolves a trait slug/key to its REAL display name via `CONFIG.DND5E`
+   (skills, abilities, armor/weapon/tool profs, languages, damage types,
+   conditions) with a fallback table. Use this for reference keys.
+3. Reference normalization (semantic → native Foundry): `scripts/reference-service.js`
+   and `docs/reference-syntax-guide.md`.
+
+Reference consumer: `renderDescription` in `scripts/character-creator-app.js`
+(`normalizeHtmlBlock` + `formatFoundryLabel` cross-ref resolution + a light
+sanitize/cruft-trim). Mirror that pattern; don't fork a new converter.

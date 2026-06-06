@@ -39,12 +39,12 @@
   border-bottom: 1px solid var(--dauligor-border);
   padding: 8px 10px 0;
 }
-.dauligor-character-creator__tabs { display: flex; gap: 4px; }
+.dauligor-character-creator__tabs { display: flex; gap: 4px; flex-wrap: wrap; }
 .dauligor-character-creator__tab {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 16px;
+  padding: 7px 13px;
   border: 1px solid var(--dauligor-btn-border);
   border-bottom: none;
   border-radius: 0;
@@ -128,6 +128,26 @@
 }
 .dauligor-character-creator__wedge-label { font-size: 15px; font-weight: 600; }
 .dauligor-character-creator__wedge-choice { font-size: 12px; fill: var(--dauligor-accent-strong); }
+
+/* A wedge whose choice has an image: a <foreignObject> holds an HTML <img>
+   (object-fit:cover + the class view's stored object-position/zoom), clipped to
+   the wedge. The veil path on top carries the wedge border + the radial
+   gradient (fill via inline style) and handles interaction; a text stroke keeps
+   the label legible over the art. */
+.dauligor-character-creator__wedge-imgbox { width: 100%; height: 100%; overflow: hidden; pointer-events: none; }
+.dauligor-character-creator__wedge-img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.dauligor-character-creator__wedge-veil {
+  stroke: var(--dauligor-btn-border-hover);
+  stroke-width: 2;
+  cursor: pointer;
+  transition: opacity 0.12s ease;
+}
+.dauligor-character-creator__wedge-veil:hover { opacity: 0.72; }
+.dauligor-character-creator__wedge-text--on-img {
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.7);
+  stroke-width: 2.5px;
+}
 
 .dauligor-character-creator__wheel-center {
   position: absolute;
@@ -353,6 +373,7 @@
 /* ── Picker (background / race / class) ───────────────────────────── */
 
 .dauligor-character-creator__picker {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(220px, 320px) 1fr;
   gap: 14px;
@@ -361,6 +382,75 @@
 }
 .dauligor-character-creator__picker-list-col { display: flex; flex-direction: column; min-height: 0; }
 .dauligor-character-creator__search { margin-bottom: 8px; }
+
+/* ── Class list toolbar (Filter button + search) + filter modal ─────── */
+.dauligor-character-creator__list-toolbar { display: flex; gap: 6px; margin-bottom: 8px; }
+.dauligor-character-creator__list-toolbar .dauligor-character-creator__search { flex: 1 1 auto; margin-bottom: 0; }
+.dauligor-character-creator__filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--dauligor-btn-border);
+  border-radius: 0;
+  background: var(--dauligor-btn-bg);
+  color: var(--dauligor-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.dauligor-character-creator__filter-btn i { opacity: 0.7; }
+.dauligor-character-creator__filter-btn:hover {
+  border-color: var(--dauligor-btn-border-hover);
+  background: var(--dauligor-btn-hover-bg);
+}
+.dauligor-character-creator__filter-btn--active {
+  border-color: var(--dauligor-btn-border-hover);
+  background: var(--dauligor-btn-hover-bg);
+  box-shadow: inset 0 -2px 0 var(--dauligor-accent);
+}
+.dauligor-character-creator__filter-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  background: var(--dauligor-accent);
+  color: #1a1712;
+  font-size: 10px;
+  font-weight: 800;
+  border-radius: 8px;
+}
+
+/* Filter modal — absolute overlay over the picker. The panel itself is styled
+   by the shared section-filter.css; here we own the overlay + the card and
+   make the panel fill the card so its body scrolls. */
+.dauligor-character-creator__filter-overlay { position: absolute; inset: 0; z-index: 30; display: flex; }
+.dauligor-character-creator__filter-backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.55); }
+.dauligor-character-creator__filter-card {
+  position: relative;
+  margin: auto;
+  width: min(540px, 94%);
+  max-height: 92%;
+  display: flex;
+  flex-direction: column;
+  background: var(--dauligor-panel);
+  border: 1px solid var(--dauligor-btn-border-hover);
+  border-radius: 8px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+.dauligor-character-creator__filter-card .dauligor-section-filter {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
 .dauligor-character-creator__picker-list {
   flex: 1 1 auto;
   overflow: auto;
@@ -413,6 +503,28 @@
   border: 1px solid var(--dauligor-border);
   padding: 1px 5px;
 }
+
+/* Core / Alternate / New section headers in the class list — sticky so the
+   current group label stays visible while scrolling. */
+.dauligor-character-creator__row-group-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 6px 10px 4px;
+  background: var(--dauligor-panel-alt);
+  border-bottom: 1px solid var(--dauligor-border);
+  color: var(--dauligor-accent-strong);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.dauligor-character-creator__row-group-header span { color: var(--dauligor-text-muted); font-weight: 600; }
+.dauligor-character-creator__row-group:not(:first-child) .dauligor-character-creator__row-group-header { border-top: 1px solid var(--dauligor-border); }
+
 .dauligor-character-creator__picker-detail { min-height: 0; overflow: auto; }
 
 /* ── Class preview (module-themed port of the app's ClassPreviewPane) ── */
@@ -472,12 +584,27 @@
   letter-spacing: 0.06em;
   font-style: italic;
   text-align: center;
-  padding: 5px 8px;
+  padding: 5px 7px;
   border-bottom: 1px solid var(--dauligor-border);
   border-right: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.12);
-  white-space: nowrap;
+  white-space: normal;
+  vertical-align: bottom;
 }
 .dauligor-character-creator__cp-table th:nth-child(3) { text-align: left; }
+/* Header labels wrap to a compact default width (at word boundaries only —
+   never mid-word), so a long header like "Harness Divine Power Uses" stacks
+   instead of stretching its column to fit one number. */
+.dauligor-character-creator__cp-th {
+  display: inline-block;
+  max-width: 5.5em;
+  line-height: 1.15;
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+/* Keep the Features column wide enough that feature names stay readable. */
+.dauligor-character-creator__cp-table th:nth-child(3),
+.dauligor-character-creator__cp-table td:nth-child(3) { min-width: 7.5em; }
 .dauligor-character-creator__cp-table td {
   padding: 4px 8px;
   border-bottom: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.08);
@@ -661,6 +788,48 @@
   padding: 2px 8px;
   color: var(--dauligor-text);
 }
+
+/* Cross-reference chips inside rendered descriptions (see renderDescription).
+   Block formatting (headings, lists, tables) is handled by the `__desc` rules
+   below — the shared `normalizeHtmlBlock` emits plain tags, not BEM classes. */
+.dauligor-character-creator__rt-ref { color: var(--dauligor-accent-strong); font-weight: 600; }
+
+/* Raw authored-HTML descriptions (feat / background / species detail) — render
+   the actual formatting (lists, paragraphs, emphasis), not stripped plain text.
+   See _renderFeatDetail + sanitizeDescriptionHtml. */
+.dauligor-character-creator__feat-prereq {
+  margin: 8px 0 2px;
+  font-size: 12.5px;
+  color: var(--dauligor-accent-strong);
+}
+.dauligor-character-creator__feat-prereq strong { font-weight: 700; }
+.dauligor-character-creator__desc { font-size: 12.5px; line-height: 1.55; color: var(--dauligor-text); }
+.dauligor-character-creator__desc p { margin: 0 0 0.7em; }
+.dauligor-character-creator__desc p:last-child { margin-bottom: 0; }
+.dauligor-character-creator__desc ul,
+.dauligor-character-creator__desc ol { margin: 4px 0 10px; padding-left: 20px; }
+.dauligor-character-creator__desc ul { list-style: disc outside; }
+.dauligor-character-creator__desc ol { list-style: decimal outside; }
+.dauligor-character-creator__desc li { display: list-item; margin: 2px 0; }
+.dauligor-character-creator__desc strong,
+.dauligor-character-creator__desc b { color: var(--dauligor-accent-strong); }
+.dauligor-character-creator__desc h1,
+.dauligor-character-creator__desc h2,
+.dauligor-character-creator__desc h3,
+.dauligor-character-creator__desc h4,
+.dauligor-character-creator__desc h5 {
+  margin: 12px 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--dauligor-accent-strong);
+}
+.dauligor-character-creator__desc hr { border: none; border-top: 1px solid var(--dauligor-border); margin: 8px 0; }
+.dauligor-character-creator__desc table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 8px 0; }
+.dauligor-character-creator__desc th,
+.dauligor-character-creator__desc td { border: 1px solid var(--dauligor-border); padding: 3px 7px; text-align: left; }
+.dauligor-character-creator__desc a { color: var(--dauligor-accent-strong); }
 
 /* ── Stub (items) ─────────────────────────────────────────────────── */
 
