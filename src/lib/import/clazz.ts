@@ -23,10 +23,11 @@
 // Component guide + recipe: docs/architecture/import-system.md
 
 import { upsertDocument } from '../d1';
+import { upsertFeature } from '../compendium';
 import { queueRebake } from '../moduleExport';
 import { slugify } from '../utils';
 import { sanitizeProficiencySelection } from '../proficiencySelection';
-import { parseClassText } from './classParse';
+import { parseClassText, type FeatureDraft } from './classParse';
 import type { ImportDescriptor, ImportContext, ImportFieldOption } from './types';
 
 const toOptions = (pairs: [string, string][]): ImportFieldOption[] =>
@@ -93,6 +94,48 @@ function buildProficiencyCollection(raw: any = {}, savingThrowIds: string[] = []
 // free of component imports).
 const DEFAULT_DISPLAY = { x: 50, y: 50, scale: 1 };
 
+// Build the class `spellcasting` JSON from a parsed Spellcasting section. The
+// simple half is text-derivable; the slot/known scaling tables stay manual
+// (empty ids — picked in the editor).
+function buildSpellcastingConfig(d: FeatureDraft, primaryCode?: string) {
+  const body = d.body || '';
+  const abM = body.match(/([A-Za-z]+)\s+is\s+your\s+spellcasting\s+ability/i);
+  const ability = (abM && ABILITY_KEYS[abM[1].toLowerCase()]) || primaryCode || 'int';
+  const type = /spells?\s+known|you know\b/i.test(body) ? 'known' : (/prepare/i.test(body) ? 'prepared' : 'known');
+  return {
+    hasSpellcasting: true,
+    isRitualCaster: /\brituals?\b/i.test(body),
+    description: body,
+    level: 1,
+    ability: ability.toUpperCase(),
+    type,
+    progressionId: '',
+    altProgressionId: '',
+    spellsKnownId: '',
+    spellsKnownFormula: '',
+    startingSpellbookCount: 0,
+    spellbookAdditionsPerLevel: 0,
+  };
+}
+
+/** Route the Features-panel drafts into class-field overrides + the child
+ * feature rows to write. Pure. */
+function routeFeatures(drafts: FeatureDraft[], primaryCode?: string) {
+  let asiLevels: number[] | null = null;
+  let subclassTitle: string | null = null;
+  let subclassLevels: number[] | null = null;
+  let spellcasting: any = null;
+  const features: { name: string; level: number; body: string }[] = [];
+  for (const d of Array.isArray(drafts) ? drafts : []) {
+    if (d.kind === 'asi') { if (d.levels?.length) asiLevels = d.levels; }
+    else if (d.kind === 'subclass') { subclassTitle = d.name || subclassTitle; subclassLevels = d.levels || []; }
+    else if (d.kind === 'spellcasting') { spellcasting = buildSpellcastingConfig(d, primaryCode); }
+    else if (d.kind === 'feature') { features.push({ name: d.name, level: Number(d.level) || 1, body: String(d.body || '') }); }
+    // 'skip' → dropped
+  }
+  return { asiLevels, subclassTitle, subclassLevels, spellcasting, features };
+}
+
 export const clazzDescriptor: ImportDescriptor = {
   type: 'class',
   label: 'Class',
@@ -115,6 +158,7 @@ export const clazzDescriptor: ImportDescriptor = {
     { key: 'wealth', label: 'Starting Wealth', kind: 'text', group: 'Details', placeholder: 'e.g. 3d4 × 10 gp' },
     { key: 'multiclassing', label: 'Multiclassing', kind: 'textarea', group: 'Details', placeholder: 'BBCode — multiclass prerequisites & proficiencies' },
     { key: 'subclassTitle', label: 'Subclass Title', kind: 'text', default: 'Subclass', group: 'Details', placeholder: 'e.g. Sorcerous Origin' },
+    { key: '_features', label: 'Features', kind: 'features', default: [], group: 'Features', help: 'Parsed sections — tick several and Merge to fold them into one feature, edit names/levels, or re-route a row (feature / spellcasting / ASI / subclass / skip). Each “feature” row is created as a child feature; spellcasting/ASI/subclass feed the class fields.' },
   ],
 
   buildPayload(f: Record<string, any>, ctx: ImportContext) {
@@ -126,6 +170,9 @@ export const clazzDescriptor: ImportDescriptor = {
     // `normalizePrimaryAbilityListForSave` / sanitized savingThrows convention).
     const primaryAbility = parseAbilities(f.primaryAbility);
     const savingThrows = parseAbilities(f.savingThrows).map((a) => a.toUpperCase());
+
+    // Features-panel routing → class-field overrides + child feature rows.
+    const routed = routeFeatures(f._features, primaryAbility[0]);
 
     // Snake_case row — a faithful mirror of ClassEditor.handleSave's `d1Data`.
     // Object/array values are JSON-stringified by upsertDocument. `created_at`
@@ -152,9 +199,9 @@ export const clazzDescriptor: ImportDescriptor = {
       multiclass_proficiencies: buildProficiencyCollection(),
       excluded_option_ids: {} as Record<string, string[]>,
       tag_ids: [] as string[],
-      subclass_title: String(f.subclassTitle ?? 'Subclass') || 'Subclass',
-      subclass_feature_levels: [] as number[],
-      asi_levels: [4, 8, 12, 16, 19],
+      subclass_title: routed.subclassTitle || (String(f.subclassTitle ?? 'Subclass') || 'Subclass'),
+      subclass_feature_levels: routed.subclassLevels ?? ([] as number[]),
+      asi_levels: routed.asiLevels ?? [4, 8, 12, 16, 19],
       advancements: [] as unknown[],
       image_url: f.imageUrl || '',
       image_display: DEFAULT_DISPLAY,
@@ -162,16 +209,42 @@ export const clazzDescriptor: ImportDescriptor = {
       card_display: DEFAULT_DISPLAY,
       preview_image_url: '',
       preview_display: DEFAULT_DISPLAY,
-      spellcasting: null,
+      spellcasting: routed.spellcasting,
       updated_at: now,
+      // Carried to commit (NOT a `classes` column) — written as child feature rows.
+      __features: routed.features,
     };
   },
 
   async commit(id: string, payload: Record<string, any>) {
+    // Strip the carry-only `__features` before the class write — it is not a
+    // `classes` column.
+    const { __features = [], ...classData } = payload;
     // The real write call — identical to ClassEditor's admin direct-save branch:
     // generic upsert into `classes`, then schedule the debounced R2 rebake.
-    await upsertDocument('classes', id, payload);
+    await upsertDocument('classes', id, classData);
     await queueRebake('class', id);
+    // Child feature rows — through the editor's REAL `upsertFeature`
+    // (normalizeFeatureData inside), parented to this class. Name + level +
+    // description only; automation/activities stay for the editor.
+    const now = classData.updated_at ?? new Date().toISOString();
+    for (const feat of __features as { name: string; level: number; body: string }[]) {
+      const featureName = String(feat.name ?? '').trim();
+      if (!featureName) continue;
+      const fid = crypto.randomUUID();
+      await upsertFeature(fid, {
+        name: featureName,
+        identifier: slugify(featureName),
+        parentId: id,
+        parentType: 'class',
+        featureType: 'class',
+        level: Number(feat.level) || 1,
+        description: String(feat.body ?? ''),
+        createdAt: now,
+        updatedAt: now,
+      });
+      await queueRebake('feature', fid);
+    }
   },
 
   // Interpret a pasted class write-up into the identity fields (name, hit die,

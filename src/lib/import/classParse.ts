@@ -76,6 +76,18 @@ function abilityCodes(text: string): string[] {
 
 export type ClassSectionKind = 'feature' | 'spellcasting' | 'asi' | 'subclass' | 'subheader' | 'identity' | 'meta';
 
+/** One editable feature draft in the import workspace's Features panel. The user
+ * can merge several into one, edit name/level, or re-route `kind` (a feature row
+ * vs. the class spellcasting config / asi_levels / subclass choice / skip). */
+export interface FeatureDraft {
+  id: string;
+  kind: 'feature' | 'spellcasting' | 'asi' | 'subclass' | 'skip';
+  name: string;
+  level: number | null;
+  levels: number[];
+  body: string;
+}
+
 export interface ClassSection {
   kind: ClassSectionKind;
   /** The header line, normalized. */
@@ -255,17 +267,20 @@ export function parseClassText(text: string): ParseResult {
     if (g && g.value && !/^none$/i.test(g.value)) leftovers.push(`${label}: ${g.value}  → set in the proficiencies grid`);
   }
 
-  // Feature summary (the panel will let you organize these).
-  const features = groupClassFeatures(splitClassSections(text));
-  const routed = { spellcasting: 0, asi: 0, subclass: 0, feature: 0 };
-  for (const s of features) routed[s.kind as keyof typeof routed] = (routed[s.kind as keyof typeof routed] || 0) + 1;
-  if (features.length) {
-    const featLines = features.filter((s) => s.kind === 'feature').map((s) => `${s.name}${s.level ? ` (L${s.level})` : ''}`);
-    leftovers.push(
-      `Features detected — ${routed.feature} feature${routed.feature === 1 ? '' : 's'}` +
-      `${routed.spellcasting ? ', Spellcasting→config' : ''}${routed.asi ? ', ASI→levels' : ''}${routed.subclass ? ', subclass choice' : ''}: ` +
-      featLines.join(', '),
-    );
+  // Features → the organizer panel (merge / edit / re-route there).
+  const sections = groupClassFeatures(splitClassSections(text));
+  if (sections.length) {
+    const drafts: FeatureDraft[] = sections.map((s, i) => ({
+      id: `sec-${i}`,
+      kind: (s.kind === 'subheader' || s.kind === 'identity' || s.kind === 'meta' ? 'feature' : s.kind) as FeatureDraft['kind'],
+      name: s.name,
+      level: s.level,
+      levels: s.levels,
+      body: s.body,
+    }));
+    fields._features = hi(drafts);
+    const n = drafts.filter((d) => d.kind === 'feature').length;
+    leftovers.push(`Parsed ${n} feature${n === 1 ? '' : 's'} + routings — organize them in the Features panel below.`);
   }
 
   return { fields, leftovers };

@@ -40,6 +40,7 @@ import {
   type ImportDescriptor,
   type ImportFieldDef,
   type ImportAssignTarget,
+  type FeatureDraft,
 } from '../../lib/import';
 
 type SourceRow = { id: string; name?: string; abbreviation?: string };
@@ -956,6 +957,67 @@ function EntityWorkspace({
   );
 }
 
+const FEATURE_KINDS: { value: FeatureDraft['kind']; label: string }[] = [
+  { value: 'feature', label: 'Feature' },
+  { value: 'spellcasting', label: 'Spellcasting' },
+  { value: 'asi', label: 'ASI' },
+  { value: 'subclass', label: 'Subclass' },
+  { value: 'skip', label: 'Skip' },
+];
+
+// The class Features organizer: parsed sections you can MERGE (tick several →
+// fold into one feature), edit (name/level), re-route (kind), or drop. Feature
+// rows become child feature records; spellcasting/asi/subclass feed class fields.
+function FeaturesPanel({ value, onChange }: { value: FeatureDraft[]; onChange: (v: FeatureDraft[]) => void }) {
+  const drafts = Array.isArray(value) ? value : [];
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const update = (id: string, patch: Partial<FeatureDraft>) => onChange(drafts.map((d) => (d.id === id ? { ...d, ...patch } : d)));
+  const remove = (id: string) => { onChange(drafts.filter((d) => d.id !== id)); setSel((p) => { const n = new Set(p); n.delete(id); return n; }); };
+  const toggle = (id: string) => setSel((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const mergeSelected = () => {
+    const idxs = drafts.map((d, i) => [d.id, i] as const).filter(([id]) => sel.has(id)).map(([, i]) => i).sort((a, b) => a - b);
+    if (idxs.length < 2) return;
+    const first = drafts[idxs[0]];
+    const body = idxs.map((i, k) => (k === 0 ? drafts[i].body : `[b]${drafts[i].name}[/b]\n${drafts[i].body}`)).join('\n\n').trim();
+    const drop = new Set(idxs.slice(1).map((i) => drafts[i].id));
+    onChange(drafts.filter((d) => !drop.has(d.id)).map((d) => (d.id === first.id ? { ...d, body } : d)));
+    setSel(new Set());
+  };
+  const addBlank = () => onChange([...drafts, { id: crypto.randomUUID(), kind: 'feature', name: 'New Feature', level: 1, levels: [], body: '' }]);
+  const featCount = drafts.filter((d) => d.kind === 'feature').length;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="section-label">{featCount} feature{featCount === 1 ? '' : 's'} · {drafts.length} section{drafts.length === 1 ? '' : 's'}</span>
+        <button type="button" disabled={sel.size < 2} onClick={mergeSelected} className="btn-gold h-7 px-2 text-[11px] disabled:opacity-40">Merge selected ({sel.size})</button>
+        <button type="button" onClick={addBlank} className="btn-gold h-7 px-2 text-[11px]">＋ Add</button>
+      </div>
+      <div className="space-y-1">
+        {drafts.length === 0 ? <p className="field-hint">No features parsed — paste a class write-up and Interpret, or ＋ Add one.</p> : null}
+        {drafts.map((d) => (
+          <div key={d.id} className={`compendium-card p-2 ${d.kind === 'skip' ? 'opacity-50' : ''}`}>
+            <div className="flex items-center gap-2">
+              <input type="checkbox" checked={sel.has(d.id)} onChange={() => toggle(d.id)} className="h-4 w-4 accent-[var(--gold)]" title="Select for merge" />
+              <select value={d.kind} onChange={(e) => update(d.id, { kind: e.target.value as FeatureDraft['kind'] })} className="field-input w-28 px-1 text-[11px]">
+                {FEATURE_KINDS.map((k) => (<option key={k.value} value={k.value}>{k.label}</option>))}
+              </select>
+              <input value={d.name} onChange={(e) => update(d.id, { name: e.target.value })} className="field-input flex-1 px-2 text-sm" placeholder="Feature name" />
+              {d.kind === 'feature' ? (
+                <input type="number" min={1} max={20} value={d.level ?? ''} onChange={(e) => update(d.id, { level: e.target.value ? Number(e.target.value) : null })} className="field-input w-14 px-1 text-sm" title="Level" />
+              ) : d.kind === 'asi' || d.kind === 'subclass' ? (
+                <span className="font-mono text-[10px] text-ink/45" title="Levels">[{d.levels.join(',')}]</span>
+              ) : null}
+              <button type="button" onClick={() => remove(d.id)} className="px-1 text-ink/40 hover:text-blood" title="Remove">✕</button>
+            </div>
+            {d.body ? <div className="mt-1 line-clamp-2 pl-6 text-[11px] text-ink/50">{d.body.replace(/\[\/?b\]/g, '')}</div> : null}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function FieldControl({
   field, value, onChange, flag, highlighted, onHover,
 }: {
@@ -1005,6 +1067,16 @@ function FieldControl({
           <p className="field-hint">Loading proficiency catalogs…</p>
         )}
         {field.help ? <p className="field-hint mt-0.5">{field.help}</p> : null}
+      </div>
+    );
+  }
+
+  if (field.kind === 'features') {
+    return (
+      <div className="sm:col-span-2" {...hover}>
+        <label className="field-label mb-1 block">{field.label}</label>
+        <FeaturesPanel value={Array.isArray(value) ? value : []} onChange={onChange} />
+        {field.help ? <p className="field-hint mt-1">{field.help}</p> : null}
       </div>
     );
   }

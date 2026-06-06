@@ -18,8 +18,10 @@ export type ImportFieldKind =
   | 'boolean'
   | 'select'
   | 'source' // a `<select>` populated from the `sources` table
-  | 'proficiencies'; // the reusable ProficienciesEditor grid; value is the class
-                     // proficiency object {armor,weapons,tools,skills,languages,…}
+  | 'proficiencies' // the reusable ProficienciesEditor grid; value is the class
+                    // proficiency object {armor,weapons,tools,skills,languages,…}
+  | 'features'; // the class features organizer; value is an array of feature
+                // drafts (parsed sections) the user can merge / edit / re-route
 
 export interface ImportFieldOption {
   value: string;
