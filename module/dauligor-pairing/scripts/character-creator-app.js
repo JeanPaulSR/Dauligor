@@ -353,6 +353,10 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     // The class being previewed in the Class tab while browsing, before it's
     // committed via "Select Class". Same shape as _choices.class (or null).
     this._classPreview = null;
+    // Browsing previews for the option-list pickers (background / species /
+    // feat), committed via their Select button. Keyed by kind; same shape as the
+    // matching _choices entry, or null.
+    this._featPreview = { background: null, race: null, feat: null };
     // Structural key of the last body render — scopes scroll-position
     // preservation to same-view re-renders (so clicks don't jump to top).
     this._lastBodyKey = null;
@@ -455,6 +459,15 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
         this._fetchClassBundle(this._classPreview.bundleUrl).then((b) => { if (b && this._tab === "class") this._renderBody(); });
         this._ensureSpellChart().then((chart) => { if (chart && this._tab === "class") this._renderBody(); });
       }
+    }
+    // Entering an option-list tab (background / species / feat): seed its preview
+    // from the committed choice on first entry, and warm that detail so the
+    // preview pane + Select button are ready. Mirrors the Class tab.
+    const fam = { background: "background", species: "race", feat: "feat" }[tab];
+    if (fam && entering) {
+      if (!this._featPreview[fam]) this._featPreview[fam] = this._choices[fam] ? { ...this._choices[fam] } : null;
+      const pv = this._featPreview[fam];
+      if (pv?.dbId) this._fetchDetail(fam, pv.dbId).then(() => { if (this._tab === tab) this._renderBody(); });
     }
     this._ensureSectionData(tab);
     this._renderAll();
@@ -1172,7 +1185,7 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     const fam = this._familyFor(kind);
     const list = fam.items;
     const searchKey = kind === "background" ? "bgSearch" : kind === "race" ? "raceSearch" : "featSearch";
-    const chosen = kind === "background" ? this._choices.background : kind === "race" ? this._choices.race : this._choices.feat;
+    const chosen = this._featPreview[kind] || this._choices[kind];
     // `kind` is the data/endpoint family ("background" | "race" | "feat");
     // `displayNoun` is the UI word ("species" for race, per 2024 terminology).
     const noun = displayNoun || (kind === "background" ? "background" : kind === "race" ? "species" : "feat");
@@ -2176,19 +2189,37 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     const row = this._familyFor(kind).items.find((r) => r.dbId === dbId);
     if (!row) return;
     this._detailErrors.delete(dbId); // a fresh (re)pick starts clean → shows "Loading…"
-    const choice = { dbId: row.dbId, name: row.name, img: row.img };
-    if (kind === "background") this._choices.background = choice;
-    else if (kind === "race") this._choices.race = choice;
-    else this._choices.feat = choice;
+    // Browsing only sets the PREVIEW; the choice is committed by the Select
+    // button (mirrors the class picker), so a stray click never commits.
+    this._featPreview[kind] = { dbId: row.dbId, name: row.name, img: row.img };
     this._renderBody();
-    this._renderFooter();
+    this._renderFooter(); // enable Select
     // Lazy-fetch detail for the preview pane (and to warm the embed cache).
     // Re-render whether it succeeds OR fails (failure shows a retry message),
-    // as long as we're still on a list-picker tab and this is still the pick.
+    // as long as we're still on a list-picker tab and this is still the preview.
     await this._fetchDetail(kind, dbId);
-    const chosenNow = kind === "background" ? this._choices.background : kind === "race" ? this._choices.race : this._choices.feat;
     const stillRelevant = this._tab === "background" || this._tab === "species" || this._tab === "feat";
-    if (stillRelevant && chosenNow?.dbId === dbId) this._renderBody();
+    if (stillRelevant && this._featPreview[kind]?.dbId === dbId) this._renderBody();
+  }
+
+  // Commit the previewed option (background / species / feat) and return to the
+  // wheel. Mirrors _selectClass.
+  _selectFeat(kind) {
+    const preview = this._featPreview[kind];
+    if (!preview) {
+      this._setStatus("Pick one first.", "danger");
+      return;
+    }
+    this._choices[kind] = { ...preview };
+    this._setStatus(`Selected ${preview.name}.`, "success");
+    this._backToHub();
+  }
+
+  // Discard the browsing change and return to the wheel; the committed choice
+  // (if any) is left untouched.
+  _cancelFeat(kind) {
+    this._featPreview[kind] = this._choices[kind] ? { ...this._choices[kind] } : null;
+    this._backToHub();
   }
 
   _pickClass(entryId, sourceSlug) {
@@ -2255,6 +2286,12 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
       actions = `
         <button type="button" class="dauligor-character-creator__button dauligor-character-creator__button--ghost" data-action="cancel-class"><i class="fas fa-xmark"></i> Cancel</button>
         <button type="button" class="dauligor-character-creator__button dauligor-character-creator__button--primary" data-action="select-class" ${this._classPreview ? "" : "disabled"}><i class="fas fa-check"></i> Select Class</button>`;
+    } else if (this._tab === "background" || this._tab === "species" || this._tab === "feat") {
+      const kind = { background: "background", species: "race", feat: "feat" }[this._tab];
+      const noun = { background: "Background", species: "Species", feat: "Feat" }[this._tab];
+      actions = `
+        <button type="button" class="dauligor-character-creator__button dauligor-character-creator__button--ghost" data-action="cancel-feat"><i class="fas fa-xmark"></i> Cancel</button>
+        <button type="button" class="dauligor-character-creator__button dauligor-character-creator__button--primary" data-action="select-feat" ${this._featPreview[kind] ? "" : "disabled"}><i class="fas fa-check"></i> Select ${noun}</button>`;
     } else if (this._tab === "create" || this._tab === "character") {
       actions = `<button type="button" class="dauligor-character-creator__button dauligor-character-creator__button--primary" data-action="build" ${this._ui.busy ? "disabled" : ""}><i class="fas fa-wand-magic-sparkles"></i> Build Character</button>`;
     }
@@ -2263,6 +2300,9 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     this._footerRegion.querySelector(`[data-action="build"]`)?.addEventListener("click", () => this._finish());
     this._footerRegion.querySelector(`[data-action="select-class"]`)?.addEventListener("click", () => this._selectClass());
     this._footerRegion.querySelector(`[data-action="cancel-class"]`)?.addEventListener("click", () => this._cancelClass());
+    const featKind = { background: "background", species: "race", feat: "feat" }[this._tab];
+    this._footerRegion.querySelector(`[data-action="select-feat"]`)?.addEventListener("click", () => this._selectFeat(featKind));
+    this._footerRegion.querySelector(`[data-action="cancel-feat"]`)?.addEventListener("click", () => this._cancelFeat(featKind));
   }
 
   _setStatus(msg, level = "info") {
