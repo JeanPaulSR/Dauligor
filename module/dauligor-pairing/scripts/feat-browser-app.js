@@ -22,11 +22,15 @@
 //   └────────────┴──────────────────┴───────────────────────┘
 //
 // Data flow
-//   1. Open: fetch `/api/module/<slug>/feats.json` for each selected
-//      source in parallel; merge to one pool, sort by featType + name.
-//   2. Row select: stash the dbId in state, kick off a background fetch
-//      of `/api/module/feats/<dbId>.json` for the detail pane.
-//   3. Import: ensure full feat is loaded, then
+//   1. Open: for each selected source, fetch in parallel the per-source feat
+//      list (`/api/module/<slug>/feats.json`, now feats-only) plus the
+//      background + species LIST catalogs (`/<slug>/backgrounds.json` ·
+//      `/<slug>/species.json`); catalog rows are synthesized into feat-shaped
+//      pool entries (featType "background"/"race"). Merge to one pool, sort by
+//      featType + name.
+//   2. Row select: stash the dbId in state, kick off a background fetch of the
+//      type's detail endpoint (feats/<id>, backgrounds/<id>, or races/<id>).
+//   3. Import: ensure the full item is loaded, then
 //      `actor.createEmbeddedDocuments("Item", [full])` (or update an
 //      existing match via `flags.dauligor-pairing.sourceId`).
 //
@@ -78,9 +82,9 @@ const FEAT_TYPE_LABELS = {
   feat: "Feat",
   class: "Class Feature",
   subclass: "Subclass Feature",
-  // `race` / `background` rows in the feats table ARE the race / background
-  // entities (they export as Foundry `type:"race"` / `"background"`), not
-  // features of them — label them accordingly.
+  // `race` / `background` rows ARE the race / background entities (they export
+  // as Foundry `type:"race"` / `"background"`), not features of them — label
+  // them accordingly. They come from the per-source species/background catalogs.
   race: "Race",
   background: "Background",
   monster: "Monster Feature",
@@ -142,10 +146,10 @@ function featTypeLabel(featType) {
   return FEAT_TYPE_LABELS[String(featType ?? "")] || String(featType ?? "feat");
 }
 
-// Backgrounds and races live in the same `feats` table and ride this browser's
-// pool (the source-feat-list endpoint returns them too, tagged by `featType`),
-// but they export as their own Foundry item type from dedicated detail
-// endpoints. Map the row's featType to the detail endpoint segment, the bundle
+// Backgrounds and species are pulled into this browser's pool from their own
+// per-source LIST catalogs (synthesized as feat-shaped entries tagged by
+// `featType`), and they export as their own Foundry item type from dedicated
+// detail endpoints. Map the row's featType to the detail endpoint segment, the bundle
 // `kind` to expect, and the key the full item lives under in that bundle.
 // Anything not listed (feat / class / subclass / monster features) uses the
 // feat endpoint. See docs/feat-import-contract.md + the bg/race import contract.
@@ -416,23 +420,26 @@ export class DauligorFeatBrowserApp extends HandlebarsApplicationMixin(Applicati
     const collected = [];
     const errors = [];
 
-    await Promise.all(this._sourceSlugs.map(async (slug) => {
+    // The per-source feat list — now feats-only, since backgrounds & species
+    // were promoted out of the `feats` table into their own tables. Each feat is
+    // already a Foundry-shaped item with flags.dauligor-pairing.{dbId,featType,…}.
+    const fetchFeats = async (slug) => {
       const url = `${host}/api/module/${encodeURIComponent(slug)}/feats.json`;
       try {
         const response = await fetch(url, { cache: "no-store" });
         if (!response.ok) {
-          errors.push(`${slug}: HTTP ${response.status}`);
+          errors.push(`${slug} feats: HTTP ${response.status}`);
           return;
         }
         const payload = await response.json();
         if (payload?.kind !== "dauligor.source-feat-list.v1") {
-          errors.push(`${slug}: unexpected payload kind ${payload?.kind ?? "(missing)"}`);
+          errors.push(`${slug} feats: unexpected payload kind ${payload?.kind ?? "(missing)"}`);
           return;
         }
         const sourceSemanticId = String(payload.sourceSemanticId ?? payload.sourceSlug ?? slug);
-        // Stamp a `__sourceLabel` for nicer display in detail header / rail.
-        // Stored OUTSIDE flags.dauligor-pairing so it doesn't pollute the
-        // payload's contract — purely a local-render concern.
+        // Stamp `__sourceSlug`/`__sourceSemanticId` for nicer display in detail
+        // header / rail. Stored OUTSIDE flags.dauligor-pairing so it doesn't
+        // pollute the payload's contract — purely a local-render concern.
         const feats = Array.isArray(payload.feats) ? payload.feats : [];
         for (const feat of feats) {
           feat.__sourceSlug = slug;
@@ -442,9 +449,55 @@ export class DauligorFeatBrowserApp extends HandlebarsApplicationMixin(Applicati
         this._sourceLabels.set(slug, String(payload.sourceSlug || slug).toUpperCase());
       } catch (err) {
         log(`feat-browser fetch failed for ${slug}`, err);
-        errors.push(`${slug}: ${err?.message ?? "network error"}`);
+        errors.push(`${slug} feats: ${err?.message ?? "network error"}`);
       }
-    }));
+    };
+
+    // Backgrounds & species now come from their own per-source LIST catalogs
+    // (lightweight {dbId,name,img,summary,tags}). Synthesize a minimal feat-
+    // shaped pool entry per row — with flags.dauligor-pairing.featType set to
+    // "background"/"race" — so they flow through the same sort/group/filter
+    // pipeline, and `_ensureFullFeat` routes their detail/import to the
+    // dedicated /backgrounds/<id> · /races/<id> endpoints (see detailEndpointFor).
+    const fetchCatalog = async (slug, file, expectKind, featType) => {
+      const url = `${host}/api/module/${encodeURIComponent(slug)}/${file}`;
+      try {
+        const response = await fetch(url, { cache: "no-store" });
+        if (!response.ok) {
+          errors.push(`${slug} ${file}: HTTP ${response.status}`);
+          return;
+        }
+        const payload = await response.json();
+        if (payload?.kind !== expectKind) {
+          errors.push(`${slug} ${file}: unexpected payload kind ${payload?.kind ?? "(missing)"}`);
+          return;
+        }
+        const sourceSemanticId = String(payload?.source?.sourceId ?? slug);
+        for (const entry of (Array.isArray(payload.entries) ? payload.entries : [])) {
+          const dbId = String(entry?.dbId ?? "");
+          const name = String(entry?.name ?? "");
+          if (!dbId || !name) continue;
+          collected.push({
+            name,
+            img: entry?.img || "",
+            type: featType === "race" ? "race" : "background",
+            flags: { [MODULE_ID]: { dbId, featType, summary: String(entry?.summary ?? "") } },
+            __sourceSlug: slug,
+            __sourceSemanticId: sourceSemanticId,
+          });
+        }
+        if (!this._sourceLabels.has(slug)) this._sourceLabels.set(slug, slug.toUpperCase());
+      } catch (err) {
+        log(`feat-browser catalog fetch failed for ${slug}/${file}`, err);
+        errors.push(`${slug} ${file}: ${err?.message ?? "network error"}`);
+      }
+    };
+
+    await Promise.all(this._sourceSlugs.flatMap((slug) => [
+      fetchFeats(slug),
+      fetchCatalog(slug, "backgrounds.json", "dauligor.background-catalog.v1", "background"),
+      fetchCatalog(slug, "species.json", "dauligor.species-catalog.v1", "race"),
+    ]));
 
     // Stable sort: featType asc, then name asc.
     collected.sort((a, b) => {
@@ -465,9 +518,10 @@ export class DauligorFeatBrowserApp extends HandlebarsApplicationMixin(Applicati
 
   /**
    * Find the featType for a pool entry by dbId, so the detail fetch can route
-   * backgrounds/races to their own endpoints. dbIds are unique across the
-   * feats table, so this is a 1:1 lookup. Defaults to "feat" when the entry
-   * isn't in the current pool (e.g. a cross-source favorite).
+   * backgrounds/species to their own endpoints. Scans the current merged pool
+   * (feats + synthesized background/species rows) and returns the first match's
+   * featType. Defaults to "feat" when the entry isn't in the current pool
+   * (e.g. a cross-source favorite).
    */
   _featTypeForDbId(dbId) {
     const feats = Array.isArray(this._pool?.feats) ? this._pool.feats : [];

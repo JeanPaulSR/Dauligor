@@ -2,8 +2,10 @@
 //
 // A six-step guided flow that assembles a level-1 character:
 //   1. Ability Scores   — Point Buy (32 / 8–16) or the shared roll pool
-//   2. Background       — picked from /api/module/<source>/feats.json (featType "background")
-//   3. Race             — picked from the same feed (featType "race")
+//   2. Background       — picked from /api/module/<source>/backgrounds.json
+//                          (dauligor.background-catalog.v1)
+//   3. Race / Species   — picked from /api/module/<source>/species.json
+//                          (dauligor.species-catalog.v1)
 //   4. Class            — picked from the per-source class catalog; applied
 //                          by delegating to the existing class importer
 //   5. Starting Items   — stubbed (no item-list endpoint yet)
@@ -72,7 +74,7 @@ const TABS = [
 
 // Wheel wedges, clockwise from the top. The center button is Ability Scores
 // (handled separately). "species" is the 2024 label over the existing race
-// data/endpoints (featType "race"). feat + image are stubbed this pass.
+// data (its own species.json catalog + /races/<id> detail). Image is stubbed.
 const SECTIONS = [
   { id: "class", label: "Class", icon: "fa-shield-halved" },
   { id: "species", label: "Species", icon: "fa-dragon" },
@@ -263,8 +265,8 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     this._choices = freshChoices();
 
     // Lazy-loaded data caches.
-    // featFamily: { status, backgrounds[], races[], errors[] }
-    this._featFamily = { status: "idle", backgrounds: [], races: [] };
+    // featFamily: { status, backgrounds[], races[], feats[], tagIndex{}, errors[] }
+    this._featFamily = { status: "idle", backgrounds: [], races: [], feats: [], tagIndex: {} };
     // classes: { status, entries[], errors[] }
     this._classes = { status: "idle", entries: [] };
     // Detail fetch caches keyed by dbId.
@@ -415,7 +417,8 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
   }
 
   _ensureSectionData(id) {
-    // "species" rides the same feat-family feed as backgrounds (featType "race").
+    // background / species / feat share the lazy-loaded family pools, each now
+    // from its own per-source catalog (see _loadFeatFamily).
     if ((id === "background" || id === "species" || id === "feat") && this._featFamily.status === "idle") {
       this._loadFeatFamily();
     }
@@ -458,13 +461,23 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     }
   }
 
+  // Loads the background / species / feat pools that back the three list-picker
+  // tabs. Backgrounds and species now have their own per-source LIST catalogs
+  // (`/<source>/backgrounds.json` → dauligor.background-catalog.v1,
+  // `/<source>/species.json` → dauligor.species-catalog.v1) whose entries
+  // already match our row shape ({dbId,name,img,summary,tags}). Feats still
+  // come from the per-source feat list (`/<source>/feats.json`, now feats-only),
+  // filtered to featType:"feat". Each source fires all three feeds in parallel.
+  // (Backgrounds/species used to ride feats.json by featType; that ended when
+  // they were promoted to their own tables — see the bg/species list-endpoints
+  // handoff.)
   async _loadFeatFamily() {
-    this._featFamily = { status: "loading", backgrounds: [], races: [], feats: [] };
+    this._featFamily = { status: "loading", backgrounds: [], races: [], feats: [], tagIndex: {} };
     if (this._tab === "background" || this._tab === "species" || this._tab === "feat") this._renderBody();
 
     const sources = await this._loadSources();
     if (!sources.length) {
-      this._featFamily = { status: "error", backgrounds: [], races: [], feats: [], errors: ["No sources available."] };
+      this._featFamily = { status: "error", backgrounds: [], races: [], feats: [], tagIndex: {}, errors: ["No sources available."] };
       if (this._tab === "background" || this._tab === "species" || this._tab === "feat") this._renderBody();
       return;
     }
@@ -473,40 +486,82 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     const backgrounds = [];
     const races = [];
     const feats = [];
+    const tagIndex = {};
     const errors = [];
 
-    await Promise.all(sources.map(async ({ slug }) => {
+    const mergeTagIndex = (idx) => {
+      if (idx && typeof idx === "object") {
+        for (const [id, name] of Object.entries(idx)) if (name) tagIndex[id] = String(name);
+      }
+    };
+
+    // A lightweight per-source list catalog (backgrounds / species). Entries are
+    // already {dbId,name,img,summary,tags}; the full item is fetched on select.
+    const fetchCatalog = async (slug, file, expectKind, sink) => {
+      const url = `${host}/api/module/${encodeURIComponent(slug)}/${file}`;
+      try {
+        const res = await fetch(url, { cache: "no-store" });
+        if (!res.ok) { errors.push(`${slug}/${file}: HTTP ${res.status}`); return; }
+        const payload = await res.json();
+        if (payload?.kind !== expectKind) return;
+        for (const e of (Array.isArray(payload.entries) ? payload.entries : [])) {
+          const dbId = String(e?.dbId ?? "");
+          const name = String(e?.name ?? "");
+          if (!dbId || !name) continue;
+          sink.push({
+            dbId,
+            name,
+            img: e?.img || null,
+            summary: String(e?.summary ?? ""),
+            tags: Array.isArray(e?.tags) ? e.tags.map(String) : [],
+            sourceSlug: slug,
+          });
+        }
+        mergeTagIndex(payload.tagIndex);
+      } catch (err) {
+        errors.push(`${slug}/${file}: ${err?.message ?? "fetch failed"}`);
+      }
+    };
+
+    // The per-source feat list — now feats-only, so keep just featType:"feat".
+    const fetchFeats = async (slug) => {
       const url = `${host}/api/module/${encodeURIComponent(slug)}/feats.json`;
       try {
         const res = await fetch(url, { cache: "no-store" });
-        if (!res.ok) { errors.push(`${slug}: HTTP ${res.status}`); return; }
+        if (!res.ok) { errors.push(`${slug}/feats.json: HTTP ${res.status}`); return; }
         const payload = await res.json();
         if (payload?.kind !== "dauligor.source-feat-list.v1") return;
         for (const feat of (Array.isArray(payload.feats) ? payload.feats : [])) {
           const flags = feat?.flags?.[MODULE_ID] ?? {};
-          const featType = String(flags.featType ?? "");
-          const row = {
-            dbId: String(flags.dbId ?? ""),
-            name: String(feat?.name ?? ""),
+          if (String(flags.featType ?? "") !== "feat") continue;
+          const dbId = String(flags.dbId ?? "");
+          const name = String(feat?.name ?? "");
+          if (!dbId || !name) continue;
+          feats.push({
+            dbId,
+            name,
             img: feat?.img ?? null,
             summary: String(flags.summary ?? flags.requirements ?? ""),
+            tags: [], // feats.json doesn't surface tag ids yet; filter parity is deferred
             sourceSlug: slug,
-          };
-          if (!row.dbId || !row.name) continue;
-          if (featType === "background") backgrounds.push(row);
-          else if (featType === "race") races.push(row);
-          else if (featType === "feat") feats.push(row);
+          });
         }
       } catch (err) {
-        errors.push(`${slug}: ${err?.message ?? "fetch failed"}`);
+        errors.push(`${slug}/feats.json: ${err?.message ?? "fetch failed"}`);
       }
-    }));
+    };
+
+    await Promise.all(sources.flatMap(({ slug }) => [
+      fetchCatalog(slug, "backgrounds.json", "dauligor.background-catalog.v1", backgrounds),
+      fetchCatalog(slug, "species.json", "dauligor.species-catalog.v1", races),
+      fetchFeats(slug),
+    ]));
 
     const byName = (a, b) => a.name.localeCompare(b.name);
     backgrounds.sort(byName);
     races.sort(byName);
     feats.sort(byName);
-    this._featFamily = { status: "ready", backgrounds, races, feats, errors };
+    this._featFamily = { status: "ready", backgrounds, races, feats, tagIndex, errors };
     if (this._tab === "background" || this._tab === "species" || this._tab === "feat") this._renderBody();
   }
 
@@ -1076,9 +1131,11 @@ export class DauligorCharacterCreatorApp extends HandlebarsApplicationMixin(Appl
     const full = cache.get(chosen.dbId);
     const hasImg = !!chosen.img;
 
-    // Prerequisite — the dnd5e `system.requirements` string (feats). The list
-    // row's `summary` carries it too, so it shows before the detail lands.
-    const prereq = String(full?.system?.requirements ?? chosen.summary ?? "").trim();
+    // Prerequisite — feats only (the dnd5e `system.requirements` string; the
+    // list row's `summary` carries it too, so it shows before the detail lands).
+    // Backgrounds/species have no prerequisite and their `summary` is a
+    // description snippet, so never surface it as one here.
+    const prereq = kind === "feat" ? String(full?.system?.requirements ?? chosen.summary ?? "").trim() : "";
     const prereqHtml = prereq
       ? `<div class="dauligor-character-creator__feat-prereq"><strong>Prerequisite:</strong> ${escapeHtml(prereq)}</div>`
       : "";
