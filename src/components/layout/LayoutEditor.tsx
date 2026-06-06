@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
-  Sparkles, LayoutGrid, Star, BookMarked, Type, ImageIcon, Minus, Square, Columns3, Megaphone,
+  Sparkles, LayoutGrid, Star, BookMarked, Type, ImageIcon, Minus, Square, Columns3, Megaphone, Lock, EyeOff,
   ChevronUp, ChevronDown, Trash2, Copy, X, GripVertical, Search, ChevronLeft,
 } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -18,7 +18,7 @@ import {
   type LayoutBlock, type LayoutBlockType, type ContainerBlock, type EntityRef,
 } from '../../lib/layoutBlocks';
 
-const ICONS: Record<string, any> = { Sparkles, LayoutGrid, Star, BookMarked, Type, ImageIcon, Minus, Square, Columns3, Megaphone };
+const ICONS: Record<string, any> = { Sparkles, LayoutGrid, Star, BookMarked, Type, ImageIcon, Minus, Square, Columns3, Megaphone, Lock, EyeOff };
 
 /** Visible text overrides — defaults are surface-neutral; a host (campaign,
  *  article, …) passes its own wording so the editor reads naturally there. */
@@ -70,6 +70,10 @@ interface LayoutEditorProps {
   /** Called by the Back button in fullscreen mode. */
   onBack?: () => void;
   labels?: LayoutEditorLabels;
+  /** Host-supplied inspector fields for block types the generic editor can't edit
+   *  on its own (e.g. a `secret` block needing era/campaign data). Rendered below
+   *  the built-in inspector fields; return null to defer to the built-in editor. */
+  renderInspectorExtras?: (block: LayoutBlock, set: (patch: Record<string, any>) => void) => React.ReactNode;
 }
 
 /* Pane widths (px) for the resizable Structure | Preview | Inspector layout —
@@ -116,7 +120,7 @@ function isDescendant(blocks: LayoutBlock[], ancestorId: string, id: string): bo
 export default function LayoutEditor({
   load, save, renderPreview, controlled, embedded = false, seedDefault, allowedTypes,
   imageStoragePath = 'images/layout', paneStorageKey = DEFAULT_PANE_KEY,
-  fullscreen = false, onBack, labels = {},
+  fullscreen = false, onBack, labels = {}, renderInspectorExtras,
 }: LayoutEditorProps) {
   const L = {
     title: 'Layout',
@@ -431,6 +435,7 @@ export default function LayoutEditor({
               onAddInside={(cid) => setAddAt({ containerId: cid })}
               onColumnCount={setColumnCount}
               imageStoragePath={imageStoragePath}
+              renderExtras={renderInspectorExtras}
             />
           ) : (
             <p className="insp-empty">Select a block in the structure tree to edit it.</p>
@@ -553,7 +558,15 @@ function BlockTree(p: TreeProps) {
           <div key={b.id}>
             <div
               draggable
-              onDragStart={(e) => { e.stopPropagation(); p.onDragStart(b.id); e.dataTransfer.effectAllowed = 'move'; }}
+              onDragStart={(e) => {
+                e.stopPropagation();
+                p.onDragStart(b.id);
+                e.dataTransfer.effectAllowed = 'move';
+                // Firefox (and some others) won't START a drag unless dataTransfer
+                // carries data — without this, dragging silently does nothing and
+                // only the up/down arrows work.
+                try { e.dataTransfer.setData('text/plain', b.id); } catch { /* some browsers throw outside a real drag */ }
+              }}
               onDragEnd={p.onDragEndAll}
               onDragOver={(e) => {
                 if (!p.dragId || p.dragId === b.id) return;
@@ -676,12 +689,14 @@ interface InspectorProps {
   onAddInside: (containerId: string) => void;
   onColumnCount: (id: string, n: number) => void;
   imageStoragePath: string;
+  renderExtras?: (block: LayoutBlock, set: (patch: Record<string, any>) => void) => React.ReactNode;
 }
-function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onAddInside, onColumnCount, imageStoragePath }: InspectorProps) {
+function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onAddInside, onColumnCount, imageStoragePath, renderExtras }: InspectorProps) {
   const meta = BLOCK_TYPE_META[block.blockType];
   const i = parent?.index ?? 0;
   const n = parent?.list.length ?? 1;
   const set = (patch: Record<string, any>) => onUpdate(block.id, patch);
+  const extras = renderExtras?.(block, set);
 
   return (
     <div className="p-4 space-y-4">
@@ -703,6 +718,11 @@ function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onA
       {block.blockType === 'text' && (<>
         <Field label="Body (BBCode)"><MarkdownEditor value={block.body} onChange={(v) => set({ body: v })} placeholder="Write text…" /></Field>
         <Seg label="Width" value={block.width} options={[['narrow', 'Narrow'], ['normal', 'Normal'], ['wide', 'Wide']]} onChange={(v) => set({ width: v })} />
+      </>)}
+
+      {block.blockType === 'note' && (<>
+        <p className="field-hint">Shown only to staff on the article — never to players.</p>
+        <Field label="Storyteller Note (BBCode)"><MarkdownEditor value={block.body} onChange={(v) => set({ body: v })} placeholder="Plot hooks, background, DM-only details…" /></Field>
       </>)}
 
       {block.blockType === 'image' && (<>
@@ -772,6 +792,10 @@ function Inspector({ block, parent, onUpdate, onMove, onDuplicate, onRemove, onA
         <Seg label="Gap" value={block.gap} options={[['small', 'S'], ['medium', 'M'], ['large', 'L']]} onChange={(v) => set({ gap: v })} />
         <p className="field-hint">Each column is its own section in the structure tree — open this block there to fill Column 1, Column 2, … separately (add a block or drag one in). Reducing the count merges the last column's blocks into the previous one, so nothing is lost.</p>
       </>)}
+
+      {/* Host-supplied editors for block types the generic editor can't edit
+          on its own (e.g. a `secret` block's era/campaign reveal controls). */}
+      {extras}
     </div>
   );
 }
@@ -872,7 +896,7 @@ function EntityRefPicker({ mode, value, onChange }: {
                   <div key={`${r.kind}:${r.id}:${idx}`} className={cn(chipDrag === idx && 'opacity-40')}>
                     {/* Summary row — drag to reorder; chevron toggles the override editor. */}
                     <div draggable
-                      onDragStart={() => setChipDrag(idx)}
+                      onDragStart={(e) => { setChipDrag(idx); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', String(idx)); } catch { /* noop */ } }}
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={() => reorder(idx)}
                       className="data-table-row grid grid-cols-[auto_1fr_auto_auto_auto] gap-2 items-center">

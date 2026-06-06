@@ -107,6 +107,8 @@ function safeJson(raw: string): any {
 const ALLOWED_ARTICLE_BLOCK_TYPES = new Set([
   "hero",
   "text",
+  "note",
+  "secret",
   "image",
   "divider",
   "callout",
@@ -116,6 +118,45 @@ const ALLOWED_ARTICLE_BLOCK_TYPES = new Set([
   "columns",
   "column",
 ]);
+
+/**
+ * Filter blocks to what a viewer is allowed to receive. The body of restricted
+ * blocks must never reach a client that shouldn't see it (client-side hiding is
+ * not a security boundary), so we strip them server-side:
+ *   - `note`   — staff only.
+ *   - `secret` — staff, or a player whose ACTIVE campaign is in the secret's
+ *                `revealedCampaignIds`.
+ * Staff get everything. (These blocks aren't nested by the designer, so a
+ * root-level filter suffices; deepen if that changes.)
+ */
+async function filterBlocksForViewer(rows: any[], staff: boolean, uid: string): Promise<any[]> {
+  if (staff) return rows;
+
+  // Only pay the active-campaign lookup if there's a secret to gate.
+  let activeCampaignId: string | null = null;
+  if (rows.some((r) => String(r?.block_type ?? "") === "secret")) {
+    const userRes = await executeD1QueryInternal({
+      sql: "SELECT active_campaign_id FROM users WHERE id = ? LIMIT 1",
+      params: [uid],
+    });
+    const ur = Array.isArray(userRes?.results) ? userRes.results : [];
+    activeCampaignId = ur[0] ? (ur[0] as any).active_campaign_id ?? null : null;
+  }
+
+  return rows.filter((r) => {
+    const type = String(r?.block_type ?? "");
+    if (type === "note") return false;
+    if (type === "secret") {
+      let cfg: any = r?.config;
+      if (typeof cfg === "string") {
+        try { cfg = JSON.parse(cfg); } catch { cfg = {}; }
+      }
+      const revealed = Array.isArray(cfg?.revealedCampaignIds) ? cfg.revealedCampaignIds : [];
+      return !!activeCampaignId && revealed.includes(activeCampaignId);
+    }
+    return true;
+  });
+}
 
 /**
  * Concatenate every text block's BBCode body (depth-first, container children
@@ -263,7 +304,7 @@ async function handleList(searchParams: URLSearchParams, staff: boolean): Promis
   return Response.json({ articles });
 }
 
-async function handleSingle(staff: boolean, articleId: string): Promise<Response> {
+async function handleSingle(staff: boolean, uid: string, articleId: string): Promise<Response> {
   const baseRes = await executeD1QueryInternal({
     sql: "SELECT * FROM lore_articles WHERE id = ? LIMIT 1",
     params: [articleId],
@@ -308,7 +349,7 @@ async function handleSingle(staff: boolean, articleId: string): Promise<Response
   ]);
 
   const tags = (Array.isArray(tagRes?.results) ? tagRes.results : []).map((r: any) => r.tag_id);
-  const blocks = Array.isArray(blocksRes?.results) ? blocksRes.results : [];
+  const blocks = await filterBlocksForViewer(Array.isArray(blocksRes?.results) ? blocksRes.results : [], staff, uid);
   const visibilityEraIds = (Array.isArray(eraRes?.results) ? eraRes.results : []).map((r: any) => r.era_id);
   const visibilityCampaignIds = (Array.isArray(campRes?.results) ? campRes.results : []).map((r: any) => r.campaign_id);
   const mentions = (Array.isArray(mentionsRes?.results) ? mentionsRes.results : [])
@@ -380,7 +421,7 @@ async function handleSecrets(staff: boolean, uid: string, articleId: string): Pr
   return Response.json({ secrets: visible });
 }
 
-async function handleArticleBlocks(staff: boolean, articleId: string): Promise<Response> {
+async function handleArticleBlocks(staff: boolean, uid: string, articleId: string): Promise<Response> {
   const check = await executeD1QueryInternal({
     sql: "SELECT status FROM lore_articles WHERE id = ? LIMIT 1",
     params: [articleId],
@@ -401,7 +442,7 @@ async function handleArticleBlocks(staff: boolean, articleId: string): Promise<R
            ORDER BY "order" ASC`,
     params: [articleId],
   });
-  const blocks = Array.isArray(result?.results) ? result.results : [];
+  const blocks = await filterBlocksForViewer(Array.isArray(result?.results) ? result.results : [], staff, uid);
   return Response.json({ blocks });
 }
 
@@ -574,12 +615,12 @@ export const onRequest = async (context: any): Promise<Response> => {
     // GET routes — any authenticated user, server-filtered.
     if (request.method === "GET") {
       if (path.length === 1 && path[0] === "articles") return await handleList(searchParams, staff);
-      if (path.length === 2 && path[0] === "articles") return await handleSingle(staff, path[1]);
+      if (path.length === 2 && path[0] === "articles") return await handleSingle(staff, uid, path[1]);
       if (path.length === 3 && path[0] === "articles" && path[2] === "secrets") {
         return await handleSecrets(staff, uid, path[1]);
       }
       if (path.length === 3 && path[0] === "articles" && path[2] === "blocks") {
-        return await handleArticleBlocks(staff, path[1]);
+        return await handleArticleBlocks(staff, uid, path[1]);
       }
       return Response.json(
         { error: `Unknown lore route: /${path.join("/")}` },

@@ -22,6 +22,8 @@ import { getSessionToken } from "./auth";
 export type LayoutBlockType =
   | 'hero'
   | 'text'
+  | 'note'             // staff-only "Storyteller Note" (rendered only when viewContext.isStaff)
+  | 'secret'           // reveal-per-campaign secret (rendered to staff, or players whose campaign is revealed)
   | 'image'
   | 'divider'
   | 'recommended'
@@ -51,6 +53,29 @@ export interface TextBlock extends BlockBase {
   /** BBCode body, rendered via BBCodeRenderer. */
   body: string;
   width: 'narrow' | 'normal' | 'wide';
+}
+/** A staff-only annotation. Rendered ONLY when the viewer is staff
+ *  (viewContext.isStaff). The lore API strips note blocks from the payload for
+ *  non-staff readers so the body never reaches players (client hiding alone is
+ *  not enough), and the content mirror excludes them. */
+export interface NoteBlock extends BlockBase {
+  blockType: 'note';
+  /** BBCode body, rendered via BBCodeRenderer. */
+  body: string;
+}
+/** A reveal-per-campaign secret. Rendered to staff always, and to a player only
+ *  when their active campaign is in `revealedCampaignIds`. The lore API strips
+ *  the block from the payload for viewers who shouldn't see it (real boundary,
+ *  not just client hiding), and the content mirror excludes it. `eraIds` scopes
+ *  which campaigns are eligible to be revealed-to in the editor UI. */
+export interface SecretBlock extends BlockBase {
+  blockType: 'secret';
+  /** BBCode body, rendered via BBCodeRenderer. */
+  body: string;
+  /** Eras this secret belongs to (UI: gates which campaigns can be revealed-to). */
+  eraIds: string[];
+  /** Campaigns this secret is revealed to (the actual visibility gate). */
+  revealedCampaignIds: string[];
 }
 export interface ImageBlock extends BlockBase {
   blockType: 'image';
@@ -184,6 +209,8 @@ export interface ColumnBlock extends BlockBase {
 export type LayoutBlock =
   | HeroBlock
   | TextBlock
+  | NoteBlock
+  | SecretBlock
   | ImageBlock
   | DividerBlock
   | RecommendedBlock
@@ -213,6 +240,8 @@ export const BLOCK_TYPE_META: Record<
   recommended:      { label: 'Recommended',      icon: 'BookMarked', description: "The campaign's recommended article.",       group: 'content' },
   callout:          { label: 'Callout',          icon: 'Megaphone',  description: 'A highlighted box with text + an optional button.', group: 'content' },
   text:             { label: 'Text',             icon: 'Type',       description: 'Free BBCode prose.',                        group: 'content' },
+  note:             { label: 'Storyteller Note', icon: 'Lock',       description: 'A staff-only note — shown only to staff, never to players.', group: 'content' },
+  secret:           { label: 'Secret',           icon: 'EyeOff',     description: 'Hidden content revealed only to chosen campaigns (staff always see it).', group: 'content' },
   image:            { label: 'Image',            icon: 'ImageIcon',  description: 'A banner image + optional caption.',        group: 'content' },
   divider:          { label: 'Divider',          icon: 'Minus',      description: 'A line, dots, or spacer.',                  group: 'content' },
   group:            { label: 'Group',            icon: 'Square',     description: 'A titled card that holds other blocks.',    group: 'container' },
@@ -250,6 +279,10 @@ export function makeBlock(type: LayoutBlockType, id: string): LayoutBlock {
       return { id, blockType: 'hero', title: '', subtitle: '', align: 'center', size: 'normal' };
     case 'text':
       return { id, blockType: 'text', body: '', width: 'normal' };
+    case 'note':
+      return { id, blockType: 'note', body: '' };
+    case 'secret':
+      return { id, blockType: 'secret', body: '', eraIds: [], revealedCampaignIds: [] };
     case 'image':
       return { id, blockType: 'image', url: '', caption: '', height: 'medium', link: '' };
     case 'divider':
@@ -326,6 +359,13 @@ export function parseLayoutBlock(row: any): LayoutBlock | null {
     case 'text':
       return { id, blockType: 'text', body: s(config.body),
         width: config.width === 'narrow' ? 'narrow' : config.width === 'wide' ? 'wide' : 'normal' };
+    case 'note':
+      return { id, blockType: 'note', body: s(config.body) };
+    case 'secret': {
+      const strArr = (v: any): string[] => (Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []);
+      return { id, blockType: 'secret', body: s(config.body),
+        eraIds: strArr(config.eraIds), revealedCampaignIds: strArr(config.revealedCampaignIds) };
+    }
     case 'image':
       return { id, blockType: 'image', url: s(config.url), caption: s(config.caption),
         height: config.height === 'small' ? 'small' : config.height === 'large' ? 'large' : 'medium', link: s(config.link) };

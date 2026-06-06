@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Lock, EyeOff } from 'lucide-react';
 import BBCodeRenderer from '../BBCodeRenderer';
 import type { BbcodeViewContext } from '../../lib/bbcode';
 import { resolveReference, type RefResolved } from '../../lib/references';
@@ -251,6 +251,47 @@ export default function LayoutBlocks({ blocks, recommendedLore = null, campaignN
       case 'text': {
         const w = block.width === 'narrow' ? 'max-w-2xl' : block.width === 'wide' ? 'max-w-none' : 'max-w-4xl';
         return <section key={block.id} className={w}><BBCodeRenderer content={block.body} viewContext={viewContext} className={textClassName} /></section>;
+      }
+
+      case 'note': {
+        // Staff-only. The lore API also strips note blocks from the payload for
+        // non-staff (so this is defense-in-depth, not the only gate); homepages
+        // pass no viewContext, so notes never render there.
+        if (!viewContext?.isStaff) return null;
+        if (!block.body) return null;
+        return (
+          <section key={block.id} className="max-w-4xl border border-primary/25 bg-primary/5 rounded-lg p-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <Lock className="w-4 h-4 text-primary" />
+              <span className="label-text text-primary">Storyteller Note</span>
+              <span className="ml-auto text-[10px] font-black uppercase tracking-widest text-primary/60 border border-primary/20 rounded px-1.5 py-0.5">Staff Only</span>
+            </div>
+            <BBCodeRenderer content={block.body} viewContext={viewContext} className="prose-sm italic" />
+          </section>
+        );
+      }
+
+      case 'secret': {
+        // Visible to staff always; to a player only when their active campaign is
+        // revealed. The lore API already strips hidden secret blocks from the
+        // payload — this is defense-in-depth + the staff reveal-status banner.
+        const revealed = !!viewContext?.campaignId && block.revealedCampaignIds.includes(viewContext.campaignId);
+        if (!viewContext?.isStaff && !revealed) return null;
+        if (!block.body) return null;
+        return (
+          <section key={block.id} className="max-w-4xl border border-primary/30 bg-primary/5 rounded-lg p-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <EyeOff className="w-4 h-4 text-primary" />
+              <span className="label-text text-primary">Secret</span>
+              {viewContext?.isStaff && (
+                <span className="ml-auto text-[10px] font-black uppercase tracking-widest text-primary/60 border border-primary/20 rounded px-1.5 py-0.5">
+                  {block.revealedCampaignIds.length > 0 ? `Revealed · ${block.revealedCampaignIds.length}` : 'Hidden from players'}
+                </span>
+              )}
+            </div>
+            <BBCodeRenderer content={block.body} viewContext={viewContext} className="prose-sm" />
+          </section>
+        );
       }
 
       case 'image': {

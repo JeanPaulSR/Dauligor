@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  fetchLoreArticle, fetchLoreSecrets, upsertLoreArticle, upsertLoreSecret, deleteLoreSecret,
+  fetchLoreArticle, fetchLoreSecrets, upsertLoreArticle,
 } from '../../lib/lore';
 import { fetchLoreArticleBlocks, saveLoreArticleBlocks } from '../../lib/loreArticleBlocks';
 import { makeBlock, parseLayoutBlock, LAYOUT_BLOCK_TYPES, type LayoutBlock, type LayoutBlockType } from '../../lib/layoutBlocks';
@@ -114,11 +114,6 @@ export default function LoreArticleDesigner({ userProfile }: { userProfile: any 
   const [openSections, setOpenSections] = useState<Set<string>>(new Set(['details']));
 
   const [blocks, setBlocks] = useState<LayoutBlock[]>(() => [newTextBlock()]);
-  const [dmNotes, setDmNotes] = useState('');
-  const [secrets, setSecrets] = useState<any[]>([]);
-  const [newSecret, setNewSecret] = useState({ content: '', eraIds: [] as string[] });
-  const [editingSecretId, setEditingSecretId] = useState<string | null>(null);
-  const [editSecretData, setEditSecretData] = useState({ content: '', eraIds: [] as string[] });
 
   const [allArticles, setAllArticles] = useState<any[]>([]);
   const [campaigns, setCampaigns] = useState<any[]>([]);
@@ -190,8 +185,6 @@ export default function LoreArticleDesigner({ userProfile }: { userProfile: any 
               metadata: { ...EMPTY_METADATA, ...(article.metadata || {}) },
               createdAt: article.createdAt,
             });
-            setDmNotes(article.dmNotes || '');
-
             // Prefer blocks from the article packet; fall back to a dedicated fetch,
             // then to wrapping the legacy `content` (articles authored in the classic
             // editor after the migration won't have block rows yet).
@@ -206,10 +199,27 @@ export default function LoreArticleDesigner({ userProfile }: { userProfile: any 
               tb.body = typeof article.content === 'string' ? article.content : '';
               parsed = [tb];
             }
+            // Lazy-migrate legacy dm_notes → a Storyteller Note block (once), so the
+            // staff note carries forward as a block when this article is re-saved.
+            const dm = typeof article.dmNotes === 'string' ? article.dmNotes : '';
+            if (dm.trim() && !parsed.some((b) => b.blockType === 'note')) {
+              const nb = makeBlock('note', crypto.randomUUID()) as any;
+              nb.body = dm;
+              parsed = [...parsed, nb];
+            }
+            // Lazy-migrate legacy lore_secrets → Secret blocks (once), so existing
+            // secrets carry forward as blocks when this article is re-saved.
+            if (!parsed.some((b) => b.blockType === 'secret')) {
+              const existingSecrets = await fetchLoreSecrets(id);
+              for (const s of existingSecrets) {
+                const sb = makeBlock('secret', crypto.randomUUID()) as any;
+                sb.body = s.content || '';
+                sb.eraIds = Array.isArray(s.eraIds) ? s.eraIds : [];
+                sb.revealedCampaignIds = Array.isArray(s.revealedCampaignIds) ? s.revealedCampaignIds : [];
+                parsed = [...parsed, sb];
+              }
+            }
             if (!cancelled) setBlocks(parsed);
-
-            const secretsData = await fetchLoreSecrets(id);
-            if (!cancelled) setSecrets(secretsData);
           }
         } catch (error) {
           console.error('Error loading lore article:', error);
@@ -233,52 +243,52 @@ export default function LoreArticleDesigner({ userProfile }: { userProfile: any 
   const setForm = (patch: Record<string, any>) => setFormData((f: any) => ({ ...f, ...patch }));
   const setMeta = (patch: Record<string, any>) => setFormData((f: any) => ({ ...f, metadata: { ...f.metadata, ...patch } }));
 
-  /* ── secrets (need a saved article) ── */
-  const handleAddSecret = async () => {
-    if (!id) { toast.error('Save the article first before adding secrets.'); return; }
-    if (!newSecret.content || newSecret.eraIds.length === 0) {
-      toast.error('Provide content and at least one Era.'); return;
-    }
-    try {
-      const secretId = crypto.randomUUID();
-      const secretData = { ...newSecret, revealedCampaignIds: [], updatedAt: new Date().toISOString() };
-      await upsertLoreSecret(id, secretId, secretData);
-      setSecrets([{ id: secretId, ...secretData }, ...secrets]);
-      setNewSecret({ content: '', eraIds: [] });
-      toast.success('Secret added');
-    } catch (e) { console.error(e); toast.error('Failed to add secret'); }
-  };
-  const handleSaveSecret = async (secretId: string) => {
-    if (!id) return;
-    if (!editSecretData.content || editSecretData.eraIds.length === 0) {
-      toast.error('Provide content and at least one Era.'); return;
-    }
-    try {
-      const secretData = { ...editSecretData, updatedAt: new Date().toISOString() };
-      await upsertLoreSecret(id, secretId, secretData);
-      setSecrets(secrets.map((s) => (s.id === secretId ? { ...s, ...secretData } : s)));
-      setEditingSecretId(null);
-      toast.success('Secret updated');
-    } catch (e) { console.error(e); toast.error('Failed to update secret'); }
-  };
-  const handleDeleteSecret = async (secretId: string) => {
-    try {
-      await deleteLoreSecret(secretId);
-      setSecrets(secrets.filter((s) => s.id !== secretId));
-      toast.success('Secret deleted');
-    } catch (e) { console.error(e); toast.error('Failed to delete secret'); }
-  };
-  const handleToggleSecretReveal = async (secret: any, campaignId: string) => {
-    if (!id) return;
-    try {
-      const isRevealed = secret.revealedCampaignIds.includes(campaignId);
-      const newRevealed = isRevealed
-        ? secret.revealedCampaignIds.filter((cid: string) => cid !== campaignId)
-        : [...secret.revealedCampaignIds, campaignId];
-      const secretData = { ...secret, revealedCampaignIds: newRevealed, updatedAt: new Date().toISOString() };
-      await upsertLoreSecret(id, secret.id, secretData);
-      setSecrets(secrets.map((s) => (s.id === secret.id ? { ...s, revealedCampaignIds: newRevealed } : s)));
-    } catch (e) { console.error(e); }
+  /* ── secret block inspector (host-supplied; needs era/campaign data) ── */
+  const renderInspectorExtras = (block: LayoutBlock, set: (patch: Record<string, any>) => void): React.ReactNode => {
+    if (block.blockType !== 'secret') return null;
+    const eraIds = block.eraIds || [];
+    const revealed = block.revealedCampaignIds || [];
+    const eligibleCampaigns = campaigns.filter((c) => eraIds.includes(c.eraId));
+    return (
+      <div className="space-y-3">
+        <p className="field-hint">Hidden from players unless revealed to their campaign. Staff always see it.</p>
+        <Field label="Secret (BBCode)">
+          <MarkdownEditor value={block.body} onChange={(v) => set({ body: v })} placeholder="What is the secret?" />
+        </Field>
+        <Field label="Eras">
+          <div className="flex flex-wrap gap-1.5">
+            {eras.map((era) => {
+              const sel = eraIds.includes(era.id);
+              return (
+                <button key={era.id} onClick={() => {
+                  const nextEras = sel ? eraIds.filter((i) => i !== era.id) : [...eraIds, era.id];
+                  // Drop reveals for campaigns no longer eligible under the new era set.
+                  const stillEligible = campaigns.filter((c) => nextEras.includes(c.eraId)).map((c) => c.id);
+                  set({ eraIds: nextEras, revealedCampaignIds: revealed.filter((id2) => stillEligible.includes(id2)) });
+                }} className={cn('px-2 py-0.5 rounded text-[10px] border', sel ? 'bg-primary text-primary-foreground border-primary font-bold' : 'border-primary/20 text-primary/60 hover:bg-primary/5')}>
+                  {era.name}
+                </button>
+              );
+            })}
+            {eras.length === 0 && <span className="text-[10px] text-gold/25 italic">No eras defined.</span>}
+          </div>
+        </Field>
+        <Field label="Reveal to campaigns">
+          <div className="flex flex-wrap gap-1.5">
+            {eligibleCampaigns.map((c) => {
+              const rev = revealed.includes(c.id);
+              return (
+                <button key={c.id} onClick={() => set({ revealedCampaignIds: rev ? revealed.filter((i) => i !== c.id) : [...revealed, c.id] })}
+                  className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] border', rev ? 'bg-primary text-primary-foreground border-primary font-bold' : 'border-gold/15 text-gold/45 hover:bg-gold/5')}>
+                  {rev ? <Unlock className="w-3 h-3" /> : <Lock className="w-3 h-3" />}{c.name}
+                </button>
+              );
+            })}
+            {eligibleCampaigns.length === 0 && <span className="text-[10px] text-gold/25 italic">Link an era to choose campaigns.</span>}
+          </div>
+        </Field>
+      </div>
+    );
   };
 
   /* ── unified save: article + blocks ── */
@@ -300,10 +310,15 @@ export default function LoreArticleDesigner({ userProfile }: { userProfile: any 
     try {
       // Article row first (creates the row a new article's blocks FK-reference),
       // then the blocks (the PUT re-derives the same content mirror server-side).
-      await upsertLoreArticle(articleId, payload, dmNotes);
+      // dm_notes is now authored as a Storyteller Note block, so clear the legacy
+      // column — the note block is the source of truth.
+      await upsertLoreArticle(articleId, payload, '');
       await saveLoreArticleBlocks(articleId, blocks);
       toast.success(id ? 'Article updated' : 'Article created');
-      navigate(`/wiki/article/${articleId}`);
+      // Stay in the designer after saving. For a brand-new article, switch to its
+      // edit route (now that it has an id) so subsequent saves update in place and
+      // the Secrets section becomes available — without leaving the editor.
+      if (!id) navigate(`/wiki/edit/${articleId}`, { replace: true });
     } catch (error) {
       console.error('Error saving lore article:', error);
       toast.error('Failed to save article');
@@ -537,105 +552,13 @@ export default function LoreArticleDesigner({ userProfile }: { userProfile: any 
                 <TemplateFields category={formData.category} metadata={formData.metadata} setMeta={setMeta} />
               </Section>
 
-              {/* Storyteller Notes */}
-              <Section title="Storyteller Notes" icon={Lock} k="notes" open={openSections.has('notes')} onToggle={toggleSection} badge="STAFF">
-                <MarkdownEditor value={dmNotes} onChange={setDmNotes} placeholder="Plot hooks, background, DM-only details…" minHeight="120px" className="bg-gold/5" label="DM Notes" />
-              </Section>
+              {/* Storyteller Notes are now authored inline as a staff-only
+                  "Storyteller Note" block on the canvas (Add block → Storyteller
+                  Note), so they can sit next to the content they annotate. */}
 
-              {/* Secrets */}
-              <Section title="Secrets" icon={Sparkles} k="secrets" open={openSections.has('secrets')} onToggle={toggleSection} badge="CAMPAIGN">
-                {!id && <p className="field-hint italic">Save the article first to manage secrets.</p>}
-                {id && (
-                  <div className="space-y-3">
-                    {secrets.map((secret) => {
-                      const isEditing = editingSecretId === secret.id;
-                      const linkedEras = eras.filter((e) => (isEditing ? editSecretData.eraIds : secret.eraIds).includes(e.id));
-                      const eligibleCampaigns = campaigns.filter((c) => (isEditing ? editSecretData.eraIds : secret.eraIds).includes(c.eraId));
-                      return (
-                        <div key={secret.id} className="p-3 rounded-lg border border-gold/15 bg-gold/5 space-y-3">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex flex-wrap gap-1">
-                              {isEditing ? (
-                                eras.map((era) => {
-                                  const sel = editSecretData.eraIds.includes(era.id);
-                                  return (
-                                    <button key={era.id} onClick={() => {
-                                      const next = sel ? editSecretData.eraIds.filter((i) => i !== era.id) : [...editSecretData.eraIds, era.id];
-                                      setEditSecretData({ ...editSecretData, eraIds: next });
-                                    }} className={cn('px-2 py-0.5 rounded text-[10px] border', sel ? 'bg-primary text-primary-foreground border-primary font-bold' : 'border-primary/20 text-primary/60 hover:bg-primary/5')}>
-                                      {era.name}
-                                    </button>
-                                  );
-                                })
-                              ) : (
-                                linkedEras.map((era) => <Badge key={era.id} variant="outline" className="bg-primary/10 text-primary border-primary/20 text-[10px]">{era.name}</Badge>)
-                              )}
-                            </div>
-                            <div className="flex items-center gap-1 shrink-0">
-                              {isEditing ? (
-                                <>
-                                  <Button variant="ghost" size="sm" onClick={() => setEditingSecretId(null)} className="h-7 text-xs text-ink/45">Cancel</Button>
-                                  <Button size="sm" onClick={() => handleSaveSecret(secret.id)} className="h-7 bg-primary text-primary-foreground text-xs">Save</Button>
-                                </>
-                              ) : (
-                                <>
-                                  <button onClick={() => { setEditingSecretId(secret.id); setEditSecretData({ content: secret.content, eraIds: secret.eraIds }); }} className="p-1 text-gold/45 hover:text-gold"><Edit className="w-3.5 h-3.5" /></button>
-                                  <button onClick={() => handleDeleteSecret(secret.id)} className="p-1 text-blood/40 hover:text-blood"><Trash2 className="w-3.5 h-3.5" /></button>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                          {isEditing ? (
-                            <textarea value={editSecretData.content} onChange={(e) => setEditSecretData({ ...editSecretData, content: e.target.value })} placeholder="What is the secret?" className="field-input w-full h-20 italic text-sm" />
-                          ) : (
-                            <p className="description-text text-sm italic">"{secret.content}"</p>
-                          )}
-                          {!isEditing && (
-                            <div className="pt-2 border-t border-gold/15">
-                              <p className="label-text text-gold/45 mb-1.5">Reveal to Campaigns</p>
-                              <div className="flex flex-wrap gap-1.5">
-                                {eligibleCampaigns.map((campaign) => {
-                                  const isRevealed = secret.revealedCampaignIds.includes(campaign.id);
-                                  return (
-                                    <button key={campaign.id} onClick={() => handleToggleSecretReveal(secret, campaign.id)} className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] border', isRevealed ? 'bg-primary text-primary-foreground border-primary font-bold' : 'border-gold/15 text-gold/45 hover:bg-gold/5')}>
-                                      {isRevealed ? <Unlock className="w-3 h-3" /> : <Lock className="w-3 h-3" />}{campaign.name}
-                                    </button>
-                                  );
-                                })}
-                                {eligibleCampaigns.length === 0 && <span className="text-[10px] text-gold/25 italic">No campaigns for these Eras.</span>}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-
-                    <div className="p-3 rounded-lg border border-dashed border-gold/25 space-y-2.5">
-                      <p className="label-text text-gold/65">Add New Secret</p>
-                      <div className="space-y-1.5">
-                        <label className="label-text text-ink/45">Link to Eras</label>
-                        <div className="flex flex-wrap gap-1.5">
-                          {eras.map((era) => {
-                            const sel = newSecret.eraIds.includes(era.id);
-                            return (
-                              <button key={era.id} onClick={() => {
-                                const next = sel ? newSecret.eraIds.filter((i) => i !== era.id) : [...newSecret.eraIds, era.id];
-                                setNewSecret({ ...newSecret, eraIds: next });
-                              }} className={cn('px-2 py-0.5 rounded text-[10px] border', sel ? 'bg-primary text-primary-foreground border-primary font-bold' : 'border-gold/25 text-gold/65 hover:bg-gold/5')}>
-                                {era.name}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                      <textarea value={newSecret.content} onChange={(e) => setNewSecret({ ...newSecret, content: e.target.value })} placeholder="What is the secret?" className="field-input w-full h-20 italic text-sm" />
-                      <div className="flex justify-end">
-                        <Button onClick={handleAddSecret} size="sm" className="h-7 bg-primary text-primary-foreground"><Plus className="w-3 h-3 mr-1" /> Add Secret</Button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </Section>
+              {/* Secrets are now authored inline as "Secret" blocks on the canvas
+                  (Add block → Secret), each with its own era links + per-campaign
+                  reveal toggles in the block inspector. */}
             </div>
           </aside>
         )}
@@ -648,6 +571,7 @@ export default function LoreArticleDesigner({ userProfile }: { userProfile: any 
           imageStoragePath={`images/lore/${id || 'new'}`}
           paneStorageKey="dauligor:loreArticleDesigner:panes:v1"
           renderPreview={(b) => <LayoutBlocks blocks={b} viewContext={{ isStaff: true }} />}
+          renderInspectorExtras={renderInspectorExtras}
         />
       </div>
     </div>

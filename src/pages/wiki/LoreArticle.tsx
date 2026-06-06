@@ -124,6 +124,21 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
     return [tb];
   }, [article]);
 
+  // Storyteller Notes now live as staff-only `note` blocks rendered in-flow. Only
+  // fall back to the legacy `dm_notes` box for articles that haven't been re-saved
+  // in the designer yet (no note block present).
+  const hasNoteBlock = useMemo(() => {
+    const visit = (bs: any[]): boolean => bs.some((b) => b?.blockType === 'note' || (Array.isArray(b?.children) && visit(b.children)));
+    return visit(bodyBlocks);
+  }, [bodyBlocks]);
+
+  // Same for secrets: secret blocks render inline, so suppress the legacy
+  // Revelations section once the article has been migrated to secret blocks.
+  const hasSecretBlock = useMemo(() => {
+    const visit = (bs: any[]): boolean => bs.some((b) => b?.blockType === 'secret' || (Array.isArray(b?.children) && visit(b.children)));
+    return visit(bodyBlocks);
+  }, [bodyBlocks]);
+
   useEffect(() => {
     if (!id) return;
 
@@ -580,8 +595,8 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
                   />
                 </div>
 
-                {/* Storyteller Notes */}
-                {isStaff && dmNotes && (
+                {/* Storyteller Notes — legacy fallback only when no note block exists. */}
+                {isStaff && dmNotes && !hasNoteBlock && (
                   <div className="mt-12 p-6 rounded-2xl border border-primary/20 bg-primary/5 space-y-4">
                     <div className="flex items-center justify-between">
                       <h2 className="label-text text-primary flex items-center gap-2">
@@ -593,8 +608,8 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
                   </div>
                 )}
 
-                {/* Revelations Section */}
-                {visibleSecrets.length > 0 && (
+                {/* Revelations Section — legacy fallback only when no secret block exists. */}
+                {!hasSecretBlock && visibleSecrets.length > 0 && (
                   <div className="mt-8 space-y-4">
                     <h2 className="label-text text-primary flex items-center gap-2">
                       <Sparkles className="w-4 h-4" /> Revelations

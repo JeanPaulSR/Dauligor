@@ -4,7 +4,12 @@ import LayoutBlocks from '../layout/LayoutBlocks';
 import {
   fetchCampaignHomeBlocks, saveCampaignHomeBlocks, defaultHomeBlocks,
 } from '../../lib/campaignHome';
-import type { LayoutBlock } from '../../lib/layoutBlocks';
+import { LAYOUT_BLOCK_TYPES, type LayoutBlock } from '../../lib/layoutBlocks';
+
+// Campaign homepages get every block type except the article-only staff blocks
+// (`note` = staff annotation, `secret` = reveal-per-campaign) which have no
+// meaning on a player-facing homepage.
+const CAMPAIGN_BLOCK_TYPES = LAYOUT_BLOCK_TYPES.filter((t) => t !== 'note' && t !== 'secret');
 
 // A stand-in recommended-article card for the editor's live preview, so the
 // `recommended` block shows something representative without resolving the
@@ -34,6 +39,7 @@ export default function CampaignHomeEditor({ campaignId, campaignName = '', full
     <LayoutEditor
       load={load}
       save={save}
+      allowedTypes={CAMPAIGN_BLOCK_TYPES}
       seedDefault={defaultHomeBlocks}
       imageStoragePath="images/campaigns/home"
       paneStorageKey="dauligor:campaignHomeEditor:panes:v1"
