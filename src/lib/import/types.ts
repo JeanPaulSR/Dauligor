@@ -73,10 +73,14 @@ export interface ImportAssignTarget {
   key: string;
   label: string;
   fieldKeys: string[];
-  /** `'append'` (default `'replace'`): each selection adds ONE item to the
-   * target's array field via `assignAppend` (e.g. class Features) instead of
-   * setting field values. */
-  mode?: 'replace' | 'append';
+  /** Popover grouping ("Blocks" | "Within Proficiencies"). Targets render under
+   * their group; the first group is what you "start with" (the full blocks). */
+  group?: string;
+  /** `'replace'` (default) sets field values via `assignField`; `'append'` adds
+   * ONE item to an array field via `assignAppend` (class Features); `'resolve'`
+   * runs a catalog-aware resolver via `assignResolve` (class Proficiencies block
+   * + its sub-sections — skills/armor/…). */
+  mode?: 'replace' | 'append' | 'resolve';
 }
 
 /** Result of interpreting a blob of pasted text into descriptor fields. Pure —
@@ -152,6 +156,11 @@ export interface ImportDescriptor {
    * ONE list item to push onto the target's array field (e.g. a class Feature
    * draft). Returns null when the selection yields nothing. */
   assignAppend?: (targetKey: string, text: string) => Record<string, unknown> | null;
+  /** OPTIONAL: for a `resolve`-mode target, ingest a selection using external
+   * CATALOGS (and the current field values, for merges) and return the field
+   * patch to apply. Used by the class Proficiencies block + sub-sections, which
+   * need the skills/armor/… tables to map names → ids. */
+  assignResolve?: (targetKey: string, text: string, ctx: { catalogs: any; values: Record<string, any> }) => Record<string, unknown>;
   /** OPTIONAL · PURE: split a multi-entity paste into per-entity blocks, returning
    * the character offset where each block STARTS (sorted, first = first entity).
    * Empty / length-1 means a single entity. Drives batch import + the manual

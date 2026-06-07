@@ -27,7 +27,7 @@ import { upsertFeature } from '../compendium';
 import { queueRebake } from '../moduleExport';
 import { slugify } from '../utils';
 import { sanitizeProficiencySelection } from '../proficiencySelection';
-import { parseClassText, classifyHitDie, normalizeClassName, parseFeatureSpan, type FeatureDraft } from './classParse';
+import { parseClassText, classifyHitDie, normalizeClassName, parseFeatureSpan, resolveClassProficiencies, resolveProficiencyKind, type FeatureDraft } from './classParse';
 import type { ImportDescriptor, ImportContext, ImportFieldOption } from './types';
 
 const toOptions = (pairs: [string, string][]): ImportFieldOption[] =>
@@ -271,15 +271,24 @@ export const clazzDescriptor: ImportDescriptor = {
   // window re-derives the loser from what's left) — so "this paragraph is Lore,
   // not the overview" is one click.
   assignTargets: [
-    { key: 'name', label: 'Name', fieldKeys: ['name'] },
-    { key: 'hitDie', label: 'Hit Die', fieldKeys: ['hitDie'] },
-    { key: 'savingThrows', label: 'Saving Throws', fieldKeys: ['savingThrows'] },
-    { key: 'primaryAbility', label: 'Primary Ability', fieldKeys: ['primaryAbility'] },
-    { key: 'description', label: 'Description', fieldKeys: ['description'] },
-    { key: 'lore', label: 'Lore / Flavour', fieldKeys: ['lore'] },
-    { key: 'startingEquipment', label: 'Equipment', fieldKeys: ['startingEquipment'] },
-    { key: 'multiclassing', label: 'Multiclassing', fieldKeys: ['multiclassing'] },
-    { key: 'feature', label: 'Feature (＋ add)', fieldKeys: ['_features'], mode: 'append' },
+    // Full blocks — what you "start with": mark a whole region.
+    { key: 'name', label: 'Name', fieldKeys: ['name'], group: 'Blocks' },
+    { key: 'description', label: 'Description', fieldKeys: ['description'], group: 'Blocks' },
+    { key: 'lore', label: 'Flavour', fieldKeys: ['lore'], group: 'Blocks' },
+    { key: 'proficiencies', label: 'Proficiencies', fieldKeys: ['proficiencies'], group: 'Blocks', mode: 'resolve' },
+    { key: 'startingEquipment', label: 'Equipment', fieldKeys: ['startingEquipment'], group: 'Blocks' },
+    { key: 'multiclassing', label: 'Multiclassing', fieldKeys: ['multiclassing'], group: 'Blocks' },
+    { key: 'feature', label: 'Feature (＋ add)', fieldKeys: ['_features'], group: 'Blocks', mode: 'append' },
+    // Within the Proficiencies block — refine one sub-section. (Distinct span
+    // keys so each highlights on its own; all write into the proficiency grid.)
+    { key: 'hitDie', label: 'Hit Die', fieldKeys: ['hitDie'], group: 'Within Proficiencies' },
+    { key: 'savingThrows', label: 'Saving Throws', fieldKeys: ['savingThrows'], group: 'Within Proficiencies' },
+    { key: 'primaryAbility', label: 'Primary Ability', fieldKeys: ['primaryAbility'], group: 'Within Proficiencies' },
+    { key: 'skills', label: 'Skills', fieldKeys: ['prof_skills'], group: 'Within Proficiencies', mode: 'resolve' },
+    { key: 'armor', label: 'Armor', fieldKeys: ['prof_armor'], group: 'Within Proficiencies', mode: 'resolve' },
+    { key: 'weapons', label: 'Weapons', fieldKeys: ['prof_weapons'], group: 'Within Proficiencies', mode: 'resolve' },
+    { key: 'tools', label: 'Tools', fieldKeys: ['prof_tools'], group: 'Within Proficiencies', mode: 'resolve' },
+    { key: 'languages', label: 'Languages', fieldKeys: ['prof_languages'], group: 'Within Proficiencies', mode: 'resolve' },
   ],
 
   assignField(target: string, text: string): Record<string, unknown> {
@@ -308,5 +317,27 @@ export const clazzDescriptor: ImportDescriptor = {
     const d = parseFeatureSpan(text);
     if (!d.name) return null;
     return { id: crypto.randomUUID(), kind: d.kind, name: d.name, level: d.level, body: d.body };
+  },
+
+  // Catalog-aware "resolve" marks. The Proficiencies block → the whole grid +
+  // hit die + saving throws + primary ability, interpreted from the marked
+  // region only (so flavour can't leak in). Each sub-section (skills/armor/
+  // weapons/tools/languages) → just that one kind, merged into the current grid.
+  assignResolve(target: string, text: string, ctx: { catalogs: any; values: Record<string, any> }): Record<string, unknown> {
+    const cat = ctx.catalogs;
+    if (!cat) return {};
+    const grid = ctx.values?.proficiencies && typeof ctx.values.proficiencies === 'object' ? ctx.values.proficiencies : {};
+    if (target === 'proficiencies') {
+      const sub = parseClassText(text);
+      const out: Record<string, unknown> = { proficiencies: resolveClassProficiencies(text, cat) };
+      if (sub.fields.hitDie?.value != null) out.hitDie = String(sub.fields.hitDie.value);
+      if (sub.fields.savingThrows?.value != null) out.savingThrows = String(sub.fields.savingThrows.value);
+      if (sub.fields.primaryAbility?.value != null) out.primaryAbility = String(sub.fields.primaryAbility.value);
+      return out;
+    }
+    if (target === 'skills' || target === 'armor' || target === 'weapons' || target === 'tools' || target === 'languages') {
+      return { proficiencies: { ...grid, [target]: resolveProficiencyKind(target, text, cat) } };
+    }
+    return {};
   },
 };

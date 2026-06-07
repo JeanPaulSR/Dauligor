@@ -37,6 +37,7 @@ import {
   getAssignTargets,
   assignFieldText,
   assignAppendItem,
+  assignResolveFields,
   splitEntityBlocks,
   resolveClassProficiencies,
   type ImportDescriptor,
@@ -818,6 +819,7 @@ function EntityWorkspace({
   const [identifierDirty, setIdentifierDirty] = useState(false);
   const [rightTab, setRightTab] = useState<'fields' | 'preview'>('fields');
   const leftRef = useRef<HTMLDivElement>(null);
+  const catalogs = useContext(ImportCatalogsContext);
 
   const fieldTarget = useMemo(() => {
     const map: Record<string, { key: string; label: string }> = {};
@@ -874,16 +876,21 @@ function EntityWorkspace({
   ) => {
     for (const u of assignTargets) {
       if (keep.has(u.key)) continue;
-      if (u.mode === 'append') continue; // append targets (Features) aren't re-derived from text
+      if (u.mode === 'append') continue; // feature spans live on the list items, not here
       let cur: Span[] | undefined;
       for (const fk of u.fieldKeys) if (prev.spans[fk]?.length) { cur = prev.spans[fk]; break; }
       if (!cur) continue;
       const trimmed = cur.flatMap((s) => subtractInterval(s, iv));
       if (sameSpanList(trimmed, cur)) continue; // this target didn't overlap iv
-      const remaining = trimmed.map((s) => rawText.slice(s.start, s.end)).join('\n').trim();
-      if (remaining) {
-        const re = assignFieldText(type, u.key, remaining);
-        for (const [k, v] of Object.entries(re)) { values[k] = v; delete provenance[k]; }
+      // Resolve targets (Proficiencies block / sub-sections): trim the HIGHLIGHT
+      // only — their grid value isn't text-derivable, so marking a sub-section
+      // inside the block just carves the block's highlight, leaving its grid.
+      if (u.mode !== 'resolve') {
+        const remaining = trimmed.map((s) => rawText.slice(s.start, s.end)).join('\n').trim();
+        if (remaining) {
+          const re = assignFieldText(type, u.key, remaining);
+          for (const [k, v] of Object.entries(re)) { values[k] = v; delete provenance[k]; }
+        }
       }
       for (const fk of u.fieldKeys) { if (trimmed.length) spans[fk] = trimmed; else delete spans[fk]; }
     }
@@ -916,6 +923,27 @@ function EntityWorkspace({
       });
       setSelection(null); window.getSelection()?.removeAllRanges();
       toast.success(`Added ${target.label}`);
+      return;
+    }
+    // Resolve-mode target (catalog-aware): the Proficiencies block resolves the
+    // whole grid + hit die/saves/primary from the region; a sub-section resolves
+    // just that one kind into the grid. Needs the loaded catalogs.
+    if (target?.mode === 'resolve') {
+      if (!catalogs) { toast.error('Catalogs still loading — try again in a moment.'); return; }
+      const probe = assignResolveFields(type, targetKey, selection.text, catalogs, state.values);
+      if (!probe || !Object.keys(probe).length) { toast.error('Nothing to resolve from that selection.'); return; }
+      onChange((prev) => {
+        const values = { ...prev.values };
+        const spans = { ...prev.spans };
+        const provenance = { ...prev.provenance };
+        repartition(prev, values, spans, provenance, iv, new Set([targetKey]));
+        const patch = assignResolveFields(type, targetKey, selection.text, catalogs, prev.values);
+        for (const [k, v] of Object.entries(patch)) { values[k] = v; delete provenance[k]; }
+        for (const fk of target.fieldKeys) spans[fk] = [iv];
+        return { ...prev, values, spans, provenance };
+      });
+      setSelection(null); window.getSelection()?.removeAllRanges();
+      toast.success(`Resolved ${target.label}`);
       return;
     }
     const probe = assignFieldText(type, targetKey, selection.text);
@@ -984,6 +1012,19 @@ function EntityWorkspace({
     if (pos < rawText.length) segs.push({ start: pos, end: rawText.length });
     return segs;
   }, [targetSpans, rawText]);
+
+  // Group the assign targets for the popover: full "Blocks" first, then refining
+  // sub-sections ("Within Proficiencies"). Single-group types render flat.
+  const assignGroups = useMemo(() => {
+    const groups: { name: string; items: ImportAssignTarget[] }[] = [];
+    for (const t of assignTargets) {
+      const g = t.group || 'Fields';
+      let bucket = groups.find((x) => x.name === g);
+      if (!bucket) { bucket = { name: g, items: [] }; groups.push(bucket); }
+      bucket.items.push(t);
+    }
+    return groups;
+  }, [assignTargets]);
 
   const grouped = groupFields(descriptor.fields);
 
@@ -1069,12 +1110,21 @@ function EntityWorkspace({
               <button type="button" className="text-ink/40 hover:text-ink" onMouseDown={(e) => e.preventDefault()} onClick={dismissSelection}>✕</button>
             </div>
             <div className="mb-1 max-h-12 overflow-hidden truncate rounded bg-ink/5 px-1.5 py-1 font-mono text-[10px] text-ink/55">“{selection.text.slice(0, 80)}{selection.text.length > 80 ? '…' : ''}”</div>
-            <div className="flex flex-wrap gap-1">
-              {assignTargets.map((t) => (
-                <button key={t.key} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => handleAssign(t.key)} className="filter-tag btn-gold">{t.label}</button>
+            <div className="space-y-1.5">
+              {assignGroups.map((g) => (
+                <div key={g.name}>
+                  {assignGroups.length > 1 ? (
+                    <div className="mb-0.5 text-[9px] font-black uppercase tracking-widest text-ink/35">{g.name}</div>
+                  ) : null}
+                  <div className="flex flex-wrap gap-1">
+                    {g.items.map((t) => (
+                      <button key={t.key} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => handleAssign(t.key)} className="filter-tag btn-gold">{t.label}</button>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
-            <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={handleClearSelection} className="mt-1 w-full rounded border border-gold/10 py-0.5 text-[10px] uppercase tracking-widest text-ink/40 hover:text-blood" title="Decouple this text — belongs to no field">Clear — not a field</button>
+            <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={handleClearSelection} className="mt-1.5 w-full rounded border border-gold/10 py-0.5 text-[10px] uppercase tracking-widest text-ink/40 hover:text-blood" title="Decouple this text — belongs to no field">Clear — not a field</button>
           </div>
         </>
       ) : null}

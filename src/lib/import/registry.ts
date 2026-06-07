@@ -63,6 +63,14 @@ export function assignAppendItem(type: string, targetKey: string, text: string):
   return descriptor?.assignAppend ? descriptor.assignAppend(targetKey, text) : null;
 }
 
+/** Catalog-aware — for a `resolve`-mode target, resolve a selection (using the
+ * loaded catalogs + current values) into the field patch to apply. Empty when
+ * unsupported. */
+export function assignResolveFields(type: string, targetKey: string, text: string, catalogs: any, values: Record<string, any>): Record<string, unknown> {
+  const descriptor = getImportDescriptor(type);
+  return descriptor?.assignResolve ? descriptor.assignResolve(targetKey, text, { catalogs, values }) : {};
+}
+
 /** PURE — split a multi-entity paste into per-entity block-start offsets. Empty
  * (or the type has no splitter) ⇒ treat the whole paste as one entity. */
 export function splitEntityBlocks(type: string, text: string): number[] {

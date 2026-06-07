@@ -411,3 +411,20 @@ export function resolveClassProficiencies(text: string, cat: ResolveCatalogs) {
     armorDisplayName: '', weaponsDisplayName: '', toolsDisplayName: '', skillsDisplayName: '',
   };
 }
+
+/** Resolve ONE proficiency kind from a marked sub-section (e.g. just the Skills
+ * line) — backs the "within Proficiencies" sub-section marks. Returns the grid's
+ * per-kind shape ({choiceCount, fixedIds, optionIds[, categoryIds]}). */
+export function resolveProficiencyKind(
+  kind: 'armor' | 'weapons' | 'tools' | 'languages' | 'skills',
+  text: string,
+  cat: ResolveCatalogs,
+) {
+  switch (kind) {
+    case 'skills': return resolveFlat(text, cat.allSkills || []);
+    case 'armor': return resolveGrouped(text, cat.allArmor || [], cat.allArmorCategories || []);
+    case 'weapons': return resolveGrouped(text, cat.allWeapons || [], cat.allWeaponCategories || []);
+    case 'tools': return resolveGrouped(text, cat.allTools || [], cat.allToolCategories || []);
+    case 'languages': return resolveGrouped(text, cat.allLanguages || [], cat.allLanguageCategories || []);
+  }
+}
