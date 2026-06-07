@@ -8,7 +8,7 @@ import { openSpellPreparationManager } from "./spell-preparation-app.js";
 import { openDauligorGmConsole } from "./gm-app.js";
 import { openDauligorCharacterCreator } from "./character-creator-app.js";
 import { openDauligorLauncher } from "./launcher-app.js";
-import { openDauligorLibrary } from "./dauligor-viewer.js";
+import { openDauligorLibrary, openDauligorCampaigns } from "./dauligor-viewer.js";
 import { log, notifyInfo, notifyWarn } from "./utils.js";
 import { isLoggedIn, getDisplayName, getProfile, login, logout } from "./auth-service.js";
 
@@ -504,6 +504,16 @@ async function openLauncher({ actor = null } = {}) {
         : "Log in to browse references, articles, and lore.",
       status: "ready",
       onSelect: async () => openDauligorLibrary()
+    },
+    {
+      id: "dauligor-campaigns",
+      label: "Dauligor Campaigns",
+      icon: "fas fa-dragon",
+      hint: isLoggedIn()
+        ? "Open your campaign home pages."
+        : "Log in to view your campaign home pages.",
+      status: "ready",
+      onSelect: async () => openDauligorCampaigns()
     },
     {
       id: "dauligor-account",

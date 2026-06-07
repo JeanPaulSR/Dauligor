@@ -21,7 +21,7 @@
 
 import { DAULIGOR_VIEWER_TEMPLATE, MODULE_ID } from "./constants.js";
 import { isLoggedIn } from "./auth-service.js";
-import { getArticle, listArticles, getSystemPage } from "./content-service.js";
+import { getArticle, listArticles, getSystemPage, listCampaigns, getCampaign, getCampaignHomeBlocks } from "./content-service.js";
 import { renderBlocks, renderRichText, collectAnchors } from "./layout-blocks.js";
 import { log } from "./utils.js";
 import {
@@ -93,13 +93,20 @@ export class DauligorViewerApp extends HandlebarsApplicationMixin(ApplicationV2)
   static _instance = null;
 
   /**
-   * Open (or focus) the library. `articleId` (a UUID or slug) opens straight to
-   * that article; otherwise it lands on the list.
+   * Open (or focus) the viewer. `articleId` opens an article, `campaignId` a
+   * campaign home, `view:"campaigns"` the campaign list; otherwise the article
+   * library list.
    */
-  static async open({ articleId } = {}) {
+  static async open({ articleId, campaignId, view } = {}) {
     const inst = this._instance ?? new this();
     this._instance = inst;
-    inst._current = articleId ? { mode: "article", id: String(articleId) } : { mode: "list" };
+    inst._current = articleId
+      ? { mode: "article", id: String(articleId) }
+      : campaignId
+        ? { mode: "campaign", id: String(campaignId) }
+        : view === "campaigns"
+          ? { mode: "campaigns" }
+          : { mode: "list" };
     inst._history = [];
     inst._browse = inst._freshBrowse(); // fresh search/filter each launcher open
     if (inst._mounted) {
@@ -216,6 +223,10 @@ export class DauligorViewerApp extends HandlebarsApplicationMixin(ApplicationV2)
       await this._renderArticleView(this._current.id, seq);
     } else if (this._current?.mode === "system") {
       await this._renderSystemView(this._current.kind, this._current.anchor, seq);
+    } else if (this._current?.mode === "campaigns") {
+      await this._renderCampaignsView(seq);
+    } else if (this._current?.mode === "campaign") {
+      await this._renderCampaignView(this._current.id, seq);
     } else {
       await this._renderListView(seq);
     }
@@ -634,6 +645,83 @@ export class DauligorViewerApp extends HandlebarsApplicationMixin(ApplicationV2)
     if (!scrolled && this._scrollRegion) this._scrollRegion.scrollTop = 0;
   }
 
+  // ── campaigns (home pages) ───────────────────────────────────────────────────
+
+  async _renderCampaignsView(seq) {
+    this._articleTitle = "Campaigns";
+    this._setRail("");
+    this._renderToolbar();
+    this._setBody(this._statusHtml("spinner", "Loading campaigns…"));
+    let campaigns = [];
+    try {
+      campaigns = await listCampaigns();
+    } catch (err) {
+      if (seq === this._seq) this._renderError(err);
+      return;
+    }
+    if (seq !== this._seq) return;
+    if (!campaigns.length) {
+      this._setBody(this._statusHtml("empty", "You're not a member of any campaigns yet."));
+      return;
+    }
+    const rows = campaigns.map((c) => {
+      const id = esc(String(c.id ?? ""));
+      const name = esc(c.name || "Untitled campaign");
+      const members = Number(c.memberCount ?? 0);
+      const meta = members ? `<span class="dauligor-viewer__row-cat">${members} member${members === 1 ? "" : "s"}</span>` : "";
+      const desc = c.description ? `<span class="dauligor-viewer__row-excerpt">${esc(c.description)}</span>` : "";
+      return `
+        <div role="button" tabindex="0" class="dauligor-viewer__row" data-campaign-id="${id}">
+          <span class="dauligor-viewer__row-head">
+            <span class="dauligor-viewer__row-title">${name}</span>
+            ${meta}
+          </span>
+          ${desc}
+        </div>`;
+    }).join("");
+    this._setBody(`<div class="dauligor-viewer__list">${rows}</div>`);
+    this._bodyRegion.querySelectorAll(`[data-campaign-id]`).forEach((el) => {
+      const go = () => this._navigate({ mode: "campaign", id: el.dataset.campaignId });
+      el.addEventListener("click", go);
+      el.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); }
+      });
+    });
+  }
+
+  async _renderCampaignView(id, seq) {
+    if (!id) { await this._renderCampaignsView(seq); return; }
+    this._setRail("");
+    this._setBody(this._statusHtml("spinner", "Loading…"));
+    let campaign, blocks;
+    try {
+      [campaign, blocks] = await Promise.all([getCampaign(id), getCampaignHomeBlocks(id)]);
+    } catch (err) {
+      if (seq === this._seq) this._renderError(err);
+      return;
+    }
+    if (seq !== this._seq) return;
+    if (!campaign) {
+      this._setBody(this._statusHtml("empty", "That campaign couldn't be found."));
+      return;
+    }
+    this._articleTitle = campaign.name || "Campaign";
+    this._renderToolbar();
+    const rows = Array.isArray(blocks) ? blocks : [];
+    let inner;
+    if (rows.length) {
+      inner = renderBlocks(rows);
+    } else if (campaign.description) {
+      inner = `<div class="dauligor-block dauligor-block--text dauligor-richtext">${renderRichText(campaign.description)}</div>`;
+    } else {
+      inner = this._statusHtml("empty", "This campaign's home page is empty.");
+    }
+    this._setBody(`<article class="dauligor-viewer__article">${inner}</article>`);
+    this._renderRail(collectAnchors(rows));
+    this._bindRefs();
+    if (this._scrollRegion) this._scrollRegion.scrollTop = 0;
+  }
+
   _renderToolbar() {
     if (!this._toolbarRegion) return;
     const canBack = this._history.length > 0;
@@ -747,4 +835,9 @@ export class DauligorViewerApp extends HandlebarsApplicationMixin(ApplicationV2)
 
 export async function openDauligorLibrary(opts = {}) {
   return DauligorViewerApp.open(opts);
+}
+
+/** Open the viewer straight to the campaign list (same window as the Library). */
+export async function openDauligorCampaigns() {
+  return DauligorViewerApp.open({ view: "campaigns" });
 }
