@@ -498,32 +498,233 @@
   color: var(--dauligor-accent-strong);
 }
 
-/* reference / entity-feature / recommended cards */
+/* ── entity-reference cards (reference / entity-feature / entity-row / recommended) ──
+ * Block wrappers are plain layout containers; the CARD inside carries the box. */
 .dauligor-viewer .dauligor-block--reference,
 .dauligor-viewer .dauligor-block--entity-feature,
-.dauligor-viewer .dauligor-block--recommended {
-  padding: 10px 12px;
-  border: 1px solid var(--dauligor-border);
-  background: var(--dauligor-panel-alt);
+.dauligor-viewer .dauligor-block--recommended,
+.dauligor-viewer .dauligor-block--entity-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
-
-/* entity-row grid */
 .dauligor-viewer .dauligor-block__row-title {
-  margin: 0 0 8px;
+  margin: 0;
   font-size: 18px;
   color: var(--dauligor-accent-strong);
 }
+
+/* base card */
+.dauligor-viewer .dauligor-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--dauligor-border);
+  background: var(--dauligor-panel-alt);
+  overflow: hidden;
+  text-decoration: none;
+  color: var(--dauligor-text);
+}
+.dauligor-viewer a.dauligor-card--link { cursor: pointer; }
+.dauligor-viewer a.dauligor-card--link:hover {
+  border-color: var(--dauligor-btn-border-hover);
+  background: var(--dauligor-panel-soft);
+}
+.dauligor-viewer .dauligor-card__media {
+  height: 124px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--dauligor-border);
+}
+.dauligor-viewer .dauligor-card__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 400ms ease;
+}
+.dauligor-viewer a.dauligor-card--link:hover .dauligor-card__media img { transform: scale(1.04); }
+.dauligor-viewer .dauligor-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 12px;
+}
+.dauligor-viewer .dauligor-card__source {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--dauligor-text-muted);
+}
+.dauligor-viewer .dauligor-card__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--dauligor-accent-strong);
+  line-height: 1.25;
+}
+.dauligor-viewer .dauligor-card__title .dauligor-ref { border-bottom: none; }
+.dauligor-viewer a.dauligor-card--link:hover .dauligor-card__title { color: #fff; }
+.dauligor-viewer .dauligor-card__summary {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--dauligor-text-muted);
+}
+.dauligor-viewer p.dauligor-card__summary {
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.dauligor-viewer .dauligor-card__view {
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--dauligor-accent);
+}
+.dauligor-viewer .dauligor-card__badge {
+  align-self: flex-start;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 2px 7px;
+  background: var(--dauligor-accent);
+  color: #1b1b1b;
+}
+.dauligor-viewer p.dauligor-card__inline-link { margin: 0; }
+
+/* reference INLINE = left-accent, no full box */
+.dauligor-viewer .dauligor-card--ref-inline {
+  border: none;
+  border-left: 2px solid var(--dauligor-btn-border-hover);
+  background: transparent;
+}
+.dauligor-viewer .dauligor-card--ref-inline .dauligor-card__body { padding: 2px 0 2px 12px; }
+.dauligor-viewer .dauligor-card--ref-inline .dauligor-card__summary { color: var(--dauligor-text); }
+
+/* reference CARD / feature / recommended = wide image-beside-text layout */
+.dauligor-viewer .dauligor-card__feature { display: flex; flex-direction: column; }
+.dauligor-viewer .dauligor-card--ref-card .dauligor-card__media { height: 150px; }
+.dauligor-viewer .dauligor-card__feature .dauligor-card__media--feature {
+  height: 150px;
+  border-bottom: 1px solid var(--dauligor-border);
+}
+@media (min-width: 520px) {
+  .dauligor-viewer .dauligor-card__feature { flex-direction: row; }
+  .dauligor-viewer .dauligor-card__feature--right { flex-direction: row-reverse; }
+  .dauligor-viewer .dauligor-card__feature .dauligor-card__media--feature {
+    flex: 0 0 34%;
+    height: auto;
+    border-bottom: none;
+  }
+  .dauligor-viewer .dauligor-card__feature--left .dauligor-card__media--feature { border-right: 1px solid var(--dauligor-border); }
+  .dauligor-viewer .dauligor-card__feature--right .dauligor-card__media--feature { border-left: 1px solid var(--dauligor-border); }
+  .dauligor-viewer .dauligor-card__feature .dauligor-card__body { flex: 1 1 auto; }
+}
+
+/* entity-row grid */
 .dauligor-viewer .dauligor-block__entity-grid {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 8px;
+  gap: 10px;
 }
-.dauligor-viewer .dauligor-block__entity-card {
-  padding: 8px 10px;
-  border: 1px solid var(--dauligor-border);
+.dauligor-viewer .dauligor-block__entity-cell { min-width: 0; display: flex; }
+.dauligor-viewer .dauligor-block__entity-cell > .dauligor-card { width: 100%; }
+.dauligor-viewer .dauligor-block__entity-cell--span-2 { grid-column: span 2; }
+.dauligor-viewer .dauligor-block__entity-cell--span-3 { grid-column: span 3; }
+.dauligor-viewer .dauligor-block__entity-cell--span-4 { grid-column: span 4; }
+.dauligor-viewer .dauligor-card--compact .dauligor-card__body { padding: 9px 11px; }
+
+/* entity-row LIST mode */
+.dauligor-viewer .dauligor-block__entity-list { list-style: none; margin: 0; padding: 0; }
+.dauligor-viewer .dauligor-block__entity-list-item { border-bottom: 1px solid var(--dauligor-border); }
+.dauligor-viewer .dauligor-list__link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 4px;
+  text-decoration: none;
+  color: var(--dauligor-text);
+}
+.dauligor-viewer a.dauligor-list__link:hover .dauligor-card__title { color: var(--dauligor-accent-strong); }
+.dauligor-viewer .dauligor-list__chev { font-size: 11px; color: var(--dauligor-accent); }
+.dauligor-viewer .dauligor-list__link .dauligor-card__source { margin-left: auto; }
+
+/* "Reference not yet made" — distinct warning state so authors can spot + fix it */
+.dauligor-viewer .dauligor-card--missing {
+  border: 1px dashed var(--dauligor-warning);
   background: var(--dauligor-panel-alt);
+  gap: 4px;
+  padding: 10px 12px;
+}
+.dauligor-viewer .dauligor-card__missing-flag {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--dauligor-warning);
+}
+.dauligor-viewer .dauligor-card--missing .dauligor-card__title { color: var(--dauligor-text); }
+.dauligor-viewer .dauligor-card__missing-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--dauligor-text-muted);
+}
+.dauligor-viewer .dauligor-card__missing-id {
+  font-family: var(--font-mono, monospace);
+  text-transform: none;
+  letter-spacing: 0;
+  padding: 1px 5px;
+  border: 1px solid var(--dauligor-border);
+  color: var(--dauligor-text-muted);
+}
+.dauligor-viewer .dauligor-card__missing-inline {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--dauligor-warning);
+}
+.dauligor-viewer .dauligor-card__missing-inline strong { color: var(--dauligor-text); }
+.dauligor-viewer .dauligor-block__entity-list-item--missing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 4px;
+}
+
+/* intentional placeholder ("coming soon") — muted, distinct from "missing" */
+.dauligor-viewer .dauligor-card--placeholder {
+  border: 1px dashed var(--dauligor-border);
+  background: transparent;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+  padding: 18px 12px;
+}
+.dauligor-viewer .dauligor-card--placeholder .dauligor-card__title {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--dauligor-text-muted);
+}
+.dauligor-viewer .dauligor-card__placeholder-sub {
+  font-size: 11px;
+  font-style: italic;
+  color: var(--dauligor-text-muted);
 }
 
 /* group + columns */

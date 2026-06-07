@@ -96,37 +96,229 @@ function parseBlock(row) {
   return { type, config };
 }
 
-function renderChildren(config) {
+function renderChildren(config, opts) {
   const kids = Array.isArray(config.children) ? config.children : [];
-  return kids.map(renderBlock).join("");
+  return kids.map((k) => renderBlock(k, opts)).join("");
 }
 
-function entityRefLink(ref) {
+// ── entity-reference cards ───────────────────────────────────────────────────
+// The four entity-reference blocks (reference / entity-feature / entity-row /
+// recommended) resolve their EntityRefs to rich cards. The resolved data map
+// (`opts.resolved`, keyed `kind:id`) is produced by content-service
+// resolveReferences BEFORE render; an absent entry means the target doesn't
+// exist yet → render a clearly-marked "reference not yet made" card so an author
+// can see WHAT is missing and WHERE. A `placeholder`-kind ref is the OTHER case:
+// a deliberate "coming soon" slot, kept visually distinct from a missing one.
+
+/** Plain-text excerpt — strip HTML tags, enriched refs (@Kind[…]{…} / &Reference[…],
+ *  any case), leftover [..]/{display} brackets, and HTML entities, then clamp. */
+function plainExcerpt(text, max = 140) {
+  const t = String(text ?? "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/(?:@|&amp;|&)\w+\[[^\]]*\](?:#[\w-]+)?(?:\{[^}]*\})?/g, " ")
+    .replace(/\[[^\]]*\]/g, " ")
+    .replace(/\{[^}]*\}/g, " ")
+    .replace(/&[a-z]+;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return t.length > max ? `${t.slice(0, max).trimEnd()}…` : t;
+}
+
+function resolvedFor(opts, ref) {
+  if (!opts || !opts.resolved || !ref) return null;
+  return opts.resolved.get(`${ref.kind}:${ref.id}`) || null;
+}
+
+// A small image block for a card (empty string when there's no image).
+function cardMedia(image, alt, extraClass = "") {
+  if (!image) return "";
+  const cls = `dauligor-card__media ${extraClass}`.trim();
+  return `<div class="${cls}"><img src="${esc(image)}" alt="${esc(alt)}" referrerpolicy="no-referrer" /></div>`;
+}
+
+// Wrap card inner HTML as a clickable card when the ref has a route, else a plain
+// div. Reuses the ref data-attrs so the viewer's delegated handler opens it
+// (in-viewer for @article / & system pages, an app tab otherwise). Only used for
+// cards whose summary is PLAIN text — never wrap a rich summary (its own ref
+// links would nest inside this anchor).
+function cardLink(ref, rule, inner, extraClass = "") {
+  const route = refRoute(ref.kind, ref.id, "", rule);
+  const data = `data-ref-sigil="${rule ? "&" : "@"}" data-ref-kind="${esc(ref.kind)}" data-ref-id="${esc(ref.id)}"`;
+  const cls = `dauligor-card ${extraClass}`.trim();
+  if (!route) return `<div class="${cls}" ${data}>${inner}</div>`;
+  return `<a class="${cls} dauligor-card--link" ${data} data-route="${esc(route)}">${inner}</a>`;
+}
+
+// "Reference not yet made" — a real ref whose target doesn't exist yet. Shows the
+// intended title plus kind:id so an author knows exactly what to create.
+function unresolvedCard(ref, variant) {
+  const title = esc(ref.title || ref.name || ref.id || "Untitled reference");
+  const meta = `${esc(formatFoundryLabel(ref.kind || "ref"))}<span class="dauligor-card__missing-id">${esc(ref.id || "")}</span>`;
+  return `<div class="dauligor-card dauligor-card--missing dauligor-card--${esc(variant)}">`
+    + `<div class="dauligor-card__missing-flag"><i class="fas fa-link-slash" inert></i> Reference not yet made</div>`
+    + `<div class="dauligor-card__title">${title}</div>`
+    + `<div class="dauligor-card__missing-meta">${meta}</div></div>`;
+}
+
+// Intentional placeholder (kind === 'placeholder') — a deliberate "coming soon"
+// slot, distinct from an unresolved real ref.
+function placeholderCard(ref, variant) {
+  const title = esc(ref.title || ref.name || "Placeholder");
+  const sub = esc(ref.description || "Coming Soon");
+  return `<div class="dauligor-card dauligor-card--placeholder dauligor-card--${esc(variant)}">`
+    + `<div class="dauligor-card__title">${title}</div>`
+    + `<div class="dauligor-card__placeholder-sub">${sub}</div></div>`;
+}
+
+// One card slot for the single-ref blocks (feature / recommended): placeholder →
+// unresolved → resolved (built by `build`). Shared so they handle the missing
+// states identically.
+function refCardSlot(ref, opts, variant, build) {
   if (!ref || typeof ref !== "object") return "";
-  const kind = String(ref.kind || "");
-  const id = String(ref.id || "");
-  if (kind === "placeholder" || (!id && !ref.name && !ref.title)) {
-    return `<span class="dauligor-ref dauligor-ref--dangling">${esc(ref.name || "—")}</span>`;
+  if (ref.kind === "placeholder") return placeholderCard(ref, variant);
+  const r = resolvedFor(opts, ref);
+  if (!r) return unresolvedCard(ref, variant);
+  return build(ref, r);
+}
+
+// reference block — inline (rich summary in flow), card (image + rich summary),
+// or link. The title is its OWN link so a rich summary's own refs don't nest
+// inside a card anchor.
+function renderReferenceBlock(c, opts) {
+  const ref = c.ref;
+  const display = c.display === "card" ? "card" : c.display === "link" ? "link" : "inline";
+  if (!ref || typeof ref !== "object") return "";
+  if (ref.kind === "placeholder") {
+    return `<div class="dauligor-block dauligor-block--reference">${placeholderCard(ref, "reference")}</div>`;
   }
-  const label = refLabel(kind, id, ref.name || ref.title);
-  return refAnchor({ kind, id, anchor: "", rule: false, label });
+  const r = resolvedFor(opts, ref);
+  if (!r) {
+    const body = display === "link"
+      ? `<p class="dauligor-card__missing-inline"><i class="fas fa-link-slash" inert></i> Reference not yet made: <strong>${esc(ref.name || ref.id)}</strong> <span class="dauligor-card__missing-id">${esc(ref.kind)}:${esc(ref.id)}</span></p>`
+      : unresolvedCard(ref, "reference");
+    return `<div class="dauligor-block dauligor-block--reference">${body}</div>`;
+  }
+  const title = ref.title || r.name || ref.name || ref.id;
+  const titleLink = refAnchor({ kind: ref.kind, id: ref.id, anchor: "", rule: !!r.rule, label: esc(title) });
+  if (display === "link") {
+    return `<div class="dauligor-block dauligor-block--reference"><p class="dauligor-card__inline-link">${titleLink}</p></div>`;
+  }
+  const summaryRaw = ref.description || r.summary || "";
+  const summary = summaryRaw ? `<div class="dauligor-card__summary dauligor-richtext">${renderRichText(summaryRaw)}</div>` : "";
+  const src = r.sourceLabel ? `<span class="dauligor-card__source">${esc(r.sourceLabel)}</span>` : "";
+  if (display === "card") {
+    const media = cardMedia(r.image, title);
+    const inner = `${media}<div class="dauligor-card__body">${src}<h3 class="dauligor-card__title">${titleLink}</h3>${summary}</div>`;
+    return `<div class="dauligor-block dauligor-block--reference"><div class="dauligor-card dauligor-card--ref-card">${inner}</div></div>`;
+  }
+  const inner = `<div class="dauligor-card__body">${src}<h3 class="dauligor-card__title">${titleLink}</h3>${summary}</div>`;
+  return `<div class="dauligor-block dauligor-block--reference"><div class="dauligor-card dauligor-card--ref-inline">${inner}</div></div>`;
 }
 
-function renderEntityRef(ref, variant) {
-  if (!ref) return "";
-  const body = ref.description ? `<div class="dauligor-richtext">${renderRichText(ref.description)}</div>` : "";
-  return `<div class="dauligor-block dauligor-block--${esc(variant)}">${entityRefLink(ref)}${body}</div>`;
+function renderEntityFeature(c, opts) {
+  const heading = c.title ? `<h2 class="dauligor-block__row-title">${esc(c.title)}</h2>` : "";
+  const side = c.imageSide === "right" ? "right" : "left";
+  const excerpt = c.excerpt !== false;
+  const card = refCardSlot(c.ref, opts, "feature", (ref, r) => {
+    const title = ref.title || r.name || ref.name || ref.id;
+    const media = cardMedia(r.image, title, "dauligor-card__media--feature");
+    const src = r.sourceLabel ? `<span class="dauligor-card__source">${esc(r.sourceLabel)}</span>` : "";
+    const summaryText = excerpt ? (ref.description || plainExcerpt(r.summary, 240)) : "";
+    const summary = summaryText ? `<p class="dauligor-card__summary">${esc(summaryText)}</p>` : "";
+    const view = refRoute(ref.kind, ref.id, "", !!r.rule) ? `<span class="dauligor-card__view">View <i class="fas fa-chevron-right" inert></i></span>` : "";
+    const inner = `<div class="dauligor-card__feature dauligor-card__feature--${side}">${media}<div class="dauligor-card__body">${src}<h3 class="dauligor-card__title">${esc(title)}</h3>${summary}${view}</div></div>`;
+    return cardLink(ref, !!r.rule, inner, "dauligor-card--feature");
+  });
+  return `<section class="dauligor-block dauligor-block--entity-feature">${heading}${card}</section>`;
 }
 
-function renderEntityRow(c) {
+function recommendedCard(ref, r) {
+  const title = (ref && (ref.title || ref.name)) || r.name || (ref && ref.id) || "Article";
+  const media = cardMedia(r.image, title, "dauligor-card__media--feature");
+  const summaryText = r.summary ? plainExcerpt(r.summary, 220) : "";
+  const summary = summaryText ? `<p class="dauligor-card__summary">${esc(summaryText)}</p>` : "";
+  const badge = `<span class="dauligor-card__badge">Essential Reading</span>`;
+  const view = (ref && refRoute(ref.kind, ref.id, "", !!r.rule)) ? `<span class="dauligor-card__view">Read article <i class="fas fa-chevron-right" inert></i></span>` : "";
+  const inner = `<div class="dauligor-card__feature dauligor-card__feature--left">${media}<div class="dauligor-card__body">${badge}<h3 class="dauligor-card__title">${esc(title)}</h3>${summary}${view}</div></div>`;
+  return ref ? cardLink(ref, !!r.rule, inner, "dauligor-card--feature dauligor-card--reco") : `<div class="dauligor-card dauligor-card--feature dauligor-card--reco">${inner}</div>`;
+}
+
+function renderRecommended(c, opts) {
+  const heading = `<h2 class="dauligor-block__row-title">${esc(c.title || "Recommended")}</h2>`;
+  let card;
+  if (c.source === "specific" && c.ref) {
+    card = refCardSlot(c.ref, opts, "recommended", (ref, r) => recommendedCard(ref, r));
+  } else {
+    // auto → the viewer resolves the campaign's recommended_lore_id into opts.recommended.
+    const auto = opts && opts.recommended;
+    card = (auto && auto.data)
+      ? recommendedCard(auto.ref, auto.data)
+      : `<div class="dauligor-card dauligor-card--placeholder dauligor-card--recommended"><div class="dauligor-card__placeholder-sub">No recommended article set for this campaign yet.</div></div>`;
+  }
+  return `<section class="dauligor-block dauligor-block--recommended">${heading}${card}</section>`;
+}
+
+function entityRowCard(ref, opts, cardMode, excerpt) {
+  if (!ref || typeof ref !== "object") return "";
+  if (ref.kind === "placeholder") return placeholderCard(ref, "row");
+  const r = resolvedFor(opts, ref);
+  if (!r) return unresolvedCard(ref, "row");
+  const title = ref.title || r.name || ref.name || ref.id;
+  const media = cardMode === "image" ? cardMedia(r.image, title) : "";
+  const src = r.sourceLabel ? `<span class="dauligor-card__source">${esc(r.sourceLabel)}</span>` : "";
+  const summaryText = excerpt ? (ref.description || plainExcerpt(r.summary, 140)) : "";
+  const summary = summaryText ? `<p class="dauligor-card__summary">${esc(summaryText)}</p>` : "";
+  const inner = `${media}<div class="dauligor-card__body">${src}<h3 class="dauligor-card__title">${esc(title)}</h3>${summary}</div>`;
+  return cardLink(ref, !!r.rule, inner, `dauligor-card--row dauligor-card--${esc(cardMode)}`);
+}
+
+function entityRowListItem(ref, opts) {
+  if (!ref || typeof ref !== "object") return "";
+  if (ref.kind === "placeholder") {
+    return `<li class="dauligor-block__entity-list-item"><span class="dauligor-card__title">${esc(ref.name || "Placeholder")}</span></li>`;
+  }
+  const r = resolvedFor(opts, ref);
+  if (!r) {
+    return `<li class="dauligor-block__entity-list-item dauligor-block__entity-list-item--missing">`
+      + `<span class="dauligor-card__missing-flag"><i class="fas fa-link-slash" inert></i> not yet made</span> `
+      + `<span class="dauligor-card__title">${esc(ref.name || ref.id)}</span> `
+      + `<span class="dauligor-card__missing-id">${esc(ref.kind)}:${esc(ref.id)}</span></li>`;
+  }
+  const title = ref.title || r.name || ref.name || ref.id;
+  const src = r.sourceLabel ? `<span class="dauligor-card__source">${esc(r.sourceLabel)}</span>` : "";
+  const inner = `<i class="fas fa-chevron-right dauligor-list__chev" inert></i><span class="dauligor-card__title">${esc(title)}</span>${src}`;
+  const route = refRoute(ref.kind, ref.id, "", !!r.rule);
+  const data = `data-ref-sigil="${r.rule ? "&" : "@"}" data-ref-kind="${esc(ref.kind)}" data-ref-id="${esc(ref.id)}"`;
+  const body = route
+    ? `<a class="dauligor-list__link" ${data} data-route="${esc(route)}">${inner}</a>`
+    : `<div class="dauligor-list__link">${inner}</div>`;
+  return `<li class="dauligor-block__entity-list-item">${body}</li>`;
+}
+
+function renderEntityRow(c, opts) {
   const refs = Array.isArray(c.refs) ? c.refs : [];
-  const cols = Number(c.columns) || 2;
+  const cols = Math.max(1, Math.min(4, Number(c.columns) || 3));
+  const cardMode = ["image", "compact", "list"].includes(c.card) ? c.card : "image";
+  const excerpt = c.excerpt !== false;
   const heading = (c.showHeading && c.title) ? `<h2 class="dauligor-block__row-title">${esc(c.title)}</h2>` : "";
-  const items = refs.map((r) => `<li class="dauligor-block__entity-card">${entityRefLink(r)}</li>`).join("");
+  if (c.source === "auto" && !refs.length) {
+    // Auto-by-category fetch isn't available in Foundry yet (matches the app).
+    return `<section class="dauligor-block dauligor-block--entity-row">${heading}`
+      + `<div class="dauligor-card dauligor-card--placeholder"><div class="dauligor-card__placeholder-sub">Automatic category rows aren’t available in Foundry yet.</div></div></section>`;
+  }
+  if (cardMode === "list") {
+    const items = refs.map((ref) => entityRowListItem(ref, opts)).join("");
+    return `<section class="dauligor-block dauligor-block--entity-row">${heading}<ul class="dauligor-block__entity-list">${items}</ul></section>`;
+  }
+  const items = refs.map((ref) => {
+    const span = Math.min(Math.max(1, Math.min(4, Number(ref?.span) || 1)), cols);
+    const spanCls = span >= 2 ? ` dauligor-block__entity-cell--span-${span}` : "";
+    return `<li class="dauligor-block__entity-cell${spanCls}">${entityRowCard(ref, opts, cardMode, excerpt)}</li>`;
+  }).join("");
   return `<section class="dauligor-block dauligor-block--entity-row">${heading}<ul class="dauligor-block__entity-grid dauligor-block--cols-${esc(String(cols))}">${items}</ul></section>`;
 }
 
-function renderBlock(row) {
+function renderBlock(row, opts) {
   const b = parseBlock(row);
   if (!b) return "";
   const c = b.config;
@@ -152,7 +344,7 @@ function renderBlock(row) {
         + `${c.buttonLabel ? `<a class="dauligor-block__callout-btn" href="${esc(c.buttonLink || "#")}" target="_blank" rel="noopener noreferrer">${esc(c.buttonLabel)}</a>` : ""}</div>`;
     case "image":
       return `<figure class="dauligor-block dauligor-block--image dauligor-block--h-${esc(c.height || "medium")}">`
-        + `${c.url ? `<img src="${esc(c.url)}" alt="${esc(c.caption || "")}" />` : ""}`
+        + `${c.url ? `<img src="${esc(c.url)}" alt="${esc(c.caption || "")}" referrerpolicy="no-referrer" />` : ""}`
         + `${c.caption ? `<figcaption>${esc(c.caption)}</figcaption>` : ""}</figure>`;
     case "divider": {
       const style = esc(c.style || "line");
@@ -164,29 +356,76 @@ function renderBlock(row) {
         + `${c.name ? `<h3 class="dauligor-block__def-name">${esc(c.name)}</h3>` : ""}`
         + `<div class="dauligor-richtext">${renderRichText(c.body)}</div></section>`;
     case "reference":
-      return renderEntityRef(c.ref, "reference");
+      return renderReferenceBlock(c, opts);
     case "entity-feature":
-      return renderEntityRef(c.ref, "entity-feature");
+      return renderEntityFeature(c, opts);
     case "entity-row":
-      return renderEntityRow(c);
+      return renderEntityRow(c, opts);
     case "recommended":
-      return c.ref ? `<div class="dauligor-block dauligor-block--recommended">${entityRefLink(c.ref)}</div>` : "";
+      return renderRecommended(c, opts);
     case "group":
       return `<section class="dauligor-block dauligor-block--group dauligor-block--${esc(c.style || "plain")}">`
-        + `${(c.showTitle && c.title) ? `<h2 class="dauligor-block__group-title">${esc(c.title)}</h2>` : ""}${renderChildren(c)}</section>`;
+        + `${(c.showTitle && c.title) ? `<h2 class="dauligor-block__group-title">${esc(c.title)}</h2>` : ""}${renderChildren(c, opts)}</section>`;
     case "columns":
-      return `<div class="dauligor-block dauligor-block--columns dauligor-block--cols-${esc(String(c.columns || 2))} dauligor-block--gap-${esc(c.gap || "medium")}">${renderChildren(c)}</div>`;
+      return `<div class="dauligor-block dauligor-block--columns dauligor-block--cols-${esc(String(c.columns || 2))} dauligor-block--gap-${esc(c.gap || "medium")}">${renderChildren(c, opts)}</div>`;
     case "column":
-      return `<div class="dauligor-block dauligor-block--column">${renderChildren(c)}</div>`;
+      return `<div class="dauligor-block dauligor-block--column">${renderChildren(c, opts)}</div>`;
     default:
       return ""; // unknown type — dropped, as the app's parseLayoutBlock does
   }
 }
 
-/** Render a list of root block rows to a single HTML string. */
-export function renderBlocks(blocks) {
+/**
+ * Render a list of root block rows to a single HTML string. `opts.resolved` is a
+ * Map (`kind:id` → display data) from content-service resolveReferences; entity-
+ * reference blocks read it to draw cards (and mark unresolved refs). `opts.recommended`
+ * (`{ ref, data }`) feeds an auto-mode recommended block. Both are optional — with
+ * no opts, entity-reference blocks fall back to "reference not yet made" cards.
+ */
+export function renderBlocks(blocks, opts = {}) {
   if (!Array.isArray(blocks)) return "";
-  return blocks.map(renderBlock).join("");
+  return blocks.map((b) => renderBlock(b, opts)).join("");
+}
+
+/** Every resolvable EntityRef in a block tree (skips placeholder + id-less +
+ *  auto-source rows), depth-first incl. container children. Feeds resolveReferences. */
+export function collectEntityRefs(blocks) {
+  const out = [];
+  const push = (ref) => {
+    if (!ref || typeof ref !== "object") return;
+    if (ref.kind === "placeholder" || !ref.kind || !ref.id) return;
+    out.push(ref);
+  };
+  const walk = (rows) => {
+    for (const row of (Array.isArray(rows) ? rows : [])) {
+      const b = parseBlock(row);
+      if (!b) continue;
+      const c = b.config;
+      if (b.type === "reference") push(c.ref);
+      else if (b.type === "entity-feature") push(c.ref);
+      else if (b.type === "entity-row") { if (c.source !== "auto") (Array.isArray(c.refs) ? c.refs : []).forEach(push); }
+      else if (b.type === "recommended") { if (c.source === "specific") push(c.ref); }
+      if (Array.isArray(c.children)) walk(c.children);
+    }
+  };
+  walk(blocks);
+  return out;
+}
+
+/** True when the tree has a `recommended` block in auto mode — lets the viewer
+ *  skip the extra recommended_lore_id fetch on pages that don't need it. */
+export function hasAutoRecommendedBlock(blocks) {
+  let found = false;
+  const walk = (rows) => {
+    for (const row of (Array.isArray(rows) ? rows : [])) {
+      const b = parseBlock(row);
+      if (!b) continue;
+      if (b.type === "recommended" && b.config.source !== "specific") found = true;
+      if (Array.isArray(b.config.children)) walk(b.config.children);
+    }
+  };
+  walk(Array.isArray(blocks) ? blocks : []);
+  return found;
 }
 
 /** Anchored definition entries (for a Contents rail), mirroring collectAnchoredBlocks. */

@@ -274,3 +274,75 @@ a.dauligor-ref:hover {
   text-decoration: underline dashed;
   cursor: help;
 }
+
+/* ============================================================================
+ * Reference hover preview card (global)
+ *
+ * A body-level preview shown on hover of a reference — our `.dauligor-ref` links
+ * (previewed from app data) OR a Foundry `@UUID` content-link (previewed from the
+ * linked document, the same object clicking opens). `pointer-events: none` so it
+ * never blocks the underlying click. Lives outside the Dauligor window scope, so
+ * the `--dauligor-*` tokens carry literal fallbacks (like `.dauligor-ref` above).
+ * ========================================================================== */
+.dauligor-reftip {
+  position: fixed;
+  z-index: 10000;
+  width: 300px;
+  max-width: 92vw;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  pointer-events: none;
+  border: 1px solid var(--dauligor-btn-border-hover, #9f9275);
+  background: var(--dauligor-panel, #1f1f1f);
+  color: var(--dauligor-text, #c9c7c0);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.dauligor-reftip__media {
+  height: 130px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--dauligor-border, #5c5c5c);
+}
+.dauligor-reftip__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.dauligor-reftip__body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 9px 11px;
+}
+.dauligor-reftip__sub {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--dauligor-text-muted, #9a978f);
+}
+.dauligor-reftip__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--dauligor-accent-strong, #c9c7c0);
+  line-height: 1.25;
+}
+.dauligor-reftip__summary {
+  color: var(--dauligor-text-muted, #9a978f);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.dauligor-reftip__tag {
+  margin-top: 2px;
+  align-self: flex-start;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+.dauligor-reftip__tag--missing { color: var(--dauligor-warning, #9e7f49); }
+.dauligor-reftip__tag--info { color: var(--dauligor-text-muted, #9a978f); }

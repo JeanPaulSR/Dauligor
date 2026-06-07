@@ -65,6 +65,8 @@ rendered body with **history-aware** navigation:
 - `@article` → loads the article in-viewer (`_navigate({mode:"article"})`).
 - `&` rule ref → loads the system page in-viewer (`_navigate({mode:"system", kind,
   anchor})`).
+- a compendium-backed entity ref (`@spell`, …) → imports + opens the Foundry item
+  (see [On-demand import](#on-demand-import-click--drag)).
 - any other entity ref → opens its `data-route` in a browser tab.
 
 ### 2. Foundry-wide (journals, sheets, chat)
@@ -79,11 +81,76 @@ plus one delegated click handler that routes them.
   `document` click listener: it **skips refs inside `.dauligor-viewer`** (the
   viewer binds its own, history-aware), then routes the rest exactly like the
   viewer — `&` → `DauligorViewerApp.open({systemKind, systemAnchor})`, `@article`
-  → `openDauligorLibrary({articleId})`, else `window.open(route)`.
+  → `openDauligorLibrary({articleId})`, a compendium-backed ref (`@spell`, …) → the
+  on-demand import (see above), else `window.open(route)`.
 
 Global `.dauligor-ref` styling lives in `base.css` (the viewer's scoped rules win
 inside the window); it uses literal color fallbacks because journals/sheets don't
 carry the `--dauligor-*` palette.
+
+## Hover preview cards
+
+The model is **hover to preview, click to navigate**. Hovering a reference shows a
+small preview card; clicking still does its normal thing (the binders above).
+Registered by `scripts/ref-hovercard.js` (`registerRefHoverCards()`, called in
+`ready`) as one delegated `document` `pointerover` / `pointerout` listener. The
+card is a single body-level element with `pointer-events: none`, so it never
+intercepts the click. Two families are covered:
+
+| Hovered link | Card data source | Click |
+|---|---|---|
+| Dauligor `.dauligor-ref[data-ref-kind]` | `content-service.resolveReferences` (app data — needs login) | compendium kinds → import the Foundry item (see [On-demand import](#on-demand-import-click--drag)); `@article` / `&` → in-viewer Library; else the app page |
+| Foundry `@UUID` content-link (`a.content-link[data-uuid]`) | the linked Foundry **document** via `fromUuid` (name / image / description) | Foundry-native — opens the item |
+
+**Two ref forms in practice.** Native Foundry `@UUID` content-links (from SRD /
+already-imported content) hover-preview the linked document and click open it
+natively — the importer only converts `@class` / `@subclass` / `@feature` /
+`@option` / `@source` into `@UUID` (see
+[`reference-service.js`](../scripts/reference-service.js)). Dauligor `@spell[slug]`
+refs (how Dauligor authors spell→spell references) hover-preview app data, and
+**click/drag import the Foundry item on-demand** (next section). The hover system
+covers both, so any reference shows a card regardless of form.
+
+**States:** a logged-out viewer hovering a *Dauligor* ref gets a "Log in to
+preview" card; a Dauligor ref whose target doesn't exist yet shows "Reference not
+yet made" (mirroring the in-page block cards). Refs that already sit inside an
+expanded entity card (`.dauligor-card`) are skipped — that card is itself the
+preview. The card markup + display data are resolved/cached the same way as the
+block cards (see [`page-system.md`](page-system.md) → Entity-reference resolution).
+Styling is global: `.dauligor-reftip` in `base.css`, with literal token fallbacks
+(it lives at `document.body`, outside the window scope).
+
+## On-demand import (click + drag)
+
+A compendium-backed reference (`@spell[…]`; feats/items to follow) is a **portal**
+to an entity on the Dauligor site — it stays semantic, never dangles, and never
+needs the entity pre-imported. `scripts/ref-import.js` gives it two interactions,
+mirroring how Foundry treats a content-link / Plutonium handles a 5etools tag:
+
+- **Click** → fetch the full Foundry-ready item and open it in a **temporary item
+  sheet** (the real dnd5e sheet, activities and all). Nothing is added to the
+  world — exactly like opening a compendium item's sheet.
+- **Drag** → the link carries the built item as a Foundry `{type:"Item", data}`
+  drop payload, so dropping it on an actor sheet (or the Items sidebar) imports it
+  through Foundry's own drop handling.
+
+**Pipeline.** `resolveReferences` returns the entity's DB id (`docId`) for the
+slug; the full Foundry-ready item is then fetched from the **public**
+`/api/module/<kind>/<dbId>.json` endpoint (a `dauligor.spell-item.v1` payload —
+the same one the Spell importer uses, so the item carries description / activities
+/ materials). `openReferencedItem` builds a temporary `Item` and renders its sheet;
+results are cached by `kind:id` (the viewer's Refresh clears the cache).
+
+**The async-at-dragstart detail.** A drag payload must be set synchronously at
+`dragstart`, but the fetch is async. The cursor entering a ref (`pointerover`)
+both enables dragging and prefetches the item, so it's cached by the time you
+drag. A drag with no prior hover just does the browser default (re-hover, then drag).
+
+**Why not bake `@UUID` at import.** A converted `@UUID` **dangles** for any entity
+not present in the world (Foundry shows a broken link, not a website fallback),
+which defeats "reference anything on the site." Keeping the ref semantic and
+importing on demand means the click always resolves to *something* — the Foundry
+item if buildable, else the app page — and never a dead link.
 
 ## The two enricher patterns
 

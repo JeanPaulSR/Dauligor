@@ -10,6 +10,8 @@ import { openDauligorCharacterCreator } from "./character-creator-app.js";
 import { openDauligorLauncher } from "./launcher-app.js";
 import { openDauligorLibrary, openDauligorCampaigns } from "./dauligor-viewer.js";
 import { registerRefEnrichers, registerRefClickHandler } from "./ref-enricher.js";
+import { registerRefHoverCards } from "./ref-hovercard.js";
+import { registerReferenceImports } from "./ref-import.js";
 import { log, notifyInfo, notifyWarn } from "./utils.js";
 import { isLoggedIn, getDisplayName, getProfile, login, logout } from "./auth-service.js";
 
@@ -43,6 +45,11 @@ Hooks.once("ready", () => {
   registerLongRestIntercept();
   // Delegated click routing for enriched refs rendered outside the viewer.
   registerRefClickHandler();
+  // Hover preview cards for refs (our @/& refs + Foundry @UUID content-links).
+  registerRefHoverCards();
+  // On-demand import: click a compendium-backed ref to open the Foundry item
+  // (temp preview), drag it to import onto a sheet.
+  registerReferenceImports();
   // Nudge un-authenticated users to log into their Dauligor account (once — a
   // prior card suppresses re-posting on reload).
   if (!isLoggedIn() && !hasLoginPromptCard()) postLoginChatCard();

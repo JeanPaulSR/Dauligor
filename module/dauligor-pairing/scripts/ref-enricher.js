@@ -18,6 +18,7 @@
 
 import { refMarkup } from "./layout-blocks.js";
 import { openDauligorLibrary, DauligorViewerApp } from "./dauligor-viewer.js";
+import { isImportableKind, openReferencedItem } from "./ref-import.js";
 import { log } from "./utils.js";
 
 // @kind[id]#anchor{display}  and  &kind[id]#anchor{display}  (kind lowercase only).
@@ -85,6 +86,17 @@ export function registerRefClickHandler() {
     }
     if (kind === "article" && refId) {
       openDauligorLibrary({ articleId: refId });
+      return;
+    }
+    // Compendium-backed entity refs (@spell, …) → open the Foundry item in a
+    // temporary preview sheet (not imported), like clicking a content-link. Falls
+    // back to the app page if it can't be built (e.g. logged out / no match).
+    if (isImportableKind(kind) && refId) {
+      openReferencedItem(kind, refId).then((handled) => {
+        if (handled) return;
+        const route = a.getAttribute("data-route");
+        if (route) window.open(route, "_blank", "noopener");
+      });
       return;
     }
     const route = a.getAttribute("data-route");

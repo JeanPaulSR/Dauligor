@@ -26,10 +26,12 @@ engine, so they look and behave consistently.
 
 | File | Role |
 |---|---|
-| `scripts/layout-blocks.js` | The renderer: block JSON → HTML for all 15 block types; BBCode → HTML; anchor collection; the shared ref-anchor builder. |
-| `scripts/content-service.js` | Authenticated readers (`listArticles`, `getArticle`, `getArticleBlocks`, `listCampaigns`, `getCampaign`, `getCampaignHomeBlocks`, `getSystemPage`). Returns parsed JSON; maps failures to friendly errors. |
+| `scripts/layout-blocks.js` | The renderer: block JSON → HTML for all 15 block types; BBCode → HTML; anchor collection; the shared ref-anchor builder; entity-reference **card** rendering + `collectEntityRefs`. |
+| `scripts/content-service.js` | Authenticated readers (`listArticles`, `getArticle`, `getArticleBlocks`, `listCampaigns`, `getCampaign`, `getCampaignHomeBlocks`, `getSystemPage`) **and `resolveReferences` / `clearReferenceCache`** (entity-reference card resolution). Returns parsed JSON; maps failures to friendly errors. |
 | `scripts/dauligor-viewer.js` | `DauligorViewerApp` (ApplicationV2) — the "Dauligor Library" window. Owns navigation, the browser, and rendering of each mode. |
 | `scripts/ref-enricher.js` | Foundry-wide `CONFIG.TextEditor` enrichers + the delegated click router (see the cross-reference doc). |
+| `scripts/ref-hovercard.js` | Foundry-wide reference **hover preview cards** — our `.dauligor-ref` links (app data) + Foundry `@UUID` content-links (the linked document). See the cross-reference doc. |
+| `scripts/ref-import.js` | **On-demand import** for compendium-backed refs (`@spell`, …): click opens the Foundry item in a temporary sheet; drag imports it onto a sheet. See the cross-reference doc. |
 | `styles/dauligor-viewer.css` | Viewer chrome + every `.dauligor-block--*` / `.dauligor-richtext` / `.dauligor-ref` rule the renderer emits. |
 | `styles/base.css` | Global `.dauligor-ref` style for refs enriched *outside* the viewer (journals/sheets). |
 
@@ -40,8 +42,9 @@ launcher tile / ref click
   → DauligorViewerApp.open({ ...target })
     → content-service reader (authFetch → app endpoint, Bearer token)
       → server filters by the account's role + active campaign
-    → layout-blocks.renderBlocks(blocks) → HTML
-    → injected into the viewer's body; refs wired for navigation
+    → resolveReferences(collectEntityRefs(blocks)) → entity-card display data
+    → layout-blocks.renderBlocks(blocks, { resolved }) → HTML
+    → injected into the viewer's body; refs + cards wired for navigation
 ```
 
 The viewer never mutates app data and never assumes a role — the **server**
@@ -56,8 +59,12 @@ config }`, where `config` is a **JSON string**. Container blocks
 The canonical model is the app's `src/lib/layoutBlocks.ts`; the module mirrors
 its parse + the block→markup mapping.
 
-`renderBlocks(rows)` parses each row (JSON-parsing the `config` string), switches
-on `block_type`, and recurses container children. The 15 types:
+`renderBlocks(rows, { resolved, recommended })` parses each row (JSON-parsing the
+`config` string), switches on `block_type`, and recurses container children. The
+optional `resolved` map (and `recommended` payload) drive the entity-reference
+cards — see [Entity-reference resolution](#entity-reference-resolution-cards)
+below; with no opts, those blocks degrade to "reference not yet made" cards. The
+15 types:
 
 `hero`, `text`, `note`, `secret`, `image`, `divider`, `recommended`, `callout`,
 `reference`, `definition`, `entity-row`, `entity-feature`, `group`, `columns`,
@@ -112,6 +119,7 @@ role-appropriate content.
 | `getCampaign(id)` | `GET /api/campaigns/<id>` | `{ campaign }` |
 | `getCampaignHomeBlocks(id)` | `GET /api/campaigns/<id>/home-blocks` | `[block rows]` |
 | `getSystemPage(kind)` | `POST /api/d1/query` | `{ page, blocks }` or `null` |
+| `resolveReferences(refs)` | `POST /api/d1/query` (one per kind) | `Map(kind:id → { name, summary, image, sourceLabel, rule })` — see [Entity-reference resolution](#entity-reference-resolution-cards) |
 
 `block_type` / `config` rows from every endpoint share the same shape, so
 `renderBlocks` handles all of them.
@@ -133,6 +141,55 @@ token.
 
 The viewer then renders those blocks and scrolls to the entry's `definition`
 anchor. A `&` kind with no authored page falls back to an "Open in app" CTA.
+
+## Entity-reference resolution (cards)
+
+Four block types embed a pointer to another entity rather than prose:
+`reference`, `entity-feature`, `entity-row`, and `recommended`. Each stores an
+`EntityRef { kind, id }` where `id` is the **semantic identifier/slug** (an
+article's slug; a spell/class/feat/item/condition identifier; a system-page entry
+anchor) — never a DB primary key. The viewer resolves these to rich cards
+(image + title + summary + source) before rendering, mirroring the app's
+`src/lib/references.ts` + `LayoutBlocks.tsx`.
+
+**Flow.** Before `renderBlocks`, the viewer calls
+`resolveReferences(collectEntityRefs(blocks))`. The resolver:
+1. Dedupes refs by `kind:id` and memoizes them in a module cache (cleared by the
+   toolbar's Refresh via `clearReferenceCache`, so site edits show up).
+2. For each kind, checks the system-page kind map **first** — so a `&` rule kind
+   (`condition`, `skill`, …) resolves as a system-page entry (definition block,
+   then a legacy `system_page_entries` fallback). Otherwise it reads the static
+   table by identifier: `spells` / `classes` / `subclasses` / `feats` / `items` /
+   `status_conditions` / `lore_articles`. `class`/`subclass` also carry an image
+   (`card_image_url`→`image_url`) and source abbreviation; the rest are text-only —
+   matching the app.
+3. Returns a `Map` keyed `kind:id` → `{ name, summary, image, sourceLabel, rule }`.
+   `rule` tells the renderer whether the card's link is a `&` system route (opens
+   in-viewer) or an `@` entity route.
+
+Every table the resolver reads is **player-readable** through the D1 proxy (none
+are in `PROTECTED_READ_TABLES`), so the same Bearer token used for every other
+read suffices — no public endpoint, no auth split.
+
+**Per-card display.** `reference` honors `display` (inline / card / link); `card`
+and `inline` render the summary as **rich BBCode** (the title is a separate link,
+so a summary's own refs never nest inside a card anchor). `entity-row` honors
+`card` (image / compact / list), `columns`, per-card `span`, and `excerpt`;
+`entity-feature` honors `imageSide`; `recommended` shows an "Essential Reading"
+card. Author overrides win: a ref's stored `title` / `description` take precedence
+over the resolved name / summary.
+
+**Unresolved vs. placeholder.** A real ref whose target doesn't exist yet renders
+a distinct **"Reference not yet made"** card showing the intended title plus the
+`kind:id` — so an author sees *what* is missing and *where* it belongs, and can go
+create it. This is kept visually separate from an intentional `placeholder`-kind
+ref (a deliberate "Coming Soon" slot). Unknown kinds and id-less refs are skipped.
+
+**Auto modes.** A `recommended` block in `auto` mode is fed by the viewer
+resolving the campaign's `recommended_lore_id` (via `getArticle`) into
+`opts.recommended`. `entity-row` in `auto` mode (latest-N-of-a-category) is not
+fetched in Foundry yet — it shows a short note — matching the app, which also
+defers it.
 
 ## Visibility (server-enforced)
 

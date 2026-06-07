@@ -21,8 +21,9 @@
 
 import { DAULIGOR_VIEWER_TEMPLATE, MODULE_ID } from "./constants.js";
 import { isLoggedIn } from "./auth-service.js";
-import { getArticle, listArticles, getSystemPage, listCampaigns, getCampaign, getCampaignHomeBlocks } from "./content-service.js";
-import { renderBlocks, renderRichText, collectAnchors } from "./layout-blocks.js";
+import { getArticle, listArticles, getSystemPage, listCampaigns, getCampaign, getCampaignHomeBlocks, resolveReferences, clearReferenceCache } from "./content-service.js";
+import { renderBlocks, renderRichText, collectAnchors, collectEntityRefs, hasAutoRecommendedBlock } from "./layout-blocks.js";
+import { isImportableKind, openReferencedItem, clearReferenceItemCache } from "./ref-import.js";
 import { log } from "./utils.js";
 import {
   renderSectionFilterPanel,
@@ -574,7 +575,9 @@ export class DauligorViewerApp extends HandlebarsApplicationMixin(ApplicationV2)
     const blocks = Array.isArray(article.blocks) ? article.blocks : [];
     let inner;
     if (blocks.length) {
-      inner = renderBlocks(blocks);
+      const resolved = await this._resolveBlockRefs(blocks);
+      if (seq !== this._seq) return; // resolve is async — re-check supersession
+      inner = renderBlocks(blocks, { resolved });
     } else if (article.content) {
       // Legacy article (BBCode body, not yet migrated to blocks) — render the
       // content mirror, same fallback the app's LoreArticle viewer uses.
@@ -628,7 +631,9 @@ export class DauligorViewerApp extends HandlebarsApplicationMixin(ApplicationV2)
     this._renderToolbar(); // title now known
     let inner;
     if (blocks.length) {
-      inner = renderBlocks(blocks);
+      const resolved = await this._resolveBlockRefs(blocks);
+      if (seq !== this._seq) return; // resolve is async — re-check supersession
+      inner = renderBlocks(blocks, { resolved });
     } else if (page.description) {
       inner = `<div class="dauligor-block dauligor-block--text dauligor-richtext">${renderRichText(page.description)}</div>`;
     } else {
@@ -712,7 +717,11 @@ export class DauligorViewerApp extends HandlebarsApplicationMixin(ApplicationV2)
     const rows = Array.isArray(blocks) ? blocks : [];
     let inner;
     if (rows.length) {
-      inner = renderBlocks(rows);
+      const resolved = await this._resolveBlockRefs(rows);
+      if (seq !== this._seq) return;
+      const recommended = await this._resolveRecommended(rows, campaign);
+      if (seq !== this._seq) return;
+      inner = renderBlocks(rows, { resolved, recommended });
     } else if (campaign.description) {
       inner = `<div class="dauligor-block dauligor-block--text dauligor-richtext">${renderRichText(campaign.description)}</div>`;
     } else {
@@ -740,7 +749,7 @@ export class DauligorViewerApp extends HandlebarsApplicationMixin(ApplicationV2)
       </div>`;
     this._toolbarRegion.querySelector(`[data-act="back"]`)?.addEventListener("click", () => this._back());
     this._toolbarRegion.querySelector(`[data-act="home"]`)?.addEventListener("click", () => this._navigate({ mode: "list" }));
-    this._toolbarRegion.querySelector(`[data-act="refresh"]`)?.addEventListener("click", () => this._renderCurrent());
+    this._toolbarRegion.querySelector(`[data-act="refresh"]`)?.addEventListener("click", () => { clearReferenceCache(); clearReferenceItemCache(); this._renderCurrent(); });
   }
 
   _renderRail(anchors) {
@@ -760,11 +769,51 @@ export class DauligorViewerApp extends HandlebarsApplicationMixin(ApplicationV2)
     });
   }
 
+  // Resolve every entity-reference in a block tree to display data (name, image,
+  // summary…) BEFORE rendering, so cards paint resolved. Returns a Map (kind:id →
+  // data); unresolved refs are simply absent and render as "reference not yet made".
+  async _resolveBlockRefs(blocks) {
+    try {
+      return await resolveReferences(collectEntityRefs(blocks));
+    } catch (err) {
+      log("viewer: reference resolve failed", err);
+      return new Map();
+    }
+  }
+
+  // For an auto-mode `recommended` block, resolve the campaign's recommended_lore_id
+  // into a card payload (mirrors the app's Home recommendedLore). Returns null when
+  // there's no auto block, no pick, or the article isn't visible to this account.
+  async _resolveRecommended(blocks, campaign) {
+    const id = campaign?.recommended_lore_id;
+    if (!id || !hasAutoRecommendedBlock(blocks)) return null;
+    try {
+      const res = await getArticle(id);
+      const a = res?.article;
+      if (!a) return null;
+      return {
+        ref: { kind: "article", id: String(a.id ?? a.slug ?? id), name: a.title },
+        data: {
+          name: a.title || "Article",
+          summary: a.excerpt || a.content || "",
+          image: a.imageUrl || a.cardImageUrl || null,
+          sourceLabel: null,
+          rule: false,
+        },
+      };
+    } catch (err) {
+      log("viewer: recommended resolve failed", err);
+      return null;
+    }
+  }
+
   // Wire cross-reference clicks emitted by layout-blocks: @article and & rule
   // refs load in-viewer; any other entity ref opens the live app in a browser tab.
+  // Covers both inline `.dauligor-ref` links and resolved entity CARDS (both carry
+  // data-route + data-ref-*), as well as entity-row list links.
   _bindRefs() {
     if (!this._bodyRegion) return;
-    this._bodyRegion.querySelectorAll(`a.dauligor-ref[data-route]`).forEach((a) => {
+    this._bodyRegion.querySelectorAll(`a[data-route]`).forEach((a) => {
       a.addEventListener("click", (e) => {
         e.preventDefault();
         const kind = a.dataset.refKind;
@@ -777,6 +826,16 @@ export class DauligorViewerApp extends HandlebarsApplicationMixin(ApplicationV2)
         }
         if (kind === "article" && refId) {
           this._navigate({ mode: "article", id: refId });
+          return;
+        }
+        // Compendium-backed entity refs (@spell, …) → open the Foundry item in a
+        // temporary preview sheet (not imported). Falls back to the app page.
+        if (isImportableKind(kind) && refId) {
+          openReferencedItem(kind, refId).then((handled) => {
+            if (handled) return;
+            const route = a.getAttribute("data-route");
+            if (route) window.open(route, "_blank", "noopener");
+          });
           return;
         }
         const route = a.getAttribute("data-route");
