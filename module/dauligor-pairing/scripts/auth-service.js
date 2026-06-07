@@ -27,6 +27,43 @@ export function resolveApiHost() {
   }
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * fetch() that auto-heals a transient failure. Cloudflare Pages Functions can
+ * cold-start: the first hit may hang/time-out or return a 5xx, and the BROWSER
+ * surfaces that as a misleading "No Access-Control-Allow-Origin" CORS error
+ * (the failed response drops the CORS headers the warm path returns). Same class
+ * of issue as the background-detail 503 the creator already retries around.
+ *
+ * Retries only TRANSIENT outcomes — a thrown network error, or a 5xx / 429 — with
+ * a short linear backoff. A real answer (2xx or 4xx, e.g. a 401 for bad creds) is
+ * returned immediately and never retried.
+ */
+async function fetchWithRetry(url, opts = {}, { retries = 2, backoffMs = 400 } = {}) {
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(url, opts);
+      if ((res.status >= 500 || res.status === 429) && attempt < retries) {
+        await sleep(backoffMs * (attempt + 1));
+        continue;
+      }
+      return res;
+    } catch (err) {
+      lastErr = err;
+      if (attempt < retries) {
+        await sleep(backoffMs * (attempt + 1));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr;
+}
+
 // ── session store (client-scoped, JSON-encoded string) ──────────────────────
 
 // The client-scoped store is a JSON map keyed by Foundry user id, so each user on
@@ -91,17 +128,18 @@ export async function login(username, password) {
   const host = resolveApiHost();
   let res;
   try {
-    res = await fetch(`${host}/api/auth/login`, {
+    res = await fetchWithRetry(`${host}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password }),
       cache: "no-store",
     });
   } catch (err) {
-    // Almost always CORS until the app-side handoff lands (the response has no
-    // Access-Control-Allow-Origin, so the browser blocks the fetch).
-    log("auth: login fetch failed (likely CORS)", err);
-    throw new Error("Couldn't reach Dauligor login (network or CORS). The app must allow cross-origin auth requests first.");
+    // After retries this is a genuine network failure (or, rarely, a real CORS
+    // misconfig). A transient Cloudflare cold-start — which the browser also
+    // reports as a CORS error — is auto-healed by fetchWithRetry above.
+    log("auth: login fetch failed after retries (network / cold-start / CORS)", err);
+    throw new Error("Couldn't reach Dauligor (network hiccup). Give it a moment and try again.");
   }
   if (res.status === 401) throw new Error("Invalid username or password.");
   if (res.status === 503) throw new Error("Dauligor native login isn't configured on the server.");
@@ -109,12 +147,15 @@ export async function login(username, password) {
   const data = await res.json().catch(() => null);
   if (!data?.token) throw new Error("Login response was missing a token.");
   await writeSession({ token: String(data.token), profile: data.profile ?? null });
+  // Let open windows (Library viewer, launcher labels) react to the new session.
+  try { Hooks.callAll(`${MODULE_ID}.authChanged`); } catch { /* no-op outside Foundry */ }
   return data.profile ?? null;
 }
 
 /** Clear the stored session. */
 export async function logout() {
   await writeSession(null);
+  try { Hooks.callAll(`${MODULE_ID}.authChanged`); } catch { /* no-op outside Foundry */ }
 }
 
 /** Refresh the sliding session token. Returns true on success. */
@@ -122,7 +163,7 @@ async function refreshToken() {
   const session = readSession();
   if (!session?.token) return false;
   try {
-    const res = await fetch(`${resolveApiHost()}/api/auth/refresh`, {
+    const res = await fetchWithRetry(`${resolveApiHost()}/api/auth/refresh`, {
       method: "POST",
       headers: { Authorization: `Bearer ${session.token}` },
       cache: "no-store",
@@ -149,7 +190,7 @@ export async function authFetch(path, opts = {}) {
   const session = readSession();
   if (!session?.token) throw new Error("Not logged in.");
   const url = /^https?:\/\//i.test(path) ? path : `${resolveApiHost()}${path}`;
-  const run = (token) => fetch(url, {
+  const run = (token) => fetchWithRetry(url, {
     ...opts,
     headers: { ...(opts.headers || {}), Authorization: `Bearer ${token}` },
     cache: opts.cache ?? "no-store",
