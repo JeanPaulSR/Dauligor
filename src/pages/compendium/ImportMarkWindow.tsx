@@ -38,6 +38,7 @@ import {
   getAssignTargets,
   assignFieldText,
   assignAppendItem,
+  assignAppendManyItems,
   assignResolveFields,
   splitEntityBlocks,
   resolveClassProficiencies,
@@ -1200,8 +1201,9 @@ function FeatureDropZone({ target, count, onAdd }: { target: ImportAssignTarget;
   return (
     <div>
       <label className="field-label">{target.label.replace(/\s*\(.*\)/, '')} <span className="text-ink/40">— {count} added</span></label>
-      <textarea value={text} rows={3} onChange={(e) => setText(e.target.value)} placeholder="Paste ONE feature (first line = name, rest = body)…" className={SECTION_INPUT_CLS} />
-      <button type="button" onClick={() => onAdd(target, text, () => setText(''))} className="btn-gold mt-1 inline-flex h-7 items-center gap-1 px-2 text-[10px]">＋ Add as feature</button>
+      <textarea value={text} rows={6} onChange={(e) => setText(e.target.value)} placeholder="Paste ALL the feature text — split into one feature per heading. (Spellcasting / ASI / subclass auto-detected.)" className={SECTION_INPUT_CLS} />
+      <button type="button" onClick={() => onAdd(target, text, () => setText(''))} className="btn-gold mt-1 inline-flex h-7 items-center gap-1 px-2 text-[10px]">＋ Add features (auto-split)</button>
+      <p className="field-hint mt-0.5">Over-split? Merge in the Features panel. Need exact boundaries? Use “Mark text” and mark each Feature.</p>
     </div>
   );
 }
@@ -1220,19 +1222,23 @@ function SectionsPanel({ type, state, onChange, catalogs }: { type: string; stat
       return { ...prev, values, provenance };
     });
   };
-  const addFeature = (t: ImportAssignTarget, text: string, clear: () => void) => {
-    const item = assignAppendItem(type, t.key, text.trim());
-    if (!item) { toast.error('Nothing to add from that text.'); return; }
+  const addFeatures = (t: ImportAssignTarget, text: string, clear: () => void) => {
+    const clean = text.trim(); if (!clean) return;
+    // Bulk split first (one feature per heading); fall back to single if the
+    // text has no detectable headings.
+    let items = assignAppendManyItems(type, t.key, clean);
+    if (!items.length) { const one = assignAppendItem(type, t.key, clean); items = one ? [one] : []; }
+    if (!items.length) { toast.error('Nothing to add from that text.'); return; }
     const fk = t.fieldKeys[0];
-    onChange((prev) => ({ ...prev, values: { ...prev.values, [fk]: [...(Array.isArray(prev.values[fk]) ? prev.values[fk] : []), item] } }));
+    onChange((prev) => ({ ...prev, values: { ...prev.values, [fk]: [...(Array.isArray(prev.values[fk]) ? prev.values[fk] : []), ...items] } }));
     clear();
-    toast.success('Feature added');
+    toast.success(`Added ${items.length} feature${items.length === 1 ? '' : 's'}`);
   };
   return (
     <div className="flex-1 space-y-3 overflow-auto">
       <p className="field-hint">Drop each block's text into its box — no guessing where boundaries are. <span className="text-gold/70">Proficiencies</span> resolves the whole grid + hit die / saves / primary at once.</p>
       {blocks.map((t) => t.mode === 'append'
-        ? <FeatureDropZone key={t.key} target={t} count={Array.isArray(state.values[t.fieldKeys[0]]) ? state.values[t.fieldKeys[0]].length : 0} onAdd={addFeature} />
+        ? <FeatureDropZone key={t.key} target={t} count={Array.isArray(state.values[t.fieldKeys[0]]) ? state.values[t.fieldKeys[0]].length : 0} onAdd={addFeatures} />
         : <BlockDropZone key={t.key} target={t} rows={t.fieldKeys[0] === 'name' ? 1 : 4} onApply={applyText} />)}
     </div>
   );

@@ -156,6 +156,10 @@ export interface ImportDescriptor {
    * ONE list item to push onto the target's array field (e.g. a class Feature
    * draft). Returns null when the selection yields nothing. */
   assignAppend?: (targetKey: string, text: string) => Record<string, unknown> | null;
+  /** OPTIONAL · PURE: for an `append`-mode target, split a BULK selection into
+   * MANY list items (e.g. a whole features blob → one draft per heading). The
+   * window prefers this over `assignAppend` when present. */
+  assignAppendMany?: (targetKey: string, text: string) => Record<string, unknown>[];
   /** OPTIONAL: for a `resolve`-mode target, ingest a selection using external
    * CATALOGS (and the current field values, for merges) and return the field
    * patch to apply. Used by the class Proficiencies block + sub-sections, which

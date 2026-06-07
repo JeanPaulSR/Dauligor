@@ -308,6 +308,20 @@ export function parseFeatureSpan(text: string): { kind: 'feature'; name: string;
   return { kind: 'feature', name, level: firstLevel(raw) ?? 1, body: rest || name };
 }
 
+/** Split a whole features BLOB into one draft per heading, with kinds
+ * auto-classified (feature / spellcasting / asi / subclass) — backs the Features
+ * section's bulk paste. Over-splits merge in the panel; precise boundaries via
+ * the "Mark text" Feature mark. */
+export function splitFeatures(text: string): Array<Pick<FeatureDraft, 'kind' | 'name' | 'level' | 'levels' | 'body'>> {
+  return groupClassFeatures(splitClassSections(text)).map((s) => ({
+    kind: (s.kind === 'subheader' || s.kind === 'identity' || s.kind === 'meta' ? 'feature' : s.kind) as FeatureDraft['kind'],
+    name: s.name,
+    level: s.level,
+    levels: s.levels,
+    body: s.body,
+  }));
+}
+
 // ───────────────────────── Proficiency resolver ─────────────────────────────
 // Catalog-aware (but otherwise pure): resolve the parsed proficiency LINES into
 // the grid's {choiceCount, fixedIds, optionIds, categoryIds} shape. Skills →

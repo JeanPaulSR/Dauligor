@@ -27,7 +27,7 @@ import { upsertFeature } from '../compendium';
 import { queueRebake } from '../moduleExport';
 import { slugify } from '../utils';
 import { sanitizeProficiencySelection } from '../proficiencySelection';
-import { parseClassText, classifyHitDie, normalizeClassName, parseFeatureSpan, resolveClassProficiencies, resolveProficiencyKind, type FeatureDraft } from './classParse';
+import { parseClassText, classifyHitDie, normalizeClassName, parseFeatureSpan, splitFeatures, resolveClassProficiencies, resolveProficiencyKind, type FeatureDraft } from './classParse';
 import type { ImportDescriptor, ImportContext, ImportFieldOption } from './types';
 
 const toOptions = (pairs: [string, string][]): ImportFieldOption[] =>
@@ -136,10 +136,16 @@ function routeFeatures(drafts: FeatureDraft[], primaryCode?: string) {
   let subclassTitle: string | null = null;
   let subclassLevels: number[] | null = null;
   let spellcasting: any = null;
-  const features: { name: string; level: number; body: string }[] = [];
+  const features: { name: string; level: number; body: string; isSubclass?: boolean }[] = [];
   for (const d of Array.isArray(drafts) ? drafts : []) {
     if (d.kind === 'asi') { if (d.levels?.length) asiLevels = d.levels; }
-    else if (d.kind === 'subclass') { subclassTitle = d.name || subclassTitle; subclassLevels = d.levels || []; }
+    else if (d.kind === 'subclass') {
+      subclassTitle = d.name || subclassTitle;
+      subclassLevels = d.levels || [];
+      // The subclass choice IS a real feature row (is_subclass_feature=1) in
+      // every built class — name == subclass_title, at the first subclass level.
+      features.push({ name: d.name, level: (d.levels && d.levels[0]) || Number(d.level) || 1, body: String(d.body || ''), isSubclass: true });
+    }
     else if (d.kind === 'spellcasting') { spellcasting = buildSpellcastingConfig(d, primaryCode); }
     else if (d.kind === 'feature') { features.push({ name: d.name, level: Number(d.level) || 1, body: String(d.body || '') }); }
     // 'skip' → dropped
@@ -239,7 +245,7 @@ export const clazzDescriptor: ImportDescriptor = {
     // (normalizeFeatureData inside), parented to this class. Name + level +
     // description only; automation/activities stay for the editor.
     const now = classData.updated_at ?? new Date().toISOString();
-    for (const feat of __features as { name: string; level: number; body: string }[]) {
+    for (const feat of __features as { name: string; level: number; body: string; isSubclass?: boolean }[]) {
       const featureName = String(feat.name ?? '').trim();
       if (!featureName) continue;
       const fid = crypto.randomUUID();
@@ -251,6 +257,8 @@ export const clazzDescriptor: ImportDescriptor = {
         featureType: 'class',
         level: Number(feat.level) || 1,
         description: String(feat.body ?? ''),
+        // The subclass-choice row carries is_subclass_feature=1, like built classes.
+        isSubclassFeature: !!feat.isSubclass,
         createdAt: now,
         updatedAt: now,
       });
@@ -317,6 +325,17 @@ export const clazzDescriptor: ImportDescriptor = {
     const d = parseFeatureSpan(text);
     if (!d.name) return null;
     return { id: crypto.randomUUID(), kind: d.kind, name: d.name, level: d.level, body: d.body };
+  },
+
+  // Bulk: paste ALL the feature text → one draft per heading, kinds auto-routed
+  // (Spellcasting → the class spellcasting config, ASI → asi_levels, the subclass
+  // grant → subclass title/levels + an is_subclass_feature row). Fix up in the
+  // Features panel (merge) or via the "Mark text" Feature mark.
+  assignAppendMany(target: string, text: string): Record<string, unknown>[] {
+    if (target !== 'feature') return [];
+    return splitFeatures(text)
+      .filter((d) => String(d.name || '').trim())
+      .map((d) => ({ id: crypto.randomUUID(), kind: d.kind, name: d.name, level: d.level, levels: d.levels, body: d.body }));
   },
 
   // Catalog-aware "resolve" marks. The Proficiencies block → the whole grid +

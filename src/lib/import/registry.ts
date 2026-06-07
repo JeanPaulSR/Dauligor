@@ -71,6 +71,13 @@ export function assignResolveFields(type: string, targetKey: string, text: strin
   return descriptor?.assignResolve ? descriptor.assignResolve(targetKey, text, { catalogs, values }) : {};
 }
 
+/** PURE — split a bulk selection into MANY append items (e.g. a whole features
+ * blob → one draft per heading). Empty when unsupported. */
+export function assignAppendManyItems(type: string, targetKey: string, text: string): Record<string, unknown>[] {
+  const descriptor = getImportDescriptor(type);
+  return descriptor?.assignAppendMany ? descriptor.assignAppendMany(targetKey, text) : [];
+}
+
 /** PURE — split a multi-entity paste into per-entity block-start offsets. Empty
  * (or the type has no splitter) ⇒ treat the whole paste as one entity. */
 export function splitEntityBlocks(type: string, text: string): number[] {
