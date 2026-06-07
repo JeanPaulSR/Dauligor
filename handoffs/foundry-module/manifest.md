@@ -139,6 +139,15 @@ append-only / non-clobbering where both branches touch the same file.
 
 ## Incoming requests (from other branches)
 
+- [ ] `(2026-06-05)` from **`compendium-editors`** — **Activity native-conversion contract changes**
+  from the Foundry-fidelity Activity Editor rebuild: (1) a Cast's `spell.uuid` now stores our spell
+  `identifier` **slug** (resolve slug → the exported spell's compendium UUID; pass through if already
+  a full UUID); (2) new `override` booleans on `activation`/`duration`/`range`/`target` — **emit them
+  in the native activity shape** (dnd5e inherits from the linked spell/activity at runtime when
+  `override === false`). **⏳ Standing reminder:** when ALL activity kinds are matched, run a full
+  activity round-trip verification (we'll ping when the list is complete). Full handoff:
+  [2026-06-05-from-compendium-editors-activity-native-conversion.md](2026-06-05-from-compendium-editors-activity-native-conversion.md).
+
 - [x] `(2026-05-30)` from **`compendium-editors`** — consume the new **background** + **race**
   export endpoints. **Done** (importer routes bg/race detail + item type by `featType` in
   `feat-browser-app.js`). Reply sent: [2026-05-30-reply-to-compendium-editors-bg-race.md](2026-05-30-reply-to-compendium-editors-bg-race.md).
@@ -169,6 +178,7 @@ Newest at the top.
 - `2026-06-04` — [2026-06-04-reply-class-category.md](2026-06-04-reply-class-category.md) — **reply from `compendium-editors`: DONE + pushed to `main`.** Catalog `category` + self-healing cache validator applied; live on prod (verified). The creator's Core/Alternate/New grouping now activates wherever the catalog ships `category` (prod now; local `:3000` after its server restarts).
 - `2026-06-04` — [2026-06-04-to-compendium-editors-class-category.md](2026-06-04-to-compendium-editors-class-category.md) — request: please add `category` to per-source class-catalog entries so the creator's class picker can group Core/Alternate/New like the website. Exact one-line change + R2-cache note inline; `foundry-module` did not modify app-side files. Module degrades to a flat list until it ships.
 - `2026-06-04` — [2026-06-04-session-state-precompaction.md](2026-06-04-session-state-precompaction.md) — full pickup state after the Character Creator (radial hub + tabs), styled launcher, and the ClassView-style class preview. Git state, what's on main vs branch (`175fce8` class-view is branch-only), the "needs a Foundry eyeball" list, how the class preview pulls data, open follow-ups, and the window-model / div-button gotchas.
+- `2026-06-05` — [2026-06-05-from-compendium-editors-activity-native-conversion.md](2026-06-05-from-compendium-editors-activity-native-conversion.md) — incoming from `compendium-editors`: Cast `spell.uuid` is now an `identifier` slug + new `override` flags on activation/duration/range/target to emit in native; standing reminder to run a full activity round-trip verify once all activity kinds are matched.
 - `2026-06-02` — [2026-06-02-to-compendium-editors-spellcasting-chart.md](2026-06-02-to-compendium-editors-spellcasting-chart.md) — heads-up + asks for the new app-side `/api/module/spellcasting/multiclass-chart.json` endpoint (master multiclass slot chart) that the creator's class preview consumes for spell-slot columns. Additive; they own the dev server + must take it to main.
 - `2026-05-30` — [2026-05-30-session-state-precompaction.md](2026-05-30-session-state-precompaction.md) — full branch state before a context compaction: doc-reconciliation + modularization, export-first bg/race/creature exporters, CSS split + dedup, three import bug fixes, bundled-data deletion. Includes the "can't test in Foundry — verify these" list + operational gotchas (junction, manifest reload).
 

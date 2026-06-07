@@ -26,6 +26,9 @@ import ActiveEffectKeyInput from './ActiveEffectKeyInput';
 // see DamagePartEditor for the canonical example.
 import { ActivitySection, FieldRow, EmptyRow } from './activity/primitives';
 import DamagePartEditor from './activity/DamagePartEditor';
+import HealingEditor from './activity/HealingEditor';
+import SummonEditor from './activity/SummonEditor';
+import TransformEditor from './activity/TransformEditor';
 import ActivationDurationEditor from './activity/ActivationDurationEditor';
 import RangeTargetingEditor from './activity/RangeTargetingEditor';
 import ConsumptionTabEditor from './activity/ConsumptionTabEditor';
@@ -161,9 +164,13 @@ const sanitizeActivity = (activity: SemanticActivity): SemanticActivity => {
   // section has checkboxes for each, the values flow through.
 
   if (sanitized.kind === 'forward') {
+    // Foundry's BaseForwardActivityData deletes duration/range/target/effects
+    // from the schema — a Forward only carries `activity.id` (the triggered
+    // activity) plus activation/consumption/uses. Keep our shape in lockstep.
     delete sanitized.duration;
     delete sanitized.range;
     delete sanitized.target;
+    delete sanitized.effects;
   }
 
   if (sanitized.damage) {
@@ -196,6 +203,10 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
   const [editingId, setEditingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('identity');
   const [activeActivationTab, setActiveActivationTab] = useState('time');
+  // Summon's Effect tab ("Summoning") carries Foundry's inner Profiles | Changes sub-tabs.
+  const [activeSummonTab, setActiveSummonTab] = useState('profiles');
+  // Transform's Effect tab ("Transformation") carries inner Profiles | Settings sub-tabs.
+  const [activeTransformTab, setActiveTransformTab] = useState('profiles');
   // Which applied-effect's "Additional Settings" tray is open (Foundry shows one
   // collapsible per effect; we track the single open one by effect id).
   const [expandedEffectId, setExpandedEffectId] = useState<string | null>(null);
@@ -220,6 +231,17 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
   // (weaponCategories / weaponProperties / armorCategories / toolCategories);
   // surfaced per Item Type via ENCHANT_CATEGORY_COLLECTION + item_properties.valid_types.
   const [restrictionData, setRestrictionData] = useState<Record<string, { id: string; identifier?: string; name: string }[]>>({});
+  // Our spell compendium feeds the Cast activity's "Spell to Cast" picker —
+  // authors search-and-assign one of our own spells instead of pasting a raw
+  // Foundry UUID. We persist the picked spell's `identifier` (slug) in
+  // `spell.uuid`; the module's class-import-service resolves slug → the
+  // exported spell's compendium UUID on import. Lazily fetched the first time a
+  // Cast activity is opened (effect below) so non-casting edits don't pay for
+  // the (potentially large) spell list.
+  const [spells, setSpells] = useState<{ id: string; identifier?: string; name: string; level?: number }[]>([]);
+  // Our spell rules feed the Transform activity's "Retained Spell Lists" — Foundry
+  // uses its spell-list registry; we substitute our own rules (app-handled).
+  const [spellRules, setSpellRules] = useState<{ id: string; identifier?: string; name: string }[]>([]);
 
   useEffect(() => {
     fetchCollection<{ id: string; identifier?: string; name: string }>('attributes')
@@ -269,6 +291,24 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
     ...tools.map(t => ({ id: t.identifier || t.id, name: t.name, hint: 'Tool' })),
   ];
 
+  // "Ignored Properties" options for the Cast activity — the spell-valid rows
+  // from the admin-managed `item_properties` table (valid_types includes
+  // "spell": Verbal/Somatic/Material/Concentration/Ritual), matching Foundry's
+  // propertyOptions. identifier = the Foundry property key so the set
+  // round-trips. Falls back to the bundled component trio when unseeded.
+  const ignoredPropertyOptions = (() => {
+    const rows = (restrictionData['itemProperties'] || []).filter(p => {
+      const vt = (p as { valid_types?: unknown }).valid_types;
+      const types = Array.isArray(vt)
+        ? vt
+        : (() => { try { return JSON.parse((vt as string) || '[]'); } catch { return []; } })();
+      return Array.isArray(types) && types.includes('spell');
+    });
+    return rows.length
+      ? rows.map(p => ({ id: p.identifier || p.id, name: p.name }))
+      : SPELL_PROPERTIES.map(p => ({ id: p, name: p === 'vocal' ? 'Verbal' : p[0].toUpperCase() + p.slice(1) }));
+  })();
+
   const activityList = Array.isArray(activities) 
     ? activities 
     : Object.values(activities);
@@ -280,6 +320,28 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
     }
   }, [activities, onChange]);
 
+  // Lazy-load the spell compendium only once a Cast activity is actually being
+  // edited — feeds the "Spell to Cast" picker. d1.ts caches the response, so
+  // reopening a cast (or a second editor on the page) is free.
+  useEffect(() => {
+    const kind = editingId ? activityList.find(a => a.id === editingId)?.kind : null;
+    if (kind !== 'cast' || spells.length) return;
+    fetchCollection<{ id: string; identifier?: string; name: string; level?: number }>('spells', { orderBy: 'name ASC' })
+      .then(setSpells)
+      .catch(() => {});
+  }, [editingId, activityList, spells.length]);
+
+  // Lazy-load our spell rules only once a Transform activity is being edited —
+  // feeds the "Retained Spell Lists" multi-select (our analogue to Foundry's
+  // spell-list registry).
+  useEffect(() => {
+    const kind = editingId ? activityList.find(a => a.id === editingId)?.kind : null;
+    if (kind !== 'transform' || spellRules.length) return;
+    fetchCollection<{ id: string; identifier?: string; name: string }>('spellRules', { orderBy: 'name ASC' })
+      .then(setSpellRules)
+      .catch(() => {});
+  }, [editingId, activityList, spellRules.length]);
+
   const handleAddActivity = (kind: ActivityKind) => {
     // 16-char alphanumeric id matching dnd5e 5.x's PseudoDocument
     // validator. Previously this used `makeFoundryId()`
@@ -290,7 +352,10 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
     const newActivity: SemanticActivity = {
       id,
       kind,
-      name: kind.charAt(0).toUpperCase() + kind.slice(1),
+      // Default name = the kind's Foundry label (utility ⇒ "Use", not
+      // "Utility"); every other kind's label already equals its capitalized
+      // slug, so only utility changes.
+      name: ACTIVITY_KINDS.find(k => k.kind === kind)?.label || (kind.charAt(0).toUpperCase() + kind.slice(1)),
       img: `systems/dnd5e/icons/svg/activity/${kind}.svg`,
       activation: { type: 'action', value: 1 },
       duration: { units: 'inst', concentration: false },
@@ -347,6 +412,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
       delete newActivity.duration;
       delete newActivity.range;
       delete newActivity.target;
+      delete newActivity.effects;
       newActivity.activity = { id: '' };
     } else if (kind === 'summon') {
       newActivity.summon = {
@@ -400,6 +466,17 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
   // activity's own consumption "Allow Scaling" toggle drives it. Hiding it on a
   // plain damage activity avoids a dead field, matching Foundry's damage-part UI.
   const canScaleDamage = !!editingActivity?.consumption?.scaling?.allowed || context === 'spell';
+
+  // A linked spell (Cast) or target activity (Forward) drives this activity's
+  // activation/duration/range/target unless each section is overridden —
+  // Foundry's _setOverride. The override toggles only surface once a source is
+  // linked (an empty "Spell to Cast" ⇒ no toggles, fields freely editable).
+  const overrideNoun = editingActivity?.kind === 'cast'
+    ? (editingActivity.spell?.uuid ? 'spell' : null)
+    : editingActivity?.kind === 'forward'
+      ? (editingActivity.activity?.id ? 'activity' : null)
+      : null;
+  const canOverrideSections = !!overrideNoun;
 
   const updateCurrent = (data: Partial<SemanticActivity>) => {
     if (!editingId) return;
@@ -650,7 +727,11 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                           <Timer className="w-3.5 h-3.5" /> Activation
                         </TabsTrigger>
                         <TabsTrigger value="effect" className="tab-trigger-custom">
-                          <Zap className="w-3.5 h-3.5" /> Effect
+                          {editingActivity.kind === 'summon'
+                            ? <><Boxes className="w-3.5 h-3.5" /> Summoning</>
+                            : editingActivity.kind === 'transform'
+                              ? <><RefreshCw className="w-3.5 h-3.5" /> Transformation</>
+                              : <><Zap className="w-3.5 h-3.5" /> Effect</>}
                         </TabsTrigger>
                       </TabsList>
                     </Tabs>
@@ -736,7 +817,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                       )}
 
                       {/* ——— BEHAVIOR ——— */}
-                      {showsTemplatePrompt && (
+                      {(showsTemplatePrompt || editingActivity.kind === 'summon') && (
                         <ActivitySection label="Behavior">
                           <FieldRow
                             label="Measured Template Prompt"
@@ -748,6 +829,20 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                               onCheckedChange={checked => updateTarget({ prompt: !!checked })}
                             />
                           </FieldRow>
+                          {/* Summon adds a second prompt (summon.prompt) here — Foundry's
+                              Identity › Behavior, not the Summoning tab. */}
+                          {editingActivity.kind === 'summon' && (
+                            <FieldRow
+                              label="Summon Prompt"
+                              hint="Should the player be prompted to place the summons? Players will still be able to summon from the chat card if prompt is disabled."
+                              inline
+                            >
+                              <Checkbox
+                                checked={editingActivity.summon?.prompt}
+                                onCheckedChange={checked => updateSummon({ prompt: !!checked })}
+                              />
+                            </FieldRow>
+                          )}
                         </ActivitySection>
                       )}
 
@@ -852,6 +947,8 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                           duration={editingActivity.duration}
                           onDurationChange={(patch) => updateSection('duration', patch)}
                           showsDuration={showsDuration}
+                          canOverride={canOverrideSections}
+                          overrideNoun={overrideNoun || 'spell'}
                         />
                       )}
 
@@ -876,6 +973,8 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                           onTargetChange={(patch) => updateTarget(patch)}
                           showsRange={showsRange}
                           showsTargeting={showsTargeting}
+                          canOverride={canOverrideSections}
+                          overrideNoun={overrideNoun || 'spell'}
                         />
                       )}
                     </div>
@@ -965,26 +1064,30 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                         <ActivitySection label={isSave ? 'Save Details' : 'Check Details'}>
                           {isSave && (
                             <FieldRow label="Challenge Abilities" hint="Abilities that may be rolled to attempt to save.">
-                              <div className="flex flex-wrap gap-1">
-                                {ABILITY_OPTIONS.map(ab => {
-                                  const active = (editingActivity.save!.abilities || []).includes(ab);
-                                  return (
-                                    <button
-                                      key={ab}
-                                      type="button"
-                                      onClick={() => {
-                                        const cur = editingActivity.save!.abilities || [];
-                                        handleUpdateActivity(editingId!, {
-                                          save: { ...editingActivity.save!, abilities: active ? cur.filter(a => a !== ab) : [...cur, ab] }
-                                        });
-                                      }}
-                                      className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border transition-colors ${active ? 'bg-gold/25 border-gold/55 text-ink/95' : 'bg-transparent border-gold/15 text-ink/35 hover:border-gold/35'}`}
-                                    >
-                                      {ab}
-                                    </button>
-                                  );
+                              {/* Foundry renders save.ability (a SetField) as a multi-select
+                                  dropdown of the six abilities — not toggle badges. */}
+                              <Select
+                                multiple
+                                value={editingActivity.save!.abilities || []}
+                                onValueChange={(vals: string[]) => handleUpdateActivity(editingId!, {
+                                  save: { ...editingActivity.save!, abilities: vals }
                                 })}
-                              </div>
+                              >
+                                <SelectTrigger className="field-input border-gold/15 text-xs">
+                                  <SelectValue placeholder="None">
+                                    {(value: unknown) => {
+                                      const arr = Array.isArray(value) ? (value as string[]) : [];
+                                      if (!arr.length) return '';
+                                      return arr.map(v => attrLabel(v)).join(', ');
+                                    }}
+                                  </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {ABILITY_OPTIONS.map(ability => (
+                                    <SelectItem key={ability} value={ability}>{attrLabel(ability)}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
                             </FieldRow>
                           )}
                           {editingActivity.check && (
@@ -1092,7 +1195,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                         const typeOptions = isHeal ? HEALING_TYPE_OPTIONS : damageTypeOptions;
                         return (
                           <ActivitySection
-                            label={isHeal ? 'Healing' : isAttack ? 'Attack Damage' : 'Damage'}
+                            label={isHeal ? 'Healing' : isAttack ? 'Attack Damage' : editingActivity.kind === 'save' ? 'Save Damage' : 'Damage'}
                             onAdd={isHeal ? undefined : () => setParts([...parts, { types: [] }])}
                             addLabel="Add damage part"
                           >
@@ -1145,7 +1248,17 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                                 )}
                               </>
                             )}
-                            {parts.length === 0 && !isHeal ? (
+                            {isHeal ? (
+                              // Heal carries exactly one healing formula (Foundry's
+                              // `healing` is a single part, not a list) — render the
+                              // label-left field-damage layout, no add/remove.
+                              <HealingEditor
+                                part={parts[0] || {}}
+                                onChange={(patch) => setParts([{ ...(parts[0] || {}), ...patch }])}
+                                typeOptions={typeOptions}
+                                canScale={canScaleDamage}
+                              />
+                            ) : parts.length === 0 ? (
                               <EmptyRow>None</EmptyRow>
                             ) : (
                               <DamagePartEditor parts={parts} onChange={setParts} typeOptions={typeOptions} canScale={canScaleDamage} />
@@ -1154,30 +1267,43 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                         );
                       })()}
 
+                      {/* ── Casting Details ── Foundry parity (cast-spell.hbs +
+                          cast-details.hbs): a spell link (we search our own
+                          compendium and assign one — Foundry takes a raw UUID /
+                          dropped item) followed by Casting Ability, Casting Level
+                          (only for a linked leveled spell), Ignored Properties,
+                          and the attack/DC Override Values. NOTE: a linked spell
+                          drives the activity's Activation/Duration/Targeting in
+                          Foundry unless each is set to override — see the override
+                          toggles (not yet implemented here). */}
                       {editingActivity.spell && (
-                        <ActivitySection label="SPELLCASTING">
-                          <FieldRow label="Spell UUID">
-                            <Input
+                        <ActivitySection label="Casting Details">
+                          <FieldRow label="Spell to Cast" hint="Search your spell compendium and assign the spell this activity casts.">
+                            <SingleSelectSearch
                               value={editingActivity.spell.uuid || ''}
-                              placeholder="Item.FoundrySpellId"
-                              onChange={e => handleUpdateActivity(editingId!, {
-                                spell: { ...editingActivity.spell!, uuid: e.target.value }
-                              })}
-                              className="field-input border-gold/15 text-xs font-mono"
+                              onChange={(val) => handleUpdateActivity(editingId!, { spell: { ...editingActivity.spell!, uuid: val } })}
+                              options={spells.map(s => ({
+                                id: s.identifier || s.id,
+                                name: s.name,
+                                hint: s.level === 0 ? 'Cantrip' : (s.level ? `Lvl ${s.level}` : undefined),
+                              }))}
+                              placeholder="Select a spell…"
+                              noEntitiesText="No spells in the compendium yet."
+                              triggerClassName="w-full"
                             />
                           </FieldRow>
-                          <FieldRow label="Ability Override">
+                          <FieldRow label="Casting Ability" hint="Ability to override the creature's normal spellcasting ability.">
                             <Select
-                              value={editingActivity.spell.ability || ''}
+                              value={editingActivity.spell.ability || '__default'}
                               onValueChange={val => handleUpdateActivity(editingId!, {
-                                spell: { ...editingActivity.spell!, ability: val }
+                                spell: { ...editingActivity.spell!, ability: val === '__default' ? '' : val }
                               })}
                             >
                               <SelectTrigger className="field-input border-gold/15 text-xs">
-                                <SelectValue placeholder="Default" />
+                                <SelectValue placeholder="Spellcasting" />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="">Default</SelectItem>
+                                <SelectItem value="__default">Spellcasting</SelectItem>
                                 <SelectItem value="str">Strength</SelectItem>
                                 <SelectItem value="dex">Dexterity</SelectItem>
                                 <SelectItem value="con">Constitution</SelectItem>
@@ -1187,23 +1313,64 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                               </SelectContent>
                             </Select>
                           </FieldRow>
-                          <FieldRow label="Cast Level Override">
-                            <Input
-                              type="number"
-                              value={editingActivity.spell.level || ''}
-                              onChange={e => handleUpdateActivity(editingId!, {
-                                spell: { ...editingActivity.spell!, level: parseInt(e.target.value) || null }
+                          {(() => {
+                            const selectedSpell = spells.find(s => (s.identifier || s.id) === editingActivity.spell!.uuid);
+                            // Foundry only renders Casting Level for a linked,
+                            // leveled spell (cantrips have no level options).
+                            if (!selectedSpell || !selectedSpell.level) return null;
+                            const ord = (l: number) => `${l}${l === 1 ? 'st' : l === 2 ? 'nd' : l === 3 ? 'rd' : 'th'} Level`;
+                            return (
+                              <FieldRow label="Casting Level" hint="Base level to cast the spell, if different than the spell's level.">
+                                <Select
+                                  value={editingActivity.spell.level ? String(editingActivity.spell.level) : '__default'}
+                                  onValueChange={val => handleUpdateActivity(editingId!, {
+                                    spell: { ...editingActivity.spell!, level: val === '__default' ? null : parseInt(val) }
+                                  })}
+                                >
+                                  <SelectTrigger className="field-input border-gold/15 text-xs">
+                                    <SelectValue placeholder="Spell's level" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="__default" className="min-h-7 items-center">{`Spell's level (${selectedSpell.level})`}</SelectItem>
+                                    {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(l => (
+                                      <SelectItem key={l} value={String(l)}>{ord(l)}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </FieldRow>
+                            );
+                          })()}
+                          <FieldRow label="Ignored Properties" hint="Spell components & tags to ignore while casting.">
+                            <Select
+                              multiple
+                              value={editingActivity.spell.properties || []}
+                              onValueChange={(vals: string[]) => handleUpdateActivity(editingId!, {
+                                spell: { ...editingActivity.spell!, properties: vals }
                               })}
-                              className="field-input border-gold/15 text-xs text-center no-number-spin"
-                            />
+                            >
+                              <SelectTrigger className="field-input border-gold/15 text-xs">
+                                <SelectValue placeholder="None">
+                                  {(value: unknown) => {
+                                    const arr = Array.isArray(value) ? (value as string[]) : [];
+                                    if (!arr.length) return '';
+                                    return arr.map(v => ignoredPropertyOptions.find(o => o.id === v)?.name || v).join(', ');
+                                  }}
+                                </SelectValue>
+                              </SelectTrigger>
+                              <SelectContent>
+                                {ignoredPropertyOptions.map(o => (
+                                  <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </FieldRow>
-                          <FieldRow label="Use Caster Spellbook" hint="Keep this on for most native cast activities." inline>
+                          <FieldRow label="Display in Spellbook" hint="Display spell in the Spells tab of the character sheet." inline>
                             <Checkbox
                               checked={editingActivity.spell.spellbook}
                               onCheckedChange={checked => updateSpell({ spellbook: !!checked })}
                             />
                           </FieldRow>
-                          <FieldRow label="Challenge Overrides" inline>
+                          <FieldRow label="Override Values" hint="Override the spell's normal attack bonus & DC when casting." inline>
                             <Checkbox
                               checked={editingActivity.spell.challenge?.override}
                               onCheckedChange={checked => handleUpdateActivity(editingId!, {
@@ -1213,87 +1380,31 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                           </FieldRow>
                           {editingActivity.spell.challenge?.override && (
                             <>
-                              <FieldRow label="Override Attack Bonus">
+                              <FieldRow label="Attack Bonus" hint="Flat to hit bonus in place of the spell's normal attack bonus.">
                                 <Input
                                   type="number"
-                                  value={editingActivity.spell.challenge.attack || ''}
+                                  value={editingActivity.spell.challenge.attack ?? ''}
                                   onChange={e => handleUpdateActivity(editingId!, {
-                                    spell: { ...editingActivity.spell!, challenge: { ...editingActivity.spell!.challenge, attack: parseInt(e.target.value) || null } }
+                                    spell: { ...editingActivity.spell!, challenge: { ...editingActivity.spell!.challenge, attack: e.target.value === '' ? null : parseInt(e.target.value) } }
                                   })}
                                   className="field-input border-gold/15 text-xs text-center no-number-spin"
                                 />
                               </FieldRow>
-                              <FieldRow label="Override Save DC">
+                              <FieldRow label="Save DC" hint="Flat DC to use in place of the spell's normal save DC.">
                                 <Input
                                   type="number"
-                                  value={editingActivity.spell.challenge.save || ''}
+                                  value={editingActivity.spell.challenge.save ?? ''}
                                   onChange={e => handleUpdateActivity(editingId!, {
-                                    spell: { ...editingActivity.spell!, challenge: { ...editingActivity.spell!.challenge, save: parseInt(e.target.value) || null } }
+                                    spell: { ...editingActivity.spell!, challenge: { ...editingActivity.spell!.challenge, save: e.target.value === '' ? null : parseInt(e.target.value) } }
                                   })}
                                   className="field-input border-gold/15 text-xs text-center no-number-spin"
                                 />
                               </FieldRow>
                             </>
                           )}
-                          <FieldRow label="Spell Properties">
-                            <div className="flex items-center gap-4">
-                              {['vocal', 'somatic', 'material'].map(prop => (
-                                <label key={prop} className="flex items-center gap-2 cursor-pointer">
-                                  <Checkbox
-                                    checked={(editingActivity.spell!.properties || []).includes(prop)}
-                                    onCheckedChange={checked => {
-                                      const props = editingActivity.spell!.properties || [];
-                                      handleUpdateActivity(editingId!, { spell: { ...editingActivity.spell!, properties: checked ? [...props, prop] : props.filter(p => p !== prop) } });
-                                    }}
-                                  />
-                                  <span className="text-[9px] uppercase font-black text-ink/65">{prop[0].toUpperCase()}</span>
-                                </label>
-                              ))}
-                            </div>
-                          </FieldRow>
                         </ActivitySection>
                       )}
 
-                      {editingActivity.roll && (
-                        <ActivitySection label="UTILITY ROLL">
-                          <FieldRow label="Roll Name">
-                            <Input
-                              value={editingActivity.roll.name || ''}
-                              onChange={e => handleUpdateActivity(editingId!, {
-                                roll: { ...(editingActivity.roll || {}), name: e.target.value }
-                              })}
-                              className="field-input border-gold/15 text-xs"
-                              placeholder="Roll"
-                            />
-                          </FieldRow>
-                          <FieldRow label="Formula">
-                            <Input
-                              value={editingActivity.roll.formula || ''}
-                              onChange={e => handleUpdateActivity(editingId!, {
-                                roll: { ...(editingActivity.roll || {}), formula: e.target.value }
-                              })}
-                              className="field-input border-gold/15 text-xs font-mono"
-                              placeholder="1d20 + @prof"
-                            />
-                          </FieldRow>
-                          <FieldRow label="Prompt Before Roll" inline>
-                            <Checkbox
-                              checked={editingActivity.roll.prompt}
-                              onCheckedChange={checked => handleUpdateActivity(editingId!, {
-                                roll: { ...(editingActivity.roll || {}), prompt: !!checked }
-                              })}
-                            />
-                          </FieldRow>
-                          <FieldRow label="Visible Chat Button" inline>
-                            <Checkbox
-                              checked={editingActivity.roll.visible}
-                              onCheckedChange={checked => handleUpdateActivity(editingId!, {
-                                roll: { ...(editingActivity.roll || {}), visible: !!checked }
-                              })}
-                            />
-                          </FieldRow>
-                        </ActivitySection>
-                      )}
 
                       {editingActivity.enchant && (() => {
                         const ench = editingActivity.enchant;
@@ -1537,260 +1648,85 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                         );
                       })()}
 
-                      {editingActivity.activity && (
-                        <ActivitySection label="FORWARD EXECUTION">
-                          <FieldRow label="Target Activity">
+                      {/* ── Triggered Activity ── Foundry parity (forward-effect.hbs):
+                          the entire Effect tab is a single "Triggered Activity"
+                          dropdown listing the item's OTHER activities (Forward
+                          excluded — no chaining), with a leading blank to clear it.
+                          A Forward has no effects/duration/range/target (the schema
+                          deletes them), so there is NO Applied Effects section here —
+                          it only redirects to the chosen activity with its own
+                          consumption & scaling. */}
+                      {editingActivity.kind === 'forward' && (
+                        <ActivitySection label="Triggered Activity">
+                          <div className="py-2">
                             <Select
-                              value={editingActivity.activity.id}
-                              onValueChange={val => handleUpdateActivity(editingId!, { activity: { id: val } })}
+                              value={editingActivity.activity?.id || '__none'}
+                              onValueChange={val => handleUpdateActivity(editingId!, { activity: { id: val === '__none' ? '' : val } })}
                             >
-                              <SelectTrigger className="field-input border-gold/15 text-xs">
-                                <SelectValue placeholder="Select another activity" />
+                              <SelectTrigger className="field-input border-gold/15 text-xs w-full">
+                                <SelectValue placeholder=" " />
                               </SelectTrigger>
                               <SelectContent>
+                                <SelectItem value="__none" className="min-h-7 items-center">{' '}</SelectItem>
                                 {activityList
-                                  .filter(a => a.id !== editingId)
+                                  .filter(a => a.id !== editingId && a.kind !== 'forward')
                                   .map(a => (
-                                    <SelectItem key={a.id} value={a.id}>{a.name} ({a.kind})</SelectItem>
+                                    <SelectItem key={a.id} value={a.id}>{a.name || ACTIVITY_KINDS.find(k => k.kind === a.kind)?.label || a.kind}</SelectItem>
                                   ))}
                               </SelectContent>
                             </Select>
-                          </FieldRow>
+                          </div>
                         </ActivitySection>
                       )}
 
                       {editingActivity.summon && (
-                        <ActivitySection label="SUMMON">
-                          <FieldRow label="Mode">
-                            <SingleSelectSearch
-                              value={editingActivity.summon.mode || ''}
-                              onChange={(val) => updateSummon({ mode: val })}
-                              options={SUMMON_OR_TRANSFORM_MODE_OPTIONS.map(o => ({ id: o.value, name: o.label }))}
-                              placeholder="Direct (level-based)"
-                              allowClear={false}
-                              triggerClassName="w-full"
-                            />
-                          </FieldRow>
-                          <FieldRow label="Temp HP">
-                            <Input
-                              value={editingActivity.summon.tempHP || ''}
-                              onChange={e => updateSummon({ tempHP: e.target.value })}
-                              className="field-input border-gold/15 text-xs font-mono"
-                              placeholder="@mod"
-                            />
-                          </FieldRow>
-                          <FieldRow label="Prompt For Placement" inline>
-                            <Checkbox
-                              checked={editingActivity.summon.prompt}
-                              onCheckedChange={checked => updateSummon({ prompt: !!checked })}
-                            />
-                          </FieldRow>
-                          <FieldRow label="Creature Sizes" hint="Pick one or more sizes the summon can match.">
-                            {/* Multi-select chips replacing the
-                                comma-separated free-text input. Authors
-                                no longer have to remember the slugs
-                                ("tiny, sm, med, lg, huge, grg"). */}
-                            <EntityPicker
-                              entities={CREATURE_SIZE_OPTIONS.map(o => ({ id: o.value, name: o.label }))}
-                              selectedIds={editingActivity.summon.creatureSizes || []}
-                              onChange={(sizes) => updateSummon({ creatureSizes: sizes })}
-                              searchPlaceholder="Search sizes…"
-                              maxHeightClass="max-h-32"
-                              showChips
-                            />
-                          </FieldRow>
-                          <FieldRow label="Creature Types" hint="Pick one or more creature types.">
-                            <EntityPicker
-                              entities={CREATURE_TYPE_OPTIONS.map(o => ({ id: o.value, name: o.label }))}
-                              selectedIds={editingActivity.summon.creatureTypes || []}
-                              onChange={(types) => updateSummon({ creatureTypes: types })}
-                              searchPlaceholder="Search creature types…"
-                              maxHeightClass="max-h-32"
-                              showChips
-                            />
-                          </FieldRow>
-                          <FieldRow label="Ability Match">
-                            <Input
-                              value={editingActivity.summon.match?.ability || ''}
-                              onChange={e => updateSummon({ match: { ...(editingActivity.summon.match || {}), ability: e.target.value } })}
-                              className="field-input border-gold/15 text-xs"
-                              placeholder="cha"
-                            />
-                          </FieldRow>
-                          <FieldRow label="Match Flags">
-                            <div className="flex flex-wrap gap-3">
-                              {['attacks', 'saves', 'proficiency', 'disposition'].map(flag => (
-                                <label key={flag} className="flex items-center gap-1.5 cursor-pointer">
-                                  <Checkbox
-                                    checked={Boolean((editingActivity.summon.match as Record<string, unknown> | undefined)?.[flag])}
-                                    onCheckedChange={checked => updateSummon({ match: { ...(editingActivity.summon.match || {}), [flag]: !!checked } })}
-                                  />
-                                  <span className="text-[9px] uppercase font-black text-ink/65">{flag}</span>
-                                </label>
-                              ))}
-                            </div>
-                          </FieldRow>
-                          <FieldRow label="Bonuses">
-                            <div className="grid grid-cols-3 gap-2">
-                              {['ac', 'hd', 'hp', 'attackDamage', 'saveDamage', 'healing'].map(field => (
-                                <div key={field}>
-                                  <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest mb-1">{field}</p>
-                                  <Input
-                                    value={((editingActivity.summon.bonuses as Record<string, unknown> | undefined)?.[field] as string) || ''}
-                                    onChange={e => updateSummon({ bonuses: { ...(editingActivity.summon.bonuses || {}), [field]: e.target.value } })}
-                                    className="h-7 bg-background/40 border-gold/15 text-[9px] font-mono"
-                                    placeholder="+2"
-                                  />
-                                </div>
-                              ))}
-                            </div>
-                          </FieldRow>
-                          <div className="py-2">
-                            <div className="flex items-center justify-between mb-2">
-                              <p className="text-xs font-semibold text-ink/75">Profiles</p>
-                              <button
-                                type="button"
-                                onClick={() => updateSummon({
-                                  profiles: [
-                                    ...(editingActivity.summon.profiles || []),
-                                    { _id: makeFoundryId(), count: '1', cr: '', level: { min: 0, max: 20 }, name: '', types: [], uuid: null }
-                                  ]
-                                })}
-                                className="flex items-center gap-1 text-[10px] uppercase tracking-widest font-black text-gold/55 hover:text-gold transition-colors"
-                              >
-                                <Plus className="w-3 h-3" /> Add
-                              </button>
-                            </div>
-                            <div className="space-y-2">
-                              {(editingActivity.summon.profiles || []).map((profile, idx) => (
-                                <div key={profile._id || idx} className="grid grid-cols-6 gap-2 items-end p-2.5 bg-gold/5 border border-gold/5 rounded">
-                                  <div className="grid gap-1">
-                                    <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest">Name</p>
-                                    <Input value={profile.name} onChange={e => { const p=[...(editingActivity.summon.profiles||[])]; p[idx]={...profile,name:e.target.value}; updateSummon({profiles:p}); }} className="h-7 bg-background/40 border-gold/15 text-xs" />
-                                  </div>
-                                  <div className="grid gap-1">
-                                    <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest">Count</p>
-                                    <Input value={profile.count} onChange={e => { const p=[...(editingActivity.summon.profiles||[])]; p[idx]={...profile,count:e.target.value}; updateSummon({profiles:p}); }} className="h-7 bg-background/40 border-gold/15 text-xs font-mono" />
-                                  </div>
-                                  <div className="grid gap-1">
-                                    <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest">CR</p>
-                                    <Input value={profile.cr} onChange={e => { const p=[...(editingActivity.summon.profiles||[])]; p[idx]={...profile,cr:e.target.value}; updateSummon({profiles:p}); }} className="h-7 bg-background/40 border-gold/15 text-xs font-mono" />
-                                  </div>
-                                  <div className="grid gap-1">
-                                    <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest">UUID</p>
-                                    <Input value={profile.uuid||''} onChange={e => { const p=[...(editingActivity.summon.profiles||[])]; p[idx]={...profile,uuid:e.target.value||null}; updateSummon({profiles:p}); }} className="h-7 bg-background/40 border-gold/15 text-xs font-mono" />
-                                  </div>
-                                  <div className="grid gap-1">
-                                    <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest">Level</p>
-                                    <div className="flex gap-1">
-                                      <Input type="number" value={profile.level.min} onChange={e => { const p=[...(editingActivity.summon.profiles||[])]; p[idx]={...profile,level:{...profile.level,min:parseInt(e.target.value,10)||0}}; updateSummon({profiles:p}); }} className="h-7 bg-background/40 border-gold/15 text-xs text-center no-number-spin" />
-                                      <Input type="number" value={profile.level.max} onChange={e => { const p=[...(editingActivity.summon.profiles||[])]; p[idx]={...profile,level:{...profile.level,max:parseInt(e.target.value,10)||20}}; updateSummon({profiles:p}); }} className="h-7 bg-background/40 border-gold/15 text-xs text-center no-number-spin" />
-                                    </div>
-                                  </div>
-                                  <button type="button" onClick={() => updateSummon({ profiles: (editingActivity.summon.profiles||[]).filter((_,i)=>i!==idx) })} className="h-7 flex items-center justify-center text-blood/60 hover:text-blood transition-colors">
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                  <div className="col-span-6 grid gap-1">
-                                    <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest">Types</p>
-                                    <Input value={(profile.types||[]).join(', ')} onChange={e => { const p=[...(editingActivity.summon.profiles||[])]; p[idx]={...profile,types:parseCsv(e.target.value)}; updateSummon({profiles:p}); }} className="h-7 bg-background/40 border-gold/15 text-xs" placeholder="beast, fey" />
-                                  </div>
-                                </div>
-                              ))}
-                              {!(editingActivity.summon.profiles||[]).length && (
-                                <p className="text-center py-3 text-ink/35 italic text-[10px]">Monster support is still pending, but profiles can already be authored.</p>
-                              )}
-                            </div>
+                        <div className="space-y-1">
+                          {/* Foundry's Summoning tab splits into Profiles | Changes sub-tabs. */}
+                          <div className="flex justify-center border-b border-gold/15 mb-1">
+                            <Tabs value={activeSummonTab} onValueChange={setActiveSummonTab} className="bg-transparent border-none">
+                              <TabsList variant="line" className="h-12 p-0 gap-12">
+                                <TabsTrigger value="profiles" className="tab-trigger-custom-small">
+                                  <Boxes className="w-3.5 h-3.5" /> Profiles
+                                </TabsTrigger>
+                                <TabsTrigger value="changes" className="tab-trigger-custom-small">
+                                  <Settings className="w-3.5 h-3.5" /> Changes
+                                </TabsTrigger>
+                              </TabsList>
+                            </Tabs>
                           </div>
-                        </ActivitySection>
+                          <SummonEditor
+                            tab={activeSummonTab as 'profiles' | 'changes'}
+                            summon={editingActivity.summon}
+                            onChange={updateSummon}
+                            abilityOptions={ABILITY_OPTIONS.map(a => ({ value: a, label: attrLabel(a) }))}
+                            makeId={makeFoundryId}
+                          />
+                        </div>
                       )}
 
                       {editingActivity.transform && (
-                        <ActivitySection label="TRANSFORM">
-                          <FieldRow label="Mode">
-                            <SingleSelectSearch
-                              value={editingActivity.transform.mode || ''}
-                              onChange={(val) => updateTransform({ mode: val })}
-                              options={SUMMON_OR_TRANSFORM_MODE_OPTIONS.map(o => ({ id: o.value, name: o.label }))}
-                              placeholder="Direct (level-based)"
-                              allowClear={false}
-                              triggerClassName="w-full"
-                            />
-                          </FieldRow>
-                          <FieldRow label="Preset">
-                            <Input
-                              value={editingActivity.transform.preset || ''}
-                              onChange={e => updateTransform({ preset: e.target.value })}
-                              className="field-input border-gold/15 text-xs"
-                              placeholder="wildshape"
-                            />
-                          </FieldRow>
-                          <FieldRow label="Customize Settings" inline>
-                            <Checkbox
-                              checked={editingActivity.transform.customize}
-                              onCheckedChange={checked => updateTransform({ customize: !!checked })}
-                            />
-                          </FieldRow>
-                          <div className="py-2">
-                            <div className="flex items-center justify-between mb-2">
-                              <p className="text-xs font-semibold text-ink/75">Profiles</p>
-                              <button
-                                type="button"
-                                onClick={() => updateTransform({
-                                  profiles: [
-                                    ...(editingActivity.transform.profiles || []),
-                                    { _id: makeFoundryId(), cr: '', level: { min: 0, max: 20 }, movement: [], name: '', sizes: [], types: [], uuid: null }
-                                  ]
-                                })}
-                                className="flex items-center gap-1 text-[10px] uppercase tracking-widest font-black text-gold/55 hover:text-gold transition-colors"
-                              >
-                                <Plus className="w-3 h-3" /> Add
-                              </button>
-                            </div>
-                            <div className="space-y-2">
-                              {(editingActivity.transform.profiles || []).map((profile, idx) => (
-                                <div key={profile._id || idx} className="grid grid-cols-6 gap-2 items-end p-2.5 bg-gold/5 border border-gold/5 rounded">
-                                  <div className="grid gap-1">
-                                    <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest">Name</p>
-                                    <Input value={profile.name} onChange={e => { const p=[...(editingActivity.transform?.profiles||[])]; p[idx]={...profile,name:e.target.value}; updateTransform({profiles:p}); }} className="h-7 bg-background/40 border-gold/15 text-xs" />
-                                  </div>
-                                  <div className="grid gap-1">
-                                    <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest">CR</p>
-                                    <Input value={profile.cr||''} onChange={e => { const p=[...(editingActivity.transform?.profiles||[])]; p[idx]={...profile,cr:e.target.value}; updateTransform({profiles:p}); }} className="h-7 bg-background/40 border-gold/15 text-xs font-mono" />
-                                  </div>
-                                  <div className="grid gap-1">
-                                    <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest">UUID</p>
-                                    <Input value={profile.uuid||''} onChange={e => { const p=[...(editingActivity.transform?.profiles||[])]; p[idx]={...profile,uuid:e.target.value||null}; updateTransform({profiles:p}); }} className="h-7 bg-background/40 border-gold/15 text-xs font-mono" />
-                                  </div>
-                                  <div className="grid gap-1">
-                                    <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest">Sizes</p>
-                                    <Input value={(profile.sizes||[]).join(', ')} onChange={e => { const p=[...(editingActivity.transform?.profiles||[])]; p[idx]={...profile,sizes:parseCsv(e.target.value)}; updateTransform({profiles:p}); }} className="h-7 bg-background/40 border-gold/15 text-xs" placeholder={CREATURE_SIZE_OPTIONS.map(o => o.value).join(', ')} />
-                                  </div>
-                                  <div className="grid gap-1">
-                                    <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest">Types</p>
-                                    <Input value={(profile.types||[]).join(', ')} onChange={e => { const p=[...(editingActivity.transform?.profiles||[])]; p[idx]={...profile,types:parseCsv(e.target.value)}; updateTransform({profiles:p}); }} className="h-7 bg-background/40 border-gold/15 text-xs" placeholder="beast" />
-                                  </div>
-                                  <button type="button" onClick={() => updateTransform({ profiles: (editingActivity.transform?.profiles||[]).filter((_,i)=>i!==idx) })} className="h-7 flex items-center justify-center text-blood/60 hover:text-blood transition-colors">
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                  <div className="col-span-3 grid gap-1">
-                                    <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest">Movement</p>
-                                    <Input value={(profile.movement||[]).join(', ')} onChange={e => { const p=[...(editingActivity.transform?.profiles||[])]; p[idx]={...profile,movement:parseCsv(e.target.value)}; updateTransform({profiles:p}); }} className="h-7 bg-background/40 border-gold/15 text-xs" placeholder={MOVEMENT_TYPE_OPTIONS.map(o => o.value).join(', ')} />
-                                  </div>
-                                  <div className="col-span-3 grid gap-1">
-                                    <p className="text-[9px] uppercase text-ink/45 font-black tracking-widest">Level Range</p>
-                                    <div className="flex gap-2">
-                                      <Input type="number" value={profile.level.min} onChange={e => { const p=[...(editingActivity.transform?.profiles||[])]; p[idx]={...profile,level:{...profile.level,min:parseInt(e.target.value,10)||0}}; updateTransform({profiles:p}); }} className="h-7 bg-background/40 border-gold/15 text-xs text-center no-number-spin" />
-                                      <Input type="number" value={profile.level.max} onChange={e => { const p=[...(editingActivity.transform?.profiles||[])]; p[idx]={...profile,level:{...profile.level,max:parseInt(e.target.value,10)||20}}; updateTransform({profiles:p}); }} className="h-7 bg-background/40 border-gold/15 text-xs text-center no-number-spin" />
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                              {!(editingActivity.transform.profiles||[]).length && (
-                                <p className="text-center py-3 text-ink/35 italic text-[10px]">Transform settings can already be authored in a Foundry-like shape.</p>
-                              )}
-                            </div>
+                        <div className="space-y-1">
+                          {/* Foundry's Transformation tab splits into Profiles | Settings sub-tabs. */}
+                          <div className="flex justify-center border-b border-gold/15 mb-1">
+                            <Tabs value={activeTransformTab} onValueChange={setActiveTransformTab} className="bg-transparent border-none">
+                              <TabsList variant="line" className="h-12 p-0 gap-12">
+                                <TabsTrigger value="profiles" className="tab-trigger-custom-small">
+                                  <Boxes className="w-3.5 h-3.5" /> Profiles
+                                </TabsTrigger>
+                                <TabsTrigger value="settings" className="tab-trigger-custom-small">
+                                  <Settings className="w-3.5 h-3.5" /> Settings
+                                </TabsTrigger>
+                              </TabsList>
+                            </Tabs>
                           </div>
-                        </ActivitySection>
+                          <TransformEditor
+                            tab={activeTransformTab as 'profiles' | 'settings'}
+                            transform={editingActivity.transform}
+                            onChange={updateTransform}
+                            makeId={makeFoundryId}
+                            spellListOptions={spellRules.map(r => ({ value: r.identifier || r.id, label: r.name }))}
+                          />
+                        </div>
                       )}
 
                       {/* ── Applied Effects ── Foundry parity (activity-effects.hbs):
@@ -1799,8 +1735,11 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                           dissociate (−) and delete (🗑) control plus a collapsible
                           "Additional Settings" tray holding the Level Limit. Deep
                           edits (changes/keys) still happen in the Effects tab. Hidden for the
-                          enchant kind, which has its own Enchantments manager above. */}
-                      {editingActivity.kind !== 'enchant' && (() => {
+                          enchant kind (its own Enchantments manager above) and forward
+                          (Foundry's Forward has no effects — only a Triggered Activity). */}
+                      {(editingActivity.kind === 'summon'
+                        ? activeSummonTab === 'changes'
+                        : !['enchant', 'forward', 'transform'].includes(editingActivity.kind)) && (() => {
                         const assoc = editingActivity.effects || [];
                         const canAuthor = !!onAvailableEffectsChange;
                         const linkedIds = new Set(assoc.map(a => a._id));
@@ -1927,6 +1866,44 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                           </ActivitySection>
                         );
                       })()}
+
+                      {/* ── Roll ── Utility (Use) parity (utility-effect.hbs): Foundry
+                          renders Applied Effects FIRST, then this Roll fieldset with only
+                          Roll Label / Roll Formula / Visible to All (no prompt control). */}
+                      {editingActivity.roll && (
+                        <ActivitySection label="Roll">
+                          <FieldRow label="Roll Label" hint="Display name for the rolling button.">
+                            <Input
+                              value={editingActivity.roll.name || ''}
+                              onChange={e => handleUpdateActivity(editingId!, {
+                                roll: { ...(editingActivity.roll || {}), name: e.target.value }
+                              })}
+                              autoComplete="off"
+                              className="field-input border-gold/15 text-xs"
+                              placeholder="Roll"
+                            />
+                          </FieldRow>
+                          <FieldRow label="Roll Formula" hint="Formula for an arbitrary roll.">
+                            <Input
+                              value={editingActivity.roll.formula || ''}
+                              onChange={e => handleUpdateActivity(editingId!, {
+                                roll: { ...(editingActivity.roll || {}), formula: e.target.value }
+                              })}
+                              autoComplete="off"
+                              className="field-input border-gold/15 text-xs font-mono"
+                              placeholder="1d20 + @prof"
+                            />
+                          </FieldRow>
+                          <FieldRow label="Visible to All" hint="Display the rolling button in chat for all players." inline>
+                            <Checkbox
+                              checked={editingActivity.roll.visible}
+                              onCheckedChange={checked => handleUpdateActivity(editingId!, {
+                                roll: { ...(editingActivity.roll || {}), visible: !!checked }
+                              })}
+                            />
+                          </FieldRow>
+                        </ActivitySection>
+                      )}
 
                     </div>
                   )}

@@ -44,6 +44,14 @@ export interface ActivationDurationEditorProps {
   onDurationChange: (patch: Partial<DurationShape>) => void;
   /** Forward activities don't carry their own duration. */
   showsDuration: boolean;
+  /**
+   * When true (a Cast activity has linked a spell, or a Forward a target
+   * activity), the Activation/Duration sections gain a Foundry-style override
+   * toggle: their values are inherited from that source unless overridden.
+   */
+  canOverride?: boolean;
+  /** Noun for the inherited-from notices ("spell" for Cast, "activity" for Forward). */
+  overrideNoun?: string;
 }
 
 // Mirrors `CONFIG.DND5E.activityActivationTypes` (dnd5e 5.3.1). Groups
@@ -107,13 +115,31 @@ export default function ActivationDurationEditor({
   duration,
   onDurationChange,
   showsDuration,
+  canOverride = false,
+  overrideNoun = 'spell',
 }: ActivationDurationEditorProps) {
   const isScalarActivation = SCALAR_ACTIVATION.has(activation?.type || '');
   const isScalarDuration = SCALAR_DURATION.has(duration?.units || '');
 
+  // Foundry override toggles (only once a source is linked). Off ⇒ the section
+  // inherits from the linked source and is locked; on ⇒ the author's own values
+  // apply. The flags round-trip so the native conversion can emit them.
+  const activationOverride = canOverride ? {
+    checked: !!activation?.override,
+    onChange: (v: boolean) => onActivationChange({ override: v }),
+    hint: `Override the linked ${overrideNoun}'s activation.`,
+    note: `Activation is inherited from the linked ${overrideNoun} — enable Override to set a custom cost.`,
+  } : undefined;
+  const durationOverride = canOverride ? {
+    checked: !!duration?.override,
+    onChange: (v: boolean) => onDurationChange({ override: v }),
+    hint: `Override the linked ${overrideNoun}'s duration.`,
+    note: `Duration is inherited from the linked ${overrideNoun} — enable Override to set a custom duration.`,
+  } : undefined;
+
   return (
     <div>
-      <ActivitySection label="Activation">
+      <ActivitySection label="Activation" override={activationOverride}>
         <FormRow
           label="Activation Cost"
           below={
@@ -163,7 +189,7 @@ export default function ActivationDurationEditor({
       </ActivitySection>
 
       {showsDuration && (
-        <ActivitySection label="Duration">
+        <ActivitySection label="Duration" override={durationOverride}>
           <FormRow
             label="Duration"
             below={

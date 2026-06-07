@@ -168,6 +168,27 @@ export const MOVEMENT_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: 'swim',   label: 'Swim' },
 ];
 
+// Transform's "Restricted Movement Types" — Foundry's CONFIG.DND5E.movementTypes
+// (note `walk` is labelled "Speed", and `jump` is included — unlike the summon
+// movement set above). Keys must match Foundry so the restriction round-trips.
+export const TRANSFORM_MOVEMENT_OPTIONS: { value: string; label: string }[] = [
+  { value: 'walk',   label: 'Speed' },
+  { value: 'burrow', label: 'Burrow' },
+  { value: 'climb',  label: 'Climb' },
+  { value: 'fly',    label: 'Fly' },
+  { value: 'jump',   label: 'Jump' },
+  { value: 'swim',   label: 'Swim' },
+];
+
+// Transform presets — Foundry's CONFIG.DND5E.transformation.presets (+ a leading
+// blank "Default"). Selecting one applies its default keep/merge/effects settings.
+export const TRANSFORM_PRESET_OPTIONS: { value: string; label: string }[] = [
+  { value: '',              label: 'Default' },
+  { value: 'polymorphSelf', label: 'Appearance Only' },
+  { value: 'polymorph',     label: 'Polymorph' },
+  { value: 'wildshape',     label: 'Wild Shape' },
+];
+
 export const CREATURE_SIZE_OPTIONS: { value: string; label: string }[] = [
   { value: 'tiny', label: 'Tiny' },
   { value: 'sm',   label: 'Small' },

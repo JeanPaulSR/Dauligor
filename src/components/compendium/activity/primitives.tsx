@@ -1,5 +1,6 @@
 import React from 'react';
 import { Plus } from 'lucide-react';
+import { Checkbox } from '../../ui/checkbox';
 import { cn } from '../../../lib/utils';
 
 /**
@@ -12,20 +13,38 @@ import { cn } from '../../../lib/utils';
  * `onAdd` renders a ➕ control on the right of the header, matching
  * the Foundry pattern where repeating sections (Consumption,
  * Recovery, Damage parts, Applied Effects) add rows from the header.
+ *
+ * `override` adds a Foundry-style override toggle to the legend. Cast/Forward
+ * activities inherit their activation/duration/range/target from a linked spell
+ * (or target activity) unless overridden — mirroring dnd5e's
+ * `<legend><label class="checkbox">` + `disabled.<field>` pattern. When the
+ * toggle is OFF the section content is locked (greyed, non-interactive) and
+ * shows an inherited notice. `locked` locks the content WITHOUT its own
+ * checkbox — for a section that shares a sibling's override flag (e.g. Area
+ * shares the Targets override).
  */
 export function ActivitySection({
-  label, onAdd, addLabel = 'Add', children,
+  label, onAdd, addLabel = 'Add', override, locked, children,
 }: {
   label: string;
   onAdd?: () => void;
   addLabel?: string;
+  override?: { checked: boolean; onChange: (next: boolean) => void; hint?: string; note?: string };
+  locked?: boolean;
   children: React.ReactNode;
 }) {
+  const isLocked = !!locked || (!!override && !override.checked);
   return (
     <section className="mt-3.5 first:mt-0">
       <header className="flex items-center gap-2 mb-1 px-3 py-1.5 rounded-t bg-gold/5 border border-gold/15 border-b-0">
         <span className="w-1 h-3 bg-gold/65 rounded-sm shrink-0" aria-hidden />
         <h3 className="flex-1 text-[10px] uppercase tracking-[0.2em] font-black text-gold/85 select-none">{label}</h3>
+        {override ? (
+          <label className="-my-0.5 shrink-0 flex items-center gap-1.5 cursor-pointer select-none" title={override.hint}>
+            <span className="text-[9px] uppercase tracking-wider font-black text-gold/55">Override</span>
+            <Checkbox checked={override.checked} onCheckedChange={v => override.onChange(!!v)} />
+          </label>
+        ) : null}
         {onAdd ? (
           <button
             type="button"
@@ -38,7 +57,16 @@ export function ActivitySection({
           </button>
         ) : null}
       </header>
-      <div className="border border-gold/15 border-t-0 rounded-b px-3 divide-y divide-gold/5 bg-background/20">
+      <div
+        className={cn(
+          'border border-gold/15 border-t-0 rounded-b px-3 divide-y divide-gold/5 bg-background/20',
+          isLocked && 'opacity-50 pointer-events-none select-none',
+        )}
+        aria-disabled={isLocked || undefined}
+      >
+        {isLocked && override?.note ? (
+          <p className="py-2 text-[10px] italic text-ink/55 leading-snug">{override.note}</p>
+        ) : null}
         {children}
       </div>
     </section>

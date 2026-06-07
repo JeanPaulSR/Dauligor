@@ -65,6 +65,15 @@ export interface RangeTargetingEditorProps {
   onTargetChange: (patch: Partial<TargetShape>) => void;
   showsRange: boolean;
   showsTargeting: boolean;
+  /**
+   * When true (a Cast activity has linked a spell), the Range + Targeting
+   * sections gain a Foundry-style override toggle: their values are inherited
+   * from that source unless overridden. `target.override` governs both the
+   * Targets and Area sections (one fieldset in Foundry).
+   */
+  canOverride?: boolean;
+  /** Noun for the inherited-from notices ("spell" for Cast). */
+  overrideNoun?: string;
 }
 
 // Range units = `CONFIG.DND5E.rangeTypes` (self/touch/spec/any) + the distance
@@ -142,8 +151,11 @@ export default function RangeTargetingEditor({
   target,
   onAffectsChange,
   onTemplateChange,
+  onTargetChange,
   showsRange,
   showsTargeting,
+  canOverride = false,
+  overrideNoun = 'spell',
 }: RangeTargetingEditorProps) {
   const affects = target?.affects;
   const template = target?.template;
@@ -152,10 +164,27 @@ export default function RangeTargetingEditor({
   const dims = template?.type ? AREA_DIMENSIONS[template.type] : undefined;
   const templateCount = parseInt(String(template?.count ?? ''), 10);
 
+  // Foundry override toggles (only once a source is linked). `target.override`
+  // covers both Targets + Area (one fieldset in Foundry) — Area shares the lock
+  // via `locked` rather than carrying its own checkbox.
+  const rangeOverride = canOverride ? {
+    checked: !!range?.override,
+    onChange: (v: boolean) => onRangeChange({ override: v }),
+    hint: `Override the linked ${overrideNoun}'s range.`,
+    note: `Range is inherited from the linked ${overrideNoun} — enable Override to set a custom range.`,
+  } : undefined;
+  const targetOverride = canOverride ? {
+    checked: !!target?.override,
+    onChange: (v: boolean) => onTargetChange({ override: v }),
+    hint: `Override the linked ${overrideNoun}'s targeting.`,
+    note: `Targeting is inherited from the linked ${overrideNoun} — enable Override to set custom targets.`,
+  } : undefined;
+  const targetLocked = canOverride && !target?.override;
+
   return (
     <div>
       {showsRange && (
-        <ActivitySection label="Range">
+        <ActivitySection label="Range" override={rangeOverride}>
           <FormRow
             label="Range"
             below={
@@ -201,7 +230,7 @@ export default function RangeTargetingEditor({
 
       {showsTargeting && (
         <>
-          <ActivitySection label="Targets">
+          <ActivitySection label="Targets" override={targetOverride}>
             <FormRow
               label="Type"
               below={
@@ -252,7 +281,7 @@ export default function RangeTargetingEditor({
             )}
           </ActivitySection>
 
-          <ActivitySection label="Area">
+          <ActivitySection label="Area" locked={targetLocked}>
             <FormRow label="Shape">
               <Field label="Type" className="flex-1">
                 <Select

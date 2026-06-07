@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Items Editor — Foundry 5.3.1 fidelity audit</title>
+<style>
+  :root{
+    --parchment:#f4ecd8; --parchment-2:#ece2c8; --ink:#2b2419; --ink-soft:#5a4f3f;
+    --ink-faint:#8a7d68; --gold:#9a7d3b; --gold-bright:#b8923f; --blood:#6b2737;
+    --green:#4f6b42; --border:#c9b896; --card:#fbf6e9;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Iowan Old Style','Palatino Linotype','Book Antiqua',Palatino,Georgia,serif;
+    background:var(--parchment);color:var(--ink);line-height:1.62;padding:2.5rem 1.5rem;max-width:74rem;margin:0 auto}
+  h1{font-size:2.2rem;font-weight:700;letter-spacing:-.01em;margin-bottom:.3rem}
+  .subtitle{font-size:1.02rem;color:var(--ink-soft);font-style:italic;margin-bottom:1.8rem}
+  h2{font-size:1.5rem;margin-top:2.6rem;margin-bottom:.5rem;padding-bottom:.35rem;border-bottom:2px solid var(--gold)}
+  h3{font-size:1.18rem;margin-top:1.5rem;margin-bottom:.4rem;color:var(--gold-bright)}
+  p{margin-bottom:.7rem} ul,ol{margin:.3rem 0 .9rem 1.4rem} li{margin-bottom:.32rem}
+  code{background:var(--parchment-2);padding:.08rem .35rem;border-radius:3px;font-family:'SF Mono',Consolas,monospace;font-size:.82em}
+  table{width:100%;border-collapse:collapse;margin:.8rem 0;font-size:.86rem}
+  th,td{text-align:left;padding:.42rem .6rem;border-bottom:1px solid var(--border);vertical-align:top}
+  th{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-faint)}
+  td code{font-size:.82em}
+  .note{background:rgba(184,146,63,.1);border-left:4px solid var(--gold-bright);padding:.75rem 1.05rem;border-radius:3px;margin:1rem 0;font-size:.95rem}
+  .warn{background:rgba(107,39,55,.08);border-left:4px solid var(--blood);padding:.75rem 1.05rem;border-radius:3px;margin:1rem 0;font-size:.95rem}
+  .ok{background:rgba(79,107,66,.1);border-left:4px solid var(--green);padding:.75rem 1.05rem;border-radius:3px;margin:1rem 0;font-size:.95rem}
+  .tag{display:inline-block;font-size:.66rem;text-transform:uppercase;letter-spacing:.05em;padding:.1rem .5rem;border-radius:3px;background:var(--gold);color:var(--parchment);font-weight:700;vertical-align:middle}
+  .tag.green{background:var(--green)} .tag.blood{background:var(--blood)} .tag.soft{background:var(--ink-faint)}
+  .meta{font-size:.82rem;color:var(--ink-faint)}
+  .bad{color:var(--blood);font-weight:600}
+  .good{color:var(--green);font-weight:600}
+</style>
+</head>
+<body>
+
+<h1>Items Editor — Foundry 5.3.1 fidelity audit</h1>
+<p class="subtitle">Every per-type sub-form &amp; dropdown in <code>ItemsEditor.tsx</code>, measured against the real <strong>dnd5e 5.3.1</strong> — its <code>templates/items/details/details-*.hbs</code> sheets and the embedded <code>CONFIG.DND5E</code> lists. Both sides read directly (no example exports exist for items). 2026-06-07.</p>
+
+<div class="ok"><strong>Bottom line:</strong> the editor was built <em>Foundry-aligned</em> and the bones are right — types, base-item FKs, weight/price shapes, armor/tool fields all match. But it <strong>predates or simplified several item-sheet features</strong>. The gaps cluster in three places: <strong>(1)</strong> a handful of <strong>option lists</strong> are short a few canonical entries, <strong>(2)</strong> the <strong>weapon</strong> and <strong>consumable</strong> sub-forms are missing whole fieldsets Foundry shows, and <strong>(3)</strong> <strong>properties aren't filtered per item type</strong>. ~11 concrete fixes, none structural.</p></div>
+
+<h2>1 · Option-list gaps <span class="tag">quick wins</span></h2>
+<table>
+  <thead><tr><th>List <span class="meta">/ where</span></th><th>Ours</th><th>Foundry 5.3.1 <code>CONFIG</code></th><th>Fix</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Rarity</strong> <span class="meta">RARITIES</span></td>
+      <td><span class="bad">none</span>, common, uncommon, rare, veryRare, legendary, artifact</td>
+      <td><code>itemRarity</code>: common…artifact <span class="meta">(no "none" — empty = none)</span></td>
+      <td>Store <code>''</code> for unrated, not the slug <code>'none'</code>, so it round-trips. Keep a "None" label on the empty option.</td>
+    </tr>
+    <tr>
+      <td><strong>Weight units</strong> <span class="meta">WEIGHT_UNITS</span></td>
+      <td>lb, kg</td>
+      <td><code>weightUnits</code>: lb, <span class="bad">tn</span> (Tons), kg, <span class="bad">Mg</span> (Tonnes)</td>
+      <td>Add <strong>tn</strong> + <strong>Mg</strong>.</td>
+    </tr>
+    <tr>
+      <td><strong>Consumable subtype</strong> <span class="meta">CONSUMABLE_SUBTYPES</span></td>
+      <td>potion, scroll, poison, ammo, wand, rod, food, trinket <span class="meta">(8)</span></td>
+      <td><code>consumableTypes</code>: + <span class="bad">wondrous</span> (Wondrous Item) <span class="meta">(9)</span></td>
+      <td>Add <strong>wondrous</strong>.</td>
+    </tr>
+    <tr>
+      <td><strong>Equipment subtype</strong> <span class="meta">EQUIPMENT_SUBTYPES</span></td>
+      <td>light, medium, heavy, shield, clothing, trinket, ring, rod, wand, wondrous, vehicle <span class="meta">(11)</span></td>
+      <td><code>equipmentTypes</code>: + <span class="bad">natural</span> (Natural Armor) <span class="meta">(12)</span></td>
+      <td>Add <strong>natural</strong> (and treat it as armor-bearing for the armor block).</td>
+    </tr>
+    <tr>
+      <td><strong>Weapon mastery</strong> <span class="meta">— no control today</span></td>
+      <td><span class="bad">none</span> <span class="meta">(column exists, no dropdown)</span></td>
+      <td><code>weaponMasteries</code>: cleave, graze, nick, push, sap, slow, topple, vex <span class="meta">(8)</span></td>
+      <td>New <strong>Mastery</strong> dropdown on the weapon sub-form (blank + 8). Data already round-trips; just unsurfaced.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>2 · Weapon sub-form <span class="tag blood">biggest gaps</span></h2>
+<p>Foundry's <code>details-weapon.hbs</code> has four fieldsets: <strong>Details</strong> (type / base / proficiency / mastery / properties / magical / ammo), <strong>Range</strong>, <strong>Damage</strong>, and a conditional <strong>Versatile</strong>. Ours has just <em>Damage</em> (single die, single type) + <em>Range</em>.</p>
+<table>
+  <thead><tr><th>Foundry field</th><th>Ours</th><th>Fix</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Weapon Mastery</strong> <code>mastery</code></td><td class="bad">missing</td><td>Add the dropdown (§1).</td></tr>
+    <tr><td><strong>Versatile damage</strong> <span class="meta">(when <code>ver</code> property)</span></td><td class="bad">missing</td><td>Add a Versatile damage fieldset that appears when the Versatile property is set — second damage formula.</td></tr>
+    <tr><td><strong>Ammunition Type</strong> <span class="meta">(when <code>amm</code>)</span></td><td class="bad">missing</td><td>Add an ammo-type select when the Ammunition property is set (<code>consumableTypes.ammo.subtypes</code>).</td></tr>
+    <tr><td><strong>Damage types</strong> <span class="meta">(multi)</span></td><td>single type only <span class="meta">("first listed is canonical")</span></td><td>Foundry's <code>field-damage</code> allows multiple types (player picks). Low priority — single is a defensible simplification.</td></tr>
+    <tr><td><strong>Weapon Type</strong> <code>type.value</code> <span class="meta">(simpleM/martialR/…)</span></td><td>via <code>base_weapon_id</code> FK <span class="meta">(intentional)</span></td><td>Keep our base-item approach, but verify the linked proficiency row carries the Foundry weapon-type slug for export.</td></tr>
+    <tr><td><strong>Proficiency</strong> <code>proficient</code> <span class="meta">(Automatic/…)</span></td><td><code>proficient</code> column, no control</td><td>Optional: surface an Automatic/Yes/No select (<code>weaponAndArmorProficiencyLevels</code>).</td></tr>
+  </tbody>
+</table>
+
+<h2>3 · Consumable sub-form <span class="tag blood">gaps</span></h2>
+<p>Foundry's <code>details-consumable.hbs</code> shows Type → <strong>Sub-Type</strong> → Properties → Magical, plus a <strong>Damage</strong> fieldset for ammo. Ours shows only a Magical Bonus.</p>
+<ul>
+  <li><strong class="bad">Sub-type (the 2-axis gap)</strong> — Foundry's <code>type.subtype</code> (poison: contact/inhaled/injury/ingested; ammo: arrow/bolt/…) is the documented drop on import (<code>itemImport.ts:479</code>). Add a second subtype dropdown driven by the chosen consumable type, and a column/packed-slug to persist it.</li>
+  <li><strong>Ammo damage</strong> — when type = ammo, Foundry shows a <em>Replace Damage</em> toggle + a base-damage editor. Missing.</li>
+</ul>
+
+<h2>4 · Properties: per-type filtering <span class="tag">cross-cutting</span></h2>
+<div class="warn"><code>PropertiesSection</code> shows the <strong>weapon</strong> property list for <em>every</em> item type (it reads <code>profs.weaponProperties</code> unconditionally, <code>ItemsEditor.tsx:1862</code>). Foundry filters to <code>validProperties[type]</code>:
+<table>
+  <thead><tr><th>Type</th><th>Foundry valid properties</th></tr></thead>
+  <tbody>
+    <tr><td>weapon</td><td>ada, amm, fin, fir, foc, hvy, lgt, lod, mgc, rch, rel, ret, sil, spc, thr, two, ver <span class="meta">(17)</span></td></tr>
+    <tr><td>equipment</td><td>ada, foc, mgc, stealthDisadvantage <span class="meta">(4)</span></td></tr>
+    <tr><td>consumable</td><td>mgc <span class="meta">(1)</span></td></tr>
+    <tr><td>container</td><td>mgc, weightlessContents</td></tr>
+  </tbody>
+</table>
+<strong>Good news:</strong> the <code>item_properties</code> table I added for the Enchant activity already carries a <code>valid_types</code> JSON column — so the per-type filter is a drop-in: source the property catalog from <code>item_properties</code> filtered by the current <code>item_type</code>, instead of <code>weaponProperties</code>. (Foundry also renders these as a checkbox grid vs our add-chip; cosmetic.)</div>
+
+<h2>5 · Container capacity <span class="tag soft">model mismatch</span></h2>
+<p>Foundry's <code>details-container.hbs</code> capacity is <strong>three independent fields</strong>: Item Count + Volume (value+units, <code>volumeUnits</code>) + Weight (value+units, <code>weightUnits</code>). Ours is a single <em>either/or</em> toggle (<code>capacity.type</code> = items | weight, one value). To round-trip 5.3.1 containers faithfully we'd move to count + volume + weight. <span class="meta">Lower priority — our model captures the common case.</span></p>
+
+<h2>Already correct <span class="tag green">✓ no change</span></h2>
+<ul>
+  <li><strong>Item types</strong> (weapon/equipment/consumable/tool/container/loot), <strong>loot subtypes</strong> (8/8), <strong>tool subtypes</strong> (art/game/music), <strong>attunement</strong> ('' / required / optional), <strong>currencies</strong> (cp…pp) — all match.</li>
+  <li><strong>Armor block</strong> (AC value / max-dex / strength / magical bonus), <strong>tool block</strong> (ability / bonus / chat flavor), <strong>weight &amp; price</strong> shapes, <strong>base-item resolution</strong> — all faithful.</li>
+  <li><strong>Activities / Effects / Advancement / Scaling / Tags</strong> sub-tabs — already built.</li>
+</ul>
+
+<h2>Suggested order <span class="meta">— small → large</span></h2>
+<ol>
+  <li><strong class="good">Option-list fixes (§1)</strong> — rarity empty, weight units, consumable <em>wondrous</em>, equipment <em>natural</em>, weapon <em>mastery</em> dropdown. An afternoon; all low-risk.</li>
+  <li><strong>Per-type property filtering (§4)</strong> — reuse <code>item_properties.valid_types</code>. One section, clean.</li>
+  <li><strong>Weapon sub-form (§2)</strong> — mastery (done in #1) + versatile + ammunition type.</li>
+  <li><strong>Consumable sub-type + ammo damage (§3)</strong> — needs the persistence decision (new column vs packed slug); closes the documented import gap.</li>
+  <li><strong>Container capacity model (§5)</strong> — only if faithful 5.3.1 container round-trip matters.</li>
+</ol>
+<div class="note"><strong>Note on damage shape:</strong> the weapon damage uses a single die + single type. Foundry's <code>field-damage</code> is the same editor we just rebuilt for activities — if we want full parity (multi-type, versatile), we can reuse <code>DamagePartEditor</code> here rather than the bespoke inline fields.</div>
+
+</body>
+</html>

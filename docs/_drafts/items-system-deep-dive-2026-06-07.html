@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Items system — deep dive &amp; state-of-play</title>
+<style>
+  :root{
+    --parchment:#f4ecd8; --parchment-2:#ece2c8; --ink:#2b2419; --ink-soft:#5a4f3f;
+    --ink-faint:#8a7d68; --gold:#9a7d3b; --gold-bright:#b8923f; --blood:#6b2737;
+    --green:#4f6b42; --border:#c9b896; --card:#fbf6e9;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Iowan Old Style','Palatino Linotype','Book Antiqua',Palatino,Georgia,serif;
+    background:var(--parchment);color:var(--ink);line-height:1.62;padding:2.5rem 1.5rem;max-width:74rem;margin:0 auto}
+  h1{font-size:2.2rem;font-weight:700;letter-spacing:-.01em;margin-bottom:.3rem}
+  .subtitle{font-size:1.02rem;color:var(--ink-soft);font-style:italic;margin-bottom:1.8rem}
+  h2{font-size:1.5rem;margin-top:2.6rem;margin-bottom:.5rem;padding-bottom:.35rem;border-bottom:2px solid var(--gold)}
+  h3{font-size:1.18rem;margin-top:1.5rem;margin-bottom:.4rem;color:var(--gold-bright)}
+  p{margin-bottom:.7rem} ul,ol{margin:.3rem 0 .9rem 1.4rem} li{margin-bottom:.32rem}
+  code{background:var(--parchment-2);padding:.08rem .35rem;border-radius:3px;font-family:'SF Mono',Consolas,monospace;font-size:.82em}
+  pre{background:#2b2419;color:#e8dcc0;padding:.9rem 1.1rem;border-radius:6px;overflow-x:auto;font-family:'SF Mono',Consolas,monospace;font-size:.78rem;line-height:1.5;margin:.6rem 0}
+  table{width:100%;border-collapse:collapse;margin:.8rem 0;font-size:.86rem}
+  th,td{text-align:left;padding:.42rem .6rem;border-bottom:1px solid var(--border);vertical-align:top}
+  th{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-faint)}
+  td code{font-size:.82em}
+  .note{background:rgba(184,146,63,.1);border-left:4px solid var(--gold-bright);padding:.75rem 1.05rem;border-radius:3px;margin:1rem 0;font-size:.95rem}
+  .warn{background:rgba(107,39,55,.08);border-left:4px solid var(--blood);padding:.75rem 1.05rem;border-radius:3px;margin:1rem 0;font-size:.95rem}
+  .ok{background:rgba(79,107,66,.1);border-left:4px solid var(--green);padding:.75rem 1.05rem;border-radius:3px;margin:1rem 0;font-size:.95rem}
+  .tag{display:inline-block;font-size:.66rem;text-transform:uppercase;letter-spacing:.05em;padding:.1rem .5rem;border-radius:3px;background:var(--gold);color:var(--parchment);font-weight:700;vertical-align:middle}
+  .tag.green{background:var(--green)} .tag.blood{background:var(--blood)} .tag.soft{background:var(--ink-faint)}
+  .meta{font-size:.82rem;color:var(--ink-faint)}
+  .bad{color:var(--blood);font-weight:600}
+  .good{color:var(--green);font-weight:600}
+  .mono{font-family:'SF Mono',Consolas,monospace;font-size:.82em}
+</style>
+</head>
+<body>
+
+<h1>Items system — deep dive &amp; state-of-play</h1>
+<p class="subtitle">What the items / equipment compendium actually <em>is</em> today — schema, editor, import &amp; export — surveyed across <code>ItemsEditor.tsx</code>, <code>itemImport.ts</code>, <code>_itemExport.ts</code>, and the six <code>items</code>-table migrations, with the Foundry side checked against <code>Foundry-JSON\items</code>. 2026-06-07.</p>
+
+<div class="ok"><strong>Bottom line:</strong> unlike the activity editor — which we just rebuilt kind-by-kind — the items system is <strong>already a mature, end-to-end pipeline</strong>. A single unified <code>items</code> table absorbs all six Foundry item types; <code>ItemsEditor</code> is a full seven-tab editor; and items <strong>round-trip both ways</strong> with the Foundry module (import via <code>itemImport.ts</code>, <em>and</em> live export via <code>_itemExport.ts</code> → <code>/api/module/items/&lt;id&gt;.json</code>). The activity work we just finished <em>already</em> powers items — <code>ItemsEditor</code> mounts <code>ActivityEditor</code> + <code>ActiveEffectEditor</code> directly. So "items" is not a build; it's a <strong>polish / gap-closing</strong> question.</div>
+
+<div class="warn"><strong>On the example exports:</strong> <code>E:\DnD\Professional\Foundry-JSON\items\</code> holds exactly <strong>one</strong> file — <code>item-feature.json</code> (a <code>feat</code>, empty system). The two <code>fvtt-Item-sorcerer-*.json</code> at the JSON root are <code>class</code> items. So there are <span class="bad">no rich weapon / armor / consumable / container example exports</span> on hand. A true window-by-window fidelity audit (the activity-editor treatment) would need item screenshots + the dnd5e item sheets — flagged below under "if the goal is editor fidelity."</div>
+
+<h2>Architecture <span class="meta">— one table, six types, both directions</span></h2>
+<ul>
+  <li><strong>Unified table.</strong> Every Foundry item type lands in <code>items</code> (alias <code>items</code> in <code>d1Tables.ts</code>). The legacy <code>weapons</code> / <code>armor</code> / <code>tools</code> tables were demoted to <em>proficiency-category definitions</em> (edited in AdminProficiencies); items link to them by FK.</li>
+  <li><strong>Six migrations of evolution</strong> (<code>0004_items</code> → <code>20260524-1800 foundry_aligned</code> → <code>20260525-1800 unified_shapes</code> → <code>20260526-1700 completeness</code> → <code>20260527-1200 advancements</code>). The shapes were deliberately <em>Foundry-aligned</em> from the start — weight/price are <code>{value, units|denomination}</code>, properties are slug arrays, etc.</li>
+  <li><strong>Base-item FKs.</strong> <code>base_weapon_id</code> / <code>base_armor_id</code> / <code>base_tool_id</code> resolve Foundry's <code>system.type.baseItem</code> slug (<code>"greatsword"</code>) against <code>weapons/armor/tools.identifier</code>. One FK set per row; the raw slug stays in <code>base_item</code> as a fallback if no proficiency row matches.</li>
+  <li><strong>Bidirectional with Foundry.</strong> Import (<code>itemImport.ts</code> + <code>ItemImportWorkbench</code>) <em>and</em> export (<code>buildItemBundle</code> in <code>_itemExport.ts</code>, served live at <code>/api/module/items/&lt;dbId&gt;.json</code>, kind <code>dauligor.item-item.v1</code>). Export even <em>synthesizes</em> ScaleValue advancements from the item's scaling columns so <code>@scale.&lt;id&gt;.&lt;col&gt;</code> resolves in Foundry — no module-side hook needed.</li>
+  <li><strong>Editor.</strong> <code>ItemsEditor.tsx</code> (~2.3k lines), proposal-aware, seven sub-tabs: <strong>Basics · Mechanics · Activities · Advancement · Scaling · Effects · Tags</strong>.</li>
+</ul>
+
+<h2>The six types <span class="tag green">all covered</span></h2>
+<table>
+  <thead><tr><th>Type</th><th>Subtypes</th><th>Type-specific fields (schema + editor)</th></tr></thead>
+  <tbody>
+    <tr><td><strong>weapon</strong></td><td><span class="meta">via base-item</span></td><td><code>damage</code> {base{number,denom,types,bonus}, parts} · <code>range</code> {value,long,reach,units} · <code>mastery</code> · <code>magical_bonus</code> · <code>ammunition</code> · <code>proficient</code> · <code>base_weapon_id</code></td></tr>
+    <tr><td><strong>equipment / armor</strong></td><td>light · medium · heavy · shield · clothing · trinket · ring · rod · wand · wondrous · vehicle</td><td><code>armor_value</code> · <code>armor_dex</code> (cap) · <code>armor_magical_bonus</code> · <code>strength</code> · <code>armor_type</code> · <code>base_armor_id</code></td></tr>
+    <tr><td><strong>consumable</strong></td><td>potion · scroll · poison · ammo · wand · rod · food · trinket</td><td><code>magical_bonus</code>; damage/heal go in <strong>Activities</strong></td></tr>
+    <tr><td><strong>tool</strong></td><td>art · game · music</td><td><code>tool_type</code> · <code>bonus</code> · <code>ability_id</code> (FK→attributes) · <code>chat_flavor</code> · <code>base_tool_id</code></td></tr>
+    <tr><td><strong>container</strong></td><td>—</td><td><code>capacity</code> {type, value, units, weightlessContents} · <code>currency</code> {cp…pp} · <code>container_id</code> (self-FK, nesting)</td></tr>
+    <tr><td><strong>loot</strong></td><td>art · gear · gem · junk · material · resource · trade · treasure</td><td>common-only</td></tr>
+  </tbody>
+</table>
+<p class="meta">Common to every type: identity (name/identifier/source/page/img) · description (BBCode) · rarity · quantity · weight · price · attunement (3-state) · equipped · identified + unidentified description · magical · properties (slug array) · <code>uses</code> {max, spent, recovery[], autoDestroy} · activities · effects · advancements · tags.</p>
+
+<h2>Where it's solid <span class="tag green">✓</span></h2>
+<ul>
+  <li><strong>Authoring + round-trip for all six types</strong> — import, edit, export verified to exist end-to-end.</li>
+  <li><strong>Activities &amp; Active Effects</strong> — mounted straight from our (now-complete) editors. Everything we just did to activities benefits items for free.</li>
+  <li><strong>Base-item ↔ proficiency linking</strong> — drives the character sheet's weapon/armor/tool proficiency resolution.</li>
+  <li><strong>Scaling → advancement synthesis on export</strong> — magic items with scaling columns (e.g. Amulet of the Devout) export correctly.</li>
+  <li><strong>Proposal-aware</strong> — fits the content-proposal workflow like the other compendium editors.</li>
+</ul>
+
+<h2>The gaps <span class="tag">candidates for work</span></h2>
+<table>
+  <thead><tr><th>Gap</th><th>State</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Two-axis subtype</strong><br><span class="meta">poison delivery (contact/inhaled/injury/ingested), ammo (arrow/bolt)</span></td>
+      <td><span class="bad">dropped on import</span></td>
+      <td>Verified TODO at <code>itemImport.ts:479</code> — Foundry's <code>system.type.subtype</code> is discarded; only the top-level subtype survives. Needs a new column (<code>type_inner_subtype</code>) or a packed-slug convention (<code>"poison:contact"</code>). <strong>Cleanest concrete gap.</strong></td>
+    </tr>
+    <tr>
+      <td><strong>Item advancements (ItemBumpUses)</strong></td>
+      <td>authored + exported, <span class="bad">runtime dormant</span></td>
+      <td>The Advancement sub-tab + <code>items.advancements</code> column let items grant uses to a target feature (e.g. an amulet adding +1 Channel Divinity). But the character builder's collector doesn't consume owned-item advancements yet. Bigger lift; touches the builder.</td>
+    </tr>
+    <tr>
+      <td><strong>Container capacity &amp; nesting</strong></td>
+      <td>schema + editor exist, <span class="bad">not enforced</span></td>
+      <td>Capacity / currency / <code>container_id</code> all persist + round-trip, but the container picker is only partially wired and the character inventory doesn't visualise nesting or enforce capacity.</td>
+    </tr>
+    <tr>
+      <td><strong>Character-sheet consumption</strong></td>
+      <td>data ready, <span class="meta">sheet-side TBD</span></td>
+      <td>Uses/charges, attunement slots, identified ↔ unidentified display — all stored + exported, but the in-app sheet doesn't yet spend charges, track attunement, or hide unidentified text. Mostly DM/Foundry-facing today.</td>
+    </tr>
+    <tr>
+      <td><strong>Weapon mastery</strong></td>
+      <td>round-trips, <span class="meta">no in-app effect</span></td>
+      <td>2024-DMG feature; the app is 2014-rules base by design. Passes through cleanly; just inert in-app. Likely intentional.</td>
+    </tr>
+    <tr>
+      <td><strong>Bulk module catalog</strong></td>
+      <td><span class="meta">per-item only</span></td>
+      <td>Items export one-at-a-time via <code>/items/&lt;id&gt;.json</code>; they're not yet in the top-level <code>module-export-pipeline.ts</code> catalog the way spells/backgrounds/species are. Minor; matters only for bulk module bundling.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>If the goal is editor fidelity <span class="meta">— the activity-editor treatment</span></h2>
+<p>We could run the same window-by-window pass on <code>ItemsEditor</code> that we ran on activities — compare each type's sub-form to Foundry's item sheet, fix labels / option lists / conditional layout. Two caveats:</p>
+<ul>
+  <li>The fields were built <em>Foundry-aligned</em> already (the migration is literally named <code>foundry_aligned_item_shapes</code>), so the delta is likely smaller than activities' was.</li>
+  <li>There are <span class="bad">no item example exports</span> to mine for canonical option lists — we'd lean on dnd5e's item data models + your screenshots, type by type.</li>
+</ul>
+
+<h2>Recommendation <span class="meta">— pick the lane</span></h2>
+<ol>
+  <li><strong class="good">Treat items as "done enough" and go to monsters.</strong> Monsters are the genuinely-new build, and they unblock the Summon/Transform creature pickers we parked. Items already round-trip; the gaps above are polish.</li>
+  <li><strong>Close one clean gap first</strong> — the <strong>two-axis subtype</strong> is the tidiest (one column + import/export wiring), if you want poison/ammo specificity to survive round-trip before moving on.</li>
+  <li><strong>Editor-fidelity audit</strong> — only if you want items visually pixel-matched to Foundry like the activity windows; needs screenshots, type by type.</li>
+</ol>
+<div class="note"><strong>My read:</strong> items is in good shape — the high-leverage next move is <strong>monsters</strong> (option 1), since that's the missing piece blocking the parked activity work and there's no creature/NPC table at all yet. Worth a quick decision before we invest in item polish.</div>
+
+</body>
+</html>
