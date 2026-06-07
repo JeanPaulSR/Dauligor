@@ -339,6 +339,7 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
 
   const hasParser = useMemo(() => canParseText(type), [type]);
   const assignTargets = useMemo(() => getAssignTargets(type), [type]);
+  const hasSections = useMemo(() => assignTargets.some((t) => t.group === 'Blocks'), [assignTargets]);
   const sourceKey = useMemo(() => descriptor?.fields.find((f) => f.kind === 'source')?.key, [descriptor]);
 
   useEffect(() => {
@@ -637,12 +638,17 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
             onPaste={handlePaste}
           />
           <div className="mt-2 flex items-center gap-2">
-            {hasParser ? (
+            {hasSections ? (
+              <>
+                <button type="button" className="btn-gold-solid h-9 px-4" onClick={handleManualEntry}>Enter by section →</button>
+                <button type="button" className="btn-gold h-9 px-4 disabled:opacity-50" disabled={!rawText.trim()} onClick={handleInterpret}>Interpret pasted text</button>
+              </>
+            ) : hasParser ? (
               <button type="button" className="btn-gold-solid h-9 px-4 disabled:opacity-50" disabled={!rawText.trim()} onClick={handleInterpret}>Interpret</button>
             ) : (
               <button type="button" className="btn-gold-solid h-9 px-4" onClick={handleManualEntry}>Enter details →</button>
             )}
-            <span className="field-hint">{hasParser ? 'Paste plain text or HTML; multiple stat blocks auto-split into a batch. Activities aren’t parsed — add them in the editor.' : 'Manual-entry type — paste reference text to keep beside the form (optional), then enter the details.'}</span>
+            <span className="field-hint">{hasSections ? 'Start blank and drop each block into its own box — or Interpret a full write-up to mark it up by hand.' : hasParser ? 'Paste plain text or HTML; multiple stat blocks auto-split into a batch. Activities aren’t parsed — add them in the editor.' : 'Manual-entry type — paste reference text to keep beside the form (optional), then enter the details.'}</span>
           </div>
         </div>
       ) : null}
@@ -821,6 +827,10 @@ function EntityWorkspace({
   const [rightTab, setRightTab] = useState<'fields' | 'preview'>('fields');
   const leftRef = useRef<HTMLDivElement>(null);
   const catalogs = useContext(ImportCatalogsContext);
+  // Types with Block-group assign targets (classes) get the "Paste by section"
+  // drop-zones as the DEFAULT input; "Mark text" is the secondary refinement.
+  const hasSections = useMemo(() => assignTargets.some((t) => t.group === 'Blocks'), [assignTargets]);
+  const [leftMode, setLeftMode] = useState<'sections' | 'mark'>(assignTargets.some((t) => t.group === 'Blocks') ? 'sections' : 'mark');
 
   const fieldTarget = useMemo(() => {
     const map: Record<string, { key: string; label: string }> = {};
@@ -1033,33 +1043,47 @@ function EntityWorkspace({
     <div className="grid gap-4 lg:grid-cols-2">
       {/* LEFT — annotated source */}
       <div className="compendium-card flex flex-col p-3">
-        <div className="mb-2 flex items-center gap-2"><ScanText className="h-4 w-4 text-gold" /><span className="section-label">Source text</span></div>
-        <div ref={leftRef} onMouseUp={onMouseUp} className="min-h-[20rem] flex-1 cursor-text overflow-auto whitespace-pre-wrap rounded border border-gold/10 bg-background/30 p-3 font-mono text-xs leading-relaxed text-ink/90 selection:bg-gold/30">
-          {segments.map((seg, i) => {
-            const txt = rawText.slice(seg.start, seg.end);
-            if (!seg.target) return <span key={i} data-start={seg.start}>{txt}</span>;
-            const active = activeTarget === seg.target;
-            return (
-              <span key={i} data-start={seg.start} title={`${seg.label} — click to re-assign`}
-                onMouseEnter={() => setActiveTarget(seg.target ?? null)} onMouseLeave={() => setActiveTarget(null)}
-                onClick={(e) => onHighlightClick(e, seg.start, seg.end)}
-                className={`cursor-pointer ${active ? 'bg-gold/35 ring-1 ring-gold/60' : 'bg-gold/15 hover:bg-gold/30'}`}>{txt}</span>
-            );
-          })}
+        <div className="mb-2 flex items-center gap-2">
+          <ScanText className="h-4 w-4 text-gold" />
+          {hasSections ? (
+            <div className="flex items-center gap-1">
+              <button type="button" onClick={() => setLeftMode('sections')} className={`filter-tag ${leftMode === 'sections' ? 'btn-gold-solid' : 'btn-gold'}`}>Sections</button>
+              <button type="button" onClick={() => setLeftMode('mark')} className={`filter-tag ${leftMode === 'mark' ? 'btn-gold-solid' : 'btn-gold'}`}>Mark text</button>
+            </div>
+          ) : (<span className="section-label">Source text</span>)}
         </div>
-        <p className="mt-2 field-hint">Select text (or click a highlight) to assign it to a field. Hover to see which field it feeds.</p>
-        {state.leftovers.length > 0 ? (
-          <div className="mt-2 rounded border border-blood/30 bg-blood/10 p-2 text-blood">
-            <div className="mb-1 flex items-center gap-1 text-[10px] font-black uppercase tracking-widest"><AlertTriangle className="h-3 w-3" /> Couldn’t place — carry these over in the editor</div>
-            <ul className="space-y-0.5 pl-1 text-xs">{state.leftovers.map((l, i) => (<li key={i}>• {l}</li>))}</ul>
-          </div>
-        ) : null}
-        {state.notes.length > 0 ? (
-          <div className="mt-2 rounded border border-gold/20 bg-gold/5 p-2 text-ink/70">
-            <div className="mb-1 flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-gold/60"><Sparkles className="h-3 w-3" /> Auto-filled — review</div>
-            <ul className="space-y-0.5 pl-1 text-xs">{state.notes.map((l, i) => (<li key={i}>• {l}</li>))}</ul>
-          </div>
-        ) : null}
+        {hasSections && leftMode === 'sections' ? (
+          <SectionsPanel type={type} state={state} onChange={onChange} catalogs={catalogs} />
+        ) : (
+          <>
+            <div ref={leftRef} onMouseUp={onMouseUp} className="min-h-[20rem] flex-1 cursor-text overflow-auto whitespace-pre-wrap rounded border border-gold/10 bg-background/30 p-3 font-mono text-xs leading-relaxed text-ink/90 selection:bg-gold/30">
+              {segments.map((seg, i) => {
+                const txt = rawText.slice(seg.start, seg.end);
+                if (!seg.target) return <span key={i} data-start={seg.start}>{txt}</span>;
+                const active = activeTarget === seg.target;
+                return (
+                  <span key={i} data-start={seg.start} title={`${seg.label} — click to re-assign`}
+                    onMouseEnter={() => setActiveTarget(seg.target ?? null)} onMouseLeave={() => setActiveTarget(null)}
+                    onClick={(e) => onHighlightClick(e, seg.start, seg.end)}
+                    className={`cursor-pointer ${active ? 'bg-gold/35 ring-1 ring-gold/60' : 'bg-gold/15 hover:bg-gold/30'}`}>{txt}</span>
+                );
+              })}
+            </div>
+            <p className="mt-2 field-hint">Select text (or click a highlight) to assign it to a field. Hover to see which field it feeds.</p>
+            {state.leftovers.length > 0 ? (
+              <div className="mt-2 rounded border border-blood/30 bg-blood/10 p-2 text-blood">
+                <div className="mb-1 flex items-center gap-1 text-[10px] font-black uppercase tracking-widest"><AlertTriangle className="h-3 w-3" /> Couldn’t place — carry these over in the editor</div>
+                <ul className="space-y-0.5 pl-1 text-xs">{state.leftovers.map((l, i) => (<li key={i}>• {l}</li>))}</ul>
+              </div>
+            ) : null}
+            {state.notes.length > 0 ? (
+              <div className="mt-2 rounded border border-gold/20 bg-gold/5 p-2 text-ink/70">
+                <div className="mb-1 flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-gold/60"><Sparkles className="h-3 w-3" /> Auto-filled — review</div>
+                <ul className="space-y-0.5 pl-1 text-xs">{state.notes.map((l, i) => (<li key={i}>• {l}</li>))}</ul>
+              </div>
+            ) : null}
+          </>
+        )}
       </div>
 
       {/* RIGHT — fields / live preview */}
@@ -1141,6 +1165,75 @@ function EntityWorkspace({
         </>,
         document.body,
       ) : null}
+    </div>
+  );
+}
+
+// ── "Paste by section" drop-zones (default class input) ────────────────────
+// One labeled box per Block-group assign target. Pasting + blurring runs the
+// SAME interpreter the mark-up popover uses (assignField / assignResolve), so
+// the user separates the text deterministically instead of relying on the
+// parser to find boundaries. The Feature block is a repeater (one box → one
+// feature, add as many as needed).
+
+const SECTION_INPUT_CLS = 'w-full rounded border border-gold/15 bg-background/40 p-2 font-mono text-xs leading-relaxed text-ink/90 focus:border-gold/40 focus:outline-none';
+
+function BlockDropZone({ target, rows, onApply }: { target: ImportAssignTarget; rows: number; onApply: (t: ImportAssignTarget, text: string) => void }) {
+  const [text, setText] = useState('');
+  const [applied, setApplied] = useState(false);
+  return (
+    <div>
+      <label className="field-label flex items-center gap-2">{target.label}{applied ? <span className="text-[9px] font-bold uppercase tracking-widest text-gold/70">✓ applied</span> : null}</label>
+      <textarea
+        value={text} rows={rows}
+        onChange={(e) => { setText(e.target.value); setApplied(false); }}
+        onBlur={() => { if (text.trim()) { onApply(target, text); setApplied(true); } }}
+        placeholder={`Paste the ${target.label.toLowerCase()} text…`}
+        className={SECTION_INPUT_CLS}
+      />
+    </div>
+  );
+}
+
+function FeatureDropZone({ target, count, onAdd }: { target: ImportAssignTarget; count: number; onAdd: (t: ImportAssignTarget, text: string, clear: () => void) => void }) {
+  const [text, setText] = useState('');
+  return (
+    <div>
+      <label className="field-label">{target.label.replace(/\s*\(.*\)/, '')} <span className="text-ink/40">— {count} added</span></label>
+      <textarea value={text} rows={3} onChange={(e) => setText(e.target.value)} placeholder="Paste ONE feature (first line = name, rest = body)…" className={SECTION_INPUT_CLS} />
+      <button type="button" onClick={() => onAdd(target, text, () => setText(''))} className="btn-gold mt-1 inline-flex h-7 items-center gap-1 px-2 text-[10px]">＋ Add as feature</button>
+    </div>
+  );
+}
+
+function SectionsPanel({ type, state, onChange, catalogs }: { type: string; state: EntityState; onChange: (u: (p: EntityState) => EntityState) => void; catalogs: ProfCatalogs | null }) {
+  const blocks = useMemo(() => getAssignTargets(type).filter((t) => t.group === 'Blocks'), [type]);
+  const applyText = (t: ImportAssignTarget, text: string) => {
+    const clean = text.trim(); if (!clean) return;
+    onChange((prev) => {
+      const values = { ...prev.values };
+      const provenance = { ...prev.provenance };
+      const patch = t.mode === 'resolve'
+        ? assignResolveFields(type, t.key, clean, catalogs, prev.values)
+        : assignFieldText(type, t.key, clean);
+      for (const [k, v] of Object.entries(patch)) { values[k] = v; delete provenance[k]; }
+      return { ...prev, values, provenance };
+    });
+  };
+  const addFeature = (t: ImportAssignTarget, text: string, clear: () => void) => {
+    const item = assignAppendItem(type, t.key, text.trim());
+    if (!item) { toast.error('Nothing to add from that text.'); return; }
+    const fk = t.fieldKeys[0];
+    onChange((prev) => ({ ...prev, values: { ...prev.values, [fk]: [...(Array.isArray(prev.values[fk]) ? prev.values[fk] : []), item] } }));
+    clear();
+    toast.success('Feature added');
+  };
+  return (
+    <div className="flex-1 space-y-3 overflow-auto">
+      <p className="field-hint">Drop each block's text into its box — no guessing where boundaries are. <span className="text-gold/70">Proficiencies</span> resolves the whole grid + hit die / saves / primary at once.</p>
+      {blocks.map((t) => t.mode === 'append'
+        ? <FeatureDropZone key={t.key} target={t} count={Array.isArray(state.values[t.fieldKeys[0]]) ? state.values[t.fieldKeys[0]].length : 0} onAdd={addFeature} />
+        : <BlockDropZone key={t.key} target={t} rows={t.fieldKeys[0] === 'name' ? 1 : 4} onApply={applyText} />)}
     </div>
   );
 }
