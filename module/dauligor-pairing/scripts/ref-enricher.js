@@ -7,10 +7,14 @@
 // routes those links: @article / & rule refs open the Dauligor viewer; other
 // entity refs open the live app.
 //
-// We PUSH to CONFIG.TextEditor.enrichers (never override enrichHTML) so we compose
-// with core + every other module's enrichers. The pattern is case-SENSITIVE and
-// requires a lowercase kind, so it can't clobber Foundry's own PascalCase document
-// enrichers (@UUID[…], @Actor[…], @Compendium[…], @Check[…]).
+// We PUSH/UNSHIFT into CONFIG.TextEditor.enrichers (never override enrichHTML) so we
+// compose with core + every other module's enrichers. Two enrichers register here:
+//   • native @kind[id] / &kind[id] (lowercase kind) — PUSHED. Case-sensitive, so it
+//     can't clobber Foundry's PascalCase document enrichers (@UUID[…], @Actor[…], …),
+//     and dnd5e ignores lowercase `&kind` refs, so order doesn't matter.
+//   • dnd5e's &Reference[type=key] — UNSHIFTED so it runs BEFORE dnd5e's own Reference
+//     enricher and routes rule refs to the Dauligor Library instead of the SRD
+//     tooltip (owner choice 2026-06-07: "Library wins for &Reference").
 
 import { refMarkup } from "./layout-blocks.js";
 import { openDauligorLibrary, DauligorViewerApp } from "./dauligor-viewer.js";
@@ -22,16 +26,37 @@ import { log } from "./utils.js";
 // never matches Foundry's PascalCase document enrichers (@UUID[…], @Actor[…], …).
 export const REF_PATTERN = /(@|&amp;|&)([a-z][a-z0-9-]*)\[([^\]\s]*)\](?:#([\w-]+))?(?:\{([^}]*)\})?/g;
 
+// dnd5e's `&Reference[type=key …flags]{Label}` syntax. We take it over and map it
+// to a Dauligor system-page rule ref, mirroring the app's bbcode `&Reference`
+// normalization: `type` → page kind, `key` → entry anchor; the page-level shorthand
+// `&Reference[prone]` → kind `prone`, no entry; trailing dnd5e flags (e.g.
+// ` apply=false`) are swallowed by `[^\]]*`. Case-insensitive, like dnd5e's.
+export const REFERENCE_PATTERN = /(?:&amp;|&)Reference\[([a-z][a-z0-9_-]*)(?:=([a-z0-9_-]+))?[^\]]*\](?:\{([^}]*)\})?/gi;
+
 function htmlToElement(html) {
   const tpl = document.createElement("template");
   tpl.innerHTML = String(html ?? "").trim();
   return tpl.content.firstElementChild;
 }
 
-/** Register the ref enricher. Call once in `init`/`setup` (idempotent per load). */
+/** Register the ref enrichers. Call once in `init`/`setup` (idempotent per load). */
 export function registerRefEnrichers() {
   CONFIG.TextEditor = CONFIG.TextEditor || {};
   if (!Array.isArray(CONFIG.TextEditor.enrichers)) CONFIG.TextEditor.enrichers = [];
+
+  // dnd5e's own &Reference enricher is already in the array (system inits before
+  // modules). UNSHIFT ours to the front so it claims &Reference[...] first and
+  // routes it to the Library instead of the SRD tooltip.
+  CONFIG.TextEditor.enrichers.unshift({
+    pattern: REFERENCE_PATTERN,
+    enricher: async (match) => {
+      const kind = String(match[1] ?? "").toLowerCase();
+      const entry = match[2] ? String(match[2]).toLowerCase() : "";
+      return htmlToElement(refMarkup({ kind, id: entry, rule: true, display: match[3] }));
+    },
+  });
+
+  // Native @kind[id] / &kind[id] semantic refs (dnd5e ignores lowercase kinds).
   CONFIG.TextEditor.enrichers.push({
     pattern: REF_PATTERN,
     enricher: async (match) => {
@@ -39,7 +64,7 @@ export function registerRefEnrichers() {
       return htmlToElement(refMarkup({ kind, id, anchor, rule: sigil !== "@", display }));
     },
   });
-  log("Registered Dauligor ref enricher (CONFIG.TextEditor.enrichers).");
+  log("Registered Dauligor ref enrichers (&Reference takeover + native @/& refs).");
 }
 
 /**
