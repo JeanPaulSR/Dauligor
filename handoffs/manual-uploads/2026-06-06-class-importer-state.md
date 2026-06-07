@@ -5,6 +5,22 @@
 
 ---
 
+## ⭐ Update 2026-06-07 — Mark-up "sections" pass (3 new commits, VERIFIED LIVE)
+
+Branch is now **23 ahead / 53 behind origin/main** (fetched 2026-06-07 — `main` has advanced well beyond the 2026-06-06 snapshot's "12 behind", so a rebase onto `origin/main` will be substantial; do it before any merge/push). Still local-only, NOT pushed. The class mark-up panel was reworked into the user's **section model**. New commits (newest first):
+
+- `cb05a71` **Proficiencies section + grouped popover.** Assign popover is grouped: **Blocks** (Name, Description, Flavour, Proficiencies, Equipment, Multiclassing, Feature) and **Within Proficiencies** (Hit Die, Saving Throws, Primary Ability, Skills, Armor, Weapons, Tools, Languages). New **`resolve`** assign mode (catalog-aware): marking **Proficiencies** interprets the whole mechanical block from THAT region — grid (armor/weapons/tools/skills/languages) + hit die + saving throws + primary ability. Each sub-section resolves ONE kind and MERGES into the grid. Sub-section marks **carve their highlight out of the block** (resolve targets trim highlight, don't re-derive value), so "mark the block then refine within it" shows both selections.
+- `fd60456` **Feature section mark (append mode).** Each marked span → ONE feature draft (first line = name, rest = body, level sniffed) appended to the Features panel; mark span A then B = two features. Each manual feature carries its `span` (highlights; removing from panel removes highlight). `classParse.parseFeatureSpan`, `FeatureDraft.span`.
+- `87ea570` **Partition / decouple + class mark-up + weapon fix.** Mark-up keeps a TRUE partition: `state.spans` is now `Record<string, Span[]>` (multi-span); assigning a span SUBTRACTS it from every other field and re-derives the losers (peel a line out of Description → Description shrinks/splits). "Clear — not a field" action. Class gained `assignTargets`/`assignField`. **Weapon fix**: whole-category grants ("Simple weapons") now expand to member item ids (the grid keys a category's checked-state off item ids, NOT `categoryIds`, so emitting categoryIds alone rendered blank). Class prof/feature summary moved from the red "couldn't place" box to a neutral **"Auto-filled — review"** notes channel (`ParseResult.notes`, `EntityState.notes`).
+
+**New contracts** (`src/lib/import/`): `ImportAssignTarget.{group?, mode?: 'replace'|'append'|'resolve'}`; `ImportDescriptor.{assignAppend?, assignResolve?}`; `ParseResult.notes?`; registry `assignAppendItem`/`assignResolveFields`; `classParse.{parseFeatureSpan, resolveProficiencyKind}`. **Window** (`ImportMarkWindow.tsx`): `EntityWorkspace` reads catalogs via `ImportCatalogsContext`; `handleAssign` has append + resolve branches before the normal path; `repartition` skips append, trims-not-re-derives resolve; `targetSpans` reads append spans off the list items; grouped popover via `assignGroups`. Resolve targets use synthetic span keys (`prof_skills`…) so each highlights independently while writing into `values.proficiencies`.
+
+All **verified live on :3003** vs local D1 catalogs: grouped popover; block resolve → hit die 6 / saves CON,INT / 14 weapons / skills 2-of-8 / armor empty; Skills sub-mark merges (weapons stay 14) with both highlights coexisting; Feature double-mark → two drafts; middle-peel decouple (Description→Lore→Description). `tsc --noEmit` = 6 pre-existing errors, 0 in import files. (Throwaway `scripts/_*` still untracked.)
+
+**Still open:** auto flavor→class-block boundary suggestion (cut at "As a {class}, you have the following class features," everything above → Lore, draggable); optional — apply the section model to spells; then the subclass importer.
+
+---
+
 ## TL;DR
 
 The in-app importer at **`/compendium/import`** (admin) now imports **classes** end-to-end from a pasted write-up:
