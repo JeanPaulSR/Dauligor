@@ -118,6 +118,23 @@ out as JSON so the app team can study real shapes (export-first / corpus).
   - canonical DAE/Midi support direction
   - use this for the broad rule set around characters, items, spells, activities, effects, and automation compatibility
 
+### In-Foundry runtime systems (player-facing)
+
+These describe how the module BEHAVES at runtime — the read-only content viewer,
+account auth, the import wizard UI, and the UI entry points — as opposed to the
+import/export data contracts above.
+
+- `docs/page-system.md`
+  - canonical guide to the in-Foundry content viewer (the Dauligor Library): the block renderer, the viewer modes (articles / system pages / campaign home), the `content-service` readers, and server-enforced visibility
+- `docs/cross-reference-enrichers.md`
+  - canonical guide to display cross-references (`@kind[id]` / `&kind[id]` / `&Reference[…]`) — how they render and navigate in the viewer and Foundry-wide. This is the DISPLAY/navigation grammar, NOT the import-time `reference-syntax-guide.md` grammar
+- `docs/native-auth.md`
+  - canonical guide to per-user account auth (login, client-scoped sessions, `authFetch`, the `authChanged` / `requestLogin` hooks) and the app-side CORS requirements
+- `docs/import-wizard.md`
+  - canonical guide to the import wizard FLOW (types, source loading, dispatch, document creation, permissions). The per-family payload formats live in the `*-import-contract.md` files
+- `docs/ui-entry-points-and-visibility.md`
+  - canonical map of every UI entry point and the GM-vs-player visibility model
+
 ## Scoped Notes
 
 These are intentionally narrower. They are useful, but they should not duplicate the full contract.
@@ -221,6 +238,15 @@ Read in this order:
 3. `docs/class-feature-activity-contract.md`
 4. `docs/item-import-contract.md`
 5. `docs/spell-import-contract.md`
+
+### G. In-Foundry content viewer and accounts
+
+Read in this order:
+
+1. `docs/native-auth.md`
+2. `docs/page-system.md`
+3. `docs/cross-reference-enrichers.md`
+4. `docs/ui-entry-points-and-visibility.md`
 
 ## What Not To Use As Your First Stop
 
