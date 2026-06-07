@@ -21,7 +21,7 @@
 
 import { DAULIGOR_VIEWER_TEMPLATE, MODULE_ID } from "./constants.js";
 import { isLoggedIn } from "./auth-service.js";
-import { getArticle, listArticles } from "./content-service.js";
+import { getArticle, listArticles, getSystemPage } from "./content-service.js";
 import { renderBlocks, renderRichText, collectAnchors } from "./layout-blocks.js";
 import { log } from "./utils.js";
 import {
@@ -214,6 +214,8 @@ export class DauligorViewerApp extends HandlebarsApplicationMixin(ApplicationV2)
     }
     if (this._current?.mode === "article") {
       await this._renderArticleView(this._current.id, seq);
+    } else if (this._current?.mode === "system") {
+      await this._renderSystemView(this._current.kind, this._current.anchor, seq);
     } else {
       await this._renderListView(seq);
     }
@@ -576,15 +578,71 @@ export class DauligorViewerApp extends HandlebarsApplicationMixin(ApplicationV2)
 
   // ── chrome regions ───────────────────────────────────────────────────────────
 
+  // A `&kind[anchor]` rule ref → render the whole system PAGE (kind = page
+  // identifier) with the block engine and scroll to the entry's definition
+  // (anchor). System pages are block layouts, so this reuses renderBlocks +
+  // the Contents rail exactly like an article.
+  async _renderSystemView(kind, anchor, seq) {
+    if (!kind) { await this._renderListView(seq); return; }
+    this._setRail("");
+    this._setBody(this._statusHtml("spinner", "Loading…"));
+    let result;
+    try {
+      result = await getSystemPage(kind);
+    } catch (err) {
+      if (seq === this._seq) this._renderError(err);
+      return;
+    }
+    if (seq !== this._seq) return; // superseded
+
+    if (!result?.page) {
+      // No such page authored yet — offer the live app as a fallback.
+      this._articleTitle = titleCase(kind);
+      this._renderToolbar();
+      const route = `https://www.dauligor.com/system/${encodeURIComponent(kind)}${anchor ? `#${encodeURIComponent(anchor)}` : ""}`;
+      this._setBody(`
+        <div class="dauligor-viewer__status dauligor-viewer__status--cta">
+          <i class="fas fa-circle-question dauligor-viewer__status-icon"></i>
+          <p>No “${esc(kind)}” page is available in the Library yet.</p>
+          <button type="button" class="dauligor-viewer__cta-btn" data-act="open-app"><i class="fas fa-up-right-from-square" inert></i> Open in app</button>
+        </div>`);
+      this._bodyRegion.querySelector(`[data-act="open-app"]`)?.addEventListener("click", () => window.open(route, "_blank", "noopener"));
+      return;
+    }
+
+    const { page, blocks } = result;
+    this._articleTitle = page.name || titleCase(kind);
+    this._renderToolbar(); // title now known
+    let inner;
+    if (blocks.length) {
+      inner = renderBlocks(blocks);
+    } else if (page.description) {
+      inner = `<div class="dauligor-block dauligor-block--text dauligor-richtext">${renderRichText(page.description)}</div>`;
+    } else {
+      inner = this._statusHtml("empty", "This page has no content yet.");
+    }
+    this._setBody(`<article class="dauligor-viewer__article">${inner}</article>`);
+    this._renderRail(collectAnchors(blocks));
+    this._bindRefs();
+
+    // Scroll to the cited entry's definition (#anchor), else to the top.
+    let scrolled = false;
+    if (anchor) {
+      const target = this._bodyRegion?.querySelector(`#${CSS.escape(anchor)}`);
+      if (target) { target.scrollIntoView({ block: "start" }); scrolled = true; }
+    }
+    if (!scrolled && this._scrollRegion) this._scrollRegion.scrollTop = 0;
+  }
+
   _renderToolbar() {
     if (!this._toolbarRegion) return;
     const canBack = this._history.length > 0;
-    const isArticle = this._current?.mode === "article";
-    const title = isArticle ? (this._articleTitle || "Article") : "Library";
+    const isList = !this._current || this._current.mode === "list";
+    const title = isList ? "Library" : (this._articleTitle || "Article");
     this._toolbarRegion.innerHTML = `
       <div class="dauligor-viewer__toolbar-nav">
         <button type="button" class="dauligor-viewer__tbtn" data-act="back" ${canBack ? "" : "disabled"} data-tooltip="Back" aria-label="Back"><i class="fas fa-arrow-left" inert></i></button>
-        <button type="button" class="dauligor-viewer__tbtn ${isArticle ? "" : "dauligor-viewer__tbtn--active"}" data-act="home" data-tooltip="Library" aria-label="Library"><i class="fas fa-book" inert></i></button>
+        <button type="button" class="dauligor-viewer__tbtn ${isList ? "dauligor-viewer__tbtn--active" : ""}" data-act="home" data-tooltip="Library" aria-label="Library"><i class="fas fa-book" inert></i></button>
       </div>
       <div class="dauligor-viewer__toolbar-title">${esc(title)}</div>
       <div class="dauligor-viewer__toolbar-actions">
@@ -612,8 +670,8 @@ export class DauligorViewerApp extends HandlebarsApplicationMixin(ApplicationV2)
     });
   }
 
-  // Wire cross-reference clicks emitted by layout-blocks: @article refs load
-  // in-viewer; any other ref with a route opens the live app in a browser tab.
+  // Wire cross-reference clicks emitted by layout-blocks: @article and & rule
+  // refs load in-viewer; any other entity ref opens the live app in a browser tab.
   _bindRefs() {
     if (!this._bodyRegion) return;
     this._bodyRegion.querySelectorAll(`a.dauligor-ref[data-route]`).forEach((a) => {
@@ -621,6 +679,12 @@ export class DauligorViewerApp extends HandlebarsApplicationMixin(ApplicationV2)
         e.preventDefault();
         const kind = a.dataset.refKind;
         const refId = a.dataset.refId;
+        // & rule refs → in-viewer system page (kind = page identifier, the ref's
+        // id is the entry's anchor on that page).
+        if (a.dataset.refSigil === "&" && kind) {
+          this._navigate({ mode: "system", kind, anchor: refId });
+          return;
+        }
         if (kind === "article" && refId) {
           this._navigate({ mode: "article", id: refId });
           return;

@@ -75,13 +75,57 @@ export async function getCampaignHomeBlocks(id) {
 }
 
 // ── system pages (Phase 4 — Option A via /api/d1/query) ─────────────────────
+//
+// A `&kind[anchor]` rule ref points at a SYSTEM PAGE (kind = the page identifier)
+// and an entry (anchor = a `definition` block on that page). System pages are
+// block layouts, so the viewer renders the whole page with the same block engine
+// and scrolls to the anchor — no per-entry resolve needed. Reads go through the
+// generic D1 proxy: `system_pages` / `system_page_blocks` are player-readable
+// (NOT in the proxy's PROTECTED_READ_TABLES), so a plain SELECT passes the gate
+// with just the Bearer token. Mirrors src/lib/systemPages.ts.
+
+function slugify(s) {
+  return String(s ?? "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+/** Run a read-only SELECT through the D1 proxy. Returns the rows (`results`). */
+async function queryD1(sql, params = []) {
+  let res;
+  try {
+    res = await authFetch(`/api/d1/query`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sql, params }),
+    });
+  } catch (err) {
+    if (String(err?.message).includes("Not logged in")) {
+      throw new Error("Log in to your Dauligor account to view this content.");
+    }
+    throw new Error("Couldn't reach Dauligor (network or CORS).");
+  }
+  if (res.status === 401) throw new Error("Your Dauligor session expired — log in again.");
+  if (!res.ok) throw new Error(`Dauligor request failed (HTTP ${res.status}).`);
+  const data = await res.json().catch(() => null);
+  return Array.isArray(data?.results) ? data.results : [];
+}
 
 /**
- * Resolve a `&kind[anchor]` rule reference to its system-page entry, via the
- * generic D1 query proxy (system_pages / system_page_blocks are player-readable).
- * Stubbed until the system-page phase; documented here so the contract is fixed.
+ * Resolve a system-page KIND (a `&` ref kind) to its page row + block layout.
+ * Honors the app's name-slug alias: a ref `&condition[...]` resolves a page whose
+ * identifier is `conditions` if its name slugifies to `condition` (mirrors
+ * getSystemPageKindMap). Returns `{ page, blocks }` or null when no page matches.
  */
-export async function resolveSystemEntry(/* kind, anchor */) {
-  log("content-service: resolveSystemEntry not wired yet (Phase 4)");
-  return null;
+export async function getSystemPage(kind) {
+  const k = String(kind ?? "").trim().toLowerCase();
+  if (!k) return null;
+  const pages = await queryD1(`SELECT id, identifier, name, description, icon, "order" FROM system_pages`);
+  if (!pages.length) return null;
+  let page = pages.find((p) => String(p.identifier ?? "").toLowerCase() === k);
+  if (!page) page = pages.find((p) => slugify(p.name) === k); // name-slug alias
+  if (!page) return null;
+  const blocks = await queryD1(
+    `SELECT id, page_id, block_type, "order", config FROM system_page_blocks WHERE page_id = ? ORDER BY "order" ASC`,
+    [page.id],
+  );
+  return { page, blocks: Array.isArray(blocks) ? blocks : [] };
 }
