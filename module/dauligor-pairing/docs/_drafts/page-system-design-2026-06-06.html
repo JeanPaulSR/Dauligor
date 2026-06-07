@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Dauligor Page System — Design (2026-06-06)</title>
+<style>
+  :root {
+    --bg: #1a1712; --panel: #221d16; --panel2: #2a241b; --ink: #e8dfce;
+    --muted: #b3a888; --gold: #c9a44c; --gold-soft: #8f7a3e; --line: #4a3f2c;
+    --blood: #a5645a; --good: #7ea86f; --blue: #6f9fc0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.6 "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+    padding: 40px 16px 80px;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; }
+  h1, h2, h3 { font-family: "Trajan Pro", "Optima", Georgia, serif; color: var(--gold); line-height: 1.25; }
+  h1 { font-size: 30px; margin: 0 0 4px; border-bottom: 2px solid var(--gold-soft); padding-bottom: 12px; }
+  h2 { font-size: 21px; margin: 34px 0 10px; border-bottom: 1px solid var(--line); padding-bottom: 5px; }
+  h3 { font-size: 16px; color: #d9bd72; margin: 20px 0 6px; }
+  .sub { color: var(--muted); font-style: italic; margin: 0 0 8px; }
+  p { margin: 8px 0; }
+  code { background: #15120d; color: #e3cf93; padding: 1px 5px; border-radius: 3px; font: 13px/1.5 ui-monospace, Menlo, Consolas, monospace; }
+  pre { background: #15120d; border: 1px solid var(--line); border-radius: 5px; padding: 12px 14px; overflow:auto; }
+  pre code { background: none; padding: 0; }
+  a { color: var(--gold); }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 7px; padding: 4px 20px 16px; margin: 16px 0; }
+  .pill { display:inline-block; font-size: 11px; letter-spacing:.06em; text-transform:uppercase; padding: 2px 9px; border-radius: 999px; border:1px solid var(--gold-soft); color: var(--gold); margin-right:6px; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 13.5px; }
+  th, td { border: 1px solid var(--line); padding: 6px 9px; text-align: left; vertical-align: top; }
+  th { background: var(--panel2); color: var(--gold); font-family: Georgia, serif; }
+  td code { font-size: 12px; }
+  .note { border-left: 3px solid var(--gold-soft); background: var(--panel2); padding: 8px 14px; margin: 12px 0; }
+  .warn { border-left: 3px solid var(--blood); }
+  .good { border-left: 3px solid var(--good); }
+  .rec { color: var(--good); font-weight: bold; }
+  .q { background: var(--panel2); border:1px solid var(--gold-soft); border-radius:6px; padding: 6px 16px; margin: 10px 0; }
+  .small { color: var(--muted); font-size: 13px; }
+  .phase { display:flex; gap:10px; align-items:baseline; }
+  .phase b { color: var(--gold); min-width: 64px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Dauligor Page System — Design</h1>
+<p class="sub">Roadmap #1 · the "live-content bridge / Phase-2 viewer" · 2026-06-06 · branch <code>foundry-module</code></p>
+<p><span class="pill">module-side</span><span class="pill">unblocked</span><span class="pill">greenfield</span> Load the app's <b>articles</b>, <b>system-page glossary</b>, and <b>campaign</b> content <i>inside Foundry</i>, rendered natively, with clickable cross-references. Auth + CORS are live, so the module reads <code>/api/lore</code> + <code>/api/campaigns</code> with the user's session token (incl. private campaign data).</p>
+
+<h2>1 · What the contract investigation settled</h2>
+<div class="card">
+<ul>
+  <li><b>The viewer = the Bearer token's user.</b> The server filters by the account's role + <code>active_campaign_id</code> (drafts, <code>dm_notes</code>, <code>note</code> blocks, and un-revealed <code>secret</code> blocks are stripped server-side). No impersonation. <b>The viewer requires login.</b></li>
+  <li><b>Content is block JSON, NOT HTML.</b> <code>/api/lore</code> + <code>/api/campaigns</code> return raw block rows <code>{id, block_type, order, config}</code> (<code>config</code> a JSON string). The module must render blocks→HTML itself. The app's <code>LayoutBlocks.tsx</code> is React/Tailwind — <b>spec only, not reusable</b>.</li>
+  <li><b>Cross-refs arrive RAW</b> in body text (<code>@kind[id]{display}</code> entity, <code>&amp;kind[id]{display}</code> rule). The module's enricher must process them. The server's <code>_bbcode.ts</code> deliberately leaves refs untouched (it's for spell-export only).</li>
+  <li><b>System pages have NO REST endpoint</b> — readable via <code>POST /api/d1/query</code> with a normal player token today, or via a new dedicated endpoint (handoff). See §6.</li>
+  <li><b>We already have the hard parts.</b> The module's <code>normalizeHtmlBlock</code>/<code>applyBbcodeTags</code> (BBCode→HTML incl. tables, just hardened) and <code>renderDescription</code>/<code>formatFoundryLabel</code> (ref-name resolution) are directly reusable for block bodies + refs.</li>
+</ul>
+</div>
+
+<h2>2 · Architecture (all new, under <code>module/dauligor-pairing/</code>)</h2>
+<table>
+<tr><th>Component</th><th>Responsibility</th></tr>
+<tr><td><code>scripts/content-service.js</code></td><td><code>authFetch</code> wrappers: <code>listArticles()</code>, <code>getArticle(idOrSlug)</code>, <code>listCampaigns()</code>, <code>getCampaign(id)</code>, <code>getCampaignHomeBlocks(id)</code>, <code>resolveSystemRef(kind, anchor)</code>. Per-page cache by id+hash.</td></tr>
+<tr><td><code>scripts/layout-blocks.js</code></td><td>Block parser + renderer: JSON rows → HTML, mirroring the app's <code>parseLayoutBlock</code> (switch on <code>block_type</code>, recurse <code>config.children</code>). Body text goes through <code>normalizeHtmlBlock</code>; <code>collectAnchoredBlocks</code> → Contents rail.</td></tr>
+<tr><td>reference enricher<br>(<code>scripts/enrichers/</code>)</td><td>Process <code>@</code>/<code>&amp;</code> refs in rendered HTML → clickable links that open the viewer (article/system) or fall back to an app link. Reuses <code>renderDescription</code>'s ref pass.</td></tr>
+<tr><td><code>scripts/dauligor-viewer.js</code><br><code>templates/dauligor-viewer.hbs</code><br><code>styles/dauligor-viewer.css</code></td><td>The <b>ApplicationV2</b> window: renders one page (article / system page / campaign home) from blocks, with a back/history nav, a Contents rail (from anchors), and ref-link handling. Reuses the <code>dauligor-importer-app</code> window theme.</td></tr>
+<tr><td>browser + entry points</td><td>A "Dauligor Library" list (search + open articles), a launcher entry, and a ref-click handler. (Optional later: Foundry-wide <code>CONFIG.TextEditor.enrichers</code> so refs in journals/sheets open the viewer too.)</td></tr>
+</table>
+
+<h2>3 · Block → HTML mapping</h2>
+<p class="small">15 types. Body fields are BBCode → run through <code>normalizeHtmlBlock</code>. <code>note</code>/<code>secret</code> are already server-stripped by role/campaign; the renderer also gates them defensively using the logged-in profile's role.</p>
+<table>
+<tr><th>block_type</th><th>renders as</th></tr>
+<tr><td><code>hero</code></td><td>title + subtitle banner (align/size)</td></tr>
+<tr><td><code>text</code></td><td><code>&lt;div class=desc&gt;</code> body (width variant)</td></tr>
+<tr><td><code>note</code> / <code>secret</code></td><td>callout box (staff/campaign-gated; defensive client gate too)</td></tr>
+<tr><td><code>image</code></td><td><code>&lt;figure&gt;</code> + caption (height; optional link)</td></tr>
+<tr><td><code>divider</code></td><td><code>&lt;hr&gt;</code> / dots / spacer</td></tr>
+<tr><td><code>callout</code></td><td>titled box + optional button (style)</td></tr>
+<tr><td><code>reference</code> / <code>entity-feature</code></td><td>embedded entity card/inline/link — resolved via a ref → viewer/app link + name (<code>EntityRef{kind,id,name}</code>)</td></tr>
+<tr><td><code>entity-row</code></td><td>grid of entity cards (columns/card/excerpt)</td></tr>
+<tr><td><code>definition</code></td><td>anchored glossary entry (<code>{anchor,name,body}</code>) — the <code>&amp;kind[anchor]</code> target</td></tr>
+<tr><td><code>recommended</code></td><td>campaign-only featured-lore card</td></tr>
+<tr><td><code>group</code> / <code>columns</code> / <code>column</code></td><td>containers — recurse <code>config.children</code></td></tr>
+</table>
+<p class="small">Per-surface allow-lists differ (articles: no <code>recommended</code>/<code>definition</code>; campaign home: no <code>note</code>/<code>secret</code>/<code>definition</code>; system pages: include <code>definition</code>). The renderer handles all; surfaces just won't contain the excluded ones.</p>
+
+<h2>4 · References (the clickable cross-links)</h2>
+<p>Body text carries <code>@kind[id]#anchor{display}</code> (entity) and <code>&amp;kind[id]{display}</code> (rule). The enricher maps each to an action:</p>
+<table>
+<tr><th>ref</th><th>behavior</th></tr>
+<tr><td><code>@article[slug]</code></td><td>open the viewer on that article (in-Foundry)</td></tr>
+<tr><td><code>&amp;condition[prone]</code> / any <code>&amp;</code> rule</td><td>open the viewer on the system-page entry (needs system-page access — §6)</td></tr>
+<tr><td><code>@spell/class/feat/item[id]</code></td><td><span class="rec">decision:</span> open the module's existing compendium browser, OR link to <code>dauligor.com/compendium/…</code>, OR plain badge (v1)</td></tr>
+<tr><td><code>@subclass</code>/<code>option-group</code>/unknown</td><td>non-clickable styled badge (app behaves the same)</td></tr>
+</table>
+<p class="small">v1 resolves refs <i>inside the viewer</i>. A later phase can register <code>CONFIG.TextEditor.enrichers</code> so the same refs are clickable in journals + sheets (the original bridge plan — do NOT override <code>enrichHTML</code>; push enrichers).</p>
+
+<h2>5 · Auth &amp; gating</h2>
+<ul>
+  <li>Every fetch goes through <code>authFetch</code> (Bearer + refresh). Not logged in → the existing login card/dialog; the viewer shows a "log in to view" state.</li>
+  <li>The server already enforces visibility (role + <code>active_campaign_id</code>). The block renderer <b>also</b> gates <code>note</code>/<code>secret</code> client-side (defense-in-depth) using <code>getProfile().role</code>.</li>
+</ul>
+
+<h2>6 · System-page access — DECISION</h2>
+<div class="card">
+<p><b>Option A — <code>/api/d1/query</code> now.</b> Works today with a player token (<code>system_pages</code>/<code>system_page_blocks</code> aren't protected-read). Replicates 2–3 SELECTs (page by identifier + kind-map, then blocks, then <code>collectAnchoredBlocks</code>). <span class="small">Downside: couples the module to raw SQL + table names (drift risk); sends SQL through the generic proxy.</span></p>
+<p><b>Option B — <span class="rec">recommended</span> handoff a clean endpoint</b> to <code>dauligor-applications</code>: <code>GET /api/system-pages/&lt;identifier&gt;</code> → <code>{page, blocks, entries}</code> and <code>…/&lt;anchor&gt;</code> → the resolved entry (wrapping the existing <code>fetchSystemPageDetail</code>/<code>resolveSystemEntry</code>), same open CORS as <code>/api/lore</code>. Mirrors the <code>/api/lore/articles/&lt;id&gt;/blocks</code> pattern; stable long-lived contract. <span class="small">Blocked on the app until it lands — but `&amp;` refs are the last phase anyway, so the timing fits.</span></p>
+<p class="small">Articles + campaign pages need <b>no</b> new endpoint (auth + CORS already done) — only the <code>&amp;</code>-rule refs do. So #1 starts fully unblocked; the system-page handoff can be in flight while phases 1–3 build.</p>
+</div>
+
+<h2>7 · Reuse map (don't reinvent)</h2>
+<ul>
+  <li><b>BBCode→HTML:</b> <code>normalizeHtmlBlock</code> + <code>applyBbcodeTags</code> (<code>class-import-service.js</code>) — handles the full tag set incl. tables (just hardened for embedded-in-HTML).</li>
+  <li><b>Ref-name resolution:</b> <code>renderDescription</code>'s ref pass + <code>formatFoundryLabel</code> (<code>importer-base-features.js</code>).</li>
+  <li><b>Transport:</b> <code>authFetch</code> (<code>auth-service.js</code>) — Bearer + refresh-on-401.</li>
+  <li><b>Browsing UI:</b> the shared <code>section-filter-panel.js</code> (search/tag filter) for the library browser.</li>
+  <li><b>Window chrome:</b> ApplicationV2 + the <code>dauligor-importer-app</code> theme (dark panel + tokens).</li>
+</ul>
+
+<h2>8 · Cross-branch ownership</h2>
+<div class="note warn">
+  The viewer files (<code>dauligor-viewer.js</code>, <code>enrichers/</code>, <code>dauligor-viewer.hbs</code>, <code>dauligor-viewer.css</code>) are reserved for <code>system-applications</code> and <b>jointly owned</b> with <code>foundry-module</code> (registry, owner-granted 2026-05-30). Per the owner's "I build module" call, <code>foundry-module</code> builds them — coordinate with <code>system-applications</code> (append-only on <code>scripts/main.js</code>) so neither clobbers the other. The optional system-page endpoint (§6 Option B) is an app-side <b>handoff</b> to <code>dauligor-applications</code>.
+</div>
+
+<h2>9 · Build phases</h2>
+<div class="card">
+  <p class="phase"><b>Phase 1</b> <span>The engine: <code>content-service.js</code> + <code>layout-blocks.js</code> renderer + ref enricher. Verify headless on a real article's blocks (render → HTML, no leftover BBCode/refs).</span></p>
+  <p class="phase"><b>Phase 2</b> <span>The <code>DauligorViewer</code> window: render an article by slug from its blocks; back/history nav; Contents rail. Launcher "Dauligor Library" entry → opens the viewer.</span></p>
+  <p class="phase"><b>Phase 3</b> <span>Article browser: list + search (<code>section-filter</code>) + open. Ref-clicks (<code>@article</code>) navigate within the viewer.</span></p>
+  <p class="phase"><b>Phase 4</b> <span>Campaign home view (<code>/api/campaigns/&lt;id&gt;/home-blocks</code>) + system-page entries / <code>&amp;</code>-refs (needs §6 access).</span></p>
+  <p class="phase"><b>Phase 5</b> <span>Optional: Foundry-wide <code>CONFIG.TextEditor.enrichers</code> so refs in journals + sheets open the viewer; hover tooltips.</span></p>
+</div>
+
+<h2>10 · Open decisions</h2>
+<div class="q"><b>D1 — System-page access:</b> Option A (<code>/api/d1/query</code> now) or Option B (handoff a clean endpoint). <span class="rec">Rec: B</span>, with phases 1–3 proceeding in parallel.</div>
+<div class="q"><b>D2 — Compendium-entity refs</b> (<code>@spell/class/feat/item</code>): open the module's existing browsers, link out to <code>dauligor.com</code>, or non-clickable badge for v1? <span class="rec">Rec: link-out for v1</span> (cheap; the browsers can come later).</div>
+<div class="q"><b>D3 — Foundry-wide enrichers</b> (refs clickable in journals/sheets): in scope for v1, or viewer-only first? <span class="rec">Rec: viewer-only v1</span>, enrichers in Phase 5.</div>
+<div class="q"><b>D4 — Scope order:</b> articles first (Phases 1–3), then campaign + system pages (Phase 4)? <span class="rec">Rec: yes.</span></div>
+
+</div>
+</body>
+</html>
