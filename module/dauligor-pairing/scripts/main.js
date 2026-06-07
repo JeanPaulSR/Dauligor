@@ -9,6 +9,7 @@ import { openDauligorGmConsole } from "./gm-app.js";
 import { openDauligorCharacterCreator } from "./character-creator-app.js";
 import { openDauligorLauncher } from "./launcher-app.js";
 import { openDauligorLibrary, openDauligorCampaigns } from "./dauligor-viewer.js";
+import { registerRefEnrichers, registerRefClickHandler } from "./ref-enricher.js";
 import { log, notifyInfo, notifyWarn } from "./utils.js";
 import { isLoggedIn, getDisplayName, getProfile, login, logout } from "./auth-service.js";
 
@@ -25,6 +26,9 @@ Hooks.once("init", () => {
   registerRestBarControls();
   registerGmConsoleControl();
   registerLongRestCommitHook();
+  // Make @article / &rule refs clickable everywhere Foundry enriches text
+  // (journals, item/actor descriptions, chat) — not just inside the viewer.
+  registerRefEnrichers();
   // Register the opt-in "Dauligor Sheet (D&D 5e)" alt character
   // sheet. Users select it per-actor via the sheet picker; non-opted
   // actors keep dnd5e's stock sheet (where the DOM-injected
@@ -37,6 +41,8 @@ Hooks.once("ready", () => {
   patchDnd5eRemoteItemImages();
   registerCustomFeatureTypeLabels();
   registerLongRestIntercept();
+  // Delegated click routing for enriched refs rendered outside the viewer.
+  registerRefClickHandler();
   // Nudge un-authenticated users to log into their Dauligor account (once — a
   // prior card suppresses re-posting on reload).
   if (!isLoggedIn() && !hasLoginPromptCard()) postLoginChatCard();

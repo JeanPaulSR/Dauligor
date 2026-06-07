@@ -73,6 +73,15 @@ export function renderRichText(bbcode) {
   return enrichRefs(normalizeHtmlBlock(bbcode));
 }
 
+/**
+ * Public ref-anchor builder — the single source of `.dauligor-ref` markup, shared
+ * by this module's enrichRefs AND the Foundry-wide TextEditor enricher (Phase 5),
+ * so a ref looks + behaves identically inside the viewer and in journals/sheets.
+ */
+export function refMarkup({ kind, id, anchor = "", rule = false, display } = {}) {
+  return refAnchor({ kind, id, anchor, rule, label: refLabel(kind, id, display) });
+}
+
 // ── block parsing + rendering ───────────────────────────────────────────────
 
 function parseBlock(row) {

@@ -249,3 +249,28 @@
 .dauligor-detail__body strong {
   color: var(--dauligor-accent-strong);
 }
+
+/* ============================================================================
+ * Global cross-reference links (page-system Phase 5)
+ *
+ * Styles `.dauligor-ref` anchors enriched OUTSIDE a Dauligor window — journal
+ * pages, item/actor descriptions, chat. Inside the viewer the more-specific
+ * `.dauligor-viewer .dauligor-ref` rules win. Tokens fall back to literals
+ * because these surfaces don't carry the Dauligor palette, and the gold reads
+ * on both light (parchment journals) and dark (sheets) backgrounds.
+ * ========================================================================== */
+a.dauligor-ref {
+  color: var(--dauligor-accent-strong, #b0882b);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+a.dauligor-ref:hover {
+  text-decoration-style: solid;
+}
+.dauligor-ref--dangling {
+  color: var(--dauligor-text-muted, #8a8a8a);
+  text-decoration: underline dashed;
+  cursor: help;
+}

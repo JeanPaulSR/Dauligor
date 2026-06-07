@@ -97,16 +97,18 @@ export class DauligorViewerApp extends HandlebarsApplicationMixin(ApplicationV2)
    * campaign home, `view:"campaigns"` the campaign list; otherwise the article
    * library list.
    */
-  static async open({ articleId, campaignId, view } = {}) {
+  static async open({ articleId, campaignId, view, systemKind, systemAnchor } = {}) {
     const inst = this._instance ?? new this();
     this._instance = inst;
     inst._current = articleId
       ? { mode: "article", id: String(articleId) }
       : campaignId
         ? { mode: "campaign", id: String(campaignId) }
-        : view === "campaigns"
-          ? { mode: "campaigns" }
-          : { mode: "list" };
+        : systemKind
+          ? { mode: "system", kind: String(systemKind), anchor: systemAnchor ? String(systemAnchor) : "" }
+          : view === "campaigns"
+            ? { mode: "campaigns" }
+            : { mode: "list" };
     inst._history = [];
     inst._browse = inst._freshBrowse(); // fresh search/filter each launcher open
     if (inst._mounted) {
