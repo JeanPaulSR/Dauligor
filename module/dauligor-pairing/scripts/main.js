@@ -275,6 +275,9 @@ function registerSheetControls() {
       action: `${MODULE_ID}.open-importer-actor`,
       label: "Dauligor Import",
       icon: "fas fa-book",
+      // Player-facing: a sheet's owner (or any GM) can import forgotten/bonus
+      // extras onto their character. Class import inside stays GM-only.
+      visible: () => (game.user?.isGM ?? false) || (sheet.document?.isOwner ?? false),
       onClick: async () => openDauligorImporter({ actor: sheet.document })
     });
 
@@ -490,20 +493,17 @@ async function openLauncher({ actor = null } = {}) {
   const isGm = game.user?.isGM === true;
   const actions = [];
 
-  // GM only: the compendium importer (heavy authoring tool).
-  if (isGm) {
-    actions.push({
+  // All users: import (forgotten/bonus extras — class import inside is GM-only),
+  // build a character, browse content, manage their account.
+  actions.push(
+    {
       id: "import",
       label: "Import",
       icon: "fas fa-book",
-      hint: "Bring in classes, spells, feats, and more.",
+      hint: "Add forgotten or bonus spells, feats, backgrounds, and more.",
       status: "ready",
       onSelect: async () => actorDoc ? openDauligorImporter({ actor: actorDoc }) : openDauligorImporter()
-    });
-  }
-
-  // All users: build a character, browse content, manage their account.
-  actions.push(
+    },
     {
       id: "character-creator",
       label: "Character Creator",
