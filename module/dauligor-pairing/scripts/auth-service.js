@@ -6,9 +6,10 @@
 // The token is a native HS256 session JWT; `requireAuthenticatedUser` accepts it
 // as a Bearer token on /api/me, /api/lore, /api/campaigns, /api/d1/query, …
 //
-// The session ({token, profile}) is stored in a CLIENT-scoped setting — private
-// to each user's browser, never world-shared. We send the token as a Bearer
-// header (no cookies), so the app can serve these routes with CORS `*` safely.
+// The session ({token, profile}) is stored in a CLIENT-scoped setting, keyed by
+// Foundry user id — so each user has their OWN Dauligor login (never shared with
+// other users, never world-synced). We send the token as a Bearer header (no
+// cookies), so the app can serve these routes with CORS `*` safely.
 //
 // NOTE: cross-origin calls only work once the app adds CORS to /api/auth +
 // /api/lore + /api/campaigns (the handoff above). Until then `login()` fails with
@@ -28,19 +29,38 @@ export function resolveApiHost() {
 
 // ── session store (client-scoped, JSON-encoded string) ──────────────────────
 
-function readSession() {
+// The client-scoped store is a JSON map keyed by Foundry user id, so each user on
+// a client has their OWN Dauligor session — one user's login is never shared with
+// another (and, being client scope, it's also unsynced + per-device).
+function currentUserId() {
+  return game.user?.id ?? "__nouser__";
+}
+
+function readSessionMap() {
   try {
     const raw = game.settings.get(MODULE_ID, SETTINGS.session);
-    if (!raw) return null;
-    const s = JSON.parse(raw);
-    return (s && typeof s === "object" && s.token) ? s : null;
+    if (!raw) return {};
+    const m = JSON.parse(raw);
+    if (!m || typeof m !== "object") return {};
+    // Discard the pre-per-user bare {token,profile} shape if it's still around.
+    if (m.token || m.profile) return {};
+    return m;
   } catch {
-    return null;
+    return {};
   }
 }
 
+function readSession() {
+  const entry = readSessionMap()[currentUserId()];
+  return (entry && typeof entry === "object" && entry.token) ? entry : null;
+}
+
 async function writeSession(value) {
-  await game.settings.set(MODULE_ID, SETTINGS.session, value ? JSON.stringify(value) : "");
+  const map = readSessionMap();
+  const uid = currentUserId();
+  if (value) map[uid] = value;
+  else delete map[uid];
+  await game.settings.set(MODULE_ID, SETTINGS.session, JSON.stringify(map));
 }
 
 /** The stored session `{ token, profile }`, or null. */

@@ -89,6 +89,26 @@
   padding: 10px 12px 8px;
 }
 
+/* Dauligor login chat card — lives in the chat log (outside the window roots),
+ * so it's self-contained rather than relying on the --dauligor-* token scope. */
+.dauligor-login-card { display: flex; flex-direction: column; gap: 6px; }
+.dauligor-login-card__msg { margin: 0; font-size: 12px; line-height: 1.4; }
+.dauligor-login-card__msg i { margin-right: 4px; opacity: 0.8; }
+.dauligor-login-card__btn {
+  align-self: flex-start;
+  min-height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--dnd5e-color-gold, #9f9275);
+  border-radius: 0;
+  background: rgba(0, 0, 0, 0.10);
+  color: inherit;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 12px;
+  transition: background 0.12s ease;
+}
+.dauligor-login-card__btn:hover { background: rgba(159, 146, 117, 0.18); }
+
 @keyframes dauligor-option-picker-pulse {
   0% { background: rgba(255, 255, 255, 0.28); }
   100% { background: rgba(255, 255, 255, 0.10); }

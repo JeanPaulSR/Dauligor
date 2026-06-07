@@ -19,6 +19,7 @@ Hooks.once("init", () => {
   registerSpellTabControls();
   registerLauncherControl();
   registerSettingsUiButtons();
+  registerLoginChatPrompt();
   registerSidebarButtons();
   registerRestBarControls();
   registerGmConsoleControl();
@@ -35,6 +36,9 @@ Hooks.once("ready", () => {
   patchDnd5eRemoteItemImages();
   registerCustomFeatureTypeLabels();
   registerLongRestIntercept();
+  // Nudge un-authenticated users to log into their Dauligor account (once — a
+  // prior card suppresses re-posting on reload).
+  if (!isLoggedIn() && !hasLoginPromptCard()) postLoginChatCard();
 });
 
 Hooks.on("createItem", (item) => {
@@ -835,6 +839,48 @@ async function openDauligorAccountDialog() {
   } catch (err) {
     notifyWarn(err?.message || "Login failed.");
   }
+}
+
+// A whispered chat card that nudges the user to log into their Dauligor account,
+// with a button that opens the login dialog. Posted on ready when logged out.
+async function postLoginChatCard() {
+  try {
+    const content = `
+      <div class="dauligor-login-card">
+        <p class="dauligor-login-card__msg"><i class="fas fa-dragon"></i> Log in to your <strong>Dauligor</strong> account to load references, articles, and campaign content in Foundry.</p>
+        <button type="button" class="dauligor-login-card__btn" data-action="dauligor-login"><i class="fas fa-right-to-bracket"></i> Log in to Dauligor</button>
+      </div>`;
+    await ChatMessage.create({
+      content,
+      whisper: [game.user.id],
+      speaker: { alias: "Dauligor" },
+      flags: { [MODULE_ID]: { loginPrompt: true } },
+    });
+  } catch (err) {
+    log("auth: failed to post login chat card", err);
+  }
+}
+
+// True when a login-prompt card already exists for this user — so reloading while
+// logged out doesn't keep stacking duplicate nudges in the chat log.
+function hasLoginPromptCard() {
+  try {
+    return (game.messages ?? []).some((m) =>
+      m.getFlag?.(MODULE_ID, "loginPrompt") && (m.whisper ?? []).includes(game.user.id));
+  } catch {
+    return false;
+  }
+}
+
+// Bind the login button on any rendered Dauligor login card. v13:
+// renderChatMessageHTML passes a raw HTMLElement (jQuery is gone in AppV2) — we
+// still normalize defensively.
+function registerLoginChatPrompt() {
+  Hooks.on("renderChatMessageHTML", (_message, html) => {
+    const el = html instanceof HTMLElement ? html : (html?.[0] ?? null);
+    const btn = el?.querySelector?.(`[data-action="dauligor-login"]`);
+    if (btn) btn.addEventListener("click", () => openDauligorAccountDialog());
+  });
 }
 
 function injectControl(controls, {
