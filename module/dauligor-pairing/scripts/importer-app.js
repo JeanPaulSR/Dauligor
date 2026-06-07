@@ -209,12 +209,6 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
     statusLevel = undefined
   } = {}) {
     importTypeId = normalizeImportTypeId(importTypeId, modeId);
-    // Class import creates world items, which non-GM players can't write — so the
-    // classes-subclasses type is GM-only. Fall a player back to spells (the
-    // importer is for forgotten/bonus extras; class-building is the Creator's job).
-    if (importTypeId === "classes-subclasses" && game.user?.isGM !== true) {
-      importTypeId = "spells";
-    }
 
     if (this._instance) {
       this._instance.setTargetActor(actor ?? null);
@@ -535,12 +529,7 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
   _renderImportTypesPanel() {
     if (!this._panelTypes) return;
 
-    // Class import is GM-only (it writes world items players can't create), so
-    // non-GMs don't see the classes-subclasses type.
-    const isGm = game.user?.isGM === true;
-    const rowsHtml = IMPORT_TYPES
-      .filter((type) => isGm || type.id !== "classes-subclasses")
-      .map((type) => `
+    const rowsHtml = IMPORT_TYPES.map((type) => `
       <button
         type="button"
         class="dauligor-wizard__choice ${type.id === this._state.importTypeId ? "dauligor-wizard__choice--active" : ""} ${type.status !== "ready" ? "dauligor-wizard__choice--disabled" : ""}"
