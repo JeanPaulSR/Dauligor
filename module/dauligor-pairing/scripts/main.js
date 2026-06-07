@@ -448,11 +448,11 @@ function registerLongRestCommitHook() {
 
 function registerSidebarButtons() {
   Hooks.on("renderActorDirectory", (_app, html) => {
-    injectSidebarDirectoryButtons(resolveHookRoot(html), { directoryType: "Actor" });
+    injectSidebarDirectoryButtons(resolveHookRoot(html));
   });
 
   Hooks.on("renderItemDirectory", (_app, html) => {
-    injectSidebarDirectoryButtons(resolveHookRoot(html), { directoryType: "Item" });
+    injectSidebarDirectoryButtons(resolveHookRoot(html));
   });
 }
 
@@ -539,6 +539,19 @@ async function openLauncher({ actor = null } = {}) {
       hint: "Prepare spells, feature manager, and more.",
       status: "ready",
       onSelect: async () => openActorToolsHub(actorDoc)
+    });
+  }
+
+  // Export Tools (GM only) — the Foundry→Dauligor folder export utilities,
+  // grouped into a sub-launcher (moved here from the directory sidebars).
+  if (game.user?.isGM) {
+    actions.push({
+      id: "export-tools",
+      label: "Export Tools",
+      icon: "fas fa-file-export",
+      hint: "Export Foundry folders for Dauligor import research.",
+      status: "ready",
+      onSelect: async () => openExportToolsLauncher()
     });
   }
 
@@ -638,6 +651,26 @@ async function openActorToolsHub(actorLike) {
         onSelect: async () => openUnderConstructionDialog("Show Players", actor.name)
       }
     ]
+  });
+}
+
+// Sub-launcher grouping the Foundry → Dauligor folder export tools (research /
+// import-prep). Moved out of the directory sidebars to keep those uncluttered;
+// reached via Dauligor Options → Export Tools (GM only). Each tile prompts its
+// own folder picker, so it works regardless of which directory is open.
+async function openExportToolsLauncher() {
+  return openDauligorLauncher({
+    title: "Dauligor Export Tools",
+    intro: "Export a Foundry folder as a Dauligor research / import batch.",
+    actions: [
+      { id: "export-spell", label: "Spell Folder", icon: "fas fa-wand-magic-sparkles", hint: "Native spell items.", status: "ready", onSelect: () => promptAndExportSpellFolder() },
+      { id: "export-feat", label: "Feat Folder", icon: "fas fa-medal", hint: "Class / race / background / general feats.", status: "ready", onSelect: () => promptAndExportFeatFolder() },
+      { id: "export-item", label: "Item Folder", icon: "fas fa-box-archive", hint: "Weapons, armor, consumables, tools, loot.", status: "ready", onSelect: () => promptAndExportItemFolder() },
+      { id: "export-background", label: "Background Folder", icon: "fas fa-scroll", hint: "Captures startingEquipment / wealth shapes.", status: "ready", onSelect: () => promptAndExportBackgroundFolder() },
+      { id: "export-race", label: "Race Folder", icon: "fas fa-dragon", hint: "Captures movement / senses / creature-type.", status: "ready", onSelect: () => promptAndExportRaceFolder() },
+      { id: "export-creature", label: "Creature Folder", icon: "fas fa-dragon", hint: "Full NPC stat blocks + embedded items.", status: "ready", onSelect: () => promptAndExportCreatureFolder() },
+      { id: "export-actor", label: "Actor Folder", icon: "fas fa-users", hint: "Characters / NPCs / vehicles / groups.", status: "ready", onSelect: () => promptAndExportActorFolder() },
+    ],
   });
 }
 
@@ -979,7 +1012,7 @@ function injectSettingsButtons(root) {
   anchor.insertAdjacentElement("afterend", wrapper);
 }
 
-function injectSidebarDirectoryButtons(root, { directoryType = "" } = {}) {
+function injectSidebarDirectoryButtons(root) {
   if (!game.user?.isGM) return;
   if (!root || root.querySelector?.(`[data-${MODULE_ID}-sidebar-tools]`)) return;
 
@@ -989,54 +1022,14 @@ function injectSidebarDirectoryButtons(root, { directoryType = "" } = {}) {
   const wrapper = document.createElement("div");
   wrapper.className = "header-actions action-buttons dauligor-directory-tools";
   wrapper.setAttribute(`data-${MODULE_ID}-sidebar-tools`, "true");
-  // Per-directory export buttons. Spell + Feat + Item live on the
-  // Item directory (Foundry stores all four document types in the
-  // same sidebar, routed by `item.type`). Actor exports live on the
-  // Actor directory. Keeping each set scoped to its native sidebar
-  // mirrors how Plutonium groups its sidebar tools by directory type.
-  let exportButtons = "";
-  if (directoryType === "Item") {
-    exportButtons = `
-    <button type="button" class="dauligor-directory-tools__button" data-action="export-spell-folder" title="Export a Foundry spell folder for Dauligor spell import research">
-      <i class="fas fa-wand-magic-sparkles"></i>
-      <span>Export Spell Folder</span>
-    </button>
-    <button type="button" class="dauligor-directory-tools__button" data-action="export-feat-folder" title="Export a Foundry feat folder for Dauligor feat import research">
-      <i class="fas fa-medal"></i>
-      <span>Export Feat Folder</span>
-    </button>
-    <button type="button" class="dauligor-directory-tools__button" data-action="export-item-folder" title="Export a Foundry item folder (weapons / armor / consumables / tools / loot / containers) for Dauligor item import research">
-      <i class="fas fa-box-archive"></i>
-      <span>Export Item Folder</span>
-    </button>
-    <button type="button" class="dauligor-directory-tools__button" data-action="export-background-folder" title="Export a Foundry background folder for Dauligor background research (captures startingEquipment / wealth shapes)">
-      <i class="fas fa-scroll"></i>
-      <span>Export Background Folder</span>
-    </button>
-    <button type="button" class="dauligor-directory-tools__button" data-action="export-race-folder" title="Export a Foundry race folder for Dauligor race research (captures movement / senses / creature-type shapes)">
-      <i class="fas fa-dragon"></i>
-      <span>Export Race Folder</span>
-    </button>
-  `;
-  } else if (directoryType === "Actor") {
-    exportButtons = `
-    <button type="button" class="dauligor-directory-tools__button" data-action="export-creature-folder" title="Export a Foundry NPC folder for Dauligor creature research (captures full stat blocks + embedded items)">
-      <i class="fas fa-dragon"></i>
-      <span>Export Creature Folder</span>
-    </button>
-    <button type="button" class="dauligor-directory-tools__button" data-action="export-actor-folder" title="Export a Foundry actor folder (characters / npcs / vehicles / groups) for Dauligor actor research">
-      <i class="fas fa-users"></i>
-      <span>Export Actor Folder</span>
-    </button>
-  `;
-  }
-
+  // Import + Options only. The folder-export tools moved into the Dauligor
+  // Options launcher ("Export Tools", GM only) so the directory header stays
+  // uncluttered; the pickers there work regardless of which directory is open.
   wrapper.innerHTML = `
     <button type="button" class="dauligor-directory-tools__button dauligor-directory-tools__button--primary" data-action="open-importer" title="Open Dauligor Importer">
       <i class="fas fa-book"></i>
       <span>Dauligor Import</span>
     </button>
-    ${exportButtons}
     <button type="button" class="dauligor-directory-tools__button dauligor-directory-tools__button--icon" data-action="open-options" title="Open Dauligor Options">
       <i class="fas fa-screwdriver-wrench"></i>
     </button>
@@ -1044,27 +1037,6 @@ function injectSidebarDirectoryButtons(root, { directoryType = "" } = {}) {
 
   wrapper.querySelector(`[data-action="open-importer"]`)?.addEventListener("click", async () => {
     await openDauligorImporter();
-  });
-  wrapper.querySelector(`[data-action="export-spell-folder"]`)?.addEventListener("click", async () => {
-    await promptAndExportSpellFolder();
-  });
-  wrapper.querySelector(`[data-action="export-feat-folder"]`)?.addEventListener("click", async () => {
-    await promptAndExportFeatFolder();
-  });
-  wrapper.querySelector(`[data-action="export-item-folder"]`)?.addEventListener("click", async () => {
-    await promptAndExportItemFolder();
-  });
-  wrapper.querySelector(`[data-action="export-background-folder"]`)?.addEventListener("click", async () => {
-    await promptAndExportBackgroundFolder();
-  });
-  wrapper.querySelector(`[data-action="export-race-folder"]`)?.addEventListener("click", async () => {
-    await promptAndExportRaceFolder();
-  });
-  wrapper.querySelector(`[data-action="export-creature-folder"]`)?.addEventListener("click", async () => {
-    await promptAndExportCreatureFolder();
-  });
-  wrapper.querySelector(`[data-action="export-actor-folder"]`)?.addEventListener("click", async () => {
-    await promptAndExportActorFolder();
   });
   wrapper.querySelector(`[data-action="open-options"]`)?.addEventListener("click", async () => {
     await openLauncher();
