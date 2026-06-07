@@ -146,6 +146,15 @@ function featTypeLabel(featType) {
   return FEAT_TYPE_LABELS[String(featType ?? "")] || String(featType ?? "feat");
 }
 
+// Window-title noun for an optional single-featType scope. The dedicated
+// Backgrounds / Species importer sections open this browser scoped to one type;
+// null = the full merged feats + backgrounds + species pool → "Feats".
+const ONLY_TITLE_NOUN = { feat: "Feats", background: "Backgrounds", race: "Species" };
+function browserTitle(only, actor) {
+  const noun = ONLY_TITLE_NOUN[String(only ?? "")] || "Feats";
+  return actor ? `Import ${noun}: ${actor.name}` : `Import ${noun}`;
+}
+
 // Backgrounds and species are pulled into this browser's pool from their own
 // per-source LIST catalogs (synthesized as feat-shaped entries tagged by
 // `featType`), and they export as their own Foundry item type from dedicated
@@ -262,25 +271,26 @@ function createFreshFilterUiState() {
 export class DauligorFeatBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) {
   static _instance = null;
 
-  static async open({ actor, sourceSlugs = [] } = {}) {
+  static async open({ actor, sourceSlugs = [], only = null } = {}) {
     if (!actor) {
       notifyWarn("Open the Feat Browser from a character actor.");
       return null;
     }
     if (this._instance) {
       this._instance.setActor(actor);
+      this._instance.setOnly(only);
       this._instance.setSourceSlugs(sourceSlugs);
       await this._instance.render({ force: true });
       this._instance.maximize?.();
       return this._instance;
     }
-    const instance = new this({ actor, sourceSlugs });
+    const instance = new this({ actor, sourceSlugs, only });
     this._instance = instance;
     await instance.render({ force: true });
     return instance;
   }
 
-  constructor({ actor, sourceSlugs = [] } = {}) {
+  constructor({ actor, sourceSlugs = [], only = null } = {}) {
     // Match the spell-prep window dimensions so the two browsers feel
     // identical when toggling between Spells and Feats imports.
     const width = Math.min(window.innerWidth - 120, 1280);
@@ -289,7 +299,7 @@ export class DauligorFeatBrowserApp extends HandlebarsApplicationMixin(Applicati
       id: `${MODULE_ID}-feat-browser`,
       classes: ["dauligor-importer-app", "dauligor-feat-browser"],
       window: {
-        title: actor ? `Import Feats: ${actor.name}` : "Import Feats",
+        title: browserTitle(only, actor),
         resizable: true,
         contentClasses: ["dauligor-importer-window", "dauligor-spell-manager-host"],
       },
@@ -298,6 +308,9 @@ export class DauligorFeatBrowserApp extends HandlebarsApplicationMixin(Applicati
 
     this._actor = actor;
     this._sourceSlugs = Array.isArray(sourceSlugs) ? sourceSlugs.map(String) : [];
+    // Optional single-featType scope ("feat" | "background" | "race"); null =
+    // the full merged pool. Drives which catalogs _loadPool fetches + the title.
+    this._only = only ? String(only) : null;
 
     // Pool state: { status: "idle"|"loading"|"ready"|"error", feats?, errors?, reason? }
     this._pool = { status: "idle", feats: [] };
@@ -353,7 +366,18 @@ export class DauligorFeatBrowserApp extends HandlebarsApplicationMixin(Applicati
 
   setActor(actor) {
     this._actor = actor;
-    if (actor) this.options.window.title = `Import Feats: ${actor.name}`;
+    if (actor) this.options.window.title = browserTitle(this._only, actor);
+  }
+
+  // Restrict (or clear) the single-featType scope. Resets the pool so a reopened
+  // browser scoped to a different type refetches just that catalog.
+  setOnly(only) {
+    const next = only ? String(only) : null;
+    if (next === this._only) return;
+    this._only = next;
+    this._pool = { status: "idle", feats: [] };
+    this._state.selectedDbId = null;
+    if (this._actor) this.options.window.title = browserTitle(this._only, this._actor);
   }
 
   setSourceSlugs(slugs) {
@@ -493,11 +517,16 @@ export class DauligorFeatBrowserApp extends HandlebarsApplicationMixin(Applicati
       }
     };
 
-    await Promise.all(this._sourceSlugs.flatMap((slug) => [
-      fetchFeats(slug),
-      fetchCatalog(slug, "backgrounds.json", "dauligor.background-catalog.v1", "background"),
-      fetchCatalog(slug, "species.json", "dauligor.species-catalog.v1", "race"),
-    ]));
+    // Scope: when `_only` is set (the dedicated Backgrounds / Species / Feats
+    // importer sections), fetch just that featType's catalog so the pool reflects
+    // the section. null = the full merged feats + backgrounds + species pool.
+    await Promise.all(this._sourceSlugs.flatMap((slug) => {
+      const jobs = [];
+      if (!this._only || this._only === "feat") jobs.push(fetchFeats(slug));
+      if (!this._only || this._only === "background") jobs.push(fetchCatalog(slug, "backgrounds.json", "dauligor.background-catalog.v1", "background"));
+      if (!this._only || this._only === "race") jobs.push(fetchCatalog(slug, "species.json", "dauligor.species-catalog.v1", "race"));
+      return jobs;
+    }));
 
     // Stable sort: featType asc, then name asc.
     collected.sort((a, b) => {
@@ -1455,7 +1484,7 @@ export class DauligorFeatBrowserApp extends HandlebarsApplicationMixin(Applicati
  * Public opener. Mirrors `openSpellBrowser` so the importer wizard's
  * `_openImporter` can dispatch uniformly between Spells and Feats.
  */
-export async function openFeatBrowser(actorLike, { sourceSlugs = [] } = {}) {
+export async function openFeatBrowser(actorLike, { sourceSlugs = [], only = null } = {}) {
   const actor = (() => {
     if (!actorLike) return null;
     if (actorLike.documentName === "Actor") return actorLike;
@@ -1467,5 +1496,5 @@ export async function openFeatBrowser(actorLike, { sourceSlugs = [] } = {}) {
     notifyWarn("Open Import Feats from a character actor.");
     return null;
   }
-  return DauligorFeatBrowserApp.open({ actor, sourceSlugs });
+  return DauligorFeatBrowserApp.open({ actor, sourceSlugs, only });
 }

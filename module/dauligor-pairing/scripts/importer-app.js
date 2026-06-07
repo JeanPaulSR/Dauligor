@@ -73,6 +73,18 @@ const IMPORT_TYPES = [
     label: "Feats",
     status: "ready",
     description: "Browse every feat published in a source and import any of them directly to the actor (general feats, class features, racial features)."
+  },
+  {
+    id: "backgrounds",
+    label: "Backgrounds",
+    status: "ready",
+    description: "Browse every background published in a source and import any of them directly to the actor."
+  },
+  {
+    id: "species",
+    label: "Species",
+    status: "ready",
+    description: "Browse every species (race) published in a source and import any of them directly to the actor."
   }
 ];
 
@@ -93,8 +105,20 @@ const SOURCE_TYPES = {
   spells: [],
   // Feats follow the same model as spells — the wizard loads the live
   // API source catalog and filters by `counts.feats > 0`.
-  feats: []
+  feats: [],
+  // Backgrounds + species also load the live API source catalog (filtered by
+  // counts.backgrounds / counts.species); they open the feat browser scoped.
+  backgrounds: [],
+  species: []
 };
+
+// Import types whose source list is the live API source catalog (per-source
+// `/api/module/<slug>/*.json`) rather than the static SOURCE_TYPES map.
+// Centralized so adding a type (backgrounds / species) is one edit.
+const API_SOURCE_IMPORT_TYPES = new Set(["classes-subclasses", "spells", "feats", "backgrounds", "species"]);
+function importTypeUsesApiSources(id) {
+  return API_SOURCE_IMPORT_TYPES.has(id);
+}
 
 const CLASS_VARIANT_PRIORITY = {
   "dauligor.semantic.class-export": 0,
@@ -331,7 +355,7 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
 
   setImportType(importTypeId) {
     if (!importTypeId) return;
-    const usesApiSources = importTypeId === "classes-subclasses" || importTypeId === "spells" || importTypeId === "feats";
+    const usesApiSources = importTypeUsesApiSources(importTypeId);
     this._state.importTypeId = importTypeId;
     this._state.sourceTypeId = getDefaultSourceTypeId(importTypeId);
     this._state.selectedSourceIds = usesApiSources
@@ -444,21 +468,20 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
     //   - feats: same rule with `counts.feats` / `"feats"` support flag
     // We keep the SAME `_sourceEntries` field — the wizard toggles
     // between modes by swapping the active count column.
-    const isSpells = this._state.importTypeId === "spells";
-    const isFeats = this._state.importTypeId === "feats";
+    // For the API-source modes, keep an entry if it supports the type or has a
+    // positive count for it (unknown counts on legacy catalogs → accept). One
+    // generic count column drives spells / feats / backgrounds / species; the
+    // classes mode falls through to the class-catalog rule.
+    const importTypeId = this._state.importTypeId;
+    const COUNT_KEY = { spells: "spells", feats: "feats", backgrounds: "backgrounds", species: "species" };
+    const countKey = COUNT_KEY[importTypeId] || null;
     this._sourceEntries = ensureArray(catalog?.entries)
       .filter((entry) => {
-        if (isSpells) {
-          const supports = ensureArray(entry.supportedImportTypes).includes("spells");
-          const hasSpells = Number(entry.counts?.spells ?? 0) > 0;
-          if (supports || hasSpells) return true;
-          return entry.counts?.spells == null; // unknown count → accept
-        }
-        if (isFeats) {
-          const supports = ensureArray(entry.supportedImportTypes).includes("feats");
-          const hasFeats = Number(entry.counts?.feats ?? 0) > 0;
-          if (supports || hasFeats) return true;
-          return entry.counts?.feats == null; // unknown count → accept
+        if (countKey) {
+          const supports = ensureArray(entry.supportedImportTypes).includes(importTypeId);
+          const has = Number(entry.counts?.[countKey] ?? 0) > 0;
+          if (supports || has) return true;
+          return entry.counts?.[countKey] == null; // unknown count → accept
         }
         return ensureArray(entry.supportedImportTypes).includes("classes-subclasses")
           || entry.classCatalogUrl;
@@ -471,11 +494,9 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
         shortName: entry.shortName ?? "",
         detailUrl: entry.detailUrl ?? null,
         classCatalogUrl: entry.classCatalogUrl ?? null,
-        count: isSpells
-          ? (Number(entry.counts?.spells ?? 0) || 0)
-          : isFeats
-            ? (Number(entry.counts?.feats ?? 0) || 0)
-            : (Number(entry.counts?.classes ?? 0) || 0),
+        count: countKey
+          ? (Number(entry.counts?.[countKey] ?? 0) || 0)
+          : (Number(entry.counts?.classes ?? 0) || 0),
         tags: ensureArray(entry.tags),
         rules: entry.rules ?? "",
         slug: entry.slug ?? ""
@@ -540,7 +561,7 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
       button.addEventListener("click", async () => {
         const importTypeId = button.dataset.importTypeId;
         if (!importTypeId) return;
-        const usesApiSources = importTypeId === "classes-subclasses" || importTypeId === "spells" || importTypeId === "feats";
+        const usesApiSources = importTypeUsesApiSources(importTypeId);
         this._state.importTypeId = importTypeId;
         this._state.sourceTypeId = getDefaultSourceTypeId(importTypeId);
         this._state.selectedSourceIds = usesApiSources
@@ -565,9 +586,7 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
     // Classes, spells, and feats importers all pull their source list
     // from the live API catalog (`_sourceEntries`); every other importer
     // mode uses the hardcoded `SOURCE_TYPES[mode]` list.
-    const usesApiSources = this._state.importTypeId === "classes-subclasses"
-      || this._state.importTypeId === "spells"
-      || this._state.importTypeId === "feats";
+    const usesApiSources = importTypeUsesApiSources(this._state.importTypeId);
     const sources = usesApiSources
       ? this._sourceEntries
       : getSourceTypes(this._state.importTypeId);
@@ -646,7 +665,11 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
                 ? `spell${source.count === 1 ? "" : "s"}`
                 : this._state.importTypeId === "feats"
                   ? `feat${source.count === 1 ? "" : "s"}`
-                  : `class${source.count === 1 ? "" : "es"}`}</span>
+                  : this._state.importTypeId === "backgrounds"
+                    ? `background${source.count === 1 ? "" : "s"}`
+                    : this._state.importTypeId === "species"
+                      ? `species`
+                      : `class${source.count === 1 ? "" : "es"}`}</span>
               ${source.rules ? `<span>${foundry.utils.escapeHTML(String(source.rules))}</span>` : ""}
             </div>
           ` : ""}
@@ -749,9 +772,7 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
     if (!this._footerPanel) return;
 
     const importType = getImportType(this._state.importTypeId);
-    const usesApiSources = this._state.importTypeId === "classes-subclasses"
-      || this._state.importTypeId === "spells"
-      || this._state.importTypeId === "feats";
+    const usesApiSources = importTypeUsesApiSources(this._state.importTypeId);
     const sources = usesApiSources ? this._sourceEntries : getSourceTypes(this._state.importTypeId);
     const selectedSources = sources.filter((source) => normalizeSourceTypeIds(this._state.selectedSourceIds, this._state.sourceTypeId).includes(source.id));
     const sourceType = selectedSources[0] ?? sources.find((source) => source.id === this._state.sourceTypeId) ?? null;
@@ -779,9 +800,7 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
 
   async _openImporter() {
     const importType = getImportType(this._state.importTypeId);
-    const usesApiSources = this._state.importTypeId === "classes-subclasses"
-      || this._state.importTypeId === "spells"
-      || this._state.importTypeId === "feats";
+    const usesApiSources = importTypeUsesApiSources(this._state.importTypeId);
     const sources = usesApiSources ? this._sourceEntries : getSourceTypes(this._state.importTypeId);
     const selectedSources = sources.filter((source) => normalizeSourceTypeIds(this._state.selectedSourceIds, this._state.sourceTypeId).includes(source.id));
     const sourceType = selectedSources[0] ?? sources.find((source) => source.id === this._state.sourceTypeId) ?? null;
@@ -815,10 +834,25 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
         notifyWarn("Open the Feat Browser from a character actor (or pick a target actor first).");
         return;
       }
-      // Slugs feed `/api/module/<slug>/feats.json`. Same fallback
-      // rule as spells (`entry.slug` then `entry.id`).
+      // Slugs feed `/api/module/<slug>/feats.json`. Same fallback rule as spells
+      // (`entry.slug` then `entry.id`). Scoped to feats now that backgrounds +
+      // species have their own importer sections.
       const slugs = selectedSources.map((s) => s.slug || s.id).filter(Boolean);
-      await openFeatBrowser(this._actor, { sourceSlugs: slugs });
+      await openFeatBrowser(this._actor, { sourceSlugs: slugs, only: "feat" });
+      return;
+    }
+
+    if (this._state.importTypeId === "backgrounds" || this._state.importTypeId === "species") {
+      // Backgrounds + species reuse the feat browser, scoped to one featType. It
+      // already fetches their catalogs (/api/module/<slug>/backgrounds.json |
+      // species.json), routes the detail fetch, and embeds the native item.
+      if (!this._actor) {
+        notifyWarn("Open the Background / Species browser from a character actor (or pick a target actor first).");
+        return;
+      }
+      const slugs = selectedSources.map((s) => s.slug || s.id).filter(Boolean);
+      const only = this._state.importTypeId === "species" ? "race" : "background";
+      await openFeatBrowser(this._actor, { sourceSlugs: slugs, only });
       return;
     }
 
