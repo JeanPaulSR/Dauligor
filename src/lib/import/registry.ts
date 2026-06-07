@@ -56,6 +56,13 @@ export function assignFieldText(type: string, targetKey: string, text: string): 
   return descriptor?.assignField ? descriptor.assignField(targetKey, text) : {};
 }
 
+/** PURE — for an `append`-mode target, parse a selection into ONE list item to
+ * push onto the target's array field. Null when unsupported / empty. */
+export function assignAppendItem(type: string, targetKey: string, text: string): Record<string, unknown> | null {
+  const descriptor = getImportDescriptor(type);
+  return descriptor?.assignAppend ? descriptor.assignAppend(targetKey, text) : null;
+}
+
 /** PURE — split a multi-entity paste into per-entity block-start offsets. Empty
  * (or the type has no splitter) ⇒ treat the whole paste as one entity. */
 export function splitEntityBlocks(type: string, text: string): number[] {

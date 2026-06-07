@@ -86,6 +86,9 @@ export interface FeatureDraft {
   level: number | null;
   levels: number[];
   body: string;
+  /** Source span when the draft came from a manual "Feature" mark — drives the
+   * left-panel highlight; absent for auto-parsed drafts. */
+  span?: { start: number; end: number };
 }
 
 export interface ClassSection {
@@ -291,6 +294,18 @@ export function parseClassText(text: string): ParseResult {
   }
 
   return { fields, leftovers, notes };
+}
+
+/** Parse ONE manually-marked span into a single feature draft: first non-empty
+ * line = name, the rest = body, level sniffed from the prose. Backs the "Feature"
+ * section mark — mark span A then span B and you get two separate features. */
+export function parseFeatureSpan(text: string): { kind: 'feature'; name: string; level: number; body: string } {
+  const raw = String(text || '');
+  const lines = raw.split('\n');
+  const firstIdx = lines.findIndex((l) => l.trim());
+  const name = firstIdx >= 0 ? lines[firstIdx].trim() : '';
+  const rest = firstIdx >= 0 ? lines.slice(firstIdx + 1).join('\n').trim() : '';
+  return { kind: 'feature', name, level: firstLevel(raw) ?? 1, body: rest || name };
 }
 
 // ───────────────────────── Proficiency resolver ─────────────────────────────

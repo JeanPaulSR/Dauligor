@@ -73,6 +73,10 @@ export interface ImportAssignTarget {
   key: string;
   label: string;
   fieldKeys: string[];
+  /** `'append'` (default `'replace'`): each selection adds ONE item to the
+   * target's array field via `assignAppend` (e.g. class Features) instead of
+   * setting field values. */
+  mode?: 'replace' | 'append';
 }
 
 /** Result of interpreting a blob of pasted text into descriptor fields. Pure —
@@ -144,6 +148,10 @@ export interface ImportDescriptor {
    * so assigning "150 feet" to Range yields `{rangeUnits:'ft', rangeValue:'150'}`
    * — not the literal string. */
   assignField?: (targetKey: string, text: string) => Record<string, unknown>;
+  /** OPTIONAL · PURE: for an `append`-mode assign target, parse a selection into
+   * ONE list item to push onto the target's array field (e.g. a class Feature
+   * draft). Returns null when the selection yields nothing. */
+  assignAppend?: (targetKey: string, text: string) => Record<string, unknown> | null;
   /** OPTIONAL · PURE: split a multi-entity paste into per-entity blocks, returning
    * the character offset where each block STARTS (sorted, first = first entity).
    * Empty / length-1 means a single entity. Drives batch import + the manual

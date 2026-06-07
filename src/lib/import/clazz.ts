@@ -27,7 +27,7 @@ import { upsertFeature } from '../compendium';
 import { queueRebake } from '../moduleExport';
 import { slugify } from '../utils';
 import { sanitizeProficiencySelection } from '../proficiencySelection';
-import { parseClassText, classifyHitDie, normalizeClassName, type FeatureDraft } from './classParse';
+import { parseClassText, classifyHitDie, normalizeClassName, parseFeatureSpan, type FeatureDraft } from './classParse';
 import type { ImportDescriptor, ImportContext, ImportFieldOption } from './types';
 
 const toOptions = (pairs: [string, string][]): ImportFieldOption[] =>
@@ -279,6 +279,7 @@ export const clazzDescriptor: ImportDescriptor = {
     { key: 'lore', label: 'Lore / Flavour', fieldKeys: ['lore'] },
     { key: 'startingEquipment', label: 'Equipment', fieldKeys: ['startingEquipment'] },
     { key: 'multiclassing', label: 'Multiclassing', fieldKeys: ['multiclassing'] },
+    { key: 'feature', label: 'Feature (＋ add)', fieldKeys: ['_features'], mode: 'append' },
   ],
 
   assignField(target: string, text: string): Record<string, unknown> {
@@ -297,5 +298,15 @@ export const clazzDescriptor: ImportDescriptor = {
       case 'multiclassing': return clean ? { multiclassing: tidy(clean) } : {};
       default: return {};
     }
+  },
+
+  // "Feature" section mark: each selected span becomes ONE feature draft appended
+  // to the Features panel (first line = name, rest = body, level sniffed). Mark
+  // span A then span B → two separate features.
+  assignAppend(target: string, text: string): Record<string, unknown> | null {
+    if (target !== 'feature') return null;
+    const d = parseFeatureSpan(text);
+    if (!d.name) return null;
+    return { id: crypto.randomUUID(), kind: d.kind, name: d.name, level: d.level, body: d.body };
   },
 };

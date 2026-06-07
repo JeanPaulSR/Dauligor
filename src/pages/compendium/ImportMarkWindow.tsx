@@ -36,6 +36,7 @@ import {
   parseEntityText,
   getAssignTargets,
   assignFieldText,
+  assignAppendItem,
   splitEntityBlocks,
   resolveClassProficiencies,
   type ImportDescriptor,
@@ -873,6 +874,7 @@ function EntityWorkspace({
   ) => {
     for (const u of assignTargets) {
       if (keep.has(u.key)) continue;
+      if (u.mode === 'append') continue; // append targets (Features) aren't re-derived from text
       let cur: Span[] | undefined;
       for (const fk of u.fieldKeys) if (prev.spans[fk]?.length) { cur = prev.spans[fk]; break; }
       if (!cur) continue;
@@ -893,11 +895,32 @@ function EntityWorkspace({
     !!t && t.fieldKeys.length > 0 && t.fieldKeys.every((fk) => descriptor.fields.find((f) => f.key === fk)?.kind === 'textarea');
   const handleAssign = (targetKey: string) => {
     if (!selection) return;
+    const target = assignTargets.find((t) => t.key === targetKey);
+    const iv: Span = { start: selection.start, end: selection.end };
+    // Append-mode target (e.g. class Feature): each selection adds ONE list item,
+    // so marking several spans yields several features. Still decouples the span
+    // from the other fields.
+    if (target?.mode === 'append') {
+      const item = assignAppendItem(type, targetKey, selection.text);
+      if (!item) { toast.error('Nothing to add from that selection.'); return; }
+      const fk = target.fieldKeys[0];
+      onChange((prev) => {
+        const values = { ...prev.values };
+        const spans = { ...prev.spans };
+        const provenance = { ...prev.provenance };
+        repartition(prev, values, spans, provenance, iv, new Set([targetKey]));
+        const arr = Array.isArray(values[fk]) ? [...values[fk]] : [];
+        arr.push({ ...item, span: iv });
+        values[fk] = arr;
+        return { ...prev, values, spans, provenance };
+      });
+      setSelection(null); window.getSelection()?.removeAllRanges();
+      toast.success(`Added ${target.label}`);
+      return;
+    }
     const probe = assignFieldText(type, targetKey, selection.text);
     if (!Object.keys(probe).length) { toast.error('Nothing to assign from that selection.'); return; }
-    const target = assignTargets.find((t) => t.key === targetKey);
     const keys = target?.fieldKeys ?? Object.keys(probe);
-    const iv: Span = { start: selection.start, end: selection.end };
     onChange((prev) => {
       const values = { ...prev.values };
       const spans = { ...prev.spans };
@@ -938,11 +961,17 @@ function EntityWorkspace({
     const out: { key: string; label: string; start: number; end: number }[] = [];
     for (const t of assignTargets) {
       let list: Span[] | undefined;
-      for (const fk of t.fieldKeys) if (state.spans[fk]?.length) { list = state.spans[fk]; break; }
+      if (t.mode === 'append') {
+        // append targets (Features) carry their span on each list item
+        const items = state.values[t.fieldKeys[0]];
+        if (Array.isArray(items)) list = items.map((it: any) => it?.span).filter(Boolean) as Span[];
+      } else {
+        for (const fk of t.fieldKeys) if (state.spans[fk]?.length) { list = state.spans[fk]; break; }
+      }
       if (list) for (const s of list) out.push({ key: t.key, label: t.label, start: s.start, end: s.end });
     }
     return out.sort((a, b) => a.start - b.start);
-  }, [assignTargets, state.spans]);
+  }, [assignTargets, state.spans, state.values]);
   const segments = useMemo(() => {
     const segs: { start: number; end: number; target?: string; label?: string }[] = [];
     let pos = 0;
