@@ -1,0 +1,15 @@
+<div class="dauligor-viewer__shell">
+  {{!-- Fixed toolbar: back / library / title / refresh. Filled by _renderToolbar(). --}}
+  <div class="dauligor-viewer__toolbar" data-region="toolbar"></div>
+
+  {{!-- Body row: a Contents rail (article anchors, hidden when empty) beside the
+       scrolling content region. Both regions are filled imperatively from the
+       block renderer (data isn't expressible in Handlebars). The min-height:0
+       chain lets the scroll region scroll inside the fixed-height window. --}}
+  <div class="dauligor-viewer__main">
+    <aside class="dauligor-viewer__rail" data-region="rail"></aside>
+    <div class="dauligor-viewer__scroll" data-region="scroll">
+      <div class="dauligor-viewer__body" data-region="body"></div>
+    </div>
+  </div>
+</div>

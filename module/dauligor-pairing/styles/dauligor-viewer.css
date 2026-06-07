@@ -1,0 +1,543 @@
+/* ============================================================================
+ * dauligor-pairing — dauligor-viewer
+ * The in-Foundry page viewer (page-system Phase 2). Two parts:
+ *   1. Viewer chrome — toolbar, Contents rail, scroll body, list rows, states.
+ *   2. Block styles — every class layout-blocks.js emits (.dauligor-block--*,
+ *      .dauligor-richtext, .dauligor-ref). Scoped under .dauligor-viewer so the
+ *      generic block class names can't leak into other windows.
+ * Tokens (--dauligor-*) come from the co-applied .dauligor-importer-app root
+ * (see tokens.css); load order is fixed in module.json.
+ * ========================================================================== */
+
+/* ── chrome ───────────────────────────────────────────────────────────────── */
+
+.dauligor-viewer .dauligor-viewer__shell {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  color: var(--dauligor-text);
+  background: var(--dauligor-panel);
+}
+
+.dauligor-viewer__toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--dauligor-border);
+  background: var(--dauligor-panel-alt);
+}
+.dauligor-viewer__toolbar-nav,
+.dauligor-viewer__toolbar-actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 4px;
+}
+.dauligor-viewer__toolbar-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: center;
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.2px;
+  color: var(--dauligor-accent-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dauligor-viewer__tbtn {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--dauligor-btn-border);
+  border-radius: 0;
+  background: var(--dauligor-btn-bg);
+  color: var(--dauligor-text);
+  cursor: pointer;
+  transition: background-color 80ms ease, border-color 80ms ease;
+}
+.dauligor-viewer__tbtn:hover:not(:disabled) {
+  background: var(--dauligor-btn-hover-bg);
+  border-color: var(--dauligor-btn-border-hover);
+}
+.dauligor-viewer__tbtn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.dauligor-viewer__tbtn--active {
+  border-color: var(--dauligor-btn-border-hover);
+  color: var(--dauligor-accent-strong);
+}
+
+/* body row: rail + scroll region */
+.dauligor-viewer__main {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+}
+.dauligor-viewer__rail {
+  flex: 0 0 198px;
+  display: none;            /* shown only when .dauligor-viewer--has-rail */
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 8px 12px 12px;
+  overflow-y: auto;
+  border-right: 1px solid var(--dauligor-border);
+  background: var(--dauligor-panel-alt);
+}
+.dauligor-viewer--has-rail .dauligor-viewer__rail {
+  display: flex;
+}
+.dauligor-viewer__rail-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--dauligor-text-muted);
+  margin-bottom: 6px;
+}
+.dauligor-viewer__rail-link {
+  display: block;
+  padding: 3px 6px;
+  font-size: 12px;
+  color: var(--dauligor-text);
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  transition: color 80ms ease, border-color 80ms ease, background-color 80ms ease;
+}
+.dauligor-viewer__rail-link:hover {
+  color: var(--dauligor-accent-strong);
+  border-left-color: var(--dauligor-btn-border-hover);
+  background: rgba(var(--dauligor-accent-tint), 0.08);
+}
+
+.dauligor-viewer__scroll {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+.dauligor-viewer__body {
+  padding: 0;
+}
+
+/* article list (v1 browse — Phase 3 swaps this for the section-filter browser) */
+.dauligor-viewer__list {
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  gap: 6px;
+}
+.dauligor-viewer__row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 11px;
+  border: 1px solid var(--dauligor-border);
+  background: var(--dauligor-panel-alt);
+  cursor: pointer;
+  transition: background-color 80ms ease, border-color 80ms ease;
+}
+.dauligor-viewer__row:hover,
+.dauligor-viewer__row:focus-visible {
+  background: var(--dauligor-panel-soft);
+  border-color: var(--dauligor-btn-border-hover);
+  outline: none;
+}
+.dauligor-viewer__row-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.dauligor-viewer__row-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--dauligor-accent-strong);
+}
+.dauligor-viewer__row-cat {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--dauligor-text-muted);
+  border: 1px solid var(--dauligor-border);
+  padding: 0 5px;
+}
+.dauligor-viewer__row-badge {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--dauligor-warning);
+  border: 1px solid var(--dauligor-warning);
+  padding: 0 5px;
+}
+.dauligor-viewer__row-excerpt {
+  font-size: 12px;
+  color: var(--dauligor-text-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* status + CTA states (loading / empty / logged-out / error) */
+.dauligor-viewer__status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+  min-height: 220px;
+  padding: 40px 28px;
+  color: var(--dauligor-text-muted);
+}
+.dauligor-viewer__status p {
+  margin: 0;
+  max-width: 380px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.dauligor-viewer__status-icon {
+  font-size: 26px;
+  color: var(--dauligor-accent);
+}
+.dauligor-viewer__status--error .dauligor-viewer__status-icon {
+  color: var(--dauligor-warning);
+}
+.dauligor-viewer__cta-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid var(--dauligor-btn-border-hover);
+  border-radius: 0;
+  background: var(--dauligor-btn-bg);
+  color: var(--dauligor-accent-strong);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 80ms ease;
+}
+.dauligor-viewer__cta-btn:hover {
+  background: var(--dauligor-btn-hover-bg);
+}
+
+/* ── article shell ──────────────────────────────────────────────────────────── */
+
+.dauligor-viewer__article {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 22px 28px 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── blocks ─────────────────────────────────────────────────────────────────── */
+
+.dauligor-viewer .dauligor-block { margin: 0; }
+
+/* hero */
+.dauligor-viewer .dauligor-block--hero {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 0 14px;
+  border-bottom: 1px solid var(--dauligor-border);
+}
+.dauligor-viewer .dauligor-block--align-center { text-align: center; align-items: center; }
+.dauligor-viewer .dauligor-block--align-left   { text-align: left;   align-items: flex-start; }
+.dauligor-viewer .dauligor-block--align-right  { text-align: right;  align-items: flex-end; }
+.dauligor-viewer .dauligor-block__hero-title {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--dauligor-accent-strong);
+  line-height: 1.15;
+}
+.dauligor-viewer .dauligor-block--size-large .dauligor-block__hero-title { font-size: 38px; }
+.dauligor-viewer .dauligor-block--size-small .dauligor-block__hero-title { font-size: 24px; }
+.dauligor-viewer .dauligor-block__hero-sub {
+  font-size: 14px;
+  color: var(--dauligor-text-muted);
+}
+
+/* text + note + secret + callout */
+.dauligor-viewer .dauligor-block--width-narrow { max-width: 540px; }
+.dauligor-viewer .dauligor-block--width-wide   { max-width: none; }
+
+.dauligor-viewer .dauligor-block--note,
+.dauligor-viewer .dauligor-block--secret {
+  padding: 10px 14px;
+  border-left: 3px solid var(--dauligor-accent);
+  background: var(--dauligor-panel-alt);
+}
+.dauligor-viewer .dauligor-block--note {
+  border-left-color: var(--dauligor-warning);
+}
+.dauligor-viewer .dauligor-block--secret {
+  border: 1px dashed var(--dauligor-danger);
+  border-left: 3px solid var(--dauligor-danger);
+  background: rgba(165, 100, 90, 0.08);
+}
+/* "Storyteller Note · staff only" / "Secret" label on privileged blocks — these
+ * only render for an entitled (staff / revealed) viewer, per server filtering. */
+.dauligor-viewer .dauligor-block__priv-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 5px;
+  color: var(--dauligor-text-muted);
+}
+.dauligor-viewer .dauligor-block--note .dauligor-block__priv-label { color: var(--dauligor-warning); }
+.dauligor-viewer .dauligor-block--secret .dauligor-block__priv-label { color: var(--dauligor-danger); }
+
+.dauligor-viewer .dauligor-block--callout {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--dauligor-border);   /* 'plain' = bordered card */
+  background: var(--dauligor-panel-alt);
+}
+/* 'soft' = dashed gold panel (the default-home look); 'plain' keeps the base. */
+.dauligor-viewer .dauligor-block--callout.dauligor-block--soft {
+  border: 1px dashed var(--dauligor-btn-border-hover);
+  background: rgba(var(--dauligor-accent-tint), 0.08);
+}
+.dauligor-viewer .dauligor-block__callout-title {
+  font-weight: 600;
+  color: var(--dauligor-accent-strong);
+}
+.dauligor-viewer .dauligor-block__callout-btn {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 4px 12px;
+  border: 1px solid var(--dauligor-btn-border-hover);
+  background: var(--dauligor-btn-bg);
+  color: var(--dauligor-accent-strong);
+  font-size: 12px;
+  text-decoration: none;
+}
+.dauligor-viewer .dauligor-block__callout-btn:hover { background: var(--dauligor-btn-hover-bg); }
+
+/* image */
+.dauligor-viewer .dauligor-block--image {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+}
+.dauligor-viewer .dauligor-block--image img {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--dauligor-border);
+}
+.dauligor-viewer .dauligor-block--h-small img  { max-height: 180px; width: auto; }
+.dauligor-viewer .dauligor-block--h-medium img { max-height: 320px; width: auto; }
+.dauligor-viewer .dauligor-block--h-large img  { max-height: 520px; width: auto; }
+.dauligor-viewer .dauligor-block--image figcaption {
+  font-size: 11px;
+  color: var(--dauligor-text-muted);
+  font-style: italic;
+}
+
+/* divider */
+.dauligor-viewer .dauligor-block--divider {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0;
+}
+.dauligor-viewer .dauligor-block--divider hr {
+  width: 100%;
+  border: none;
+  border-top: 1px solid var(--dauligor-border);
+  margin: 0;
+}
+.dauligor-viewer .dauligor-block__dots {
+  color: var(--dauligor-accent);
+  letter-spacing: 6px;
+  font-size: 14px;
+}
+.dauligor-viewer .dauligor-block--divider.dauligor-block--space { padding: 14px 0; }
+
+/* definition (anchored entry) */
+.dauligor-viewer .dauligor-block--definition {
+  scroll-margin-top: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--dauligor-border);
+}
+.dauligor-viewer .dauligor-block__def-name {
+  margin: 0 0 4px;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--dauligor-accent-strong);
+}
+
+/* reference / entity-feature / recommended cards */
+.dauligor-viewer .dauligor-block--reference,
+.dauligor-viewer .dauligor-block--entity-feature,
+.dauligor-viewer .dauligor-block--recommended {
+  padding: 10px 12px;
+  border: 1px solid var(--dauligor-border);
+  background: var(--dauligor-panel-alt);
+}
+
+/* entity-row grid */
+.dauligor-viewer .dauligor-block__row-title {
+  margin: 0 0 8px;
+  font-size: 18px;
+  color: var(--dauligor-accent-strong);
+}
+.dauligor-viewer .dauligor-block__entity-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.dauligor-viewer .dauligor-block__entity-card {
+  padding: 8px 10px;
+  border: 1px solid var(--dauligor-border);
+  background: var(--dauligor-panel-alt);
+}
+
+/* group + columns */
+.dauligor-viewer .dauligor-block--group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.dauligor-viewer .dauligor-block--group.dauligor-block--card {
+  padding: 14px;
+  border: 1px solid var(--dauligor-border);
+  background: var(--dauligor-panel-alt);
+}
+.dauligor-viewer .dauligor-block--group.dauligor-block--bordered {
+  padding: 12px;
+  border: 1px solid var(--dauligor-border);
+}
+.dauligor-viewer .dauligor-block__group-title {
+  margin: 0;
+  font-size: 20px;
+  color: var(--dauligor-accent-strong);
+}
+.dauligor-viewer .dauligor-block--columns {
+  display: grid;
+  gap: 16px;
+}
+.dauligor-viewer .dauligor-block--gap-small  { gap: 8px; }
+.dauligor-viewer .dauligor-block--gap-large  { gap: 28px; }
+.dauligor-viewer .dauligor-block--column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* shared column-count helper (entity grid + columns block) */
+.dauligor-viewer .dauligor-block--cols-1 { grid-template-columns: 1fr; }
+.dauligor-viewer .dauligor-block--cols-2 { grid-template-columns: repeat(2, 1fr); }
+.dauligor-viewer .dauligor-block--cols-3 { grid-template-columns: repeat(3, 1fr); }
+.dauligor-viewer .dauligor-block--cols-4 { grid-template-columns: repeat(4, 1fr); }
+
+/* ── rich text (normalizeHtmlBlock output) ───────────────────────────────────── */
+
+.dauligor-viewer .dauligor-richtext {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--dauligor-text);
+}
+.dauligor-viewer .dauligor-richtext > :first-child { margin-top: 0; }
+.dauligor-viewer .dauligor-richtext > :last-child { margin-bottom: 0; }
+.dauligor-viewer .dauligor-richtext p { margin: 0 0 0.7em; }
+.dauligor-viewer .dauligor-richtext h1,
+.dauligor-viewer .dauligor-richtext h2,
+.dauligor-viewer .dauligor-richtext h3,
+.dauligor-viewer .dauligor-richtext h4 {
+  color: var(--dauligor-accent-strong);
+  margin: 1em 0 0.4em;
+  line-height: 1.25;
+}
+.dauligor-viewer .dauligor-richtext h1 { font-size: 22px; }
+.dauligor-viewer .dauligor-richtext h2 { font-size: 19px; }
+.dauligor-viewer .dauligor-richtext h3 { font-size: 16px; }
+.dauligor-viewer .dauligor-richtext h4 { font-size: 14px; }
+.dauligor-viewer .dauligor-richtext ul,
+.dauligor-viewer .dauligor-richtext ol { margin: 0 0 0.7em; padding-left: 1.4em; }
+.dauligor-viewer .dauligor-richtext li { margin: 0.15em 0; }
+.dauligor-viewer .dauligor-richtext blockquote {
+  margin: 0 0 0.7em;
+  padding: 4px 12px;
+  border-left: 3px solid var(--dauligor-accent);
+  color: var(--dauligor-text-muted);
+  font-style: italic;
+}
+.dauligor-viewer .dauligor-richtext code {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.9em;
+  padding: 1px 4px;
+  background: var(--dauligor-panel-soft);
+  border: 1px solid var(--dauligor-border);
+}
+.dauligor-viewer .dauligor-richtext hr {
+  border: none;
+  border-top: 1px solid var(--dauligor-border);
+  margin: 1em 0;
+}
+.dauligor-viewer .dauligor-richtext a {
+  color: var(--dauligor-accent-strong);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.dauligor-viewer .dauligor-richtext img { max-width: 100%; height: auto; }
+
+/* tables (BBCode [table] → HTML, incl. embedded-in-HTML) */
+.dauligor-viewer .dauligor-richtext table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 0.8em;
+  font-size: 13px;
+}
+.dauligor-viewer .dauligor-richtext th,
+.dauligor-viewer .dauligor-richtext td {
+  border: 1px solid var(--dauligor-border);
+  padding: 5px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+.dauligor-viewer .dauligor-richtext th {
+  background: var(--dauligor-panel-soft);
+  color: var(--dauligor-accent-strong);
+  font-weight: 600;
+}
+.dauligor-viewer .dauligor-richtext tr:nth-child(even) td {
+  background: rgba(var(--dauligor-accent-tint), 0.04);
+}
+
+/* ── cross-reference links ───────────────────────────────────────────────────── */
+
+.dauligor-viewer .dauligor-ref {
+  color: var(--dauligor-accent-strong);
+  text-decoration: none;
+  border-bottom: 1px dotted var(--dauligor-btn-border-hover);
+  cursor: pointer;
+  transition: color 80ms ease, border-color 80ms ease;
+}
+.dauligor-viewer a.dauligor-ref:hover {
+  color: #fff;
+  border-bottom-style: solid;
+}
+.dauligor-viewer .dauligor-ref--dangling {
+  color: var(--dauligor-text-muted);
+  border-bottom: 1px dashed var(--dauligor-text-muted);
+  cursor: help;
+}

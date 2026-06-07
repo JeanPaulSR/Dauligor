@@ -54,6 +54,7 @@
     "styles/gm-console.css",
     "styles/character-creator.css",
     "styles/launcher.css",
+    "styles/dauligor-viewer.css",
     "styles/responsive.css"
   ]
 }

@@ -129,9 +129,13 @@ function renderBlock(row) {
     case "text":
       return `<div class="dauligor-block dauligor-block--text dauligor-block--width-${esc(c.width || "normal")} dauligor-richtext">${renderRichText(c.body)}</div>`;
     case "note":
-      return `<aside class="dauligor-block dauligor-block--note dauligor-richtext">${renderRichText(c.body)}</aside>`;
+      // Server strips note blocks for non-staff — so when one renders, the viewer
+      // is staff. Label it as privileged so staff know players can't see it.
+      return `<aside class="dauligor-block dauligor-block--note"><div class="dauligor-block__priv-label">Storyteller Note · staff only</div><div class="dauligor-richtext">${renderRichText(c.body)}</div></aside>`;
     case "secret":
-      return `<aside class="dauligor-block dauligor-block--secret dauligor-richtext">${renderRichText(c.body)}</aside>`;
+      // Server gates secret blocks by role / revealed-campaign; a rendered one is
+      // visible to this viewer, but mark it so its restricted nature is obvious.
+      return `<aside class="dauligor-block dauligor-block--secret"><div class="dauligor-block__priv-label">Secret</div><div class="dauligor-richtext">${renderRichText(c.body)}</div></aside>`;
     case "callout":
       return `<div class="dauligor-block dauligor-block--callout dauligor-block--${esc(c.style || "soft")}">`
         + `${c.title ? `<div class="dauligor-block__callout-title">${esc(c.title)}</div>` : ""}`

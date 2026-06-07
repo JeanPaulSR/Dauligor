@@ -8,6 +8,7 @@ import { openSpellPreparationManager } from "./spell-preparation-app.js";
 import { openDauligorGmConsole } from "./gm-app.js";
 import { openDauligorCharacterCreator } from "./character-creator-app.js";
 import { openDauligorLauncher } from "./launcher-app.js";
+import { openDauligorLibrary } from "./dauligor-viewer.js";
 import { log, notifyInfo, notifyWarn } from "./utils.js";
 import { isLoggedIn, getDisplayName, getProfile, login, logout } from "./auth-service.js";
 
@@ -495,6 +496,16 @@ async function openLauncher({ actor = null } = {}) {
       onSelect: async () => openDauligorCharacterCreator(actorDoc ? { actor: actorDoc } : {})
     },
     {
+      id: "dauligor-library",
+      label: "Dauligor Library",
+      icon: "fas fa-book-open",
+      hint: isLoggedIn()
+        ? "Browse references, articles, and lore from the app."
+        : "Log in to browse references, articles, and lore.",
+      status: "ready",
+      onSelect: async () => openDauligorLibrary()
+    },
+    {
       id: "dauligor-account",
       label: isLoggedIn() ? `Account: ${getDisplayName() || "signed in"}` : "Log in to Dauligor",
       icon: "fas fa-user-lock",
@@ -881,6 +892,9 @@ function registerLoginChatPrompt() {
     const btn = el?.querySelector?.(`[data-action="dauligor-login"]`);
     if (btn) btn.addEventListener("click", () => openDauligorAccountDialog());
   });
+  // Let other Dauligor windows (e.g. the Library viewer) request the account /
+  // login dialog without importing main.js — avoids a circular import.
+  Hooks.on(`${MODULE_ID}.requestLogin`, () => openDauligorAccountDialog());
 }
 
 function injectControl(controls, {
