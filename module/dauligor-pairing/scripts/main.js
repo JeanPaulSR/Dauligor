@@ -282,6 +282,9 @@ function registerSheetControls() {
       action: `${MODULE_ID}.open-options-actor`,
       label: "Dauligor Options",
       icon: "fas fa-screwdriver-wrench",
+      // Player-facing: a sheet's owner (or any GM) can open the launcher. The
+      // launcher itself is role-aware — GM-only tools stay hidden for players.
+      visible: () => (game.user?.isGM ?? false) || (sheet.document?.isOwner ?? false),
       onClick: async () => openLauncher({ actor: sheet.document })
     });
   });
@@ -484,15 +487,23 @@ function registerSpellTabControls() {
 
 async function openLauncher({ actor = null } = {}) {
   const actorDoc = resolveActorDocument(actor);
-  const actions = [
-    {
+  const isGm = game.user?.isGM === true;
+  const actions = [];
+
+  // GM only: the compendium importer (heavy authoring tool).
+  if (isGm) {
+    actions.push({
       id: "import",
       label: "Import",
       icon: "fas fa-book",
       hint: "Bring in classes, spells, feats, and more.",
       status: "ready",
       onSelect: async () => actorDoc ? openDauligorImporter({ actor: actorDoc }) : openDauligorImporter()
-    },
+    });
+  }
+
+  // All users: build a character, browse content, manage their account.
+  actions.push(
     {
       id: "character-creator",
       label: "Character Creator",
@@ -529,7 +540,7 @@ async function openLauncher({ actor = null } = {}) {
       status: "ready",
       onSelect: async () => openDauligorAccountDialog()
     }
-  ];
+  );
 
   if (actorDoc) {
     actions.push({
@@ -542,9 +553,8 @@ async function openLauncher({ actor = null } = {}) {
     });
   }
 
-  // Export Tools (GM only) — the Foundry→Dauligor folder export utilities,
-  // grouped into a sub-launcher (moved here from the directory sidebars).
-  if (game.user?.isGM) {
+  // GM only: export utilities + behavior/config tools (not player-facing).
+  if (isGm) {
     actions.push({
       id: "export-tools",
       label: "Export Tools",
@@ -553,48 +563,48 @@ async function openLauncher({ actor = null } = {}) {
       status: "ready",
       onSelect: async () => openExportToolsLauncher()
     });
+    actions.push(
+      {
+        id: "hp-gain-behavior",
+        label: "HP Gain Behavior",
+        icon: "fas fa-heart-circle-bolt",
+        hint: "Configure how hit points are gained on level up.",
+        status: "soon",
+        onSelect: async () => openUnderConstructionDialog("HP Gain Behavior")
+      },
+      {
+        id: "spell-points-behavior",
+        label: "Spell Points Behavior",
+        icon: "fas fa-wand-sparkles",
+        hint: "Integrate with the Spell Points module.",
+        status: "ready",
+        onSelect: async () => openSpellPointsBehaviorDialog()
+      },
+      {
+        id: "loot-generator",
+        label: "Loot Generator",
+        icon: "fas fa-coins",
+        hint: "Roll up treasure and loot.",
+        status: "soon",
+        onSelect: async () => openUnderConstructionDialog("Loot Generator")
+      },
+      {
+        id: "equipment-shop",
+        label: "Equipment Shop",
+        icon: "fas fa-cart-shopping",
+        hint: "Browse and buy gear.",
+        status: "soon",
+        onSelect: async () => openUnderConstructionDialog("Equipment Shop")
+      }
+    );
   }
-
-  actions.push(
-    {
-      id: "hp-gain-behavior",
-      label: "HP Gain Behavior",
-      icon: "fas fa-heart-circle-bolt",
-      hint: "Configure how hit points are gained on level up.",
-      status: "soon",
-      onSelect: async () => openUnderConstructionDialog("HP Gain Behavior")
-    },
-    {
-      id: "spell-points-behavior",
-      label: "Spell Points Behavior",
-      icon: "fas fa-wand-sparkles",
-      hint: "Integrate with the Spell Points module.",
-      status: "ready",
-      onSelect: async () => openSpellPointsBehaviorDialog()
-    },
-    {
-      id: "loot-generator",
-      label: "Loot Generator",
-      icon: "fas fa-coins",
-      hint: "Roll up treasure and loot.",
-      status: "soon",
-      onSelect: async () => openUnderConstructionDialog("Loot Generator")
-    },
-    {
-      id: "equipment-shop",
-      label: "Equipment Shop",
-      icon: "fas fa-cart-shopping",
-      hint: "Browse and buy gear.",
-      status: "soon",
-      onSelect: async () => openUnderConstructionDialog("Equipment Shop")
-    }
-  );
 
   return openDauligorLauncher({
     title: actorDoc ? `Dauligor Options: ${actorDoc.name}` : "Dauligor Options",
-    intro: actorDoc
-      ? "Tools for this character. Greyed entries are coming soon."
-      : "Greyed entries are coming soon.",
+    // Only the GM sees the "soon" (greyed) config tiles, so tailor the caption.
+    intro: isGm
+      ? (actorDoc ? "Tools for this character. Greyed entries are coming soon." : "Greyed entries are coming soon.")
+      : (actorDoc ? "Tools for this character." : "Dauligor tools."),
     actions
   });
 }
@@ -950,14 +960,17 @@ function injectControl(controls, {
   action,
   label,
   icon = "fas fa-file-export",
-  onClick
+  onClick,
+  visible
 }) {
   if (controls.some((it) => it.action === action)) return;
   controls.unshift({
     action,
     label,
     icon,
-    visible: () => game.user?.isGM ?? false,
+    // Default GM-only; callers can pass a `visible` predicate (e.g. owner-or-GM
+    // for player-facing controls).
+    visible: visible ?? (() => game.user?.isGM ?? false),
     onClick
   });
 }
