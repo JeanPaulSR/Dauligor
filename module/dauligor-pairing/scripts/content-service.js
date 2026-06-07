@@ -193,14 +193,25 @@ export async function getSystemPage(kind) {
 
 // Static (non-system-page) kinds → table + columns. image/source only for
 // class/subclass (matching the app — other kinds resolve to name + summary).
+// `where` is an extra SQL predicate ANDed onto the id lookup. Backgrounds + species
+// have their OWN tables (`backgrounds` / `species`, leaner camelCase columns —
+// `_speciesBackgroundShared.ts`); the per-entity endpoints `/api/module/backgrounds`
+// + `/api/module/races` (races read the `species` table) are keyed by those tables'
+// `id`. The `feats` table holds standalone feats AND class/subclass features
+// (discriminated by `feat_type`), so `feat` filters to standalone feats only
+// (feat_type 'feat' or NULL) — case-insensitive, since the column isn't reliably
+// lowercase.
 const REF_KIND_TABLES = {
-  spell:     { table: "spells",            idCol: "identifier", summary: "description" },
-  class:     { table: "classes",           idCol: "identifier", summary: "COALESCE(NULLIF(preview, ''), description)", image: "COALESCE(NULLIF(card_image_url, ''), image_url)", source: "(SELECT abbreviation FROM sources WHERE sources.id = classes.source_id)" },
-  subclass:  { table: "subclasses",        idCol: "identifier", summary: "COALESCE(NULLIF(preview, ''), description)", image: "COALESCE(NULLIF(card_image_url, ''), image_url)", source: "(SELECT abbreviation FROM sources WHERE sources.id = subclasses.source_id)" },
-  feat:      { table: "feats",             idCol: "identifier", summary: "description" },
-  item:      { table: "items",             idCol: "identifier", summary: "description" },
-  condition: { table: "status_conditions", idCol: "identifier", summary: "description" },
-  article:   { table: "lore_articles",     idCol: "slug", nameCol: "title", summary: "excerpt" },
+  spell:      { table: "spells",            idCol: "identifier", summary: "description" },
+  class:      { table: "classes",           idCol: "identifier", summary: "COALESCE(NULLIF(preview, ''), description)", image: "COALESCE(NULLIF(card_image_url, ''), image_url)", source: "(SELECT abbreviation FROM sources WHERE sources.id = classes.source_id)", sourceSlug: "(SELECT slug FROM sources WHERE sources.id = classes.source_id)" },
+  subclass:   { table: "subclasses",        idCol: "identifier", summary: "COALESCE(NULLIF(preview, ''), description)", image: "COALESCE(NULLIF(card_image_url, ''), image_url)", source: "(SELECT abbreviation FROM sources WHERE sources.id = subclasses.source_id)" },
+  feat:       { table: "feats",             idCol: "identifier", where: "LOWER(COALESCE(feat_type, 'feat')) = 'feat'", summary: "description" },
+  item:       { table: "items",             idCol: "identifier", summary: "description" },
+  background: { table: "backgrounds",       idCol: "identifier", summary: "description" },
+  species:    { table: "species",           idCol: "identifier", summary: "description" },
+  race:       { table: "species",           idCol: "identifier", summary: "description" },
+  condition:  { table: "status_conditions", idCol: "identifier", summary: "description" },
+  article:    { table: "lore_articles",     idCol: "slug", nameCol: "title", summary: "excerpt" },
 };
 
 // Parse a system page's definition blocks (incl. nested in containers) into
@@ -238,9 +249,11 @@ async function resolveTableRefs(kind, ids, out) {
   const cols = [`${cfg.idCol} AS ref_id`, `id AS ref_docid`, `${nameCol} AS ref_name`, `${cfg.summary} AS ref_summary`];
   if (cfg.image) cols.push(`${cfg.image} AS ref_image`);
   if (cfg.source) cols.push(`${cfg.source} AS ref_source`);
+  if (cfg.sourceSlug) cols.push(`${cfg.sourceSlug} AS ref_source_slug`);
   const placeholders = ids.map(() => "?").join(", ");
+  const extraWhere = cfg.where ? ` AND ${cfg.where}` : "";
   const rows = await queryD1(
-    `SELECT ${cols.join(", ")} FROM ${cfg.table} WHERE ${cfg.idCol} IN (${placeholders})`,
+    `SELECT ${cols.join(", ")} FROM ${cfg.table} WHERE ${cfg.idCol} IN (${placeholders})${extraWhere}`,
     ids,
   );
   for (const row of (Array.isArray(rows) ? rows : [])) {
@@ -251,6 +264,7 @@ async function resolveTableRefs(kind, ids, out) {
       summary: String(row.ref_summary ?? ""),
       image: row.ref_image ? String(row.ref_image) : null,
       sourceLabel: row.ref_source ? String(row.ref_source) : null,
+      sourceSlug: row.ref_source_slug ? String(row.ref_source_slug) : null,
       docId: row.ref_docid != null ? String(row.ref_docid) : null,
       rule: false,
     });

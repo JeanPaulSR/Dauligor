@@ -65,8 +65,9 @@ rendered body with **history-aware** navigation:
 - `@article` → loads the article in-viewer (`_navigate({mode:"article"})`).
 - `&` rule ref → loads the system page in-viewer (`_navigate({mode:"system", kind,
   anchor})`).
-- a compendium-backed entity ref (`@spell`, …) → imports + opens the Foundry item
-  (see [On-demand import](#on-demand-import-click--drag)).
+- a `@class` ref → opens the standalone class-detail window (see below).
+- a compendium-backed entity ref (`@spell` / `@item` / `@species` / `@background`)
+  → imports + opens the Foundry item (see [On-demand import](#on-demand-import-click--drag)).
 - any other entity ref → opens its `data-route` in a browser tab.
 
 ### 2. Foundry-wide (journals, sheets, chat)
@@ -81,8 +82,9 @@ plus one delegated click handler that routes them.
   `document` click listener: it **skips refs inside `.dauligor-viewer`** (the
   viewer binds its own, history-aware), then routes the rest exactly like the
   viewer — `&` → `DauligorViewerApp.open({systemKind, systemAnchor})`, `@article`
-  → `openDauligorLibrary({articleId})`, a compendium-backed ref (`@spell`, …) → the
-  on-demand import (see above), else `window.open(route)`.
+  → `openDauligorLibrary({articleId})`, `@class` → the standalone class-detail
+  window, a compendium-backed ref (`@spell` / `@item` / `@species` / `@background`)
+  → the on-demand import (see above), else `window.open(route)`.
 
 Global `.dauligor-ref` styling lives in `base.css` (the viewer's scoped rules win
 inside the window); it uses literal color fallbacks because journals/sheets don't
@@ -122,10 +124,11 @@ Styling is global: `.dauligor-reftip` in `base.css`, with literal token fallback
 
 ## On-demand import (click + drag)
 
-A compendium-backed reference (`@spell[…]`; feats/items to follow) is a **portal**
-to an entity on the Dauligor site — it stays semantic, never dangles, and never
-needs the entity pre-imported. `scripts/ref-import.js` gives it two interactions,
-mirroring how Foundry treats a content-link / Plutonium handles a 5etools tag:
+A compendium-backed reference (`@spell`, `@item`, `@species`, `@background`) is a
+**portal** to an entity on the Dauligor site — it stays semantic, never dangles,
+and never needs the entity pre-imported. `scripts/ref-import.js` gives it two
+interactions, mirroring how Foundry treats a content-link / Plutonium handles a
+5etools tag:
 
 - **Click** → fetch the full Foundry-ready item and open it in a **temporary item
   sheet** (the real dnd5e sheet, activities and all). Nothing is added to the
@@ -133,6 +136,34 @@ mirroring how Foundry treats a content-link / Plutonium handles a 5etools tag:
 - **Drag** → the link carries the built item as a Foundry `{type:"Item", data}`
   drop payload, so dropping it on an actor sheet (or the Items sidebar) imports it
   through Foundry's own drop handling.
+
+**Kinds + endpoints.** Each importable kind maps to a public per-entity endpoint
+and the Foundry document it builds:
+
+| Ref kind | Endpoint | Payload kind | Foundry item |
+|---|---|---|---|
+| `@spell` | `/api/module/spells/<dbId>.json` | `dauligor.spell-item.v1` | `spell` |
+| `@item` | `/api/module/items/<dbId>.json` | `dauligor.item-item.v1` | weapon / equipment / … |
+| `@background` | `/api/module/backgrounds/<dbId>.json` | `dauligor.background-item.v1` | `background` |
+| `@species` / `@race` | `/api/module/races/<dbId>.json` | `dauligor.race-item.v1` | `race` |
+
+Backgrounds + species live in the **`feats` table** app-side
+(`feat_type='background'` / `'race'`), so the slug→dbId lookup (`resolveTableRefs`)
+ANDs a `feat_type` filter — `@background[x]` can't resolve a feat or species of the
+same identifier.
+
+**Classes are special.** `@class[…]` is NOT a temp-item import — clicking it opens a
+**standalone class-detail window** (`openClassReference` → `openDauligorClassDetail`)
+showing the SAME rich ClassView the character creator renders (header + progression
+table + Features / Subclass / Spell-List / Info / Flavor tabs + Core-Traits
+sidebar). That view lives in a shared module,
+[`class-detail-view.js`](../scripts/class-detail-view.js) (`renderClassView` +
+`bindClassView` + fetch helpers), used by the creator's Class tab, this window, and
+reusable by the class-import / subclass wizards — **one implementation, no
+duplication**. The window resolves the class's source slug (via `resolveReferences`),
+fetches the public class bundle (`/api/module/<source>/classes/<identifier>.json`) +
+the multiclass slot chart, then renders. Subclass / feat / condition / article refs
+keep their prior routing.
 
 **Pipeline.** `resolveReferences` returns the entity's DB id (`docId`) for the
 slug; the full Foundry-ready item is then fetched from the **public**

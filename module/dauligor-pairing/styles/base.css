@@ -346,3 +346,9 @@ a.dauligor-ref:hover {
 }
 .dauligor-reftip__tag--missing { color: var(--dauligor-warning, #9e7f49); }
 .dauligor-reftip__tag--info { color: var(--dauligor-text-muted, #9a978f); }
+
+/* Standalone class-detail window — a scroll shell holding the shared ClassView
+ * (the window root carries `dauligor-character-creator`, so the ClassView markup
+ * is styled identically to the creator's Class tab). */
+.dauligor-class-detail { height: 100%; min-height: 0; display: flex; flex-direction: column; }
+.dauligor-class-detail__body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }

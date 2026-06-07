@@ -23,7 +23,7 @@ import { DAULIGOR_VIEWER_TEMPLATE, MODULE_ID } from "./constants.js";
 import { isLoggedIn } from "./auth-service.js";
 import { getArticle, listArticles, getSystemPage, listCampaigns, getCampaign, getCampaignHomeBlocks, resolveReferences, clearReferenceCache } from "./content-service.js";
 import { renderBlocks, renderRichText, collectAnchors, collectEntityRefs, hasAutoRecommendedBlock } from "./layout-blocks.js";
-import { isImportableKind, openReferencedItem, clearReferenceItemCache } from "./ref-import.js";
+import { isImportableKind, openReferencedItem, openClassReference, clearReferenceItemCache } from "./ref-import.js";
 import { log } from "./utils.js";
 import {
   renderSectionFilterPanel,
@@ -826,6 +826,11 @@ export class DauligorViewerApp extends HandlebarsApplicationMixin(ApplicationV2)
         }
         if (kind === "article" && refId) {
           this._navigate({ mode: "article", id: refId });
+          return;
+        }
+        // Class refs open the character-creator class DETAIL page (not a temp item).
+        if (kind === "class" && refId) {
+          openClassReference(refId);
           return;
         }
         // Compendium-backed entity refs (@spell, …) → open the Foundry item in a

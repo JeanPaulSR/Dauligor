@@ -33,3 +33,4 @@ export const DAULIGOR_SPELLS_TAB_TEMPLATE = "modules/dauligor-pairing/templates/
 export const CHARACTER_CREATOR_TEMPLATE = "modules/dauligor-pairing/templates/character-creator-shell.hbs";
 export const LAUNCHER_TEMPLATE = "modules/dauligor-pairing/templates/launcher-shell.hbs";
 export const DAULIGOR_VIEWER_TEMPLATE = "modules/dauligor-pairing/templates/dauligor-viewer.hbs";
+export const CLASS_DETAIL_TEMPLATE = "modules/dauligor-pairing/templates/class-detail.hbs";

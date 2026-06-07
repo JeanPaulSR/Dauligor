@@ -35,6 +35,9 @@ function refRoute(kind, id, anchor, rule) {
     case "class": return `${APP_HOST}/compendium/classes/view/${i}${frag}`;
     case "feat": return `${APP_HOST}/compendium/feats?focus=${i}${frag}`;
     case "item": return `${APP_HOST}/compendium/items?focus=${i}${frag}`;
+    case "background": return `${APP_HOST}/compendium/backgrounds?focus=${i}${frag}`;
+    case "species":
+    case "race": return `${APP_HOST}/compendium/races?focus=${i}${frag}`;
     case "article": return `${APP_HOST}/wiki/article/${i}${frag}`;
     default: return null; // subclass / option-group / unknown → badge
   }

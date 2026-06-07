@@ -21,11 +21,18 @@ import { fetchJson } from "./class-import-service.js";
 import { resolveApiHost } from "./auth-service.js";
 import { log } from "./utils.js";
 
-// Reference kinds we can build a Foundry item for. Spells first; feats share the
-// same endpoint/payload shape and can be enabled once verified live.
+// Reference kinds we can build a Foundry item for → the public per-entity endpoint
+// (`/api/module/<path>/<dbId>.json`), its payload `kind`, and the field holding the
+// Foundry-ready item. Each is a Foundry Item, so the temp-sheet + drop flow is
+// identical regardless of kind. Backgrounds + species (races) live in the feats
+// table app-side, but export as Foundry `background`/`race` items here.
 const IMPORT_ENDPOINTS = {
-  spell: { path: "spells", payloadKind: "dauligor.spell-item.v1", field: "spell" },
-  // feat: { path: "feats", payloadKind: "dauligor.feat-item.v1", field: "feat" },
+  spell:      { path: "spells",      payloadKind: "dauligor.spell-item.v1",      field: "spell" },
+  item:       { path: "items",       payloadKind: "dauligor.item-item.v1",       field: "item" },
+  background: { path: "backgrounds", payloadKind: "dauligor.background-item.v1", field: "background" },
+  species:    { path: "races",       payloadKind: "dauligor.race-item.v1",       field: "race" },
+  race:       { path: "races",       payloadKind: "dauligor.race-item.v1",       field: "race" },
+  feat:       { path: "feats",       payloadKind: "dauligor.feat-item.v1",       field: "feat" },
 };
 
 export function isImportableKind(kind) {
@@ -109,6 +116,24 @@ export async function openReferencedItem(kind, id) {
     return true;
   } catch (err) {
     log(`ref-import: failed to open temp item for ${kind}:${id}`, err);
+    return false;
+  }
+}
+
+/**
+ * CLICK for an `@class[…]` reference: open the standalone class-DETAIL window (the
+ * shared ClassView — NOT a temp item, NOT the full creator). Dynamic import so this
+ * module carries no static dependency on the detail app. Returns true when invoked.
+ */
+export async function openClassReference(id) {
+  const cid = String(id || "");
+  if (!cid) return false;
+  try {
+    const mod = await import("./class-detail-app.js");
+    await mod.openDauligorClassDetail(cid);
+    return true;
+  } catch (err) {
+    log("ref-import: openClassReference failed", err);
     return false;
   }
 }

@@ -32,6 +32,8 @@ engine, so they look and behave consistently.
 | `scripts/ref-enricher.js` | Foundry-wide `CONFIG.TextEditor` enrichers + the delegated click router (see the cross-reference doc). |
 | `scripts/ref-hovercard.js` | Foundry-wide reference **hover preview cards** — our `.dauligor-ref` links (app data) + Foundry `@UUID` content-links (the linked document). See the cross-reference doc. |
 | `scripts/ref-import.js` | **On-demand import** for compendium-backed refs (`@spell`, …): click opens the Foundry item in a temporary sheet; drag imports it onto a sheet. See the cross-reference doc. |
+| `scripts/class-detail-view.js` | The shared **ClassView** (header + progression table + Features/Subclass/Spell-List/Info/Flavor tabs + Core-Traits sidebar) — `renderClassView` / `bindClassView` + fetch helpers. Used by the character creator's Class tab, the standalone class-detail window, and reusable by the import/subclass wizards. |
+| `scripts/class-detail-app.js` | The standalone **class-detail window** opened by a clicked `@class[…]` ref — mounts `class-detail-view` (not the full creator). |
 | `styles/dauligor-viewer.css` | Viewer chrome + every `.dauligor-block--*` / `.dauligor-richtext` / `.dauligor-ref` rule the renderer emits. |
 | `styles/base.css` | Global `.dauligor-ref` style for refs enriched *outside* the viewer (journals/sheets). |
 

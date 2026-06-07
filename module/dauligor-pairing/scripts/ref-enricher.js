@@ -18,7 +18,7 @@
 
 import { refMarkup } from "./layout-blocks.js";
 import { openDauligorLibrary, DauligorViewerApp } from "./dauligor-viewer.js";
-import { isImportableKind, openReferencedItem } from "./ref-import.js";
+import { isImportableKind, openReferencedItem, openClassReference } from "./ref-import.js";
 import { log } from "./utils.js";
 
 // @kind[id]#anchor{display}  and  &kind[id]#anchor{display}  (kind lowercase only).
@@ -86,6 +86,11 @@ export function registerRefClickHandler() {
     }
     if (kind === "article" && refId) {
       openDauligorLibrary({ articleId: refId });
+      return;
+    }
+    // Class refs open the character-creator class DETAIL page (not a temp item).
+    if (kind === "class" && refId) {
+      openClassReference(refId);
       return;
     }
     // Compendium-backed entity refs (@spell, …) → open the Foundry item in a
