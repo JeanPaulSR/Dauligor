@@ -609,7 +609,29 @@ async function handleWikiSettingsPut(request: Request, authHeader: string | unde
 /* Dispatcher                                                                  */
 /* -------------------------------------------------------------------------- */
 
+// CORS so the Foundry module (a cross-origin browser client) can read articles
+// with a Bearer token. Mirrors the wrapper /api/module/* uses; Bearer-token
+// auth, no cookies, so `*` is safe.
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS, PUT, DELETE",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
 export const onRequest = async (context: any): Promise<Response> => {
+  // Short-circuit the preflight BEFORE auth — otherwise the no-auth-header
+  // OPTIONS request 401s in requireAuthenticatedUser and the preflight fails.
+  if (context.request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: CORS_HEADERS });
+  }
+  const response = await handleLoreRequest(context);
+  for (const [key, value] of Object.entries(CORS_HEADERS)) {
+    response.headers.set(key, value);
+  }
+  return response;
+};
+
+const handleLoreRequest = async (context: any): Promise<Response> => {
   const { request, params } = context;
   try {
     const authHeader = request.headers.get("authorization") ?? undefined;

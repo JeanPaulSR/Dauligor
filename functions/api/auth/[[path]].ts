@@ -241,7 +241,29 @@ async function handleChangePassword(request: Request): Promise<Response> {
   return Response.json({ changed: true });
 }
 
+// CORS so the Foundry module (a cross-origin browser client) can POST login /
+// refresh and read the response body (the native JWT) cross-origin. Mirrors the
+// wrapper /api/module/* uses; Bearer-token auth, no cookies, so `*` is safe.
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS, PUT, DELETE",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
 export const onRequest = async (context: any): Promise<Response> => {
+  // Short-circuit the preflight BEFORE the handler — a cross-origin JSON POST
+  // (login/refresh) triggers an OPTIONS preflight the router would otherwise 405.
+  if (context.request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: CORS_HEADERS });
+  }
+  const response = await handleAuthRequest(context);
+  for (const [key, value] of Object.entries(CORS_HEADERS)) {
+    response.headers.set(key, value);
+  }
+  return response;
+};
+
+const handleAuthRequest = async (context: any): Promise<Response> => {
   const { request, params } = context;
   try {
     const path: string[] = Array.isArray(params?.path)
