@@ -16,6 +16,7 @@
 // to ones saved from the hand editor. Activities/automation are NOT parsed.
 
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 import { AlertTriangle, ChevronUp, FileText, Library, ListChecks, Pencil, ScanText, Scissors, Sparkles, Wand2 } from 'lucide-react';
 import { fetchCollection } from '../../lib/d1';
@@ -49,7 +50,7 @@ import {
 type SourceRow = { id: string; name?: string; abbreviation?: string };
 type FieldFlag = { confidence: 'low' | 'none'; note?: string };
 type Span = { start: number; end: number };
-type ActiveSelection = { start: number; end: number; text: string; top: number; left: number };
+type ActiveSelection = { start: number; end: number; text: string; top: number; selTop: number; left: number };
 /** The editable state of one entity in the workspace. */
 type EntityState = { values: Record<string, any>; spans: Record<string, Span[]>; provenance: Record<string, FieldFlag>; leftovers: string[]; notes: string[] };
 
@@ -854,13 +855,13 @@ function EntityWorkspace({
     const start = Math.min(a, b), end = Math.max(a, b);
     if (end <= start) return;
     const rect = range.getBoundingClientRect();
-    setSelection({ start, end, text: rawText.slice(start, end), top: rect.bottom, left: rect.left });
+    setSelection({ start, end, text: rawText.slice(start, end), top: rect.bottom, selTop: rect.top, left: rect.left });
   };
   const onHighlightClick = (e: React.MouseEvent, start: number, end: number) => {
     const sel = window.getSelection();
     if (sel && !sel.isCollapsed) return;
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    setSelection({ start, end, text: rawText.slice(start, end), top: rect.bottom, left: rect.left });
+    setSelection({ start, end, text: rawText.slice(start, end), top: rect.bottom, selTop: rect.top, left: rect.left });
   };
   // Carve [iv] out of every assign target NOT in `keep`, re-deriving each
   // trimmed target's value from the text that REMAINS. This is what makes a
@@ -1101,10 +1102,21 @@ function EntityWorkspace({
       </div>
 
       {/* Assign popover */}
-      {selection && assignTargets.length > 0 ? (
+      {selection && assignTargets.length > 0 ? createPortal(
         <>
           <div className="fixed inset-0 z-40" onMouseDown={dismissSelection} />
-          <div className="fixed z-50 w-60 rounded-lg border border-gold/30 bg-popover p-2 shadow-xl" style={{ top: Math.min(selection.top + 6, window.innerHeight - 180), left: Math.min(selection.left, window.innerWidth - 250) }}>
+          <div className="fixed z-50 w-60 overflow-y-auto rounded-lg border border-gold/30 bg-popover p-2 shadow-xl" style={(() => {
+            // Keep the popover fully on-screen: anchor below the selection when
+            // there's room, else flip above; cap the height to the available
+            // space (it scrolls internally) so the long grouped list is reachable.
+            const left = Math.min(Math.max(8, selection.left), window.innerWidth - 250);
+            const spaceBelow = window.innerHeight - selection.top - 12;
+            const spaceAbove = selection.selTop - 12;
+            const above = spaceBelow < 240 && spaceAbove > spaceBelow;
+            return above
+              ? { left, bottom: Math.max(8, window.innerHeight - selection.selTop + 6), maxHeight: Math.max(140, spaceAbove) }
+              : { left, top: Math.max(8, selection.top + 6), maxHeight: Math.max(140, spaceBelow) };
+          })() as React.CSSProperties}>
             <div className="mb-1 flex items-center justify-between">
               <span className="section-label text-ink/50">Assign selection to</span>
               <button type="button" className="text-ink/40 hover:text-ink" onMouseDown={(e) => e.preventDefault()} onClick={dismissSelection}>✕</button>
@@ -1126,7 +1138,8 @@ function EntityWorkspace({
             </div>
             <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={handleClearSelection} className="mt-1.5 w-full rounded border border-gold/10 py-0.5 text-[10px] uppercase tracking-widest text-ink/40 hover:text-blood" title="Decouple this text — belongs to no field">Clear — not a field</button>
           </div>
-        </>
+        </>,
+        document.body,
       ) : null}
     </div>
   );
