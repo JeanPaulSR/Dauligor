@@ -328,6 +328,20 @@
   font-size: 1rem;
 }
 
+/* Status badge beside a placeholder card's title (e.g. "In Progress"). */
+.dauligor-feature-manager__coming-soon-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  vertical-align: middle;
+  color: var(--dauligor-warning);
+  border: 1px solid var(--dauligor-warning);
+}
+
 .dauligor-feature-manager__empty-hint,
 .dauligor-feature-manager__coming-soon-hint {
   font-size: 0.78rem;

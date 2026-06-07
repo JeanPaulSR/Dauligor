@@ -496,17 +496,17 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
       case TAB_SPELLS:      return this._renderSpellsTab();
       case TAB_CRAFTING:    return this._renderPlaceholderTab({
         title: "Crafting Projects",
-        message: "Track downtime crafting projects — current progress, materials, days remaining. Queue progress increments between sessions so a downtime week resolves in one commit.",
-        hint: "Storage hook will piggyback on the same long-rest commit path."
+        status: "In Progress",
+        message: "Track downtime crafting projects and queue up crafting ahead of time."
       });
       case TAB_FEATS:       return this._renderPlaceholderTab({
         title: "Feat Picks",
-        message: "Surfaces every Ability Score Improvement slot that resolved to a feat. Queue a retrain here and the swap will commit during the next level-up wizard run.",
-        hint: "Requires the ItemChoice `replaces` semantics work that's already on the backlog."
+        message: "Retrain your feats on level up.",
+        hint: "Integrates with the existing importer level-up flow."
       });
       case TAB_ADVANCEMENT: return this._renderPlaceholderTab({
         title: "Class Advancement",
-        message: "Queue class entry, subclass entry, and base-proficiency choices ahead of a level up. The Dauligor Level Up wizard will see the queue and pre-fill the relevant prompts.",
+        message: "Replace current Advancements with new ones on level up.",
         hint: "Integrates with the existing importer level-up flow."
       });
       default:
@@ -1056,13 +1056,16 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
     `;
   }
 
-  _renderPlaceholderTab({ title, message, hint }) {
+  _renderPlaceholderTab({ title, message, hint, status }) {
+    const badge = status
+      ? ` <span class="dauligor-feature-manager__coming-soon-badge">${escapeHtml(status)}</span>`
+      : "";
     this._bodyRegion.innerHTML = `
       <div class="dauligor-feature-manager__coming-soon">
         <i class="fas fa-hammer"></i>
-        <h3>${escapeHtml(title)}</h3>
+        <h3>${escapeHtml(title)}${badge}</h3>
         <p>${escapeHtml(message)}</p>
-        <p class="dauligor-feature-manager__coming-soon-hint">${escapeHtml(hint)}</p>
+        ${hint ? `<p class="dauligor-feature-manager__coming-soon-hint">${escapeHtml(hint)}</p>` : ""}
       </div>
     `;
   }
