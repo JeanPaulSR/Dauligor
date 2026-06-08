@@ -125,6 +125,14 @@ async function importDauligorCharacter(actor, payload) {
 }
 
 function normalizeItemPayload(item, sourceMeta = null) {
+  // Deep-clone preserves the entire native `system.*` block, so every field the
+  // app's item export emits round-trips by pass-through: `system.type.value` /
+  // `.subtype`, `system.damage`, `system.capacity` (dnd5e 5.x shape),
+  // `system.currency`, `system.container`, `system.properties` (mgc /
+  // weightlessContents), `system.attunement`, `system.description.chat`. (See
+  // the items native-conversion handoff.) Only top-level, non-semantic keys are
+  // stripped below. Container CONTENTS round-trip (child docs + `container_id`
+  // remap) is owned by the app-side character importer, not this single-item path.
   const clone = foundry.utils.deepClone(item ?? {});
   clone.flags ??= {};
   clone.flags[MODULE_ID] ??= {};

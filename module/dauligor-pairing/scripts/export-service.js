@@ -878,9 +878,14 @@ function buildItemSummary(item, source) {
 
   const base = {
     itemType: item.type,
+    // dnd5e 5.x two-axis type: `system.type.value` (potion/scroll/poison/ammo/…)
+    // ↔ app `items.type_subtype`; `system.type.subtype` (ammo/poison second axis)
+    // ↔ app `items.type_inner_subtype`. Pass-through identifiers.
     itemCategory: String(system.type?.value ?? ""),
     itemSubcategory: String(system.type?.subtype ?? ""),
     identifier: String(system.identifier ?? ""),
+    // `system.description.chat` ↔ app `items.chat_description` (all item types).
+    chatDescription: String(system.description?.chat ?? ""),
     rarity: String(system.rarity ?? "").trim() || "none",
     quantity: Number(system.quantity ?? 1) || 1,
     weight: readItemWeight(system),
@@ -891,6 +896,9 @@ function buildItemSummary(item, source) {
     attunement: String(system.attunement ?? ""),
     equipped: !!system.equipped,
     identified: system.identified !== false,
+    // Canonical "magical" is the `mgc` property (dnd5e 5.x — no separate field);
+    // the app derives `items.magical` from it on save. The rarity check here is a
+    // preview-only heuristic so rare items without `mgc` still read as magical.
     magical: properties.includes("mgc") || (String(system.rarity ?? "").trim() && system.rarity !== "none"),
     properties,
     uses: system.uses ?? {},
@@ -935,11 +943,35 @@ function buildItemSummary(item, source) {
       // surface the auto-destroy flag so the workbench can preview
       // "destroys on last use" without reaching into uses.
       destroyOnEmpty: !!system.uses?.autoDestroy,
+      // Ammunition (`system.type.value === "ammo"`) carries a damage line +
+      // a "replace weapon damage" flag — app `items.damage` =
+      // `{ base: <DamagePart>, replace: <bool> }`. The second-axis subtype
+      // (arrow/bolt/…) is `base.itemSubcategory` (system.type.subtype).
+      damage: system.damage ?? {},
     };
   } else if (item.type === "container" || item.type === "backpack") {
     base.container = {
-      // `capacity` shape: { type: "weight" | "items" | "volume", value: <number> }
+      // dnd5e 5.x capacity shape (CHANGED from 3.x's { type, value }):
+      //   { count:  <int|null>,                              // null = unlimited
+      //     volume: { value: <number>, units: "cubicFoot" | "liter" },
+      //     weight: { value: <number>, units: "lb" | "kg" | "tn" | "Mg" } }
+      // Pass-through ↔ app `items.capacity`. (`weightlessContents` is now a
+      // *property* in `base.properties`, not a capacity flag.)
       capacity: system.capacity ?? {},
+      // The container's own coin pouch ↔ app `items.currency` (5-coin grid).
+      currency: {
+        cp: Number(system.currency?.cp ?? 0) || 0,
+        sp: Number(system.currency?.sp ?? 0) || 0,
+        ep: Number(system.currency?.ep ?? 0) || 0,
+        gp: Number(system.currency?.gp ?? 0) || 0,
+        pp: Number(system.currency?.pp ?? 0) || 0,
+      },
+      // Contents are independent child item docs (their `system.container` →
+      // this item's _id), not stored on this item — a folder export emits them
+      // as sibling items. The catalog `container_contents` recipe and the
+      // character-inventory remap are owned app-side (see the
+      // items-native-conversion handoff). `attunement` (when `mgc`) +
+      // `properties` (mgc / weightlessContents) are already in `base`.
     };
   }
   // `loot` has no type-specific extras beyond the base block.
