@@ -74,6 +74,11 @@ const ABILITY_FULL: Record<string, string> = {
 };
 const abilitiesToNames = (text: unknown): string =>
   parseAbilities(text).map((c) => ABILITY_FULL[c]).filter(Boolean).join(', ');
+// Normalize an abilities value (UPPERCASE id array from the pill picker, OR free
+// text) → the stored lowercase 3-letter list (mirrors the class editor's
+// normalizePrimaryAbilityListForSave).
+const normalizeAbilityList = (v: unknown): string[] =>
+  Array.from(new Set((Array.isArray(v) ? v.map((x) => String(x)) : [String(v ?? '')]).flatMap((s) => parseAbilities(s))));
 // Drop a leading "Label:" prefix from a marked selection ("Saving Throws: …").
 const stripLeadingLabel = (text: string): string =>
   String(text || '').replace(/^\s*(?:saving throws?|hit (?:dice|points)|armou?r|weapons?|tools?|skills?|languages?|equipment|primary abilit(?:y|ies))\b\s*:?\s*/i, '').trim();
@@ -165,15 +170,16 @@ export const clazzDescriptor: ImportDescriptor = {
     { key: 'sourceId', label: 'Source', kind: 'source', group: 'Identity' },
     { key: 'category', label: 'Category', kind: 'select', default: 'core', options: CATEGORY_OPTIONS, group: 'Identity' },
     { key: 'hitDie', label: 'Hit Die', kind: 'select', default: '8', options: HIT_DIE_OPTIONS, group: 'Mechanics' },
-    { key: 'primaryAbility', label: 'Primary Ability', kind: 'text', group: 'Mechanics', placeholder: 'Charisma — or "Strength or Dexterity"', help: 'Full names or abbreviations; "or"/"and"/commas accepted.' },
+    { key: 'primaryAbility', label: 'Primary Ability', kind: 'abilities', default: [] as string[], group: 'Mechanics', help: 'Ability/abilities ALL required (click to toggle) — reuses the class editor’s picker.' },
+    { key: 'primaryAbilityChoice', label: 'Primary Ability — choice row', kind: 'abilities', default: [] as string[], group: 'Mechanics', help: 'Optional: choose ONE of these to fulfil the requirement (e.g. Str OR Dex).' },
     { key: 'savingThrows', label: 'Saving Throw Proficiencies', kind: 'text', group: 'Mechanics', placeholder: 'Constitution, Charisma', help: 'The two save proficiencies the class grants at level 1.' },
     { key: 'proficiencies', label: 'Proficiencies', kind: 'proficiencies', group: 'Proficiencies', default: buildProficiencyCollection(), proficiencyTypes: ['armor', 'weapons', 'skills', 'tools', 'languages'], help: 'Armor / weapons / tools / skills / languages — authored through the same grid as the class editor. (Saving throws are set above.) Tweak freely.' },
-    { key: 'description', label: 'Description', kind: 'textarea', group: 'Text', placeholder: 'BBCode — the class overview' },
+    { key: 'description', label: 'Description', kind: 'markdown', group: 'Text', placeholder: 'The class overview' },
     { key: 'preview', label: 'Preview blurb', kind: 'textarea', group: 'Text', placeholder: 'A short one-liner for cards/listings' },
-    { key: 'lore', label: 'Lore', kind: 'textarea', group: 'Text', placeholder: 'BBCode — flavour / in-world lore' },
+    { key: 'lore', label: 'Lore', kind: 'markdown', group: 'Text', placeholder: 'Flavour / in-world lore' },
     { key: 'startingEquipment', label: 'Starting Equipment', kind: 'textarea', group: 'Details', placeholder: 'BBCode — starting gear' },
     { key: 'wealth', label: 'Starting Wealth', kind: 'text', group: 'Details', placeholder: 'e.g. 3d4 × 10 gp' },
-    { key: 'multiclassing', label: 'Multiclassing', kind: 'textarea', group: 'Details', placeholder: 'BBCode — multiclass prerequisites & proficiencies' },
+    { key: 'multiclassing', label: 'Multiclassing', kind: 'markdown', group: 'Details', placeholder: 'Multiclass prerequisites & proficiencies' },
     { key: 'subclassTitle', label: 'Subclass Title', kind: 'text', default: 'Subclass', group: 'Details', placeholder: 'e.g. Sorcerous Origin' },
     { key: '_features', label: 'Features', kind: 'features', default: [], group: 'Features', help: 'Parsed sections — tick several and Merge to fold them into one feature, edit names/levels, or re-route a row (feature / spellcasting / ASI / subclass / skip). Each “feature” row is created as a child feature; spellcasting/ASI/subclass feed the class fields.' },
   ],
@@ -185,7 +191,8 @@ export const clazzDescriptor: ImportDescriptor = {
 
     // primary_ability is stored lowercase; saving throws uppercase (the editor's
     // `normalizePrimaryAbilityListForSave` / sanitized savingThrows convention).
-    const primaryAbility = parseAbilities(f.primaryAbility);
+    const primaryAbility = normalizeAbilityList(f.primaryAbility);
+    const primaryAbilityChoice = normalizeAbilityList(f.primaryAbilityChoice);
     const savingThrows = parseAbilities(f.savingThrows).map((a) => a.toUpperCase());
 
     // Features-panel routing → class-field overrides + child feature rows.
@@ -210,7 +217,7 @@ export const clazzDescriptor: ImportDescriptor = {
       proficiencies: buildProficiencyCollection(f.proficiencies, savingThrows),
       starting_equipment: String(f.startingEquipment ?? ''),
       primary_ability: primaryAbility,
-      primary_ability_choice: [] as string[],
+      primary_ability_choice: primaryAbilityChoice,
       wealth: String(f.wealth ?? ''),
       multiclassing: String(f.multiclassing ?? ''),
       multiclass_proficiencies: buildProficiencyCollection(),

@@ -18,6 +18,8 @@ export type ImportFieldKind =
   | 'boolean'
   | 'select'
   | 'source' // a `<select>` populated from the `sources` table
+  | 'markdown' // rich prose editor — reuses the class editor's MarkdownEditor
+  | 'abilities' // ability pill toggles — reuses ClassEditor's primary-ability picker (value = UPPERCASE ability ids)
   | 'proficiencies' // the reusable ProficienciesEditor grid; value is the class
                     // proficiency object {armor,weapons,tools,skills,languages,…}
   | 'features'; // the class features organizer; value is an array of feature

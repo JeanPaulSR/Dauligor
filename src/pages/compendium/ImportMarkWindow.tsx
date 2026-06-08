@@ -28,6 +28,7 @@ import { reportClientError, OperationType } from '../../lib/firebase';
 import SingleSelectSearch from '../../components/ui/SingleSelectSearch';
 import SpellDetailPanel from '../../components/compendium/SpellDetailPanel';
 import ClassPreviewPane from '../../components/compendium/ClassPreviewPane';
+import MarkdownEditor from '../../components/MarkdownEditor';
 import ProficienciesEditor, { type ProficiencyType } from '../../components/compendium/ProficienciesEditor';
 import {
   listImportDescriptors,
@@ -61,6 +62,7 @@ type EntityState = { values: Record<string, any>; spans: Record<string, Span[]>;
  * `proficiencies` field's embedded ProficienciesEditor via context. */
 type ProfCatalogs = {
   allSkills: any[];
+  allAttributes: any[];
   allArmor: any[]; allArmorCategories: any[]; groupedArmor: Record<string, any[]>;
   allWeapons: any[]; allWeaponCategories: any[]; groupedWeapons: Record<string, any[]>;
   allTools: any[]; allToolCategories: any[]; groupedTools: Record<string, any[]>;
@@ -141,6 +143,17 @@ function mergeSpans(list: Span[]): Span[] {
 }
 function sameSpanList(x: Span[], y: Span[]): boolean {
   return x.length === y.length && x.every((s, i) => s.start === y[i].start && s.end === y[i].end);
+}
+
+// Tolerant ability-code reader for the 'abilities' pill control: accepts a
+// UPPERCASE id array (the pill form) OR free text / lowercase from the parser /
+// proficiencies resolve, and returns the selected UPPERCASE codes.
+const ABILITY_CODES = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
+const ABILITY_FULLNAMES: Record<string, string> = { STR: 'STRENGTH', DEX: 'DEXTERITY', CON: 'CONSTITUTION', INT: 'INTELLIGENCE', WIS: 'WISDOM', CHA: 'CHARISMA' };
+function toAbilityCodes(v: any): string[] {
+  if (Array.isArray(v)) return ABILITY_CODES.filter((c) => v.some((x) => String(x).toUpperCase() === c));
+  const s = String(v ?? '').toUpperCase();
+  return s ? ABILITY_CODES.filter((c) => s.includes(c) || s.includes(ABILITY_FULLNAMES[c])) : [];
 }
 
 // Capture target → relative line index from the current spans (skips description,
@@ -324,7 +337,7 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
   // `proficiencies` field (skipped for spell-only sessions).
   const [rawCatalogs, setRawCatalogs] = useState<{
     skills: any[]; armor: any[]; armorCats: any[]; weapons: any[]; weaponCats: any[];
-    tools: any[]; toolCats: any[]; languages: any[]; languageCats: any[];
+    tools: any[]; toolCats: any[]; languages: any[]; languageCats: any[]; attributes: any[];
   } | null>(null);
 
   // Workspace
@@ -367,7 +380,7 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
     let cancelled = false;
     (async () => {
       try {
-        const [skills, armor, armorCats, weapons, weaponCats, tools, toolCats, languages, languageCats] = await Promise.all([
+        const [skills, armor, armorCats, weapons, weaponCats, tools, toolCats, languages, languageCats, attributes] = await Promise.all([
           fetchCollection('skills', { orderBy: 'name ASC' }),
           fetchCollection('armor', { orderBy: 'name ASC' }),
           fetchCollection('armorCategories', { orderBy: 'name ASC' }),
@@ -377,6 +390,7 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
           fetchCollection('toolCategories', { orderBy: 'name ASC' }),
           fetchCollection('languages', { orderBy: 'name ASC' }),
           fetchCollection('languageCategories', { orderBy: 'name ASC' }),
+          fetchCollection('attributes', { orderBy: 'name ASC' }),
         ]);
         if (cancelled) return;
         const d = (rows: any[]) => (rows || []).map((r) => denormalizeCompendiumData(r));
@@ -397,6 +411,7 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
           weapons: d(weapons), weaponCats: d(weaponCats),
           tools: d(tools), toolCats: d(toolCats),
           languages: d(languages), languageCats: d(languageCats),
+          attributes: d(attributes),
         });
       } catch (err) { console.error('[ImportMarkWindow] proficiency catalogs load failed:', err); }
     })();
@@ -413,6 +428,7 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
       allWeapons: c.weapons, allWeaponCategories: c.weaponCats, groupedWeapons: groupByCategory(c.weapons, c.weaponCats, true),
       allTools: c.tools, allToolCategories: c.toolCats, groupedTools: groupByCategory(c.tools, c.toolCats),
       allLanguages: c.languages, allLanguageCategories: c.languageCats, groupedLanguages: groupByCategory(c.languages, c.languageCats),
+      allAttributes: c.attributes,
     };
   }, [rawCatalogs]);
 
@@ -920,7 +936,7 @@ function EntityWorkspace({
   // target REPLACES — so several flavour paragraphs all feed Lore, but
   // re-marking the Name just swaps it.
   const isBlockTarget = (t?: ImportAssignTarget) =>
-    !!t && t.fieldKeys.length > 0 && t.fieldKeys.every((fk) => descriptor.fields.find((f) => f.key === fk)?.kind === 'textarea');
+    !!t && t.fieldKeys.length > 0 && t.fieldKeys.every((fk) => { const k = descriptor.fields.find((f) => f.key === fk)?.kind; return k === 'textarea' || k === 'markdown'; });
   const handleAssign = (targetKey: string) => {
     if (!selection) return;
     const target = assignTargets.find((t) => t.key === targetKey);
@@ -1336,6 +1352,46 @@ function FieldControl({
         <input id={id} type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} className={`h-4 w-4 accent-[var(--gold)]${flag ? ' ring-1 ring-blood/50' : ''}`} />
         {field.label}
       </label>
+    );
+  }
+
+  if (field.kind === 'markdown') {
+    return (
+      <div className="sm:col-span-2" {...hover}>
+        <label className="field-label mb-1 block">{field.label}</label>
+        <div className={`rounded border border-gold/15${stateRing}`}>
+          <MarkdownEditor value={String(value ?? '')} onChange={onChange} minHeight="80px" placeholder={field.placeholder} />
+        </div>
+        {flag ? <p className="mt-0.5 text-[10px] text-blood">{flagNote}</p> : field.help ? <p className="field-hint mt-0.5">{field.help}</p> : null}
+      </div>
+    );
+  }
+
+  if (field.kind === 'abilities') {
+    const sel: string[] = toAbilityCodes(value);
+    const attrs: any[] = catalogs?.allAttributes ?? [];
+    const codeOf = (a: any) => String(a.identifier || a.id).toUpperCase();
+    const toggle = (a: any) => {
+      const c = codeOf(a);
+      onChange(sel.includes(c) ? sel.filter((s) => s !== c) : [...sel, c]);
+    };
+    return (
+      <div className="sm:col-span-2" {...hover}>
+        <label className="field-label mb-1 block">{field.label}</label>
+        <div className={`flex flex-wrap gap-2 rounded border border-gold/10 bg-background/50 p-2${stateRing}`}>
+          {attrs.map((a) => {
+            const on = sel.includes(codeOf(a));
+            return (
+              <button key={a.id} type="button" onClick={() => toggle(a)}
+                className={`rounded border px-2 py-1 text-[10px] font-bold transition-all ${on ? 'border-gold bg-gold text-white' : 'border-gold/10 bg-gold/5 text-gold hover:bg-gold/10'}`}>
+                {a.name}
+              </button>
+            );
+          })}
+          {attrs.length === 0 ? <p className="text-[10px] italic text-ink/30">{catalogs ? 'No attributes defined.' : 'Loading…'}</p> : null}
+        </div>
+        {field.help ? <p className="field-hint mt-0.5">{field.help}</p> : null}
+      </div>
     );
   }
 
