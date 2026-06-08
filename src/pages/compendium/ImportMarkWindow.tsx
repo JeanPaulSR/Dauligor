@@ -27,6 +27,7 @@ import { cleanFoundryHtml } from '../../lib/foundryHtmlCleanup';
 import { reportClientError, OperationType } from '../../lib/firebase';
 import SingleSelectSearch from '../../components/ui/SingleSelectSearch';
 import SpellDetailPanel from '../../components/compendium/SpellDetailPanel';
+import ClassPreviewPane from '../../components/compendium/ClassPreviewPane';
 import ProficienciesEditor, { type ProficiencyType } from '../../components/compendium/ProficienciesEditor';
 import {
   listImportDescriptors,
@@ -341,6 +342,7 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
   const hasParser = useMemo(() => canParseText(type), [type]);
   const assignTargets = useMemo(() => getAssignTargets(type), [type]);
   const hasSections = useMemo(() => assignTargets.some((t) => t.group === 'Blocks'), [assignTargets]);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const sourceKey = useMemo(() => descriptor?.fields.find((f) => f.kind === 'source')?.key, [descriptor]);
 
   useEffect(() => {
@@ -673,11 +675,18 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
               {hasParser ? (
                 <button type="button" className="btn-gold inline-flex h-9 items-center gap-1 px-3 text-[11px]" onClick={enterBatch}><Scissors className="h-3 w-3" /> Divide</button>
               ) : null}
+              {hasSections ? (
+                <button type="button" className="btn-gold inline-flex h-9 items-center gap-1 px-3 text-[11px] disabled:opacity-50" disabled={!singleResolved} onClick={() => setPreviewOpen(true)}><FileText className="h-3 w-3" /> Preview</button>
+              ) : null}
               <button type="button" className="btn-gold-solid h-9 px-5 disabled:opacity-50" disabled={saving || !singleResolved || singleResolved.errors.length > 0} onClick={handleCreateSingle}>{saving ? 'Creating…' : `Create ${descriptor.label}`}</button>
             </div>
           </div>
           <EntityWorkspace type={type} descriptor={descriptor} rawText={rawText} state={single} onChange={setSingle} assignTargets={assignTargets} renderPreview={renderPreview} onSaveFormat={hasParser ? handleSaveFormat : undefined} />
           {singleResolved ? <ResolvedPayload payload={singleResolved.payload} /> : null}
+          {previewOpen && singleResolved ? (() => {
+            const row: any = { ...singleResolved.payload }; delete row.__features;
+            return <ClassPreviewPane classData={{ ...denormalizeCompendiumData(row), id: 'import-preview' }} open onClose={() => setPreviewOpen(false)} />;
+          })() : null}
         </>
       ) : null}
 
@@ -1342,7 +1351,7 @@ function FieldControl({
               proficiencies={prof}
               setProficiencies={onChange}
               types={types}
-              showDisplayNames={false}
+              showDisplayNames={true}
               allSkills={catalogs.allSkills}
               allArmor={catalogs.allArmor} allArmorCategories={catalogs.allArmorCategories} groupedArmor={catalogs.groupedArmor}
               allWeapons={catalogs.allWeapons} allWeaponCategories={catalogs.allWeaponCategories} groupedWeapons={catalogs.groupedWeapons}
