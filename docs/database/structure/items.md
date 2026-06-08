@@ -97,9 +97,17 @@ not a separate column. The pre-20260526-1700 `stealth` boolean column was droppe
 ### Container-specific (only set when `item_type = 'container'`)
 | Column | Type | Notes |
 |---|---|---|
-| `capacity` | JSON | `{type: 'items'|'weight', value: number, units?: 'lb'|'kg', weightlessContents?: bool}` |
-| `currency` | JSON | 5-coin grid: `{cp, sp, ep, gp, pp}` |
-| `container_id` | TEXT | Nested container UUID (Foundry-side reference) |
+| `capacity` | JSON | dnd5e 5.x shape: `{count: int\|null, volume: {value, units: 'cubicFoot'\|'liter'}, weight: {value, units: 'lb'\|'kg'\|'tn'\|'Mg'}}`. `count` null = unlimited. (Weightless is the `weightlessContents` **property**, not a capacity flag.) |
+| `currency` | JSON | 5-coin grid the container itself holds: `{cp, sp, ep, gp, pp}` |
+| `container_id` | TEXT (FK) | → `items.id` of the **parent** container this item sits inside (Foundry's `system.container` back-pointer). Null for top-level / catalog items. |
+
+> **Container contents are NOT on this table.** A catalog container's *recipe* of
+> contents lives in its own **`container_contents`** table (migration
+> `20260608-1200`): `{ container_id → items.id, item_id → items.id (or
+> is_custom + custom_data), quantity, sort_order }` — references to catalog items
+> with counts, no duplicate item rows. Per-character bag *instances* (independent
+> copies with state) live in `character_inventory`, materialized by expanding the
+> recipe. See the items native-conversion handoff for the Foundry round-trip.
 
 ### Activities + effects
 | Column | Type | Notes |

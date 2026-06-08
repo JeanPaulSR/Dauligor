@@ -45,6 +45,11 @@ export const D1_TABLE_MAP: Record<string, string> = {
   loreLinks: 'lore_links',
   campaigns: 'campaigns',
   items: 'items',
+  // Catalog/template container recipe — a container item's contents as
+  // references to catalog items (+ qty) or custom one-offs. Migration
+  // 20260608-1200. Distinct from `character_inventory` (per-character
+  // instances); the recipe is expanded into instances on a character.
+  containerContents: 'container_contents',
   feats: 'feats',
   // Backgrounds + Species — promoted out of the `feats` table into their own
   // tables (migration 20260601-1200). camelCase columns; "species" is the 2024

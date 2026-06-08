@@ -13,9 +13,9 @@ are still TODO:
 - **Module-side native conversion** (the `foundry-module` branch):
   `module/dauligor-pairing/scripts/{import,export}-service.js`.
 
-> **Status: PENDING** — the consumable UI is done in-app, but neither the
-> app-side nor the module-side round-trip is wired. Author both when we pick the
-> items track back up (after the remaining item types are built).
+> **Status: PENDING** — the consumable + container UIs are done in-app, but
+> neither the app-side nor the module-side round-trip is wired. Author both when
+> we pick the items track back up (after the remaining item types are built).
 
 ---
 
@@ -57,23 +57,114 @@ The app export already emits it; standard Foundry field, no special conversion.
 
 ---
 
+## Container  *(app UI complete 2026-06-08)*
+
+Containers are Foundry-special: **Details + Contents tabs only** — no
+activities, effects, advancement, or scaling. **Zero new DB columns / no
+migration** — `capacity`, `currency`, `container_id`, `attunement`, and
+`properties` already exist, and `item_properties` already carries `mgc` +
+`weightlessContents` with `container` in `valid_types`.
+
+### Properties → `system.properties` (slug array)
+- `mgc` — Magical
+- `weightlessContents` — Weightless Contents (contents ignore encumbrance, e.g. Bag of Holding)
+
+(`items.magical` boolean stays derived from `mgc` on save, as for every type.)
+
+### Attunement → `system.attunement`
+3-state string, surfaced in the editor only when `mgc` is set (Foundry shows the
+field for magic items): `''` (not required) · `required` · `optional`. Stored raw
+in `items.attunement`.
+
+### Capacity → `system.capacity`  *(dnd5e 5.x shape — CHANGED from 3.x)*
+Stored in `items.capacity` (JSON) exactly as Foundry shapes it, so conversion is a
+pass-through:
+```json
+{
+  "count":  <int|null>,                              // max item count, null = unlimited
+  "volume": { "value": <number>, "units": "cubicFoot" },
+  "weight": { "value": <number>, "units": "lb" }
+}
+```
+- volume `units` ∈ `CONFIG.DND5E.volumeUnits`: `cubicFoot` (default) · `liter`
+- weight `units` ∈ `CONFIG.DND5E.weightUnits`: `lb` (default) · `kg` · `tn` · `Mg`
+- ⚠️ OLD app shape was `{ type:'items'|'weight', value, units, weightlessContents }`
+  (dnd5e 3.x). The new editor reads the 5.x shape and ignores the old keys
+  (`weightlessContents` is now the *property*, not a capacity flag). Re-save any
+  stale container row to normalize. **`export-service.js` still comments the 3.x
+  shape — update it to 5.x.**
+
+### Contents — TWO layers (template recipe vs character instances)
+Foundry stores contents as independent child item documents (copies) whose
+`system.container` = the container's item `_id`. We split that into two layers:
+
+**1. Catalog/template recipe → `container_contents`** *(new — migration `20260608-1200`)*
+A compendium container (e.g. Explorer's Pack) defines a *recipe* of contents —
+references to catalog items + a quantity, no duplicate item rows:
+
+| Column | Meaning |
+|---|---|
+| `container_id` → items.id | the container (FK, `ON DELETE CASCADE`) |
+| `item_id` → items.id | catalog reference; `NULL` when custom |
+| `is_custom` / `custom_data` | inline one-off (JSON snapshot) when not a catalog item |
+| `quantity` | count |
+| `sort_order` | display order |
+
+The editor's **Contents tab authors these** (catalog picker + qty, plus a custom
+one-off). It's references, not copies — catalog edits propagate to every pack.
+
+**2. Character instances → `character_inventory`** (existing table)
+A player's actual bag holds independent *copies* carrying instance state
+(equipped, attuned, spent uses, identified, renamed). They are MATERIALIZED,
+never referenced live — so removing an item from one character's bag never
+touches the template or another character.
+
+**Round-trip**
+- **Export** a catalog container: expand each `container_contents` row → a child
+  item document with `system.container = <container>`; reference rows copy the
+  catalog item + set `quantity`; custom rows emit the `custom_data` snapshot.
+- **Import** a catalog container with contents: collapse the children
+  (`system.container` set) → `container_contents` rows; match against catalog by
+  source identifier → reference row, else `is_custom` snapshot.
+- **Import a character**: the actor's bag children become **`character_inventory`**
+  instances (NOT `container_contents`); remap each child's container pointer from
+  the Foundry `_id` to the new instance id, or it dangles. (`itemImport.ts` for a
+  single item still stamps `items.container_id` with the raw Foundry `_id` —
+  staging only; the character importer owns the remap.)
+
+**Currency** the container itself holds → `system.currency` (5-coin grid
+`{cp,sp,ep,gp,pp}`) ↔ `items.currency`. Already passed through on import.
+
+---
+
 ## TODO checklist
 
 **App-side (`compendium-editors`):**
 - [ ] `_itemExport.ts buildItemBundle`: emit `system.type.value` ← `type_subtype`,
-      `system.type.subtype` ← `type_inner_subtype`, `system.damage` ← `damage`.
+      `system.type.subtype` ← `type_inner_subtype`, `system.damage` ← `damage`,
+      and for containers `system.capacity` ← `capacity`, `system.currency` ←
+      `currency`, `system.container` ← `container_id`.
 - [ ] `itemImport.ts`: capture `system.type.subtype` → `type_inner_subtype`,
-      `system.damage` → `damage`. (`type_subtype` already captured.)
+      `system.damage` → `damage`. (`type_subtype`, `capacity`, `currency`,
+      `container_id` already captured — see container `_id` remap note above.)
+- [ ] `_itemExport.ts`: expand a catalog container's `container_contents` rows →
+      child item docs (`system.container`); copy referenced catalog items + qty,
+      emit custom snapshots.
+- [ ] `itemImport.ts`: collapse a catalog container's child docs →
+      `container_contents` rows (match catalog → reference, else `is_custom`).
 
 **Module-side (`foundry-module`):**
 - [ ] import-service: map the semantic fields above → native item shapes (mostly pass-through).
 - [ ] export-service: map native Foundry item → the semantic fields above.
+- [ ] export-service: container `capacity` comment/handling still says 3.x
+      `{type,value}` — update to the 5.x `{count,volume,weight}` shape.
 
 ## DB migrations  *(LOCAL-only — remote pending owner go-ahead)*
 `20260607-1200_items_chat_description` · `20260607-1300_consumable_taxonomies`
 · `20260607-1400_ammo_item_properties` · `20260607-1500_scroll_item_properties`
+· `20260608-1200_container_contents`
 
 ---
 
 ## Next types (append as finished)
-container · weapon · equipment · tool · loot
+weapon · equipment · tool · loot

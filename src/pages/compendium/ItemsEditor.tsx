@@ -7,6 +7,7 @@ import ActivityEditor from '../../components/compendium/ActivityEditor';
 import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
 import ItemDetailPanel from '../../components/compendium/ItemDetailPanel';
 import ItemUsesField from '../../components/compendium/ItemUsesField';
+import ContainerContentsPanel from '../../components/compendium/ContainerContentsPanel';
 import TagPicker from '../../components/compendium/TagPicker';
 import { normalizeTagRow } from '../../lib/tagHierarchy';
 import MarkdownEditor from '../../components/MarkdownEditor';
@@ -149,13 +150,28 @@ const WEAPON_RANGE_UNITS: [string, string][] = [
   ['ft', 'feet'], ['mi', 'miles'], ['m', 'meters'], ['km', 'kilometers'], ['spec', 'special'],
 ];
 
-const CAPACITY_TYPES: [string, string][] = [
-  ['items', 'Item Count'],
-  ['weight', 'Weight Capacity'],
+// dnd5e 5.x container capacity units (CONFIG.DND5E.volumeUnits /
+// weightUnits). Keys are Foundry-canonical so capacity round-trips as a
+// pass-through. Defaults: volume → cubicFoot, weight → lb.
+const CAPACITY_VOLUME_UNITS: [string, string][] = [
+  ['cubicFoot', 'Cubic Feet'],
+  ['liter', 'Liters'],
 ];
 
 const CAPACITY_WEIGHT_UNITS: [string, string][] = [
-  ['lb', 'lb'], ['kg', 'kg'],
+  ['lb', 'Pounds'],
+  ['kg', 'Kilograms'],
+  ['tn', 'Tons'],
+  ['Mg', 'Megagrams'],
+];
+
+// Foundry's 3-state attunement vocabulary, labelled to match the dnd5e
+// sheet. '' (not required) rides the 'none' sentinel so the Select never
+// carries an empty-string item value.
+const CONTAINER_ATTUNEMENT_OPTIONS: [string, string][] = [
+  ['none', 'Attunement Not Required'],
+  ['required', 'Attunement Required'],
+  ['optional', 'Optional Attunement'],
 ];
 
 function getSubtypeOptions(itemType: string): [string, string][] | null {
@@ -1112,7 +1128,9 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
   })();
 
   // ── Editor sub-tabs ───────────────────────────────────────────
-  const editorSubTabs: EditorSubTab[] = useMemo(() => [
+  const editorSubTabs: EditorSubTab[] = useMemo(() => {
+    const isContainer = (formData.itemType || 'loot') === 'container';
+    const tabs: EditorSubTab[] = [
     {
       key: 'basics',
       label: 'Basics',
@@ -1138,6 +1156,28 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
         />
       ),
     },
+    ];
+
+    // Containers are Foundry-special: Details + Contents only — no
+    // activities, effects, advancement, or scaling.
+    if (isContainer) {
+      tabs.push({
+        key: 'contents',
+        label: 'Contents',
+        layout: 'scroll',
+        render: () => (
+          <ContainerContents
+            formData={formData}
+            setFormData={setFormData}
+            containerId={editingId}
+            itemCatalog={entries}
+          />
+        ),
+      });
+      return tabs;
+    }
+
+    tabs.push(
     {
       key: 'activities',
       label: 'Activities',
@@ -1243,7 +1283,9 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
         </div>
       ),
     },
-  ], [formData, sources, profs, editingId, scalingColumns, availableFeats, availableFeatures]);
+    );
+    return tabs;
+  }, [formData, sources, profs, editingId, entries, scalingColumns, availableFeats, availableFeatures]);
 
   const tagsSubTabsList: TagsSubTab[] = useMemo(() => [
     {
@@ -1800,6 +1842,9 @@ function MechanicsTab({
   if (itemType === 'consumable') {
     return <ConsumableDetails formData={formData} setFormData={setFormData} profs={profs} />;
   }
+  if (itemType === 'container') {
+    return <ContainerDetails formData={formData} setFormData={setFormData} profs={profs} />;
+  }
 
   return (
     <div className="space-y-4 pt-4 border-t border-gold/15">
@@ -1877,7 +1922,6 @@ function MechanicsTab({
       {itemType === 'equipment' && <EquipmentItemFields formData={formData} setFormData={setFormData} />}
       {itemType === 'consumable' && <ConsumableItemFields formData={formData} setFormData={setFormData} />}
       {itemType === 'tool' && <ToolItemFields formData={formData} setFormData={setFormData} profs={profs} />}
-      {itemType === 'container' && <ContainerItemFields formData={formData} setFormData={setFormData} />}
       {itemType === 'loot' && (
         <ActivitySection label="LOOT">
           <p className="text-[10px] text-ink/45 py-2">
@@ -2445,82 +2489,232 @@ function ToolItemFields({
   );
 }
 
-function ContainerItemFields({
+// ─── Container Details (Foundry dnd5e 5.3.1 container sheet) ────────
+//
+// Containers are Foundry-special: a Details tab + a Contents tab, no
+// activities or effects. Details = container properties (Magical /
+// Weightless Contents — both `system.properties` slugs) + conditional
+// attunement + capacity (count / volume / weight, the dnd5e 5.x shape).
+
+function ContainerDetails({
   formData,
   setFormData,
+  profs,
 }: {
   formData: ItemFormData;
   setFormData: React.Dispatch<React.SetStateAction<ItemFormData>>;
+  profs: ProficiencyBucket;
 }) {
-  const capacity = formData.capacity || { type: 'items', value: 0, units: 'lb' };
-  const currency = formData.currency || { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0 };
+  // Container properties come from the admin-managed item_properties
+  // table (valid_types includes 'container') — exactly Magical (mgc) +
+  // Weightless Contents (weightlessContents). Same data-driven catalog
+  // the consumable Details + Enchant activity use.
+  const propertyCatalog = useMemo(() => {
+    const list = Array.isArray(profs.itemProperties) ? profs.itemProperties : [];
+    return list
+      .filter((p: any) => {
+        try { return JSON.parse(p.valid_types || '[]').includes('container'); }
+        catch { return false; }
+      })
+      .map((p: any) => ({ id: String(p.identifier || p.id), name: String(p.name || p.identifier) }));
+  }, [profs.itemProperties]);
 
-  const updateCapacity = (patch: Record<string, any>) => {
-    setFormData((prev) => ({ ...prev, capacity: { ...capacity, ...patch } }));
-  };
-  const updateCurrency = (coin: string, val: number) => {
-    setFormData((prev) => ({ ...prev, currency: { ...currency, [coin]: val } }));
-  };
+  const properties = Array.isArray(formData.properties) ? formData.properties : [];
+  const isMagical = properties.includes('mgc');
+  const toggleProperty = (slug: string) => setFormData((prev) => {
+    const cur = Array.isArray(prev.properties) ? prev.properties : [];
+    return { ...prev, properties: cur.includes(slug) ? cur.filter((s) => s !== slug) : [...cur, slug] };
+  });
+
+  // Capacity — dnd5e 5.x shape: { count, volume:{value,units}, weight:{value,units} }.
+  const capacity = (formData.capacity && typeof formData.capacity === 'object') ? formData.capacity : {};
+  const volume = (capacity.volume && typeof capacity.volume === 'object') ? capacity.volume : {};
+  const weight = (capacity.weight && typeof capacity.weight === 'object') ? capacity.weight : {};
+  const setCapacity = (patch: Record<string, any>) => setFormData((prev) => {
+    const cur = (prev.capacity && typeof prev.capacity === 'object') ? prev.capacity : {};
+    return { ...prev, capacity: { ...cur, ...patch } };
+  });
+  const setVolume = (patch: Record<string, any>) => setCapacity({ volume: { ...volume, ...patch } });
+  const setWeight = (patch: Record<string, any>) => setCapacity({ weight: { ...weight, ...patch } });
 
   return (
-    <>
-      <ActivitySection label="CONTAINER · CAPACITY">
-        <FieldRow label="Capacity Type" hint="Item-count caps how many objects fit; weight-based limits total weight carried.">
-          <SingleSelectSearch
-            value={capacity.type || 'items'}
-            onChange={(val) => updateCapacity({ type: val })}
-            options={CAPACITY_TYPES.map(([v, l]) => ({ id: v, name: l }))}
-            triggerClassName="w-full"
-          />
-        </FieldRow>
-        <FieldRow label="Capacity Value">
-          <div className="flex gap-1">
+    <div className="space-y-4 pt-4 border-t border-gold/15">
+      <fieldset className="config-fieldset">
+        <legend className="section-label text-gold/60 px-1">Container Details</legend>
+        {/* Properties — Magical + Weightless Contents (stacked grid, matching consumable). */}
+        <div className="py-2 space-y-1.5">
+          <p className="text-xs font-semibold text-ink/85 leading-tight">Container Properties</p>
+          {propertyCatalog.length === 0 ? (
+            <p className="field-hint">No properties for this type.</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3">
+              {propertyCatalog.map((p) => (
+                <label key={p.id} className="flex items-center gap-2 cursor-pointer">
+                  <Checkbox checked={properties.includes(p.id)} onCheckedChange={() => toggleProperty(p.id)} />
+                  <span className="text-xs text-ink/75">{p.name}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+        {/* Attunement — only shown for magical containers (Foundry behaviour). */}
+        {isMagical && (
+          <FieldRow
+            label="Attunement"
+            hint="Whether a creature must attune to this magic item to use its properties."
+          >
+            <FieldSelect
+              value={formData.attunement ? formData.attunement : 'none'}
+              onChange={(val) => setFormData((prev) => ({ ...prev, attunement: val === 'none' ? '' : val }))}
+              options={CONTAINER_ATTUNEMENT_OPTIONS}
+              triggerClassName="w-full"
+            />
+          </FieldRow>
+        )}
+      </fieldset>
+
+      <fieldset className="config-fieldset">
+        <legend className="section-label text-gold/60 px-1">Capacity</legend>
+        <div className="space-y-3 py-1">
+          {/* Item Count — single field, blank = unlimited. */}
+          <div className="space-y-0.5">
+            <Label className="field-label">Item Count</Label>
             <Input
               type="number"
               min={0}
-              value={capacity.value ?? 0}
-              onChange={(e) => updateCapacity({ value: parseFloat(e.target.value) || 0 })}
-              className="bg-background/50 border-gold/15 flex-1"
+              value={capacity.count ?? ''}
+              onChange={(e) => setCapacity({ count: e.target.value === '' ? null : (parseInt(e.target.value, 10) || 0) })}
+              placeholder="Unlimited"
+              className="h-8 bg-background/50 border-gold/15 text-sm no-number-spin"
             />
-            {capacity.type === 'weight' && (
-              <SingleSelectSearch
-                value={capacity.units || 'lb'}
-                onChange={(val) => updateCapacity({ units: val })}
-                options={CAPACITY_WEIGHT_UNITS.map(([v, l]) => ({ id: v, name: l }))}
-                triggerClassName="w-20"
-              />
-            )}
+            <p className="field-hint">Maximum number of items the container can hold. Blank = unlimited.</p>
           </div>
-        </FieldRow>
-        <FieldRow label="Weightless Contents" hint="If true, items inside don't count toward the carrier's encumbrance (Bag of Holding)." inline>
-          <Checkbox
-            checked={!!capacity.weightlessContents}
-            onCheckedChange={(checked) => updateCapacity({ weightlessContents: !!checked })}
-          />
-        </FieldRow>
-      </ActivitySection>
-
-      <ActivitySection label="CONTAINER · CURRENCY">
-        <div className="py-2">
-          <p className="text-[10px] text-ink/45 mb-2">
-            Pre-filled coins inside this container. Foundry's 5-coin grid.
-          </p>
-          <div className="grid grid-cols-5 gap-2">
-            {DENOMINATIONS.map(([coin, label]) => (
-              <div key={coin} className="space-y-1">
-                <Label className="text-[9px] uppercase tracking-widest text-ink/45 text-center block">{label}</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={(currency as any)[coin] ?? 0}
-                  onChange={(e) => updateCurrency(coin, parseInt(e.target.value || '0', 10) || 0)}
-                  className="bg-background/50 border-gold/15 text-center text-xs"
-                />
-              </div>
-            ))}
+          {/* Volume + Weight — each an amount + a unit. */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <CapacityAxis
+              label="Volume Capacity"
+              value={volume.value}
+              units={volume.units || 'cubicFoot'}
+              unitOptions={CAPACITY_VOLUME_UNITS}
+              onValue={(v) => setVolume({ value: v, units: volume.units || 'cubicFoot' })}
+              onUnits={(u) => setVolume({ units: u })}
+            />
+            <CapacityAxis
+              label="Weight Capacity"
+              value={weight.value}
+              units={weight.units || 'lb'}
+              unitOptions={CAPACITY_WEIGHT_UNITS}
+              onValue={(v) => setWeight({ value: v, units: weight.units || 'lb' })}
+              onUnits={(u) => setWeight({ units: u })}
+            />
           </div>
         </div>
-      </ActivitySection>
-    </>
+      </fieldset>
+    </div>
+  );
+}
+
+// Amount + unit pair used by the container capacity (volume / weight).
+function CapacityAxis({
+  label,
+  value,
+  units,
+  unitOptions,
+  onValue,
+  onUnits,
+}: {
+  label: string;
+  value: number | null | undefined;
+  units: string;
+  unitOptions: [string, string][];
+  onValue: (next: number | null) => void;
+  onUnits: (next: string) => void;
+}) {
+  return (
+    <div className="space-y-0.5">
+      <Label className="field-label">{label}</Label>
+      <div className="grid grid-cols-[1fr_auto] gap-1.5">
+        <Input
+          type="number"
+          min={0}
+          value={value ?? ''}
+          onChange={(e) => onValue(e.target.value === '' ? null : (parseFloat(e.target.value) || 0))}
+          placeholder="Amount"
+          className="h-8 bg-background/50 border-gold/15 text-sm no-number-spin"
+        />
+        <FieldSelect
+          value={units}
+          onChange={onUnits}
+          options={unitOptions}
+          triggerClassName="h-8 w-28"
+        />
+      </div>
+    </div>
+  );
+}
+
+// ─── Container Contents (currency + stored-items model) ────────────
+//
+// Foundry's container Contents tab shows the stored currency and the
+// items inside. Contained items live as their own rows that point back
+// via `container_id`, so a catalog container is empty here; a
+// character's saved bag (including Foundry imports) keeps whatever it
+// holds.
+
+function ContainerContents({
+  formData,
+  setFormData,
+  containerId,
+  itemCatalog,
+}: {
+  formData: ItemFormData;
+  setFormData: React.Dispatch<React.SetStateAction<ItemFormData>>;
+  containerId: string | null;
+  itemCatalog: any[];
+}) {
+  const currency = (formData.currency && typeof formData.currency === 'object')
+    ? formData.currency
+    : { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0 };
+  const updateCurrency = (coin: string, val: number) => setFormData((prev) => {
+    const cur = (prev.currency && typeof prev.currency === 'object')
+      ? prev.currency
+      : { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0 };
+    return { ...prev, currency: { ...cur, [coin]: val } };
+  });
+
+  return (
+    <div className="space-y-4 pt-4 border-t border-gold/15">
+      <fieldset className="config-fieldset">
+        <legend className="section-label text-gold/60 px-1">Currency</legend>
+        <p className="field-hint mb-2">Coins stored inside this container.</p>
+        <div className="grid grid-cols-5 gap-2">
+          {DENOMINATIONS.map(([coin, label]) => (
+            <div key={coin} className="space-y-0.5">
+              <Label className="field-label block text-center">{label}</Label>
+              <Input
+                type="number"
+                min={0}
+                value={(currency as any)[coin] ?? 0}
+                onChange={(e) => updateCurrency(coin, parseInt(e.target.value || '0', 10) || 0)}
+                className="h-8 bg-background/50 border-gold/15 text-center text-sm no-number-spin"
+              />
+            </div>
+          ))}
+        </div>
+      </fieldset>
+
+      {containerId ? (
+        <ContainerContentsPanel containerId={containerId} itemCatalog={itemCatalog || []} />
+      ) : (
+        <fieldset className="config-fieldset">
+          <legend className="section-label text-gold/60 px-1">Stored Items</legend>
+          <p className="text-xs text-ink/55 leading-relaxed py-1">
+            Save this container first to add contents. The recipe attaches to the
+            saved container row, and materializes as a character's own copies when
+            the container is added to a sheet or imported from Foundry.
+          </p>
+        </fieldset>
+      )}
+    </div>
   );
 }
