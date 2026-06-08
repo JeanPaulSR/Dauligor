@@ -1284,7 +1284,34 @@ function FeaturesPanel({ value, onChange }: { value: FeatureDraft[]; onChange: (
   const drafts = Array.isArray(value) ? value : [];
   const [sel, setSel] = useState<Set<string>>(new Set());
   const update = (id: string, patch: Partial<FeatureDraft>) => onChange(drafts.map((d) => (d.id === id ? { ...d, ...patch } : d)));
-  const remove = (id: string) => { onChange(drafts.filter((d) => d.id !== id)); setSel((p) => { const n = new Set(p); n.delete(id); return n; }); };
+  const remove = (id: string) => {
+    const i = drafts.findIndex((d) => d.id === id);
+    if (i > 0) {
+      // Collapse into the feature ABOVE (don't lose the text); reversible via Split.
+      const above = drafts[i - 1], cur = drafts[i];
+      const body = `${above.body}\n\n[b]${cur.name}[/b]\n${cur.body}`.trim();
+      onChange(drafts.filter((d) => d.id !== id).map((d) => (d.id === above.id ? { ...d, body } : d)));
+    } else {
+      onChange(drafts.filter((d) => d.id !== id));
+    }
+    setSel((p) => { const n = new Set(p); n.delete(id); return n; });
+  };
+  // Re-separate a (merged) feature: split its body on the [b]Name[/b] markers that
+  // merge/collapse insert. The first chunk keeps this row's name.
+  const split = (id: string) => {
+    const i = drafts.findIndex((d) => d.id === id);
+    if (i < 0) return;
+    const d = drafts[i];
+    const segs = d.body.split(/\n*\[b\]([^[\]]+)\[\/b\]\n?/);
+    if (segs.length < 3) { toast.error('Nothing to split — no merged sub-features in this body.'); return; }
+    const lvlOf = (b: string) => { const m = b.match(/(\d+)(?:st|nd|rd|th)\s+level/i); return m ? Number(m[1]) : 1; };
+    const parts: FeatureDraft[] = [{ ...d, body: segs[0].trim() }];
+    for (let k = 1; k < segs.length; k += 2) {
+      const body = (segs[k + 1] || '').trim();
+      parts.push({ id: crypto.randomUUID(), kind: 'feature', name: segs[k].trim(), level: lvlOf(body), levels: [], body });
+    }
+    onChange([...drafts.slice(0, i), ...parts, ...drafts.slice(i + 1)]);
+  };
   const toggle = (id: string) => setSel((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const mergeSelected = () => {
     const idxs = drafts.map((d, i) => [d.id, i] as const).filter(([id]) => sel.has(id)).map(([, i]) => i).sort((a, b) => a - b);
@@ -1320,7 +1347,10 @@ function FeaturesPanel({ value, onChange }: { value: FeatureDraft[]; onChange: (
               ) : d.kind === 'asi' || d.kind === 'subclass' ? (
                 <span className="font-mono text-[10px] text-ink/45" title="Levels">[{d.levels.join(',')}]</span>
               ) : null}
-              <button type="button" onClick={() => remove(d.id)} className="px-1 text-ink/40 hover:text-blood" title="Remove">✕</button>
+              {/\[b\]/.test(d.body) ? (
+                <button type="button" onClick={() => split(d.id)} className="px-1 text-ink/40 hover:text-gold" title="Split back into separate features">⊟</button>
+              ) : null}
+              <button type="button" onClick={() => remove(d.id)} className="px-1 text-ink/40 hover:text-blood" title="Remove — collapses into the feature above">✕</button>
             </div>
             {d.body ? <div className="mt-1 line-clamp-2 pl-6 text-[11px] text-ink/50">{d.body.replace(/\[\/?b\]/g, '')}</div> : null}
           </div>

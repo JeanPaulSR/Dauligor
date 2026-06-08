@@ -18,6 +18,7 @@
 // exactly like spell activities.
 
 import type { ParseResult, ParsedField } from './types';
+import { buildGroupedProficiencyDisplayName } from '../proficiencySelection';
 
 const ABILITY_NAMES: Record<string, string> = {
   str: 'STR', strength: 'STR',
@@ -70,6 +71,27 @@ function abilityCodes(text: string): string[] {
   return Array.from(new Set(
     text.split(/[,/&]|\band\b|\bor\b/i).map((p) => ABILITY_NAMES[p.trim().toLowerCase()]).filter(Boolean),
   ));
+}
+
+// Re-flow PDF-wrapped prose into paragraphs (mid-sentence hard newlines → spaces;
+// blank line / sentence-final punctuation → a paragraph break; a trailing "-"
+// rejoins a split compound). Mirrors the spell importer's reflowDescription but
+// kept dependency-free so this module stays pure. Clean prose passes through.
+const ENDS_PARA = /[.!?]["'”’)\]]*$/;
+export function reflowText(raw: string): string {
+  const lines = String(raw ?? '').replace(/\r\n?/g, '\n').split('\n');
+  const out: string[] = [];
+  let cur = '';
+  for (const r of lines) {
+    const line = r.trim();
+    if (line === '') { if (cur) { out.push(cur); cur = ''; } continue; }
+    if (cur === '') cur = line;
+    else if (cur.endsWith('-')) cur += line;
+    else cur += ' ' + line;
+    if (ENDS_PARA.test(line)) { out.push(cur); cur = ''; }
+  }
+  if (cur) out.push(cur);
+  return out.join('\n\n');
 }
 
 // ───────────────────────────── Feature splitter ─────────────────────────────
@@ -179,7 +201,7 @@ export function splitClassSections(text: string): ClassSection[] {
   for (let h = 0; h < headerIdx.length; h++) {
     const i = headerIdx[h];
     const nextHeaderLine = headerIdx[h + 1] ?? lines.length;
-    const body = lines.slice(i + 1, nextHeaderLine).join('\n').trim();
+    const body = reflowText(lines.slice(i + 1, nextHeaderLine).join('\n').trim());
     const name = normalizeClassName(lines[i]);
     const lvl = firstLevel(body);
     const kind = classifyKind(name, body, lvl != null);
@@ -261,8 +283,13 @@ export function parseClassText(text: string): ParseResult {
   // Spellcasting ability → a primary-ability hint (low confidence; confirm).
   const abM = text.match(/\b([A-Z][a-z]+)\s+is\s+your\s+spellcasting\s+ability/);
   if (abM && ABILITY_NAMES[abM[1].toLowerCase()]) {
-    fields.primaryAbility = lo(abM[1], 'Inferred from the spellcasting ability — confirm.');
+    fields.primaryAbility = lo(abilityCodes(abM[1]), 'Inferred from the spellcasting ability — confirm.');
   }
+  // A "Primary Ability:" / "Primary Abilities:" line (high confidence) wins and
+  // lights the pill picker. LINE-bounded (`[^\n]+`) so it can't bleed into the
+  // next field — grabLabel would over-capture past "Hit Dice:".
+  const paM = text.match(/Primary\s+Abilit(?:y|ies)\s*:?\s*([^\n]+)/i);
+  if (paM && abilityCodes(paM[1]).length) fields.primaryAbility = hi(abilityCodes(paM[1]));
 
   // Proficiency lines (resolved into the grid by the window) + a feature summary
   // are surfaced as review NOTES — everything here WAS placed; the note just
@@ -305,7 +332,7 @@ export function parseFeatureSpan(text: string): { kind: 'feature'; name: string;
   const firstIdx = lines.findIndex((l) => l.trim());
   const name = firstIdx >= 0 ? lines[firstIdx].trim() : '';
   const rest = firstIdx >= 0 ? lines.slice(firstIdx + 1).join('\n').trim() : '';
-  return { kind: 'feature', name, level: firstLevel(raw) ?? 1, body: rest || name };
+  return { kind: 'feature', name, level: firstLevel(raw) ?? 1, body: reflowText(rest || name) };
 }
 
 /** Split a whole features BLOB into one draft per heading, with kinds
@@ -415,14 +442,19 @@ function resolveGrouped(text: string, items: any[], categories: any[]) {
  * Saving throws are filled from the dedicated text field, not here. */
 export function resolveClassProficiencies(text: string, cat: ResolveCatalogs) {
   const p = extractProficiencyLines(text);
+  const armor = resolveGrouped(p.armor, cat.allArmor || [], cat.allArmorCategories || []);
+  const weapons = resolveGrouped(p.weapons, cat.allWeapons || [], cat.allWeaponCategories || []);
+  const tools = resolveGrouped(p.tools, cat.allTools || [], cat.allToolCategories || []);
+  const skills = resolveFlat(p.skills, cat.allSkills || []);
+  const languages = resolveGrouped(p.languages, cat.allLanguages || [], cat.allLanguageCategories || []);
   return {
-    armor: resolveGrouped(p.armor, cat.allArmor || [], cat.allArmorCategories || []),
-    weapons: resolveGrouped(p.weapons, cat.allWeapons || [], cat.allWeaponCategories || []),
-    tools: resolveGrouped(p.tools, cat.allTools || [], cat.allToolCategories || []),
-    skills: resolveFlat(p.skills, cat.allSkills || []),
-    languages: resolveGrouped(p.languages, cat.allLanguages || [], cat.allLanguageCategories || []),
+    armor, weapons, tools, skills, languages,
     savingThrows: { choiceCount: 0, optionIds: [] as string[], fixedIds: [] as string[] },
-    armorDisplayName: '', weaponsDisplayName: '', toolsDisplayName: '', skillsDisplayName: '',
+    // Auto-sync the display strings (what the editor's "Sync" buttons produce).
+    armorDisplayName: buildGroupedProficiencyDisplayName(armor, cat.allArmor || [], cat.allArmorCategories || []),
+    weaponsDisplayName: buildGroupedProficiencyDisplayName(weapons, cat.allWeapons || [], cat.allWeaponCategories || []),
+    toolsDisplayName: buildGroupedProficiencyDisplayName(tools, cat.allTools || [], cat.allToolCategories || []),
+    skillsDisplayName: buildGroupedProficiencyDisplayName(skills, cat.allSkills || [], []),
   };
 }
 

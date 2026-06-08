@@ -26,8 +26,8 @@ import { upsertDocument } from '../d1';
 import { upsertFeature } from '../compendium';
 import { queueRebake } from '../moduleExport';
 import { slugify } from '../utils';
-import { sanitizeProficiencySelection } from '../proficiencySelection';
-import { parseClassText, classifyHitDie, normalizeClassName, parseFeatureSpan, splitFeatures, resolveClassProficiencies, resolveProficiencyKind, type FeatureDraft } from './classParse';
+import { sanitizeProficiencySelection, buildGroupedProficiencyDisplayName } from '../proficiencySelection';
+import { parseClassText, classifyHitDie, normalizeClassName, parseFeatureSpan, splitFeatures, reflowText, resolveClassProficiencies, resolveProficiencyKind, type FeatureDraft } from './classParse';
 import type { ImportDescriptor, ImportContext, ImportFieldOption } from './types';
 
 const toOptions = (pairs: [string, string][]): ImportFieldOption[] =>
@@ -315,11 +315,11 @@ export const clazzDescriptor: ImportDescriptor = {
       case 'name': return clean ? { name: normalizeClassName(clean) } : {};
       case 'hitDie': { const n = classifyHitDie(clean); return n != null ? { hitDie: String(n) } : {}; }
       case 'savingThrows': { const s = abilitiesToNames(stripLeadingLabel(clean)); return s ? { savingThrows: s } : {}; }
-      case 'primaryAbility': { const s = abilitiesToNames(stripLeadingLabel(clean)); return clean ? { primaryAbility: s || stripLeadingLabel(clean) } : {}; }
-      case 'description': return clean ? { description: tidy(clean) } : {};
-      case 'lore': return clean ? { lore: tidy(clean) } : {};
+      case 'primaryAbility': { const arr = parseAbilities(stripLeadingLabel(clean)).map((a) => a.toUpperCase()); return arr.length ? { primaryAbility: arr } : {}; }
+      case 'description': return clean ? { description: tidy(reflowText(clean)) } : {};
+      case 'lore': return clean ? { lore: tidy(reflowText(clean)) } : {};
       case 'startingEquipment': { const s = stripLeadingLabel(clean); return s ? { startingEquipment: tidy(s) } : {}; }
-      case 'multiclassing': return clean ? { multiclassing: tidy(clean) } : {};
+      case 'multiclassing': return clean ? { multiclassing: tidy(reflowText(clean)) } : {};
       default: return {};
     }
   },
@@ -358,11 +358,20 @@ export const clazzDescriptor: ImportDescriptor = {
       const out: Record<string, unknown> = { proficiencies: resolveClassProficiencies(text, cat) };
       if (sub.fields.hitDie?.value != null) out.hitDie = String(sub.fields.hitDie.value);
       if (sub.fields.savingThrows?.value != null) out.savingThrows = String(sub.fields.savingThrows.value);
-      if (sub.fields.primaryAbility?.value != null) out.primaryAbility = String(sub.fields.primaryAbility.value);
+      if (sub.fields.primaryAbility?.value != null) out.primaryAbility = sub.fields.primaryAbility.value;
       return out;
     }
     if (target === 'skills' || target === 'armor' || target === 'weapons' || target === 'tools' || target === 'languages') {
-      return { proficiencies: { ...grid, [target]: resolveProficiencyKind(target, text, cat) } };
+      const resolved = resolveProficiencyKind(target, text, cat);
+      const itemsCats: Record<string, [any[], any[]]> = {
+        skills: [cat.allSkills || [], []],
+        armor: [cat.allArmor || [], cat.allArmorCategories || []],
+        weapons: [cat.allWeapons || [], cat.allWeaponCategories || []],
+        tools: [cat.allTools || [], cat.allToolCategories || []],
+        languages: [cat.allLanguages || [], cat.allLanguageCategories || []],
+      };
+      const [items, cats2] = itemsCats[target];
+      return { proficiencies: { ...grid, [target]: resolved, [`${target}DisplayName`]: buildGroupedProficiencyDisplayName(resolved, items, cats2) } };
     }
     return {};
   },
