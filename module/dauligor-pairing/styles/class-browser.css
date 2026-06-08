@@ -339,6 +339,144 @@
   font-size: 12px;
 }
 
+/* Two-pane list: class/subclass card grid (left) + inline ClassView preview
+ * (right). The list region is `flex:1; min-height:0; overflow:auto` (see
+ * `__region--list`), so a `height:100%` split inside it lets each pane scroll
+ * independently rather than scrolling the whole region as one. */
+/* Mirror the character creator's picker split: a capped class-list column +
+ * the ClassView taking the rest. The list rarely needs more than ~300px (its
+ * rows are name + source tag), so giving the remaining width to the ClassView
+ * preview removes the wasted name↔source gap and lets the level table breathe. */
+.dauligor-class-browser__split {
+  display: grid;
+  /* Capped list column (slightly wider than the creator's 320 since subclass
+   * names run long) + the ClassView taking the rest. */
+  grid-template-columns: minmax(240px, 360px) minmax(0, 1fr);
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+}
+
+.dauligor-class-browser__cards {
+  min-width: 0;
+  /* Flex column so the reused `dauligor-character-creator__picker-list`
+   * (the creator's bordered scroller) fills the pane and scrolls itself. */
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.dauligor-class-browser__detail {
+  min-width: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-left: 1px solid var(--dauligor-border);
+  padding-left: 12px;
+}
+
+.dauligor-class-browser__detail-empty {
+  color: var(--dauligor-text-muted);
+  font-style: italic;
+  padding: 28px 16px;
+  text-align: center;
+}
+
+/* ── Class list rows (creator-style) ────────────────────────────────────────
+ * The left list reuses the character creator's row classes
+ * (`dauligor-character-creator__row` / `__row-img` / `__row-noimg` /
+ * `__row-name` / `__row-tag` / `__row-group`) for a 1:1 look. These
+ * importer-only modifiers add what the creator's class-only list lacks: the
+ * subclass sub-rows + the actor level-up lock state. Compound/descendant
+ * selectors keep specificity above the base `__row*` rules (character-creator.css
+ * loads AFTER class-browser.css, so equal-specificity rules would otherwise lose). */
+/* A class line = chevron toggle + the (creator-style) class row. Collapsed by
+ * default; the chevron reveals the subclass sub-rows. */
+.dauligor-class-browser__classline {
+  display: flex;
+  align-items: stretch;
+}
+
+.dauligor-class-browser__classline .dauligor-class-browser__classrow {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.dauligor-class-browser__chevron {
+  flex: 0 0 auto;
+  width: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  /* Match the creator row's bottom rule so the chevron column aligns. */
+  border-bottom: 1px solid rgba(var(--dauligor-accent-tint, 170, 130, 80), 0.08);
+  background: transparent;
+  color: var(--dauligor-text-muted);
+  font-size: 10px;
+  cursor: pointer;
+  transition: color 0.1s ease;
+}
+
+.dauligor-class-browser__chevron:hover {
+  color: var(--dauligor-text);
+}
+
+.dauligor-class-browser__chevron[disabled] {
+  visibility: hidden;
+  cursor: default;
+}
+
+/* Highlight the whole line (chevron column included) when its class is selected,
+ * with the accent bar at the line's left edge. */
+.dauligor-class-browser__classline:has(.dauligor-character-creator__row--selected) {
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 3px 0 0 var(--dauligor-accent);
+}
+
+/* The line owns the selected background + accent bar, so neutralize the inner
+ * class row's own selected styling to avoid doubling it up after the chevron. */
+.dauligor-class-browser__classline .dauligor-character-creator__row--selected {
+  background: transparent;
+  border-left-color: transparent;
+}
+
+.dauligor-class-browser__classrow .dauligor-character-creator__row-name {
+  font-weight: 700;
+}
+
+/* Indent sub-rows so their thumbnail aligns under the class thumbnail (past the
+ * 24px chevron column). Compound selector beats the base `__row` padding. */
+.dauligor-class-browser__subrow.dauligor-character-creator__row {
+  padding-left: 34px;
+}
+
+.dauligor-class-browser__subrow .dauligor-character-creator__row-img,
+.dauligor-class-browser__subrow .dauligor-character-creator__row-noimg {
+  width: 22px;
+  height: 22px;
+}
+
+.dauligor-class-browser__subrow .dauligor-character-creator__row-name {
+  font-weight: 500;
+  color: #c2c0b8;
+}
+
+.dauligor-class-browser__subrow-meta {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+.dauligor-class-browser__subrow--locked.dauligor-character-creator__row {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dauligor-class-browser__subrow--locked.dauligor-character-creator__row:hover {
+  background: transparent;
+}
+
 .dauligor-class-browser__table {
   display: flex;
   flex-direction: column;

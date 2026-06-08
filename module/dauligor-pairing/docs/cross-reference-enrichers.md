@@ -159,11 +159,17 @@ table + Features / Subclass / Spell-List / Info / Flavor tabs + Core-Traits
 sidebar). That view lives in a shared module,
 [`class-detail-view.js`](../scripts/class-detail-view.js) (`renderClassView` +
 `bindClassView` + fetch helpers), used by the creator's Class tab, this window, and
-reusable by the class-import / subclass wizards — **one implementation, no
-duplication**. The window resolves the class's source slug (via `resolveReferences`),
-fetches the public class bundle (`/api/module/<source>/classes/<identifier>.json`) +
-the multiclass slot chart, then renders. Subclass / feat / condition / article refs
-keep their prior routing.
+the **import wizard's class browser** (an inline preview pane beside the
+class/subclass card grid — `DauligorClassBrowserApp._renderClassDetail`) — **one
+implementation, no duplication**. The window resolves the class's source slug (via
+`resolveReferences`), fetches the public class bundle
+(`/api/module/<source>/classes/<identifier>.json`) + the multiclass slot chart, then
+renders. Subclass / feat / condition / article refs keep their prior routing.
+
+In the import wizard the ClassView's subclass dropdown is two-way synced with the
+card grid (the authoritative import target), so the preview always matches what will
+be imported; the bundle is the variant's lazily-fetched payload
+(`_ensureVariantPayload`), which IS the semantic class-export the ClassView consumes.
 
 **Pipeline.** `resolveReferences` returns the entity's DB id (`docId`) for the
 slug; the full Foundry-ready item is then fetched from the **public**

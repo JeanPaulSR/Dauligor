@@ -30,6 +30,15 @@ import {
   nextCombineModeReverse,
   SECTION_FILTER_STATE,
 } from "./section-filter-panel.js";
+// Shared ClassView (also used by the character creator + the standalone
+// `@class[…]` detail window). The class browser embeds it as an inline preview
+// pane so the user sees the rich class detail before importing.
+import {
+  renderClassView,
+  bindClassView,
+  ensureSpellChart,
+  fetchClassSpells,
+} from "./class-detail-view.js";
 
 /**
  * Fresh ephemeral UI state for SectionFilterPanel. Re-created on modal
@@ -950,9 +959,12 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
         resizable: true,
         contentClasses: ["dauligor-importer-window"]
       },
+      // Wider default than the old 860 so the inline ClassView preview pane
+      // (added beside the class/subclass card grid) isn't cramped. Resizable,
+      // so the user can still shrink it.
       position: centeredAppPosition(
-        Math.min(window.innerWidth - 100, 860),
-        Math.min(window.innerHeight - 100, 760)
+        Math.min(window.innerWidth - 80, 1100),
+        Math.min(window.innerHeight - 100, 780)
       )
     });
 
@@ -1016,6 +1028,36 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
     // landed yet. Shape: { tagsById, tagGroups, tagsByGroup }.
     this._tagCatalog = null;
     this._tagCatalogInFlight = false;
+
+    // Inline ClassView preview state (the shared `class-detail-view.js`
+    // renderer). This single object IS the `view` passed to `renderClassView`
+    // / `bindClassView` (same pattern as the standalone class-detail window):
+    // `chosen` + `bundle` are refreshed per selection in `_renderClassDetail`,
+    // the rest persists across re-renders. `onFetchSpells` lazily loads the
+    // class spell list into `cvSpells` then repaints the detail pane.
+    this._cv = {
+      chosen: null,
+      bundle: null,
+      cvTab: "features",
+      cvSubclassId: null,
+      cvExpanded: new Set(),
+      cvSpells: new Map(),
+      spellChart: null,
+      spellChartFetched: false,
+      onFetchSpells: (c) => fetchClassSpells(c.bundleUrl, this._cv.cvSpells, (url) => {
+        if (this._cv.cvTab === "spells" && this._cv.chosen?.bundleUrl === url) this._renderClassDetail();
+      }),
+    };
+    // Which class rows have their subclass sub-rows revealed. Collapsed by
+    // default; a class is auto-expanded when selected, and the chevron toggles
+    // it. Survives card re-renders (it's read in `_renderCards`).
+    this._expandedClasses = new Set();
+    // Class thumbnails preloaded into the browser cache so re-rendering the card
+    // list on a search keystroke serves them from cache (no reload/flicker).
+    this._preloadedImages = new Set();
+    // Set when the user clicks a subclass → `_renderClassDetail` scrolls the
+    // preview to its Subclass section (then clears this).
+    this._cvJumpToSubclass = false;
   }
 
   // -----------------------------------------------------------------------
@@ -1225,7 +1267,9 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
     });
     this._toolbarRegion.querySelector(`[data-action="search"]`)?.addEventListener("input", (event) => {
       this._state.search = event.currentTarget.value ?? "";
-      this._renderList();
+      // Re-render only the card list — not the detail pane — so the ClassView
+      // preview and the (preloaded) row thumbnails don't reload on each keystroke.
+      this._renderCards();
       this._renderFooter();
     });
     this._toolbarRegion.querySelector(`[data-action="reload"]`)?.addEventListener("click", async () => {
@@ -1605,96 +1649,290 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
       return;
     }
 
+    // Build the two-pane shell once: the creator-style class list (left) and the
+    // inline ClassView preview (right). `__detail` carries `dauligor-character-
+    // creator` so the ClassView CSS applies. The rows + the detail are painted
+    // into their own regions by `_renderCards` / `_renderClassDetail`, so a
+    // search keystroke (which re-renders only the cards) never tears down or
+    // reloads the detail pane.
+    this._listRegion.innerHTML = `
+      <div class="dauligor-class-browser__split">
+        <div class="dauligor-class-browser__cards" data-region="cards"></div>
+        <div class="dauligor-class-browser__detail dauligor-character-creator" data-region="cv-detail"></div>
+      </div>
+    `;
+    this._renderCards();
+    this._renderClassDetail();
+  }
+
+  /**
+   * Paint ONLY the class/subclass card list (left pane). Split out from
+   * `_renderList` so a search keystroke or an expand/collapse re-renders just
+   * the rows — never the detail pane (no ClassView rebuild). Class/subclass
+   * thumbnails are eager + preloaded (`_preloadClassImages`), so re-rendering
+   * the rows serves them from cache instead of reloading.
+   */
+  _renderCards() {
+    const host = this._listRegion?.querySelector(`[data-region="cards"]`);
+    if (!host) return;
+
     const visibleClasses = this._getVisibleClasses();
     if (!visibleClasses.length) {
-      this._listRegion.innerHTML = `<div class="dauligor-class-browser__empty">No classes matched the current search and filter.</div>`;
+      host.innerHTML = `<div class="dauligor-class-browser__empty">No classes matched the current search and filter.</div>`;
       return;
     }
 
     const actorClassMap = this._getActorClassMap();
+    const esc = foundry.utils.escapeHTML;
 
-    const rowsHtml = visibleClasses.map((classModel) => {
+    // One creator-style line per class: a chevron toggle + the row (thumbnail +
+    // name + source tag). Subclass sub-rows render only when the class is
+    // expanded (collapsed by default) — indented, same look, with the actor
+    // level-up lock display retained. Reuses the creator's `__row*` classes so
+    // the list matches the character creator 1:1.
+    const renderClassRow = (classModel) => {
       const isSelected = classModel.classSourceId === this._state.selectedClassSourceId;
+      const isExpanded = this._expandedClasses.has(classModel.classSourceId);
       const selectedSubclassId = isSelected ? this._state.selectedSubclassSourceId : null;
       const classSource = classModel.sourceLabel || classModel.subclasses.find((subclass) => subclass.sourceLabel)?.sourceLabel || "";
+      const hasSubclasses = classModel.subclasses.length > 0;
+      const classImg = classModel.img
+        ? `<img class="dauligor-character-creator__row-img" src="${esc(classModel.img)}" alt="" />`
+        : `<span class="dauligor-character-creator__row-noimg"><i class="fas fa-shield-halved"></i></span>`;
 
-      // When the actor already has this class + a subclass, lock the
-      // subclass picker — only the existing subclass is selectable. Other
-      // rows render disabled with a "Locked" tag so the user can see why.
+      // When the actor already has this class + a subclass, lock the subclass
+      // picker — only the existing subclass is selectable. Other rows render
+      // disabled with a "Locked" tag so the user can see why.
       const actorExisting = actorClassMap.get(classModel.classSourceId) ?? null;
       const lockedSubclassId = actorExisting?.existingSubclassSourceId ?? null;
 
-      const subclassesHtml = classModel.subclasses.length
-        ? `
-          ${classModel.subclasses.map((subclass) => {
-            const isLockedToOther = Boolean(lockedSubclassId) && subclass.sourceId !== lockedSubclassId;
-            const isExistingPick = Boolean(lockedSubclassId) && subclass.sourceId === lockedSubclassId;
-            const isRowSelected = isExistingPick || selectedSubclassId === subclass.sourceId;
-            const meta = isExistingPick ? "Already chosen" : (isLockedToOther ? "Locked" : "");
-            return `
-              <button
-                type="button"
-                class="dauligor-class-browser__row dauligor-class-browser__row--subclass ${isRowSelected ? "dauligor-class-browser__row--selected" : ""} ${isLockedToOther ? "dauligor-class-browser__row--disabled" : ""}"
-                data-action="select-subclass"
-                data-class-source-id="${foundry.utils.escapeHTML(classModel.classSourceId)}"
-                data-subclass-source-id="${foundry.utils.escapeHTML(subclass.sourceId)}"
-                ${isLockedToOther ? "disabled" : ""}
-              >
-                <span class="dauligor-class-browser__row-select">
-                  <span class="dauligor-class-browser__radio ${isRowSelected ? "dauligor-class-browser__radio--selected" : ""}"></span>
-                </span>
-                <span class="dauligor-class-browser__row-name dauligor-class-browser__row-name--subclass">&mdash; ${foundry.utils.escapeHTML(subclass.name)}${meta ? ` <span style="font-size:9px;letter-spacing:.08em;text-transform:uppercase;opacity:.6;">· ${foundry.utils.escapeHTML(meta)}</span>` : ""}</span>
-                <span class="dauligor-class-browser__row-source">${foundry.utils.escapeHTML(subclass.sourceLabel || classSource)}</span>
-              </button>
-            `;
-          }).join("")}
-        `
+      const subclassesHtml = (hasSubclasses && isExpanded)
+        ? classModel.subclasses.map((subclass) => {
+          const isLockedToOther = Boolean(lockedSubclassId) && subclass.sourceId !== lockedSubclassId;
+          const isExistingPick = Boolean(lockedSubclassId) && subclass.sourceId === lockedSubclassId;
+          const isRowSelected = isExistingPick || selectedSubclassId === subclass.sourceId;
+          const meta = isExistingPick ? "Already chosen" : (isLockedToOther ? "Locked" : "");
+          const subImg = subclass.img
+            ? `<img class="dauligor-character-creator__row-img" src="${esc(subclass.img)}" alt="" />`
+            : `<span class="dauligor-character-creator__row-noimg"><i class="fas fa-code-branch"></i></span>`;
+          return `
+            <button
+              type="button"
+              class="dauligor-character-creator__row dauligor-class-browser__subrow ${isRowSelected ? "dauligor-character-creator__row--selected" : ""} ${isLockedToOther ? "dauligor-class-browser__subrow--locked" : ""}"
+              data-action="select-subclass"
+              data-class-source-id="${esc(classModel.classSourceId)}"
+              data-subclass-source-id="${esc(subclass.sourceId)}"
+              ${isLockedToOther ? "disabled" : ""}
+            >
+              ${subImg}
+              <span class="dauligor-character-creator__row-name">${esc(subclass.name)}${meta ? ` <span class="dauligor-class-browser__subrow-meta">· ${esc(meta)}</span>` : ""}</span>
+              <span class="dauligor-character-creator__row-tag">${esc(subclass.sourceLabel || classSource)}</span>
+            </button>`;
+        }).join("")
         : "";
 
       return `
-        <div class="dauligor-class-browser__group" data-class-card="${foundry.utils.escapeHTML(classModel.classSourceId)}">
-          <label class="dauligor-class-browser__row dauligor-class-browser__row--class ${isSelected ? "dauligor-class-browser__row--selected" : ""}">
-            <span class="dauligor-class-browser__row-select">
-              <input
-                class="dauligor-class-browser__row-input"
-                type="radio"
-                name="selected-class"
-                data-action="select-class"
-                value="${foundry.utils.escapeHTML(classModel.classSourceId)}"
-                ${isSelected ? "checked" : ""}
-              >
-              <span class="dauligor-class-browser__radio ${isSelected ? "dauligor-class-browser__radio--selected" : ""}"></span>
-            </span>
-            <span class="dauligor-class-browser__row-name">
-              <span class="dauligor-class-browser__row-name-text">${foundry.utils.escapeHTML(classModel.name)}</span>
-            </span>
-            <span class="dauligor-class-browser__row-source">${foundry.utils.escapeHTML(classSource)}</span>
-          </label>
-          ${subclassesHtml}
+        <div class="dauligor-class-browser__classline">
+          <button
+            type="button"
+            class="dauligor-class-browser__chevron"
+            data-action="toggle-class"
+            data-class-source-id="${esc(classModel.classSourceId)}"
+            ${hasSubclasses ? "" : "disabled"}
+            aria-label="${isExpanded ? "Collapse" : "Expand"} subclasses"
+          ><i class="fas fa-chevron-${isExpanded ? "down" : "right"}"></i></button>
+          <button
+            type="button"
+            class="dauligor-character-creator__row dauligor-class-browser__classrow ${isSelected ? "dauligor-character-creator__row--selected" : ""}"
+            data-action="select-class"
+            data-class-source-id="${esc(classModel.classSourceId)}"
+          >
+            ${classImg}
+            <span class="dauligor-character-creator__row-name">${esc(classModel.name)}</span>
+            <span class="dauligor-character-creator__row-tag">${esc(classSource)}</span>
+          </button>
         </div>
-      `;
-    }).join("");
+        ${subclassesHtml}`;
+    };
 
-    this._listRegion.innerHTML = `
-      <div class="dauligor-class-browser__table">
-        <div class="dauligor-class-browser__header">
-          <span class="dauligor-class-browser__header-cell dauligor-class-browser__header-cell--select"></span>
-          <span class="dauligor-class-browser__header-cell dauligor-class-browser__header-cell--name">Name <span class="dauligor-class-browser__sort-indicator">&#9650;</span></span>
-          <span class="dauligor-class-browser__header-cell dauligor-class-browser__header-cell--source">Source</span>
-        </div>
-        <div class="dauligor-class-browser__list">${rowsHtml}</div>
-      </div>
-    `;
+    // Core / Alternate / New sections (mirrors the creator + the website's class
+    // list). Falls back to a flat list when the catalog ships no `category`.
+    const GROUPS = [
+      { label: "Core Classes", match: (category) => category !== "alternate" && category !== "new" },
+      { label: "Alternate Classes", match: (category) => category === "alternate" },
+      { label: "New Classes", match: (category) => category === "new" },
+    ];
+    const grouped = visibleClasses.some((classModel) => classModel.category);
+    const listHtml = grouped
+      ? GROUPS.map((group) => {
+        const items = visibleClasses.filter((classModel) => group.match(classModel.category));
+        if (!items.length) return "";
+        return `<div class="dauligor-character-creator__row-group">
+            <div class="dauligor-character-creator__row-group-header">${esc(group.label)} <span>${items.length}</span></div>
+            ${items.map(renderClassRow).join("")}
+          </div>`;
+      }).join("")
+      : visibleClasses.map(renderClassRow).join("");
 
-    this._listRegion.querySelectorAll(`[data-action="select-class"]`).forEach((input) => {
-      input.addEventListener("change", () => {
-        this._selectClass(input.value, null);
+    // Reuse the creator's bordered `__picker-list` scroller for the row list.
+    host.innerHTML = `<div class="dauligor-character-creator__picker-list">${listHtml}</div>`;
+
+    host.querySelectorAll(`[data-action="toggle-class"]`).forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        this._toggleClassExpanded(button.dataset.classSourceId);
       });
     });
-    this._listRegion.querySelectorAll(`[data-action="select-subclass"]`).forEach((button) => {
+    host.querySelectorAll(`[data-action="select-class"]`).forEach((button) => {
+      button.addEventListener("click", () => {
+        this._selectClass(button.dataset.classSourceId, null);
+      });
+    });
+    host.querySelectorAll(`[data-action="select-subclass"]`).forEach((button) => {
       button.addEventListener("click", () => {
         this._selectClass(button.dataset.classSourceId, button.dataset.subclassSourceId);
       });
+    });
+  }
+
+  /** Toggle a class's subclass disclosure (collapsed by default). Re-renders
+   *  only the card list — the detail pane is left untouched. */
+  _toggleClassExpanded(classSourceId) {
+    if (!classSourceId) return;
+    if (this._expandedClasses.has(classSourceId)) this._expandedClasses.delete(classSourceId);
+    else this._expandedClasses.add(classSourceId);
+    this._renderCards();
+  }
+
+  /** Warm the browser cache with the class thumbnails so re-rendering the card
+   *  list (search / expand / select) serves them from cache instead of
+   *  reloading. Subclass thumbnails backfill lazily via `_enrichSubclassImages`. */
+  _preloadClassImages() {
+    if (typeof Image === "undefined" || !Array.isArray(this._classModels)) return;
+    for (const classModel of this._classModels) {
+      const url = classModel?.img;
+      if (!url || this._preloadedImages.has(url)) continue;
+      this._preloadedImages.add(url);
+      try { const im = new Image(); im.src = url; } catch { /* noop */ }
+    }
+  }
+
+  /**
+   * Paint the inline ClassView preview pane (the right column of the class
+   * browser's two-pane list) for the currently selected class/subclass.
+   *
+   * Reuses the shared `class-detail-view.js` renderer — the same one the
+   * character creator's Class tab and the standalone `@class[…]` window use.
+   * The class bundle is the variant's lazily-fetched payload
+   * (`_ensureVariantPayload`), which IS the semantic class-export the
+   * ClassView consumes (top-level `class` / `subclasses` / `features` /
+   * `scalingColumns`); no transform needed.
+   */
+  _renderClassDetail() {
+    const detailEl = this._listRegion?.querySelector(`[data-region="cv-detail"]`);
+    if (!detailEl) return;
+
+    const selected = this._getSelectedClass();
+    if (!selected) {
+      this._cv.chosen = null;
+      this._cv.bundle = null;
+      detailEl.innerHTML = `<div class="dauligor-class-browser__detail-empty">Select a class to preview it.</div>`;
+      return;
+    }
+
+    const variant = this._getSelectedVariant(selected);
+    const bundle = variant?.payload ?? null;
+    const sourceSlug = selected.sourceLabel
+      || selected.subclasses?.find((subclass) => subclass.sourceLabel)?.sourceLabel
+      || "";
+    this._cv.chosen = {
+      name: selected.name,
+      sourceSlug,
+      img: bundle?.class?.previewImageUrl || bundle?.class?.imageUrl || bundle?.class?.cardImageUrl || "",
+      bundleUrl: variant?.entry?.payloadUrl || "",
+    };
+    this._cv.bundle = bundle;
+
+    // Subclass thumbnails aren't shipped in the catalog — backfill them from the
+    // loaded bundle (matched by sourceId), remember them on the model, and
+    // refresh the card list if this class's subclasses are currently shown.
+    if (bundle && this._enrichSubclassImages(selected, bundle) && this._expandedClasses.has(selected.classSourceId)) {
+      this._renderCards();
+    }
+
+    // Fetch the master multiclass slot chart once (so caster tables fill in).
+    this._ensureCvSpellChart();
+
+    if (!bundle) {
+      // Render the loading shell now, then lazily fetch the variant payload
+      // (the same fetch the Import button triggers) and repaint if the
+      // selection hasn't changed underneath us.
+      detailEl.innerHTML = renderClassView(this._cv);
+      const pendingClassSourceId = selected.classSourceId;
+      if (variant) {
+        this._ensureVariantPayload(variant).then((ok) => {
+          if (ok && this._state.selectedClassSourceId === pendingClassSourceId) this._renderClassDetail();
+        });
+      }
+      return;
+    }
+
+    detailEl.innerHTML = renderClassView(this._cv);
+    // Wire the ClassView's own tab / subclass / feature-toggle controls. The
+    // subclass dropdown is two-way synced back to the card-grid selection (the
+    // authoritative import target) so the preview and the import never diverge.
+    bindClassView(detailEl, this._cv, () => {
+      if ((this._cv.cvSubclassId ?? null) !== (this._state.selectedSubclassSourceId ?? null)) {
+        // The ClassView's subclass dropdown changed — mirror it onto the card
+        // grid (selection highlight) and refresh the footer's "Selected …" status.
+        this._state.selectedSubclassSourceId = this._cv.cvSubclassId ?? null;
+        this._renderCards();
+        this._renderClassDetail();
+        this._renderFooter();
+      } else {
+        // Tab switch / feature expand — only the detail pane needs repainting.
+        this._renderClassDetail();
+      }
+    });
+
+    // After a subclass click in the list, jump the preview down to its Subclass
+    // section instead of leaving it scrolled to the class header.
+    if (this._cvJumpToSubclass) {
+      this._cvJumpToSubclass = false;
+      const tabs = detailEl.querySelector(".dauligor-character-creator__cv-tabsrow");
+      if (tabs) {
+        const delta = tabs.getBoundingClientRect().top - detailEl.getBoundingClientRect().top;
+        if (delta > 0) detailEl.scrollTop += delta;
+      }
+    }
+  }
+
+  /**
+   * Backfill subclass thumbnails on a class model from its loaded bundle
+   * (catalog entries don't carry subclass images). Matched by sourceId — the
+   * catalog and the semantic export both use `subclass-<identifier>`. Returns
+   * true if any image was newly set (so the caller can refresh the card list).
+   */
+  _enrichSubclassImages(classModel, bundle) {
+    const bundleSubs = Array.isArray(bundle?.subclasses) ? bundle.subclasses : [];
+    const modelSubs = Array.isArray(classModel?.subclasses) ? classModel.subclasses : [];
+    if (!bundleSubs.length || !modelSubs.length) return false;
+    const bySourceId = new Map(bundleSubs.map((sub) => [String(sub.sourceId), sub]));
+    let changed = false;
+    for (const sub of modelSubs) {
+      if (sub.img) continue;
+      const match = bySourceId.get(String(sub.sourceId));
+      const img = (match?.previewImageUrl || match?.imageUrl || match?.cardImageUrl || "").trim();
+      if (img) { sub.img = img; changed = true; }
+    }
+    return changed;
+  }
+
+  /** Fetch the master multiclass slot chart once into the ClassView state. */
+  _ensureCvSpellChart() {
+    if (this._cv.spellChartFetched) return;
+    ensureSpellChart(this._cv).then((chart) => {
+      if (chart) this._renderClassDetail();
     });
   }
 
@@ -1795,6 +2033,7 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
     const entryPayloads = catalogEntries.map((entry) => ({ entry, payload: null }));
 
     this._classModels = buildClassModels(entryPayloads);
+    this._preloadClassImages();
     this._availableTags = [...new Set(this._classModels.flatMap((classModel) => classModel.tags))].sort();
     // Merge tagIndex from every catalog that shipped one. The browser
     // may have loaded multiple per-source catalogs (the user can pick
@@ -1965,6 +2204,7 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
   }
 
   _selectClass(classSourceId, subclassSourceId = null) {
+    const classChanged = (this._state.selectedClassSourceId ?? null) !== (classSourceId ?? null);
     this._state.selectedClassSourceId = classSourceId ?? null;
 
     // When the actor already has this class:
@@ -2005,7 +2245,29 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
     }
     this._state.selectedSubclassSourceId = resolvedSubclassId;
 
-    this._renderList();
+    // Keep the inline ClassView preview in sync with the card-grid selection.
+    if (this._cv) {
+      this._cv.cvSubclassId = resolvedSubclassId ?? null;
+      if (classChanged) {
+        // New class → reset the ClassView to its Features tab.
+        this._cv.cvTab = "features";
+        this._cv.cvExpanded = new Set();
+      }
+      if (subclassSourceId) {
+        // Clicking a subclass jumps the preview to its Subclass section.
+        this._cv.cvTab = "subclass";
+        this._cvJumpToSubclass = true;
+      }
+    }
+
+    // Selecting a class reveals its subclasses (auto-expand); the chevron can
+    // still collapse them again.
+    if (classSourceId) this._expandedClasses.add(classSourceId);
+
+    // Granular re-render: refresh the card selection highlight + the detail
+    // pane (and footer) without tearing down the two-pane shell.
+    this._renderCards();
+    this._renderClassDetail();
     this._renderFooter();
   }
 
@@ -7001,6 +7263,12 @@ function buildClassModels(entryPayloads) {
         name: metadata.name,
         description: metadata.description,
         sourceLabel: metadata.sourceLabel || "",
+        // Card thumbnail + Core/Alternate/New grouping for the creator-style
+        // class list — both ship on the catalog entry (the same fields the
+        // character creator reads). Empty/blank → list falls back gracefully
+        // (placeholder glyph / flat ungrouped list).
+        img: entry.img || entry.imageUrl || "",
+        category: entry.category ? String(entry.category).toLowerCase() : "",
         tags: [],
         subclasses: [],
         variants: [],
@@ -7016,6 +7284,8 @@ function buildClassModels(entryPayloads) {
     if (!group.sourceLabel || variantPriority(group.preferredVariant?.entry?.payloadKind) > variantPriority(entry.payloadKind)) {
       group.sourceLabel = metadata.sourceLabel || group.sourceLabel;
     }
+    if (!group.img && (entry.img || entry.imageUrl)) group.img = entry.img || entry.imageUrl;
+    if (!group.category && entry.category) group.category = String(entry.category).toLowerCase();
 
     group.tags = [...new Set([...group.tags, ...metadata.tags])].sort();
     for (const subclass of metadata.subclasses) {
@@ -7061,6 +7331,9 @@ function extractClassEntryMetadata(entry, payload) {
       subclasses: ensureArray(entry?.subclasses).map((sub) => ({
         sourceId: sub?.sourceId ?? slugify(sub?.name ?? ""),
         name: sub?.name ?? "Subclass",
+        // Thumbnail for the class-list sub-rows (creator-style). Empty when
+        // the catalog doesn't ship one → the row renders a fallback glyph.
+        img: sub?.img ?? sub?.imageUrl ?? "",
         // Each subclass can come from a different book than its parent
         // class (e.g. PHB Sorcerer + TCE-released Aberrant Mind). Prefer
         // the subclass's own `shortName` from the catalog; only fall
