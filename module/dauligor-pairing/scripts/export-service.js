@@ -1012,6 +1012,36 @@ export function buildItemFolderExport(folder, { includeSubfolders = true } = {})
     && includedFolderIds.has(item.folder?.id ?? "")
   );
 
+  // Container contents (option C — flat siblings): a container's child items are
+  // separate world docs whose `system.container` = the container's `_id`, but
+  // they often sit OUTSIDE the exported folder (Foundry nests them in the
+  // sidebar by `system.container`, not by folder). Pull them in so a container
+  // round-trips with its contents — the app collapses them back into
+  // `container_contents` by matching each child's `system.container` against the
+  // container entry's `sourceDocument._id`. Loops to a fixpoint so contents of
+  // nested containers are gathered too.
+  // See handoff 2026-06-08-to-foundry-module-container-contents.md.
+  const containerIds = new Set(
+    items.filter((i) => i.type === "container" || i.type === "backpack").map((i) => i.id)
+  );
+  if (containerIds.size) {
+    const allItems = Array.from(game.items ?? []);
+    const included = new Set(items.map((i) => i.id));
+    let added = true;
+    while (added) {
+      added = false;
+      for (const item of allItems) {
+        if (included.has(item.id)) continue;
+        const parentId = item.system?.container ?? null;
+        if (!parentId || !containerIds.has(parentId)) continue;
+        items.push(item);
+        included.add(item.id);
+        if (item.type === "container" || item.type === "backpack") containerIds.add(item.id);
+        added = true;
+      }
+    }
+  }
+
   const folderPath = getFolderPath(folder);
 
   return {

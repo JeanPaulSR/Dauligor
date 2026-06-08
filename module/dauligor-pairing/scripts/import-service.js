@@ -90,9 +90,19 @@ export async function importPayloadToActor(actor, payload) {
     return;
   }
 
-  if (payload.kind === "dauligor.item.v1") {
-    await upsertActorItems(actor, [normalizeItemPayload(payload.item, payload.source)]);
-    notifyInfo(`Imported "${payload.item?.name ?? "item"}" onto ${actor.name}.`);
+  if (payload.kind === "dauligor.item.v1" || payload.kind === "dauligor.item-item.v1") {
+    const itemData = payload.item;
+    const contents = Array.isArray(payload.contents) ? payload.contents : [];
+    const isContainer = itemData?.type === "container" || itemData?.type === "backpack";
+    if (isContainer && contents.length) {
+      // Option-C container recipe (per-entity `dauligor.item-item.v1` bundle):
+      // create the container, then its `contents[]` children remapped to it.
+      await importContainerContentsToActor(actor, itemData, contents, payload.source);
+      notifyInfo(`Imported "${itemData?.name ?? "container"}" with ${contents.length} content item(s) onto ${actor.name}.`);
+    } else {
+      await upsertActorItems(actor, [normalizeItemPayload(itemData, payload.source)]);
+      notifyInfo(`Imported "${itemData?.name ?? "item"}" onto ${actor.name}.`);
+    }
     return;
   }
 
@@ -207,6 +217,35 @@ async function upsertActorItems(actor, items) {
 
   if (toCreate.length) await actor.createEmbeddedDocuments("Item", toCreate);
   if (toUpdate.length) await actor.updateEmbeddedDocuments("Item", toUpdate);
+}
+
+/**
+ * Materialize an option-C container recipe onto an actor: create the container
+ * first to obtain its embedded `_id`, then create each `contents[]` child as a
+ * sibling item with `system.container` remapped from the app's placeholder slug
+ * to that real id (Foundry then nests them under the container natively). Each
+ * child keeps its own `system.quantity` (preserved by `normalizeItemPayload`).
+ * Contents are instance copies — created fresh, not deduped.
+ * See handoff 2026-06-08-to-foundry-module-container-contents.md.
+ */
+async function importContainerContentsToActor(actor, containerData, contents, sourceMeta) {
+  const container = normalizeItemPayload(containerData, sourceMeta);
+  applyReferenceNormalization(container, { actor });
+  const [createdContainer] = await actor.createEmbeddedDocuments("Item", [container]);
+  const containerId = createdContainer?.id ?? null;
+  if (!containerId) {
+    warn("Container import: could not create the container; skipping its contents.");
+    return;
+  }
+  const children = (Array.isArray(contents) ? contents : []).map((child) => {
+    const normalized = normalizeItemPayload(child, sourceMeta);
+    applyReferenceNormalization(normalized, { actor });
+    normalized.system = normalized.system ?? {};
+    normalized.system.container = containerId; // remap placeholder slug → real Foundry _id
+    return normalized;
+  });
+  if (children.length) await actor.createEmbeddedDocuments("Item", children);
+  log(`Imported container "${container.name}" with ${children.length} content item(s) onto ${actor.name}.`);
 }
 
 function looksLikeSourceBookId(value) {
