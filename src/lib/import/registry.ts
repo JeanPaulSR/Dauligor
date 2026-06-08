@@ -8,11 +8,13 @@ import type { ImportDescriptor, ResolvedEntity, ImportContext, ParseResult, Impo
 import { spellDescriptor } from './spell';
 import { clazzDescriptor } from './clazz';
 import { subclazzDescriptor } from './subclazz';
+import { uniqueOptionGroupDescriptor } from './uniqueOptionGroup';
 
 const DESCRIPTORS: Record<string, ImportDescriptor> = {
   [spellDescriptor.type]: spellDescriptor,
   [clazzDescriptor.type]: clazzDescriptor,
   [subclazzDescriptor.type]: subclazzDescriptor,
+  [uniqueOptionGroupDescriptor.type]: uniqueOptionGroupDescriptor,
   // feat, item, feature, … land here as their descriptors ship.
 };
 

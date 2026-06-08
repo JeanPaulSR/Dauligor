@@ -34,6 +34,13 @@ const hi = (value: unknown, span?: { start: number; end: number }): ParsedField 
 const lo = (value: unknown, note?: string, span?: { start: number; end: number }): ParsedField =>
   ({ value, confidence: 'low', ...(note ? { note } : {}), ...(span ? { span } : {}) });
 
+/** Strip BBCode tags ([h3]…[/h3], [b]…[/b], [url=…]…) from a string, preserving
+ * its inner text + casing. Used to keep feature / option NAMES natural even when
+ * the captured header line was formatted (an HTML paste converts <h3> → [h3]).
+ * The body keeps its formatting — only names are cleaned. */
+export const stripBbcodeTags = (s: string): string =>
+  String(s ?? '').replace(/\[\/?[a-z][a-z0-9]*(?:=[^\]]*)?\]/gi, '').replace(/\s+/g, ' ').trim();
+
 /** Title-Case every word at the start (matches the class editor's display). */
 export function normalizeClassName(raw: string): string {
   return raw
@@ -375,7 +382,9 @@ export function parseFeatureSpan(text: string): { kind: 'feature'; name: string;
   const raw = String(text || '');
   const lines = raw.split('\n');
   const firstIdx = lines.findIndex((l) => l.trim());
-  const name = firstIdx >= 0 ? lines[firstIdx].trim() : '';
+  // The first line is the NAME — strip any BBCode wrapper ([h3]…[/h3] from an
+  // HTML paste) so it reads naturally; the body keeps its formatting.
+  const name = firstIdx >= 0 ? stripBbcodeTags(lines[firstIdx]) : '';
   const rest = firstIdx >= 0 ? lines.slice(firstIdx + 1).join('\n').trim() : '';
   return { kind: 'feature', name, level: firstLevel(raw) ?? 1, body: reflowText(rest || name) };
 }

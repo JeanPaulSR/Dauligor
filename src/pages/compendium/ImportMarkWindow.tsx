@@ -19,6 +19,7 @@ import React, { createContext, useContext, useEffect, useMemo, useRef, useState 
 import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 import { AlertTriangle, ChevronUp, FileText, Library, ListChecks, Pencil, ScanText, Scissors, Sparkles, Wand2 } from 'lucide-react';
+import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { fetchCollection } from '../../lib/d1';
 import { denormalizeCompendiumData } from '../../lib/compendium';
 import { slugify } from '../../lib/utils';
@@ -26,8 +27,9 @@ import { htmlToBbcode } from '../../lib/bbcode';
 import { cleanFoundryHtml } from '../../lib/foundryHtmlCleanup';
 import { reportClientError, OperationType } from '../../lib/firebase';
 import SingleSelectSearch from '../../components/ui/SingleSelectSearch';
+import EntityPicker from '../../components/ui/EntityPicker';
 import SpellDetailPanel from '../../components/compendium/SpellDetailPanel';
-import ClassPreviewPane from '../../components/compendium/ClassPreviewPane';
+import BBCodeRenderer from '../../components/BBCodeRenderer';
 import MarkdownEditor from '../../components/MarkdownEditor';
 import ProficienciesEditor, { type ProficiencyType } from '../../components/compendium/ProficienciesEditor';
 import {
@@ -47,6 +49,7 @@ import {
   subHeadingBBCode,
   SUBHEADING_SPLIT_RE,
   SUBHEADING_TAG,
+  stripBbcodeTags,
   type ImportDescriptor,
   type ImportFieldDef,
   type ImportAssignTarget,
@@ -360,7 +363,6 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
   const hasParser = useMemo(() => canParseText(type), [type]);
   const assignTargets = useMemo(() => getAssignTargets(type), [type]);
   const hasSections = useMemo(() => assignTargets.some((t) => t.group === 'Blocks'), [assignTargets]);
-  const [previewOpen, setPreviewOpen] = useState(false);
   // Overwrite an existing entity instead of creating new (e.g. replace a
   // source-less placeholder) — its id becomes the upsert target. The pool is the
   // CURRENT type's collection (classes for class, subclasses for subclass).
@@ -370,7 +372,19 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
   // classes table, loaded once and shared via the catalog context.
   const [parentClasses, setParentClasses] = useState<{ id: string; name?: string; identifier?: string }[]>([]);
   const sourceKey = useMemo(() => descriptor?.fields.find((f) => f.kind === 'source')?.key, [descriptor]);
-  const needsParentClass = useMemo(() => descriptors.some((d) => d.fields.some((f) => f.kind === 'parentClass')), [descriptors]);
+  // Load the classes catalog when any descriptor needs a class picker — a
+  // subclass's `parentClass` (single) OR an option group's `classMulti` (multi).
+  const needsParentClass = useMemo(() => descriptors.some((d) => d.fields.some((f) => f.kind === 'parentClass' || f.kind === 'classMulti')), [descriptors]);
+
+  // Fullscreen the importer at xl+ — lock page scroll so the three-pane workspace
+  // fills the viewport (each pane scrolls internally). Below xl the panes stack
+  // and the page scrolls normally, so the body lock only applies on wide screens.
+  const isWideViewport = useMediaQuery('(min-width: 1280px)');
+  useEffect(() => {
+    if (!isWideViewport) return;
+    document.body.classList.add('spell-list-fullscreen');
+    return () => document.body.classList.remove('spell-list-fullscreen');
+  }, [isWideViewport]);
 
   useEffect(() => {
     let cancelled = false;
@@ -620,18 +634,18 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
   })();
 
   // Live "how it will render" preview using the compendium's real detail pane.
-  // Spell-specific for now; future types wire their own here. Builds the resolved
-  // payload and adapts it to the panel's raw-row shape.
-  const renderPreview: ((state: EntityState) => React.ReactNode) | undefined =
-    type === 'spell'
-      ? (state) => {
-          try {
-            const fields = sourceKey ? { ...state.values, [sourceKey]: sourceId } : state.values;
-            const payload = resolveEntity(type, fields).payload;
-            return <SpellDetailPanel spellId="import-preview" spellData={buildSpellPreviewRow(payload)} size="compact" emptyMessage="" />;
-          } catch { return null; }
-        }
-      : undefined;
+  // Always-on live preview (its own column in the workspace). Spell keeps its
+  // richer SpellDetailPanel; every other type renders the unified EntityPreview
+  // sheet from the resolved payload, so class / subclass / option group all
+  // preview consistently.
+  const renderPreview = (state: EntityState): React.ReactNode => {
+    try {
+      const fields = sourceKey ? { ...state.values, [sourceKey]: sourceId } : state.values;
+      const payload = resolveEntity(type, fields).payload;
+      if (type === 'spell') return <SpellDetailPanel spellId="import-preview" spellData={buildSpellPreviewRow(payload)} size="compact" emptyMessage="" />;
+      return <EntityPreview type={type} label={descriptor?.label ?? type} payload={payload} />;
+    } catch { return null; }
+  };
 
   // Save the current marked-up layout as the source's format template, then
   // re-parse the batch with it. Clear removes it.
@@ -652,15 +666,13 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
 
   return (
     <ImportCatalogsContext.Provider value={catalogsValue}>
-    <div className="mx-auto max-w-7xl px-4 py-6">
-      {/* Header */}
-      <div className="page-header">
-        <div className="flex items-center gap-3">
+    <div className="flex w-full flex-col gap-3 px-4 py-3 xl:h-[calc(100vh-88px)] xl:overflow-hidden">
+      {/* Header — compact, full width */}
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-gold/15 pb-2">
+        <div className="flex items-center gap-2.5">
           <Wand2 className="h-5 w-5 text-gold" />
-          <div>
-            <h1 className="h3-title">Mark &amp; Build</h1>
-            <p className="muted-text text-xs">Paste one or many stat blocks; map them onto the fields, re-assign by selecting text, then create — through the editor’s real save path.</p>
-          </div>
+          <h1 className="h3-title">Mark &amp; Build</h1>
+          <span className="muted-text hidden text-xs lg:inline">Paste, map onto fields, then create through the editor’s real save path.</span>
         </div>
         <label className="flex items-center gap-2">
           <span className="field-label">Type</span>
@@ -672,7 +684,7 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
 
       {/* Source — persistent */}
       {sourceKey ? (
-        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-gold/15 bg-gold/5 px-4 py-2.5">
+        <div className="flex shrink-0 flex-wrap items-center gap-3 rounded-lg border border-gold/15 bg-gold/5 px-4 py-2">
           <div className="flex items-center gap-2"><Library className="h-4 w-4 text-gold" /><span className="field-label">Source</span></div>
           <div className="w-64">
             <SingleSelectSearch value={sourceId} onChange={setSourceId} options={sourceOptions} placeholder="— none —" noEntitiesText="No sources found." triggerClassName="field-input w-full text-sm" />
@@ -694,10 +706,10 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
 
       {/* ── INPUT ───────────────────────────────────────────────────────────── */}
       {phase === 'input' ? (
-        <div className="compendium-card flex flex-col p-3">
+        <div className="compendium-card flex min-h-0 flex-1 flex-col p-3">
           <div className="mb-2 flex items-center gap-2"><ScanText className="h-4 w-4 text-gold" /><span className="section-label">Source text</span></div>
           <textarea
-            className="field-input min-h-[24rem] w-full flex-1 p-2 font-mono text-xs leading-relaxed"
+            className="field-input w-full min-h-0 flex-1 p-2 font-mono text-xs leading-relaxed"
             rows={20}
             placeholder={PLACEHOLDER}
             value={rawText}
@@ -722,8 +734,8 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
 
       {/* ── SINGLE ──────────────────────────────────────────────────────────── */}
       {phase === 'single' && descriptor ? (
-        <>
-          <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-gold/25 bg-card/40 px-4 py-2.5">
+        <div className="flex min-h-0 flex-1 flex-col gap-3">
+          <div className="flex shrink-0 flex-wrap items-center gap-3 rounded-lg border border-gold/25 bg-card/40 px-4 py-2">
             <Sparkles className="h-4 w-4 text-gold" />
             <div className="min-w-0">
               <span className="font-serif text-base font-bold text-ink">{singleResolved?.displayName || '(unnamed)'}</span>
@@ -739,9 +751,6 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
               {hasParser ? (
                 <button type="button" className="btn-gold inline-flex h-9 items-center gap-1 px-3 text-[11px]" onClick={enterBatch}><Scissors className="h-3 w-3" /> Divide</button>
               ) : null}
-              {type === 'class' ? (
-                <button type="button" className="btn-gold inline-flex h-9 items-center gap-1 px-3 text-[11px] disabled:opacity-50" disabled={!singleResolved} onClick={() => setPreviewOpen(true)}><FileText className="h-3 w-3" /> Preview</button>
-              ) : null}
               {hasSections ? (
                 <div className="w-52" title={`Pick an existing ${descriptor.label.toLowerCase()} to REPLACE (writes to its id) — or leave blank to create new`}>
                   <SingleSelectSearch value={overwriteId ?? ''} onChange={(v) => setOverwriteId(v || null)} options={overwriteOptions} placeholder="＋ Create new" noEntitiesText={`No ${descriptor.label.toLowerCase()}es.`} triggerClassName="field-input h-9 w-full text-[11px]" />
@@ -750,19 +759,14 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
               <button type="button" className="btn-gold-solid h-9 px-5 disabled:opacity-50" disabled={saving || !singleResolved || singleResolved.errors.length > 0} onClick={handleCreateSingle}>{saving ? 'Saving…' : overwriteId ? `Overwrite ${descriptor.label}` : `Create ${descriptor.label}`}</button>
             </div>
           </div>
-          <EntityWorkspace type={type} descriptor={descriptor} rawText={rawText} state={single} onChange={setSingle} assignTargets={assignTargets} renderPreview={renderPreview} onSaveFormat={hasParser ? handleSaveFormat : undefined} />
-          {singleResolved ? <ResolvedPayload payload={singleResolved.payload} /> : null}
-          {previewOpen && singleResolved && type === 'class' ? (() => {
-            const row: any = { ...singleResolved.payload }; delete row.__features;
-            return <ClassPreviewPane classData={{ ...denormalizeCompendiumData(row), id: 'import-preview' }} open onClose={() => setPreviewOpen(false)} />;
-          })() : null}
-        </>
+          <EntityWorkspace type={type} descriptor={descriptor} rawText={rawText} state={single} onChange={setSingle} assignTargets={assignTargets} renderPreview={renderPreview} onSaveFormat={type === 'spell' ? handleSaveFormat : undefined} />
+        </div>
       ) : null}
 
       {/* ── BATCH ───────────────────────────────────────────────────────────── */}
       {phase === 'batch' && descriptor && reviewIndex == null ? (
-        <>
-          <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-gold/25 bg-card/40 px-4 py-2.5">
+        <div className="flex min-h-0 flex-1 flex-col gap-3">
+          <div className="flex shrink-0 flex-wrap items-center gap-3 rounded-lg border border-gold/25 bg-card/40 px-4 py-2">
             <ListChecks className="h-4 w-4 text-gold" />
             <span className="font-serif text-base font-bold text-ink">Batch import</span>
             <span className="field-hint">{candidates.length} {descriptor.label.toLowerCase()}s detected · {selected.size} selected</span>
@@ -771,7 +775,7 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
               <button type="button" className="btn-gold-solid h-9 px-5 disabled:opacity-50" disabled={saving || selected.size === 0} onClick={handleCreateBatch}>{saving ? 'Creating…' : `Create ${selected.size} ${descriptor.label}${selected.size === 1 ? '' : 's'}`}</button>
             </div>
           </div>
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto lg:grid-cols-2">
             {/* Division editor */}
             <div className="compendium-card flex flex-col p-3">
               <div className="mb-2 flex items-center gap-2"><Scissors className="h-4 w-4 text-gold" /><span className="section-label">Divisions</span><span className="ml-auto field-hint">＋ split · ✕ merge</span></div>
@@ -796,13 +800,13 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
               })}
             </div>
           </div>
-        </>
+        </div>
       ) : null}
 
       {/* ── BATCH · review one candidate ────────────────────────────────────── */}
       {phase === 'batch' && descriptor && reviewIndex != null && candidates[reviewIndex] ? (
-        <>
-          <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-gold/25 bg-card/40 px-4 py-2.5">
+        <div className="flex min-h-0 flex-1 flex-col gap-3">
+          <div className="flex shrink-0 flex-wrap items-center gap-3 rounded-lg border border-gold/25 bg-card/40 px-4 py-2">
             <button type="button" className="btn-gold h-9 px-3 text-[11px]" onClick={() => setReviewIndex(null)}>← Candidates</button>
             <span className="font-serif text-base font-bold text-ink">{stateFor(reviewIndex).values.name || '(unnamed)'}</span>
             <span className="field-hint">Reviewing {reviewIndex + 1} of {candidates.length}</span>
@@ -818,9 +822,9 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
             onChange={(updater) => setEdits((prev) => ({ ...prev, [reviewIndex]: updater(stateFor(reviewIndex)) }))}
             assignTargets={assignTargets}
             renderPreview={renderPreview}
-            onSaveFormat={hasParser ? handleSaveFormat : undefined}
+            onSaveFormat={type === 'spell' ? handleSaveFormat : undefined}
           />
-        </>
+        </div>
       ) : null}
     </div>
     </ImportCatalogsContext.Provider>
@@ -877,13 +881,83 @@ function DivisionEditor({
   );
 }
 
-// ─────────────────────────── Resolved payload ───────────────────────────────
-function ResolvedPayload({ payload }: { payload: Record<string, any> }) {
+// ───────────────────────────── Live preview sheet ───────────────────────────
+// A readable, type-aware preview of the resolved payload — the always-on right
+// column. Spell uses SpellDetailPanel (richer); class / subclass / option group
+// render here. Lightweight: name + description + a few key stats + the child
+// list (features / options). Reads the classes catalog (context) to name parents
+// / restrictions.
+function Stat({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <details className="compendium-card mt-4 p-3">
-      <summary className="section-label flex cursor-pointer items-center gap-2 text-ink/60"><FileText className="h-3.5 w-3.5" /> Resolved payload — what will be written</summary>
-      <pre className="mt-2 max-h-80 overflow-auto rounded bg-ink/90 p-2 text-[10px] leading-relaxed text-parchment">{JSON.stringify(payload, null, 2)}</pre>
-    </details>
+    <div className="border border-gold/10 bg-background/30 px-2 py-1.5">
+      <div className="text-[9px] font-black uppercase tracking-widest text-ink/40">{label}</div>
+      <div className="truncate text-sm text-ink/85">{value}</div>
+    </div>
+  );
+}
+
+function EntityPreview({ type, label, payload }: { type: string; label: string; payload: Record<string, any> }) {
+  const catalogs = useContext(ImportCatalogsContext);
+  const className = (id: string) => (catalogs?.allClasses ?? []).find((c: any) => String(c.id) === String(id))?.name || id;
+  const name = String(payload.name || '').trim() || '(unnamed)';
+  const children: any[] = type === 'optionGroup' ? (payload.__items ?? []) : (payload.__features ?? []);
+  const childNoun = type === 'optionGroup' ? 'option' : 'feature';
+  const abilities = (v: any) => (Array.isArray(v) ? v : []).map((a: any) => String(a).toUpperCase()).join(', ');
+
+  return (
+    <div className="space-y-4">
+      <div className="border-b border-gold/15 pb-2">
+        <div className="text-[10px] font-black uppercase tracking-widest text-gold/55">{label}</div>
+        <h3 className="font-serif text-xl font-bold leading-tight text-ink">{name}</h3>
+        {payload.identifier ? <div className="font-mono text-[10px] text-ink/40">{payload.identifier}</div> : null}
+      </div>
+
+      {payload.description ? <BBCodeRenderer content={String(payload.description)} className="prose max-w-none text-sm text-ink/80" /> : null}
+
+      {type === 'class' ? (
+        <div className="grid grid-cols-2 gap-2">
+          <Stat label="Hit Die" value={`d${payload.hit_die ?? '—'}`} />
+          <Stat label="Primary Ability" value={abilities(payload.primary_ability) || '—'} />
+          <Stat label="Saving Throws" value={abilities(payload.saving_throws) || '—'} />
+          <Stat label="Subclass" value={payload.subclass_title || '—'} />
+        </div>
+      ) : null}
+      {type === 'subclass' ? (
+        <div className="grid grid-cols-2 gap-2">
+          <Stat label="Parent Class" value={payload.class_id ? className(payload.class_id) : '—'} />
+          <Stat label="Spellcasting" value={payload.spellcasting ? 'Yes' : '—'} />
+        </div>
+      ) : null}
+      {type === 'optionGroup' ? (
+        <div>
+          <div className="field-label mb-1">Class Restrictions</div>
+          {Array.isArray(payload.class_ids) && payload.class_ids.length
+            ? <div className="flex flex-wrap gap-1">{payload.class_ids.map((id: string) => <span key={id} className="border border-gold/30 bg-gold/10 px-2 py-0.5 text-[11px] text-gold">{className(id)}</span>)}</div>
+            : <span className="field-hint">Visible to all classes</span>}
+        </div>
+      ) : null}
+
+      <div>
+        <div className="section-label mb-1.5 text-gold/60">{children.length} {childNoun}{children.length === 1 ? '' : 's'}</div>
+        {children.length === 0 ? (
+          <p className="field-hint italic">No {childNoun}s yet — add them on the left.</p>
+        ) : (
+          <div className="space-y-2.5">
+            {children.map((c: any, i: number) => (
+              <div key={i} className="border-l-2 border-gold/30 pl-3">
+                <div className="flex items-baseline gap-2">
+                  <span className="font-serif text-[15px] font-bold text-ink">{stripBbcodeTags(c.name) || '(unnamed)'}</span>
+                  {Number(c.level) > 0 ? <span className="text-[10px] font-black uppercase tracking-wider text-gold/55">{type === 'optionGroup' ? `Prereq Lv ${c.level}` : `Level ${c.level}`}</span> : null}
+                </div>
+                {/* In-body [h3] subsections (folded sub-headers) render SMALLER than
+                    the feature name above, so the hierarchy reads correctly. */}
+                {c.body ? <BBCodeRenderer content={String(c.body)} className="prose max-w-none text-xs text-ink/65 [&_h1]:text-xs [&_h2]:text-xs [&_h3]:text-xs [&_h4]:text-xs [&_h1]:font-bold [&_h2]:font-bold [&_h3]:font-bold [&_h4]:font-bold [&_h1]:mt-1.5 [&_h2]:mt-1.5 [&_h3]:mt-1.5 [&_h4]:mt-1.5 [&_h1]:mb-0.5 [&_h2]:mb-0.5 [&_h3]:mb-0.5 [&_h4]:mb-0.5 [&_h1]:text-ink/80 [&_h2]:text-ink/80 [&_h3]:text-ink/80 [&_h4]:text-ink/80" /> : null}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -903,7 +977,6 @@ function EntityWorkspace({
   const [activeTarget, setActiveTarget] = useState<string | null>(null);
   const [selection, setSelection] = useState<ActiveSelection | null>(null);
   const [identifierDirty, setIdentifierDirty] = useState(false);
-  const [rightTab, setRightTab] = useState<'fields' | 'preview'>('fields');
   const leftRef = useRef<HTMLDivElement>(null);
   const catalogs = useContext(ImportCatalogsContext);
   // Types with Block-group assign targets (classes) get the "Paste by section"
@@ -1119,10 +1192,10 @@ function EntityWorkspace({
   const grouped = groupFields(descriptor.fields);
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      {/* LEFT — annotated source */}
-      <div className="compendium-card flex flex-col p-3">
-        <div className="mb-2 flex items-center gap-2">
+    <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,0.95fr)]">
+      {/* COLUMN 1 — source / sections */}
+      <div className="compendium-card flex flex-col p-3 xl:min-h-0">
+        <div className="mb-2 flex shrink-0 items-center gap-2">
           <ScanText className="h-4 w-4 text-gold" />
           {hasSections ? (
             <div className="flex items-center gap-1">
@@ -1131,77 +1204,72 @@ function EntityWorkspace({
             </div>
           ) : (<span className="section-label">Source text</span>)}
         </div>
-        {hasSections && leftMode === 'sections' ? (
-          <SectionsPanel type={type} state={state} onChange={onChange} catalogs={catalogs} />
-        ) : (
-          <>
-            <div ref={leftRef} onMouseUp={onMouseUp} className="min-h-[20rem] flex-1 cursor-text overflow-auto whitespace-pre-wrap rounded border border-gold/10 bg-background/30 p-3 font-mono text-xs leading-relaxed text-ink/90 selection:bg-gold/30">
-              {segments.map((seg, i) => {
-                const txt = rawText.slice(seg.start, seg.end);
-                if (!seg.target) return <span key={i} data-start={seg.start}>{txt}</span>;
-                const active = activeTarget === seg.target;
-                return (
-                  <span key={i} data-start={seg.start} title={`${seg.label} — click to re-assign`}
-                    onMouseEnter={() => setActiveTarget(seg.target ?? null)} onMouseLeave={() => setActiveTarget(null)}
-                    onClick={(e) => onHighlightClick(e, seg.start, seg.end)}
-                    className={`cursor-pointer ${active ? 'bg-gold/35 ring-1 ring-gold/60' : 'bg-gold/15 hover:bg-gold/30'}`}>{txt}</span>
-                );
-              })}
-            </div>
-            <p className="mt-2 field-hint">Select text (or click a highlight) to assign it to a field. Hover to see which field it feeds.</p>
-            {state.leftovers.length > 0 ? (
-              <div className="mt-2 rounded border border-blood/30 bg-blood/10 p-2 text-blood">
-                <div className="mb-1 flex items-center gap-1 text-[10px] font-black uppercase tracking-widest"><AlertTriangle className="h-3 w-3" /> Couldn’t place — carry these over in the editor</div>
-                <ul className="space-y-0.5 pl-1 text-xs">{state.leftovers.map((l, i) => (<li key={i}>• {l}</li>))}</ul>
+        <div className="flex flex-col xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:pr-1">
+          {hasSections && leftMode === 'sections' ? (
+            <SectionsPanel type={type} state={state} onChange={onChange} catalogs={catalogs} />
+          ) : (
+            <>
+              <div ref={leftRef} onMouseUp={onMouseUp} className="min-h-[12rem] flex-1 cursor-text whitespace-pre-wrap rounded border border-gold/10 bg-background/30 p-3 font-mono text-xs leading-relaxed text-ink/90 selection:bg-gold/30">
+                {segments.map((seg, i) => {
+                  const txt = rawText.slice(seg.start, seg.end);
+                  if (!seg.target) return <span key={i} data-start={seg.start}>{txt}</span>;
+                  const active = activeTarget === seg.target;
+                  return (
+                    <span key={i} data-start={seg.start} title={`${seg.label} — click to re-assign`}
+                      onMouseEnter={() => setActiveTarget(seg.target ?? null)} onMouseLeave={() => setActiveTarget(null)}
+                      onClick={(e) => onHighlightClick(e, seg.start, seg.end)}
+                      className={`cursor-pointer ${active ? 'bg-gold/35 ring-1 ring-gold/60' : 'bg-gold/15 hover:bg-gold/30'}`}>{txt}</span>
+                  );
+                })}
               </div>
-            ) : null}
-            {state.notes.length > 0 ? (
-              <div className="mt-2 rounded border border-gold/20 bg-gold/5 p-2 text-ink/70">
-                <div className="mb-1 flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-gold/60"><Sparkles className="h-3 w-3" /> Auto-filled — review</div>
-                <ul className="space-y-0.5 pl-1 text-xs">{state.notes.map((l, i) => (<li key={i}>• {l}</li>))}</ul>
-              </div>
-            ) : null}
-          </>
-        )}
+              <p className="mt-2 field-hint">Select text (or click a highlight) to assign it to a field. Hover to see which field it feeds.</p>
+              {state.leftovers.length > 0 ? (
+                <div className="mt-2 rounded border border-blood/30 bg-blood/10 p-2 text-blood">
+                  <div className="mb-1 flex items-center gap-1 text-[10px] font-black uppercase tracking-widest"><AlertTriangle className="h-3 w-3" /> Couldn’t place — carry these over in the editor</div>
+                  <ul className="space-y-0.5 pl-1 text-xs">{state.leftovers.map((l, i) => (<li key={i}>• {l}</li>))}</ul>
+                </div>
+              ) : null}
+              {state.notes.length > 0 ? (
+                <div className="mt-2 rounded border border-gold/20 bg-gold/5 p-2 text-ink/70">
+                  <div className="mb-1 flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-gold/60"><Sparkles className="h-3 w-3" /> Auto-filled — review</div>
+                  <ul className="space-y-0.5 pl-1 text-xs">{state.notes.map((l, i) => (<li key={i}>• {l}</li>))}</ul>
+                </div>
+              ) : null}
+            </>
+          )}
+        </div>
       </div>
 
-      {/* RIGHT — fields / live preview */}
-      <div className="space-y-3">
-        {(renderPreview || onSaveFormat) ? (
-          <div className="flex items-center gap-1">
-            {renderPreview ? (
-              <>
-                <button type="button" onClick={() => setRightTab('fields')} className={`filter-tag ${rightTab === 'fields' ? 'btn-gold-solid' : 'btn-gold'}`}>Edit fields</button>
-                <button type="button" onClick={() => setRightTab('preview')} className={`filter-tag ${rightTab === 'preview' ? 'btn-gold-solid' : 'btn-gold'}`}>Preview</button>
-              </>
-            ) : null}
-            {onSaveFormat ? (
-              <button type="button" onClick={() => onSaveFormat(state, rawText)} className="btn-gold ml-auto inline-flex h-7 items-center gap-1 px-2 text-[10px]" title="Remember this field layout for the source — auto-applied to future spells of this source">
-                Save as format
-              </button>
-            ) : null}
-          </div>
-        ) : null}
-        {rightTab === 'preview' && renderPreview ? (
-          <div className="compendium-card min-h-[32rem] overflow-auto">{renderPreview(state)}</div>
-        ) : (
-          <div className="space-y-4">
-            {grouped.map((group) => (
-              <fieldset key={group.name} className="config-fieldset">
-                <legend className="section-label text-gold/60 px-1">{group.name}</legend>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {group.fields.map((field) => {
-                    const tgt = fieldTarget[field.key];
-                    return (
-                      <FieldControl key={field.key} field={field} value={state.values[field.key]} onChange={(v) => setField(field.key, v)}
-                        flag={state.provenance[field.key]} highlighted={!!tgt && activeTarget === tgt.key} onHover={(on) => setActiveTarget(on && tgt ? tgt.key : null)} />
-                    );
-                  })}
-                </div>
-              </fieldset>
-            ))}
-          </div>
-        )}
+      {/* COLUMN 2 — fields */}
+      <div className="compendium-card flex flex-col p-3 xl:min-h-0">
+        <div className="mb-2 flex shrink-0 items-center gap-2">
+          <span className="section-label">Fields</span>
+          {onSaveFormat ? (
+            <button type="button" onClick={() => onSaveFormat(state, rawText)} className="btn-gold ml-auto inline-flex h-7 items-center gap-1 px-2 text-[10px]" title="Remember this field layout for the source — auto-applied to future entities of this source">Save as format</button>
+          ) : null}
+        </div>
+        <div className="space-y-4 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:pr-1">
+          {grouped.map((group) => (
+            <fieldset key={group.name} className="config-fieldset">
+              <legend className="section-label text-gold/60 px-1">{group.name}</legend>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {group.fields.map((field) => {
+                  const tgt = fieldTarget[field.key];
+                  return (
+                    <FieldControl key={field.key} field={field} value={state.values[field.key]} onChange={(v) => setField(field.key, v)}
+                      flag={state.provenance[field.key]} highlighted={!!tgt && activeTarget === tgt.key} onHover={(on) => setActiveTarget(on && tgt ? tgt.key : null)} />
+                  );
+                })}
+              </div>
+            </fieldset>
+          ))}
+        </div>
+      </div>
+
+      {/* COLUMN 3 — live preview (always on) */}
+      <div className="compendium-card flex flex-col p-3 xl:min-h-0">
+        <div className="mb-2 flex shrink-0 items-center gap-2"><FileText className="h-4 w-4 text-gold" /><span className="section-label">Live preview</span></div>
+        <div className="xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:pr-1">{renderPreview ? renderPreview(state) : null}</div>
       </div>
 
       {/* Assign popover */}
@@ -1293,12 +1361,16 @@ function BlockDropZone({ target, rows, onApply }: { target: ImportAssignTarget; 
 
 function FeatureDropZone({ target, count, onAdd }: { target: ImportAssignTarget; count: number; onAdd: (t: ImportAssignTarget, text: string, clear: () => void) => void }) {
   const [text, setText] = useState('');
+  // Generic over the append target — "Feature" (class/subclass) or "Option"
+  // (option group). The noun drives the placeholder / button / hint copy.
+  const label = target.label.replace(/\s*\(.*\)/, '');
+  const noun = label.toLowerCase();
   return (
     <div>
-      <label className="field-label">{target.label.replace(/\s*\(.*\)/, '')} <span className="text-ink/40">— {count} added</span></label>
-      <textarea value={text} rows={6} onChange={(e) => setText(e.target.value)} onPaste={(e) => richPasteInto(e, text, setText)} placeholder="Paste ALL the feature text — split into one feature per heading. (Spellcasting / ASI / subclass auto-detected.)" className={SECTION_INPUT_CLS} />
-      <button type="button" onClick={() => onAdd(target, text, () => setText(''))} className="btn-gold mt-1 inline-flex h-7 items-center gap-1 px-2 text-[10px]">＋ Add features (auto-split)</button>
-      <p className="field-hint mt-0.5">Over-split? Merge in the Features panel. Need exact boundaries? Use “Mark text” and mark each Feature.</p>
+      <label className="field-label">{label} <span className="text-ink/40">— {count} added</span></label>
+      <textarea value={text} rows={6} onChange={(e) => setText(e.target.value)} onPaste={(e) => richPasteInto(e, text, setText)} placeholder={`Paste ALL the ${noun} text — split into one ${noun} per heading.`} className={SECTION_INPUT_CLS} />
+      <button type="button" onClick={() => onAdd(target, text, () => setText(''))} className="btn-gold mt-1 inline-flex h-7 items-center gap-1 px-2 text-[10px]">＋ Add {noun}s (auto-split)</button>
+      <p className="field-hint mt-0.5">Over-split? Merge in the panel below. Need exact boundaries? Use “Mark text” and mark each {label}.</p>
     </div>
   );
 }
@@ -1330,7 +1402,7 @@ function SectionsPanel({ type, state, onChange, catalogs }: { type: string; stat
     toast.success(`Added ${items.length} feature${items.length === 1 ? '' : 's'}`);
   };
   return (
-    <div className="flex-1 space-y-3 overflow-auto">
+    <div className="space-y-3">
       <p className="field-hint">Drop each block's text into its box — no guessing where boundaries are. <span className="text-gold/70">Proficiencies</span> resolves the whole grid + hit die / saves / primary at once.</p>
       {blocks.map((t) => t.mode === 'append'
         ? <FeatureDropZone key={t.key} target={t} count={Array.isArray(state.values[t.fieldKeys[0]]) ? state.values[t.fieldKeys[0]].length : 0} onAdd={addFeatures} />
@@ -1350,7 +1422,7 @@ const FEATURE_KINDS: { value: FeatureDraft['kind']; label: string }[] = [
 // The class Features organizer: parsed sections you can MERGE (tick several →
 // fold into one feature), edit (name/level), re-route (kind), or drop. Feature
 // rows become child feature records; spellcasting/asi/subclass feed class fields.
-function FeaturesPanel({ value, onChange }: { value: FeatureDraft[]; onChange: (v: FeatureDraft[]) => void }) {
+function FeaturesPanel({ value, onChange, kinds = FEATURE_KINDS }: { value: FeatureDraft[]; onChange: (v: FeatureDraft[]) => void; kinds?: { value: string; label: string }[] }) {
   const drafts = Array.isArray(value) ? value : [];
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [bodyEdit, setBodyEdit] = useState<Set<string>>(new Set());
@@ -1411,9 +1483,9 @@ function FeaturesPanel({ value, onChange }: { value: FeatureDraft[]; onChange: (
             <div className="flex items-center gap-2">
               <input type="checkbox" checked={sel.has(d.id)} onChange={() => toggle(d.id)} className="h-4 w-4 accent-[var(--gold)]" title="Select for merge" />
               <select value={d.kind} onChange={(e) => update(d.id, { kind: e.target.value as FeatureDraft['kind'] })} className="field-input w-28 px-1 text-[11px]">
-                {FEATURE_KINDS.map((k) => (<option key={k.value} value={k.value}>{k.label}</option>))}
+                {kinds.map((k) => (<option key={k.value} value={k.value}>{k.label}</option>))}
               </select>
-              <input value={d.name} onChange={(e) => update(d.id, { name: e.target.value })} className="field-input flex-1 px-2 text-sm" placeholder="Feature name" />
+              <input value={stripBbcodeTags(d.name)} onChange={(e) => update(d.id, { name: e.target.value })} className="field-input flex-1 px-2 text-sm" placeholder="Feature name" />
               {d.kind === 'feature' ? (
                 <input type="number" min={1} max={20} value={d.level ?? ''} onChange={(e) => update(d.id, { level: e.target.value ? Number(e.target.value) : null })} className="field-input w-14 px-1 text-sm" title="Level" />
               ) : d.kind === 'asi' || d.kind === 'subclass' ? (
@@ -1426,15 +1498,19 @@ function FeaturesPanel({ value, onChange }: { value: FeatureDraft[]; onChange: (
             </div>
             <div className="mt-1 pl-6">
               {bodyEdit.has(d.id) ? (
-                <>
-                  <MarkdownEditor value={d.body} onChange={(v) => update(d.id, { body: v })} minHeight="80px" placeholder="Feature body (rich text)" />
-                  <button type="button" onClick={() => toggleBody(d.id)} className="mt-0.5 text-[10px] text-gold/60 hover:text-gold">done</button>
-                </>
-              ) : (
-                <div className="flex items-start gap-2">
-                  <div className="line-clamp-2 flex-1 text-[11px] text-ink/50">{d.body ? d.body.replace(/\[\/?(?:b|h[1-6])\]/g, '') : <span className="italic text-ink/30">No body</span>}</div>
-                  <button type="button" onClick={() => toggleBody(d.id)} className="shrink-0 text-[10px] text-gold/60 hover:text-gold" title="Edit body (rich text)">edit</button>
+                <div className="space-y-1 rounded border border-gold/20 bg-background/30 p-2">
+                  <MarkdownEditor value={d.body} onChange={(v) => update(d.id, { body: v })} minHeight="100px" placeholder="Feature body (rich text)…" />
+                  <div className="flex justify-end">
+                    <button type="button" onClick={() => toggleBody(d.id)} className="btn-gold-solid h-6 px-3 text-[10px]">Done</button>
+                  </div>
                 </div>
+              ) : (
+                <button type="button" onClick={() => toggleBody(d.id)} title="Click to edit the body (rich text)"
+                  className="block w-full rounded border border-transparent px-1.5 py-1 text-left text-[11px] text-ink/55 transition-colors hover:border-gold/25 hover:bg-gold/5">
+                  {d.body
+                    ? <span className="line-clamp-2 block">{d.body.replace(/\[\/?(?:b|h[1-6])\]/g, '')}</span>
+                    : <span className="italic text-ink/35">No body — click to add</span>}
+                </button>
               )}
             </div>
           </div>
@@ -1536,6 +1612,26 @@ function FieldControl({
     );
   }
 
+  if (field.kind === 'classMulti') {
+    // value = string[] of class ids (e.g. an option group's class restrictions).
+    const selected: string[] = Array.isArray(value) ? value.map(String) : [];
+    const classes: any[] = catalogs?.allClasses ?? [];
+    const entities = classes.map((c) => ({ id: String(c.id), name: String(c.name || c.identifier || c.id) }));
+    return (
+      <div className="sm:col-span-2" {...hover}>
+        <label className="field-label mb-1 block">{field.label}</label>
+        <EntityPicker
+          entities={entities}
+          selectedIds={selected}
+          onChange={onChange}
+          searchPlaceholder="Search classes…"
+          noEntitiesText={catalogs ? 'No classes found.' : 'Loading classes…'}
+        />
+        {field.help ? <p className="field-hint mt-0.5">{field.help}</p> : null}
+      </div>
+    );
+  }
+
   if (field.kind === 'proficiencies') {
     const types = (field.proficiencyTypes as ProficiencyType[] | undefined) ?? ['armor', 'weapons', 'skills', 'tools', 'languages'];
     const prof = value && typeof value === 'object' ? value : {};
@@ -1568,7 +1664,7 @@ function FieldControl({
     return (
       <div className="sm:col-span-2" {...hover}>
         <label className="field-label mb-1 block">{field.label}</label>
-        <FeaturesPanel value={Array.isArray(value) ? value : []} onChange={onChange} />
+        <FeaturesPanel value={Array.isArray(value) ? value : []} onChange={onChange} kinds={field.featureKinds} />
         {field.help ? <p className="field-hint mt-1">{field.help}</p> : null}
       </div>
     );

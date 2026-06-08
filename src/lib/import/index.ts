@@ -2,4 +2,4 @@
 export * from './types';
 export * from './registry';
 export type { FeatureDraft } from './classParse';
-export { resolveClassProficiencies, subHeadingBBCode, SUBHEADING_SPLIT_RE, SUBHEADING_TAG } from './classParse';
+export { resolveClassProficiencies, subHeadingBBCode, SUBHEADING_SPLIT_RE, SUBHEADING_TAG, stripBbcodeTags } from './classParse';

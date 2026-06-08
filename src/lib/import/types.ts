@@ -23,6 +23,8 @@ export type ImportFieldKind =
   | 'parentClass' // a single-select of existing classes (a subclass's parent);
                   // value is { id, identifier, name } so the payload can fill
                   // both class_id and class_identifier
+  | 'classMulti' // a multi-select of existing classes (EntityPicker); value is a
+                 // string[] of class ids (e.g. an option group's class restrictions)
   | 'proficiencies' // the reusable ProficienciesEditor grid; value is the class
                     // proficiency object {armor,weapons,tools,skills,languages,…}
   | 'features'; // the class features organizer; value is an array of feature
@@ -45,6 +47,9 @@ export interface ImportFieldDef {
   /** for kind === 'proficiencies' — which sub-grids to render (default
    * armor/weapons/tools/skills/languages; a class keeps savingThrows as a text field). */
   proficiencyTypes?: string[];
+  /** for kind === 'features' — override the draft-kind dropdown options (default
+   * feature/spellcasting/asi/subclass/skip). An option group passes Option/Skip. */
+  featureKinds?: ImportFieldOption[];
   placeholder?: string;
   help?: string;
   group?: string; // optional UI grouping ("Identity" | "Mechanics" | …)

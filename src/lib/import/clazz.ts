@@ -27,7 +27,7 @@ import { upsertFeature } from '../compendium';
 import { queueRebake } from '../moduleExport';
 import { slugify } from '../utils';
 import { sanitizeProficiencySelection, buildGroupedProficiencyDisplayName } from '../proficiencySelection';
-import { parseClassText, classifyHitDie, normalizeClassName, parseFeatureSpan, splitFeatures, reflowText, resolveClassProficiencies, resolveProficiencyKind, type FeatureDraft } from './classParse';
+import { parseClassText, classifyHitDie, normalizeClassName, parseFeatureSpan, splitFeatures, reflowText, resolveClassProficiencies, resolveProficiencyKind, stripBbcodeTags, type FeatureDraft } from './classParse';
 import type { ImportDescriptor, ImportContext, ImportFieldOption } from './types';
 
 const toOptions = (pairs: [string, string][]): ImportFieldOption[] =>
@@ -253,7 +253,7 @@ export const clazzDescriptor: ImportDescriptor = {
     // description only; automation/activities stay for the editor.
     const now = classData.updated_at ?? new Date().toISOString();
     for (const feat of __features as { name: string; level: number; body: string; isSubclass?: boolean }[]) {
-      const featureName = String(feat.name ?? '').trim();
+      const featureName = stripBbcodeTags(String(feat.name ?? ''));
       if (!featureName) continue;
       const fid = crypto.randomUUID();
       await upsertFeature(fid, {

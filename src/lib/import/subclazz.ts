@@ -29,7 +29,7 @@ import { upsertDocument } from '../d1';
 import { upsertFeature } from '../compendium';
 import { queueRebake } from '../moduleExport';
 import { slugify } from '../utils';
-import { parseSubclassText, parseFeatureSpan, splitFeatures, reflowText, firstLevel, type FeatureDraft } from './classParse';
+import { parseSubclassText, parseFeatureSpan, splitFeatures, reflowText, firstLevel, stripBbcodeTags, type FeatureDraft } from './classParse';
 import type { ImportDescriptor, ImportContext } from './types';
 
 // Mirrors ClassImageEditor's DEFAULT_DISPLAY (replicated to keep the import core
@@ -171,7 +171,7 @@ export const subclazzDescriptor: ImportDescriptor = {
     // description only; automation/activities stay for the editor.
     const now = subclassData.updated_at ?? new Date().toISOString();
     for (const feat of __features as { name: string; level: number; body: string }[]) {
-      const featureName = String(feat.name ?? '').trim();
+      const featureName = stripBbcodeTags(String(feat.name ?? ''));
       if (!featureName) continue;
       const fid = crypto.randomUUID();
       await upsertFeature(fid, {
