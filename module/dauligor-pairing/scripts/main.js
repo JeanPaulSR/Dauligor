@@ -22,6 +22,7 @@ Hooks.once("init", () => {
   registerSheetControls();
   registerSpellTabControls();
   registerLauncherControl();
+  registerWindowExportControl();
   registerSettingsUiButtons();
   registerLoginChatPrompt();
   registerSidebarButtons();
@@ -369,6 +370,30 @@ function registerLauncherControl() {
 }
 
 /**
+ * GM-only debug export, tucked into the AppV2 header **controls dropdown** (the
+ * ⋮ toggle menu) instead of cluttering the always-visible header button row.
+ *
+ * `getHeaderControls*` dispatches up the whole inheritance chain (Foundry v13
+ * `ApplicationV2##callHooks`), so a single `getHeaderControlsApplicationV2`
+ * registration fires for EVERY AppV2 window — item sheets, every activity sheet,
+ * and the ActiveEffect config (all DocumentSheetV2). `shouldExposeWindowExport`
+ * gates which windows actually get the entry, and `injectControl` defaults it to
+ * GM-only. Foundry renders the control natively into `.controls-dropdown` and
+ * un-hides the toggle once a control is present.
+ */
+function registerWindowExportControl() {
+  Hooks.on("getHeaderControlsApplicationV2", (app, controls) => {
+    if (!shouldExposeWindowExport(app)) return;
+    injectControl(controls, {
+      action: `${MODULE_ID}.window-export`,
+      label: "Dauligor Debug Export",
+      icon: "fas fa-file-export",
+      onClick: () => exportApplicationWindow(app)
+    });
+  });
+}
+
+/**
  * Register a GM-only scene controls toolbar button that opens the
  * Dauligor GM Console.
  *
@@ -474,14 +499,9 @@ function registerSettingsUiButtons() {
     injectSettingsButtons(resolveHookRoot(html));
   });
 
-  Hooks.on("renderActiveEffectConfig", (app, html) => {
-    injectWindowExportButton(app, resolveHookRoot(html));
-  });
-
   Hooks.on("renderApplicationV2", (app, element) => {
     const root = resolveHookRoot(element);
     injectSpellTabButton(app, root);
-    injectWindowExportButton(app, root);
 
     const isSettingsConfig = app?.constructor?.name === "SettingsConfig" || app?.id === "settings";
     if (!isSettingsConfig) return;
@@ -1844,35 +1864,6 @@ function shouldExposeWindowExport(app) {
   if (constructorName.includes("ActivityChoiceDialog")) return true;
 
   return false;
-}
-
-function injectWindowExportButton(app, root) {
-  if (!shouldExposeWindowExport(app)) return;
-  if (!root) return;
-  if (root.querySelector?.(`[data-${MODULE_ID}-window-export]`)) return;
-
-  const header = root.querySelector(".window-header");
-  if (!header) return;
-
-  const anchor = header.querySelector(".header-control-buttons, .window-controls, .header-actions, .controls");
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "header-control icon";
-  button.title = "Temporary Dauligor debug export for this window";
-  button.setAttribute(`data-${MODULE_ID}-window-export`, "true");
-  button.innerHTML = `<i class="fas fa-file-export"></i>`;
-  button.addEventListener("click", async (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    await exportApplicationWindow(app);
-  });
-
-  if (anchor) {
-    anchor.prepend(button);
-    return;
-  }
-
-  header.append(button);
 }
 
 async function openDauligorLevelUp(actorLike) {
