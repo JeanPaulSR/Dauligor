@@ -116,7 +116,7 @@ const KIND_CONFIG: Record<string, KindConfig> = {
   feat:      { table: 'feats',             idCol: 'identifier', nameCol: 'name',  summaryExpr: 'description', shortTextCol: 'requirements_short_text', freeTextCol: 'requirements', treeCol: 'requirements_tree' },
   item:      { table: 'items',             idCol: 'identifier', nameCol: 'name',  summaryExpr: 'description' },
   condition: { table: 'status_conditions', idCol: 'identifier', nameCol: 'name',  summaryExpr: 'description' },
-  article:   { table: 'lore_articles',     idCol: 'slug',       nameCol: 'title', summaryExpr: 'excerpt' },
+  article:   { table: 'lore_articles',     idCol: 'slug',       nameCol: 'title', summaryExpr: 'excerpt', imageExpr: "COALESCE(NULLIF(card_image_url, ''), image_url)" },
   // No stored slug — keyed by slugify(name) (names are unique). idCol=name so
   // the search query filters by name; the resolved/search id is slugified.
   'option-group': { table: 'unique_option_groups', idCol: 'name', nameCol: 'name', summaryExpr: 'description', deriveSlugId: true, itemsTable: 'unique_option_items', itemFkCol: 'group_id' },
