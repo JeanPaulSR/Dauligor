@@ -159,10 +159,14 @@ touches the template or another character.
 - [ ] export-service: container `capacity` comment/handling still says 3.x
       `{type,value}` — update to the 5.x `{count,volume,weight}` shape.
 
-## DB migrations  *(LOCAL-only — remote pending owner go-ahead)*
+## DB migrations  *(APPLIED to local + remote 2026-06-08)*
 `20260607-1200_items_chat_description` · `20260607-1300_consumable_taxonomies`
 · `20260607-1400_ammo_item_properties` · `20260607-1500_scroll_item_properties`
 · `20260608-1200_container_contents`
+
+The consumable + container editor UIs are **live on prod** as of 2026-06-08
+(`main` @ `87fac50`); remote D1 carries all five migrations. The round-trip code
+(checklist above) is the remaining work — app-side and module-side.
 
 ---
 

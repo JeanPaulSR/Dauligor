@@ -21,12 +21,14 @@ Schema baseline migrations (chronological):
 | `identifier` | TEXT NOT NULL UNIQUE | Slug (e.g. `flame-tongue-greatsword`) |
 | `item_type` | TEXT NOT NULL | `weapon|equipment|consumable|tool|container|loot` |
 | `type_subtype` | TEXT | Primary subtype (`potion`/`light`/`art`/etc.) — Foundry's `system.type.value` |
+| `type_inner_subtype` | TEXT | Second-axis subtype — Foundry's `system.type.subtype`. Consumable-only so far: ammo (`arrow`/`crossbowBolt`/…) or poison (`contact`/`injury`/…), keyed to the `ammunition_types`/`poison_types` taxonomies. Migration `20260607-1300` |
 | `description` | TEXT | BBCode |
 | `image_url` | TEXT | CDN URL or relative path |
 | `source_id` | TEXT (FK) | → `sources.id`. ON DELETE SET NULL |
 | `page` | TEXT | Page number(s) |
 | `tags` | JSON | Tag-table FK array |
 | `unidentified_description` | TEXT | Pre-identification copy. Optional |
+| `chat_description` | TEXT | Chat-card copy (HTML/BBCode) — Foundry's `system.description.chat`. Optional. Migration `20260607-1200` |
 
 ### Physical
 | Column | Type | Notes |
@@ -99,7 +101,7 @@ not a separate column. The pre-20260526-1700 `stealth` boolean column was droppe
 |---|---|---|
 | `capacity` | JSON | dnd5e 5.x shape: `{count: int\|null, volume: {value, units: 'cubicFoot'\|'liter'}, weight: {value, units: 'lb'\|'kg'\|'tn'\|'Mg'}}`. `count` null = unlimited. (Weightless is the `weightlessContents` **property**, not a capacity flag.) |
 | `currency` | JSON | 5-coin grid the container itself holds: `{cp, sp, ep, gp, pp}` |
-| `container_id` | TEXT (FK) | → `items.id` of the **parent** container this item sits inside (Foundry's `system.container` back-pointer). Null for top-level / catalog items. |
+| `container_id` | TEXT (FK) | `REFERENCES items(id) ON DELETE SET NULL` — → `items.id` of the **parent** container this item sits inside (Foundry's `system.container` back-pointer). Null for top-level / catalog items. **Import note:** `itemImport.ts` currently stages the raw Foundry `_id` here, pending resolution to the Dauligor `items.id` (the "Foundry-side reference" the pre-2026-06-08 doc called out). |
 
 > **Container contents are NOT on this table.** A catalog container's *recipe* of
 > contents lives in its own **`container_contents`** table (migration
@@ -153,6 +155,8 @@ React editor (the form's `formData` uses camelCase, the DB row is snake_case):
 | `container_id` | `containerId` |
 | `type_subtype` | `typeSubtype` |
 | `unidentified_description` | `unidentifiedDescription` |
+| `chat_description` | `chatDescription` |
+| `type_inner_subtype` | `typeInnerSubtype` |
 
 Other columns (`uses`, `capacity`, `currency`, `quantity`, `weight`, `price`,
 `damage`, `range`, `attunement`, `equipped`, `identified`, `magical`, `properties`,
