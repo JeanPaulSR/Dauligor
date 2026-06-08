@@ -356,6 +356,10 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
   const assignTargets = useMemo(() => getAssignTargets(type), [type]);
   const hasSections = useMemo(() => assignTargets.some((t) => t.group === 'Blocks'), [assignTargets]);
   const [previewOpen, setPreviewOpen] = useState(false);
+  // Overwrite an existing class instead of creating new (e.g. replace a
+  // source-less placeholder) — its id becomes the upsert target.
+  const [overwriteId, setOverwriteId] = useState<string | null>(null);
+  const [existingClasses, setExistingClasses] = useState<{ id: string; name?: string; identifier?: string }[]>([]);
   const sourceKey = useMemo(() => descriptor?.fields.find((f) => f.kind === 'source')?.key, [descriptor]);
 
   useEffect(() => {
@@ -436,16 +440,34 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
     () => sources.map((s) => ({ id: s.id, name: (s.abbreviation ? `${s.abbreviation} — ` : '') + (s.name || s.id) })),
     [sources],
   );
+  const existingClassOptions = useMemo(
+    () => existingClasses.map((c) => ({ id: c.id, name: `${c.name || c.identifier || c.id}${c.identifier ? ` · ${c.identifier}` : ''}` })),
+    [existingClasses],
+  );
 
-  // Reset the workspace on a type switch (source persists).
+  // Reset the workspace on a type switch (source persists). Sections-types (class)
+  // open STRAIGHT into the drop-zone workspace — "Edit text" returns to the paste
+  // box for the Interpret / mark-up flow.
   useEffect(() => {
-    setRawText(''); setPhase('input');
+    setRawText('');
     setSingle(emptyState(descriptor));
     setBoundaries([]); setEdits({}); setSelected(new Set()); setReviewIndex(null);
+    setPhase(hasSections ? 'single' : 'input');
   }, [type]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load the saved format template whenever the type or source changes.
   useEffect(() => { setFormatTemplate(loadFormat(type, sourceId)); }, [type, sourceId]);
+
+  // Existing classes for the "Overwrite" picker (sections-types only).
+  useEffect(() => {
+    if (!hasSections) return;
+    let cancelled = false;
+    (async () => {
+      try { const rows = await fetchCollection<{ id: string; name?: string; identifier?: string }>('classes', { orderBy: 'name ASC' }); if (!cancelled) setExistingClasses(rows); }
+      catch (err) { console.error('[ImportMarkWindow] failed to load classes:', err); }
+    })();
+    return () => { cancelled = true; };
+  }, [hasSections]);
 
   // ── Batch candidates (auto-parsed baseline; per-index edits override) ───────
   const blocks = useMemo(
@@ -531,7 +553,7 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
   // ── Create ─────────────────────────────────────────────────────────────────
   const commitState = async (st: EntityState) => {
     const fields = sourceKey ? { ...st.values, [sourceKey]: sourceId } : st.values;
-    const resolved = resolveEntity(type, fields);
+    const resolved = resolveEntity(type, fields, overwriteId ? { existingId: overwriteId } : undefined);
     if (resolved.errors.length) throw new Error(resolved.errors[0]);
     await commitEntity(resolved);
     return resolved.displayName;
@@ -542,8 +564,8 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
     setSaving(true);
     try {
       const name = await commitState(single);
-      toast.success(`${descriptor.label} “${name}” created`);
-      setRawText(''); setSingle(emptyState(descriptor)); setPhase('input');
+      toast.success(`${descriptor.label} “${name}” ${overwriteId ? 'overwritten' : 'created'}`);
+      setRawText(''); setSingle(emptyState(descriptor)); setOverwriteId(null); setPhase(hasSections ? 'single' : 'input');
     } catch (err: any) {
       toast.error(err?.message || `Failed to create ${descriptor.label.toLowerCase()}.`);
       reportClientError(err, OperationType.CREATE, `import/${type}`);
@@ -694,7 +716,12 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
               {hasSections ? (
                 <button type="button" className="btn-gold inline-flex h-9 items-center gap-1 px-3 text-[11px] disabled:opacity-50" disabled={!singleResolved} onClick={() => setPreviewOpen(true)}><FileText className="h-3 w-3" /> Preview</button>
               ) : null}
-              <button type="button" className="btn-gold-solid h-9 px-5 disabled:opacity-50" disabled={saving || !singleResolved || singleResolved.errors.length > 0} onClick={handleCreateSingle}>{saving ? 'Creating…' : `Create ${descriptor.label}`}</button>
+              {hasSections ? (
+                <div className="w-52" title="Pick an existing class to REPLACE (writes to its id) — or leave blank to create new">
+                  <SingleSelectSearch value={overwriteId ?? ''} onChange={(v) => setOverwriteId(v || null)} options={existingClassOptions} placeholder="＋ Create new" noEntitiesText="No classes." triggerClassName="field-input h-9 w-full text-[11px]" />
+                </div>
+              ) : null}
+              <button type="button" className="btn-gold-solid h-9 px-5 disabled:opacity-50" disabled={saving || !singleResolved || singleResolved.errors.length > 0} onClick={handleCreateSingle}>{saving ? 'Saving…' : overwriteId ? 'Overwrite class' : `Create ${descriptor.label}`}</button>
             </div>
           </div>
           <EntityWorkspace type={type} descriptor={descriptor} rawText={rawText} state={single} onChange={setSingle} assignTargets={assignTargets} renderPreview={renderPreview} onSaveFormat={hasParser ? handleSaveFormat : undefined} />
@@ -1204,6 +1231,22 @@ function EntityWorkspace({
 
 const SECTION_INPUT_CLS = 'w-full rounded border border-gold/15 bg-background/40 p-2 font-mono text-xs leading-relaxed text-ink/90 focus:border-gold/40 focus:outline-none';
 
+// Preserve pasted rich-text formatting in a plain section drop-zone: convert the
+// clipboard's text/html → site BBCode (the same path the main paste box uses), so
+// bold/italic/lists survive into the stored value.
+function richPasteInto(e: React.ClipboardEvent<HTMLTextAreaElement>, value: string, setValue: (v: string) => void) {
+  const cd = e.clipboardData || (e.nativeEvent as any)?.clipboardData;
+  const html = cd?.getData?.('text/html') || '';
+  if (!html || !looksLikeHtml(html)) return; // no rich HTML → normal plain paste
+  e.preventDefault();
+  const bbcode = htmlToSiteBbcode(html);
+  const el = e.currentTarget;
+  const start = el.selectionStart ?? value.length;
+  const end = el.selectionEnd ?? value.length;
+  setValue(value.slice(0, start) + bbcode + value.slice(end));
+  toast.success('Captured HTML formatting');
+}
+
 function BlockDropZone({ target, rows, onApply }: { target: ImportAssignTarget; rows: number; onApply: (t: ImportAssignTarget, text: string) => void }) {
   const [text, setText] = useState('');
   const [applied, setApplied] = useState(false);
@@ -1213,6 +1256,7 @@ function BlockDropZone({ target, rows, onApply }: { target: ImportAssignTarget; 
       <textarea
         value={text} rows={rows}
         onChange={(e) => { setText(e.target.value); setApplied(false); }}
+        onPaste={(e) => richPasteInto(e, text, (v) => { setText(v); setApplied(false); })}
         onBlur={() => { if (text.trim()) { onApply(target, text); setApplied(true); } }}
         placeholder={`Paste the ${target.label.toLowerCase()} text…`}
         className={SECTION_INPUT_CLS}
@@ -1226,7 +1270,7 @@ function FeatureDropZone({ target, count, onAdd }: { target: ImportAssignTarget;
   return (
     <div>
       <label className="field-label">{target.label.replace(/\s*\(.*\)/, '')} <span className="text-ink/40">— {count} added</span></label>
-      <textarea value={text} rows={6} onChange={(e) => setText(e.target.value)} placeholder="Paste ALL the feature text — split into one feature per heading. (Spellcasting / ASI / subclass auto-detected.)" className={SECTION_INPUT_CLS} />
+      <textarea value={text} rows={6} onChange={(e) => setText(e.target.value)} onPaste={(e) => richPasteInto(e, text, setText)} placeholder="Paste ALL the feature text — split into one feature per heading. (Spellcasting / ASI / subclass auto-detected.)" className={SECTION_INPUT_CLS} />
       <button type="button" onClick={() => onAdd(target, text, () => setText(''))} className="btn-gold mt-1 inline-flex h-7 items-center gap-1 px-2 text-[10px]">＋ Add features (auto-split)</button>
       <p className="field-hint mt-0.5">Over-split? Merge in the Features panel. Need exact boundaries? Use “Mark text” and mark each Feature.</p>
     </div>
@@ -1283,6 +1327,8 @@ const FEATURE_KINDS: { value: FeatureDraft['kind']; label: string }[] = [
 function FeaturesPanel({ value, onChange }: { value: FeatureDraft[]; onChange: (v: FeatureDraft[]) => void }) {
   const drafts = Array.isArray(value) ? value : [];
   const [sel, setSel] = useState<Set<string>>(new Set());
+  const [bodyEdit, setBodyEdit] = useState<Set<string>>(new Set());
+  const toggleBody = (id: string) => setBodyEdit((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const update = (id: string, patch: Partial<FeatureDraft>) => onChange(drafts.map((d) => (d.id === id ? { ...d, ...patch } : d)));
   const remove = (id: string) => {
     const i = drafts.findIndex((d) => d.id === id);
@@ -1352,7 +1398,19 @@ function FeaturesPanel({ value, onChange }: { value: FeatureDraft[]; onChange: (
               ) : null}
               <button type="button" onClick={() => remove(d.id)} className="px-1 text-ink/40 hover:text-blood" title="Remove — collapses into the feature above">✕</button>
             </div>
-            {d.body ? <div className="mt-1 line-clamp-2 pl-6 text-[11px] text-ink/50">{d.body.replace(/\[\/?b\]/g, '')}</div> : null}
+            <div className="mt-1 pl-6">
+              {bodyEdit.has(d.id) ? (
+                <>
+                  <MarkdownEditor value={d.body} onChange={(v) => update(d.id, { body: v })} minHeight="80px" placeholder="Feature body (rich text)" />
+                  <button type="button" onClick={() => toggleBody(d.id)} className="mt-0.5 text-[10px] text-gold/60 hover:text-gold">done</button>
+                </>
+              ) : (
+                <div className="flex items-start gap-2">
+                  <div className="line-clamp-2 flex-1 text-[11px] text-ink/50">{d.body ? d.body.replace(/\[\/?b\]/g, '') : <span className="italic text-ink/30">No body</span>}</div>
+                  <button type="button" onClick={() => toggleBody(d.id)} className="shrink-0 text-[10px] text-gold/60 hover:text-gold" title="Edit body (rich text)">edit</button>
+                </div>
+              )}
+            </div>
           </div>
         ))}
       </div>
