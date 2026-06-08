@@ -218,15 +218,32 @@ export function splitClassSections(text: string): ClassSection[] {
   return sections;
 }
 
+// ─────────────────────── Folded sub-heading markers ─────────────────────────
+// When a sub-section header (e.g. "Cantrips") is folded INTO a feature body — by
+// the auto-grouper below, or by the Features panel's merge / collapse — it's
+// emitted as a flat SITE HEADING (NOT bold) on its own line, with a blank line
+// after, so it (a) renders with the site's heading style and (b) sits in its own
+// block that can be re-tagged / edited cleanly (a single newline would keep it in
+// the same paragraph as the body). h3 is the in-feature sub-header convention in
+// this codebase. Route every folded header through these so merge / collapse /
+// auto-fold and the panel's re-split stay in sync.
+export const SUBHEADING_TAG = 'h3';
+export const subHeadingBBCode = (name: string): string =>
+  `[${SUBHEADING_TAG}]${String(name ?? '').trim()}[/${SUBHEADING_TAG}]`;
+/** Splits a body on the folded sub-heading markers (capturing the heading text),
+ * consuming the surrounding blank lines. Mirrors `subHeadingBBCode`. */
+export const SUBHEADING_SPLIT_RE = new RegExp(`\\n*\\[${SUBHEADING_TAG}\\]([^\\[\\]]+)\\[\\/${SUBHEADING_TAG}\\]\\n*`);
+
 /** The feature-ish sections, with sub-headers folded into the feature above. */
 export function groupClassFeatures(sections: ClassSection[]): ClassSection[] {
   const out: ClassSection[] = [];
   for (const s of sections) {
     if (s.kind === 'identity' || s.kind === 'meta') continue;
     const prev = out[out.length - 1];
-    // A sub-header folds into the feature OR spellcasting block above it.
+    // A sub-header folds into the feature OR spellcasting block above it — as a
+    // flat site heading with a blank line after (NOT bold), so it's its own block.
     if (s.kind === 'subheader' && prev && (prev.kind === 'feature' || prev.kind === 'spellcasting')) {
-      prev.body = `${prev.body}\n\n[b]${s.name}[/b]\n${s.body}`.trim();
+      prev.body = `${prev.body}\n\n${subHeadingBBCode(s.name)}\n\n${s.body}`.trim();
       prev.end = s.end;
       continue;
     }
@@ -321,6 +338,34 @@ export function parseClassText(text: string): ParseResult {
   }
 
   return { fields, leftovers, notes };
+}
+
+/** Interpret a SUBCLASS write-up. Subclasses carry no identity stat block —
+ * hit die, saving throws, proficiencies, primary ability all come from the
+ * parent class — so this only routes the body into feature drafts (reusing the
+ * class feature splitter) and leaves a note. Name + parent class are set in the
+ * form fields. A "Spellcasting" section auto-routes to the subclass spellcasting
+ * config; everything else becomes a child feature row. */
+export function parseSubclassText(text: string): ParseResult {
+  const fields: Record<string, ParsedField> = {};
+  const notes: string[] = [];
+  const sections = groupClassFeatures(splitClassSections(text));
+  if (sections.length) {
+    const drafts: FeatureDraft[] = sections.map((s, i) => ({
+      id: `sec-${i}`,
+      kind: (s.kind === 'subheader' || s.kind === 'identity' || s.kind === 'meta' ? 'feature' : s.kind) as FeatureDraft['kind'],
+      name: s.name,
+      level: s.level,
+      levels: s.levels,
+      body: s.body,
+    }));
+    fields._features = hi(drafts);
+    const featCount = drafts.filter((d) => d.kind === 'feature').length;
+    const hasSpellcasting = drafts.some((d) => d.kind === 'spellcasting');
+    notes.push(`Parsed ${drafts.length} section${drafts.length === 1 ? '' : 's'} (${featCount} feature${featCount === 1 ? '' : 's'}${hasSpellcasting ? ' + Spellcasting' : ''}) — organize them in the Features panel below.`);
+  }
+  notes.push('Set the subclass name + parent class in the fields on the right (or drop the name text into the Name box).');
+  return { fields, leftovers: [], notes };
 }
 
 /** Parse ONE manually-marked span into a single feature draft: first non-empty

@@ -7,11 +7,13 @@
 import type { ImportDescriptor, ResolvedEntity, ImportContext, ParseResult, ImportAssignTarget } from './types';
 import { spellDescriptor } from './spell';
 import { clazzDescriptor } from './clazz';
+import { subclazzDescriptor } from './subclazz';
 
 const DESCRIPTORS: Record<string, ImportDescriptor> = {
   [spellDescriptor.type]: spellDescriptor,
   [clazzDescriptor.type]: clazzDescriptor,
-  // feat, item, feature, subclass, … land here as their descriptors ship.
+  [subclazzDescriptor.type]: subclazzDescriptor,
+  // feat, item, feature, … land here as their descriptors ship.
 };
 
 export function listImportDescriptors(): ImportDescriptor[] {
@@ -101,12 +103,20 @@ export function resolveEntity(
   const errors: string[] = [];
   const warnings: string[] = [];
 
+  // A required field is satisfied unless it's blank. "Blank" is shape-aware so
+  // structured fields validate too: an empty string, an empty array, or an
+  // object whose values are all falsy (e.g. the parent-class ref before a class
+  // is chosen — { id:'', identifier:'', name:'' }).
+  const isBlankRequired = (v: unknown): boolean => {
+    if (v === undefined || v === null) return true;
+    if (typeof v === 'string') return v.trim() === '';
+    if (Array.isArray(v)) return v.length === 0;
+    if (typeof v === 'object') return !Object.values(v as Record<string, unknown>).some((x) => x !== '' && x != null && x !== false);
+    return false;
+  };
   for (const field of descriptor.fields) {
     if (!field.required) continue;
-    const value = fields[field.key];
-    if (value === undefined || value === null || String(value).trim() === '') {
-      errors.push(`${field.label} is required.`);
-    }
+    if (isBlankRequired(fields[field.key])) errors.push(`${field.label} is required.`);
   }
 
   // Empty-source warning — source-less entries are filtered out of the public

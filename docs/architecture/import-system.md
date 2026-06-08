@@ -100,7 +100,8 @@ Everything here works for any descriptor; you rarely touch it to add a type. It 
 |---|---|
 | spell | `upsertSpell(id, payload)` |
 | feat / item / feature | `upsertFeat` / `upsertItem` / `upsertFeature` (+ `queueRebake('feature', id)`) |
-| class / subclass | `upsertDocument('classes', id, d1Data)` + `queueRebake('class', id)` (subclass adds `class_id`, `class_identifier`) |
+| class | `upsertDocument('classes', id, d1Data)` + `queueRebake('class', id)` + a child `upsertFeature` row per feature (`parentType: 'class'`, `+ queueRebake('feature', …)`) |
+| subclass | `upsertDocument('subclasses', id, d1Data)` + `queueRebake('subclass', id)` + child `upsertFeature` rows (`parentType: 'subclass'`); `class_id` / `class_identifier` come from the required parent-class picker |
 | options / species / background / facility / source / system pages / spell_rules | direct `upsertDocument(collection, id, payload)` (or `saveRule` / `saveSystemPage*`) |
 
 Universal idioms: `id` is a **separate positional arg** = `existingId ?? crypto.randomUUID()`; `identifier = identifier.trim() || slugify(name)`; `tag` column is `tag_ids` for class/subclass, `tags` elsewhere; legacy tables are snake_case, `backgrounds`/`species`/`species_options`/`background_features` are camelCase.
@@ -111,7 +112,9 @@ Universal idioms: `id` is a **separate positional arg** = `existingId ?? crypto.
 
 ## Field model
 
-`ImportFieldDef` kinds the window renders: `text`, `textarea`, `number`, `boolean`, `select` (needs `options`), and `source` (a persistent `<select>` from the `sources` table, rendered top-level and shared across creates). Group fields with `group` ("Identity", "Mechanics", …) → they render as `.config-fieldset` sections. `key` must match the camelCase form-state key `buildPayload` reads, so the payload stays a faithful mirror of the editor.
+`ImportFieldDef` kinds the window renders: `text`, `textarea`, `number`, `boolean`, `select` (needs `options`), and `source` (a persistent `<select>` from the `sources` table, rendered top-level and shared across creates). The class/subclass importers add richer kinds, each reusing the matching editor control: `markdown` (the `MarkdownEditor` TipTap editor — value carries site BBCode, handles rich paste), `abilities` (ability-pill toggles, value = UPPERCASE ability ids), `proficiencies` (the reusable `ProficienciesEditor` grid; value is the class proficiency object), `features` (the feature organizer — merge / collapse / re-route drafts), and `parentClass` (a `SingleSelectSearch` of existing classes for a subclass's parent; value is `{ id, identifier, name }` so `buildPayload` can fill both `class_id` and `class_identifier`). Group fields with `group` ("Identity", "Mechanics", …) → they render as `.config-fieldset` sections. `key` must match the camelCase form-state key `buildPayload` reads, so the payload stays a faithful mirror of the editor.
+
+> The structured kinds (`proficiencies`, `parentClass`, …) need external catalogs (the skills/armor/… tables, the classes list). The window loads these once and shares them through `ImportCatalogsContext`; `FieldControl` reads the context. A `required` field whose value is an **object** (like `parentClass`'s `{id,…}`) is validated shape-aware in `resolveEntity` — blank when every value is falsy — so "no parent class chosen" still blocks the create.
 
 ## Interpreter model
 
@@ -136,6 +139,18 @@ A `<textarea>` only receives the clipboard's `text/plain`, so the window's `onPa
 5. **Verify** like the spell type: `tsc` clean, create one live on `:3003`, and confirm the D1 row matches a `ClassEditor` save (same columns, same `queueRebake` side-effect).
 
 That's it — steps 1–2 give a working class importer; 3–4 add interpretation + preview; the mark-up workspace, batch, division editor, and format templates all work the moment the optional hooks exist.
+
+### Second worked type — subclass (`src/lib/import/subclazz.ts`)
+
+The subclass importer is the class recipe again, with one structural difference and a few reuses:
+
+- **Required parent class.** A `parentClass` field (`classRef`, value `{id, identifier, name}`) is the one thing a subclass needs that a class doesn't. `buildPayload` reads it for `class_id` / `class_identifier` (falling back to `slugify(name)`, like `SubclassEditor`). It's `required`, validated shape-aware (see [field model](#field-model)).
+- **Reuses the class feature pipeline.** `parseSubclassText` (in `classParse.ts`) routes the body through the **same** `splitClassSections` / `groupClassFeatures` splitter — subclasses carry no identity stat block (hit die, saves, proficiencies all inherit from the parent), so it only organizes features + a note. `assignAppend` / `assignAppendMany` reuse `parseFeatureSpan` / `splitFeatures`.
+- **Child features use `parentType: 'subclass'`** (`feature_type: 'class'`, matching every existing subclass feature). A `Spellcasting` section routes into the **subclass-shape** spellcasting config (note: `progression` + `level: 3` default — distinct from the class shape).
+- **`advancements: []`** — the editor synthesizes the canonical subclass progression on first save (same skeleton-default rule as the class importer's advancement tree).
+- **No preview** — there's no standalone subclass detail pane, so the window gates the Preview button to `type === 'class'`. The **Overwrite** picker is type-aware (it loads the current descriptor's `collection`, so subclass overwrites subclasses).
+
+**Folded sub-headers render as flat headings, not bold.** When the feature pipeline folds a sub-section header (e.g. "Cantrips") into a feature body — during parse, or via the Features panel's merge / collapse — it emits `[h3]Name[/h3]` on its own line with a blank line after (a flat site heading via `bbcodeToHtml`, sitting in its own block so it can be re-tagged/edited), **not** `[b]…[/b]`. Route every folded header through the shared `subHeadingBBCode` helper + `SUBHEADING_SPLIT_RE` (exported from `classParse.ts`) so the merge ↔ split round-trip stays exact. `SUBHEADING_TAG` is the single knob for the level.
 
 ---
 

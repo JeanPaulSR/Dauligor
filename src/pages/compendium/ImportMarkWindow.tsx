@@ -44,6 +44,9 @@ import {
   assignResolveFields,
   splitEntityBlocks,
   resolveClassProficiencies,
+  subHeadingBBCode,
+  SUBHEADING_SPLIT_RE,
+  SUBHEADING_TAG,
   type ImportDescriptor,
   type ImportFieldDef,
   type ImportAssignTarget,
@@ -63,6 +66,8 @@ type EntityState = { values: Record<string, any>; spans: Record<string, Span[]>;
 type ProfCatalogs = {
   allSkills: any[];
   allAttributes: any[];
+  /** Existing classes — the option pool for a `parentClass` field (subclass). */
+  allClasses: any[];
   allArmor: any[]; allArmorCategories: any[]; groupedArmor: Record<string, any[]>;
   allWeapons: any[]; allWeaponCategories: any[]; groupedWeapons: Record<string, any[]>;
   allTools: any[]; allToolCategories: any[]; groupedTools: Record<string, any[]>;
@@ -356,11 +361,16 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
   const assignTargets = useMemo(() => getAssignTargets(type), [type]);
   const hasSections = useMemo(() => assignTargets.some((t) => t.group === 'Blocks'), [assignTargets]);
   const [previewOpen, setPreviewOpen] = useState(false);
-  // Overwrite an existing class instead of creating new (e.g. replace a
-  // source-less placeholder) — its id becomes the upsert target.
+  // Overwrite an existing entity instead of creating new (e.g. replace a
+  // source-less placeholder) — its id becomes the upsert target. The pool is the
+  // CURRENT type's collection (classes for class, subclasses for subclass).
   const [overwriteId, setOverwriteId] = useState<string | null>(null);
-  const [existingClasses, setExistingClasses] = useState<{ id: string; name?: string; identifier?: string }[]>([]);
+  const [overwriteRows, setOverwriteRows] = useState<{ id: string; name?: string; identifier?: string }[]>([]);
+  // Parent-class options for a `parentClass` field (subclass) — always the
+  // classes table, loaded once and shared via the catalog context.
+  const [parentClasses, setParentClasses] = useState<{ id: string; name?: string; identifier?: string }[]>([]);
   const sourceKey = useMemo(() => descriptor?.fields.find((f) => f.kind === 'source')?.key, [descriptor]);
+  const needsParentClass = useMemo(() => descriptors.some((d) => d.fields.some((f) => f.kind === 'parentClass')), [descriptors]);
 
   useEffect(() => {
     let cancelled = false;
@@ -433,16 +443,17 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
       allTools: c.tools, allToolCategories: c.toolCats, groupedTools: groupByCategory(c.tools, c.toolCats),
       allLanguages: c.languages, allLanguageCategories: c.languageCats, groupedLanguages: groupByCategory(c.languages, c.languageCats),
       allAttributes: c.attributes,
+      allClasses: parentClasses,
     };
-  }, [rawCatalogs]);
+  }, [rawCatalogs, parentClasses]);
 
   const sourceOptions = useMemo(
     () => sources.map((s) => ({ id: s.id, name: (s.abbreviation ? `${s.abbreviation} — ` : '') + (s.name || s.id) })),
     [sources],
   );
-  const existingClassOptions = useMemo(
-    () => existingClasses.map((c) => ({ id: c.id, name: `${c.name || c.identifier || c.id}${c.identifier ? ` · ${c.identifier}` : ''}` })),
-    [existingClasses],
+  const overwriteOptions = useMemo(
+    () => overwriteRows.map((c) => ({ id: c.id, name: `${c.name || c.identifier || c.id}${c.identifier ? ` · ${c.identifier}` : ''}` })),
+    [overwriteRows],
   );
 
   // Reset the workspace on a type switch (source persists). Sections-types (class)
@@ -452,22 +463,37 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
     setRawText('');
     setSingle(emptyState(descriptor));
     setBoundaries([]); setEdits({}); setSelected(new Set()); setReviewIndex(null);
+    setOverwriteId(null);
     setPhase(hasSections ? 'single' : 'input');
   }, [type]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load the saved format template whenever the type or source changes.
   useEffect(() => { setFormatTemplate(loadFormat(type, sourceId)); }, [type, sourceId]);
 
-  // Existing classes for the "Overwrite" picker (sections-types only).
+  // Existing rows of the CURRENT type for the "Overwrite" picker (sections-types
+  // only) — classes for class, subclasses for subclass. Re-loads on type switch.
   useEffect(() => {
-    if (!hasSections) return;
+    if (!hasSections || !descriptor) return;
     let cancelled = false;
+    const collection = descriptor.collection;
     (async () => {
-      try { const rows = await fetchCollection<{ id: string; name?: string; identifier?: string }>('classes', { orderBy: 'name ASC' }); if (!cancelled) setExistingClasses(rows); }
-      catch (err) { console.error('[ImportMarkWindow] failed to load classes:', err); }
+      try { const rows = await fetchCollection<{ id: string; name?: string; identifier?: string }>(collection, { orderBy: 'name ASC' }); if (!cancelled) setOverwriteRows(rows); }
+      catch (err) { console.error(`[ImportMarkWindow] failed to load existing ${collection}:`, err); }
     })();
     return () => { cancelled = true; };
-  }, [hasSections]);
+  }, [hasSections, type]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Parent-class options for any `parentClass` field (subclass) — the classes
+  // table, loaded once. Shared with FieldControl via the catalog context.
+  useEffect(() => {
+    if (!needsParentClass) return;
+    let cancelled = false;
+    (async () => {
+      try { const rows = await fetchCollection<{ id: string; name?: string; identifier?: string }>('classes', { orderBy: 'name ASC' }); if (!cancelled) setParentClasses(rows); }
+      catch (err) { console.error('[ImportMarkWindow] failed to load parent classes:', err); }
+    })();
+    return () => { cancelled = true; };
+  }, [needsParentClass]);
 
   // ── Batch candidates (auto-parsed baseline; per-index edits override) ───────
   const blocks = useMemo(
@@ -713,20 +739,20 @@ export default function ImportMarkWindow({ userProfile }: { userProfile: any }) 
               {hasParser ? (
                 <button type="button" className="btn-gold inline-flex h-9 items-center gap-1 px-3 text-[11px]" onClick={enterBatch}><Scissors className="h-3 w-3" /> Divide</button>
               ) : null}
-              {hasSections ? (
+              {type === 'class' ? (
                 <button type="button" className="btn-gold inline-flex h-9 items-center gap-1 px-3 text-[11px] disabled:opacity-50" disabled={!singleResolved} onClick={() => setPreviewOpen(true)}><FileText className="h-3 w-3" /> Preview</button>
               ) : null}
               {hasSections ? (
-                <div className="w-52" title="Pick an existing class to REPLACE (writes to its id) — or leave blank to create new">
-                  <SingleSelectSearch value={overwriteId ?? ''} onChange={(v) => setOverwriteId(v || null)} options={existingClassOptions} placeholder="＋ Create new" noEntitiesText="No classes." triggerClassName="field-input h-9 w-full text-[11px]" />
+                <div className="w-52" title={`Pick an existing ${descriptor.label.toLowerCase()} to REPLACE (writes to its id) — or leave blank to create new`}>
+                  <SingleSelectSearch value={overwriteId ?? ''} onChange={(v) => setOverwriteId(v || null)} options={overwriteOptions} placeholder="＋ Create new" noEntitiesText={`No ${descriptor.label.toLowerCase()}es.`} triggerClassName="field-input h-9 w-full text-[11px]" />
                 </div>
               ) : null}
-              <button type="button" className="btn-gold-solid h-9 px-5 disabled:opacity-50" disabled={saving || !singleResolved || singleResolved.errors.length > 0} onClick={handleCreateSingle}>{saving ? 'Saving…' : overwriteId ? 'Overwrite class' : `Create ${descriptor.label}`}</button>
+              <button type="button" className="btn-gold-solid h-9 px-5 disabled:opacity-50" disabled={saving || !singleResolved || singleResolved.errors.length > 0} onClick={handleCreateSingle}>{saving ? 'Saving…' : overwriteId ? `Overwrite ${descriptor.label}` : `Create ${descriptor.label}`}</button>
             </div>
           </div>
           <EntityWorkspace type={type} descriptor={descriptor} rawText={rawText} state={single} onChange={setSingle} assignTargets={assignTargets} renderPreview={renderPreview} onSaveFormat={hasParser ? handleSaveFormat : undefined} />
           {singleResolved ? <ResolvedPayload payload={singleResolved.payload} /> : null}
-          {previewOpen && singleResolved ? (() => {
+          {previewOpen && singleResolved && type === 'class' ? (() => {
             const row: any = { ...singleResolved.payload }; delete row.__features;
             return <ClassPreviewPane classData={{ ...denormalizeCompendiumData(row), id: 'import-preview' }} open onClose={() => setPreviewOpen(false)} />;
           })() : null}
@@ -1335,20 +1361,20 @@ function FeaturesPanel({ value, onChange }: { value: FeatureDraft[]; onChange: (
     if (i > 0) {
       // Collapse into the feature ABOVE (don't lose the text); reversible via Split.
       const above = drafts[i - 1], cur = drafts[i];
-      const body = `${above.body}\n\n[b]${cur.name}[/b]\n${cur.body}`.trim();
+      const body = `${above.body}\n\n${subHeadingBBCode(cur.name)}\n\n${cur.body}`.trim();
       onChange(drafts.filter((d) => d.id !== id).map((d) => (d.id === above.id ? { ...d, body } : d)));
     } else {
       onChange(drafts.filter((d) => d.id !== id));
     }
     setSel((p) => { const n = new Set(p); n.delete(id); return n; });
   };
-  // Re-separate a (merged) feature: split its body on the [b]Name[/b] markers that
-  // merge/collapse insert. The first chunk keeps this row's name.
+  // Re-separate a (merged) feature: split its body on the [h3]Name[/h3] markers
+  // that merge/collapse insert. The first chunk keeps this row's name.
   const split = (id: string) => {
     const i = drafts.findIndex((d) => d.id === id);
     if (i < 0) return;
     const d = drafts[i];
-    const segs = d.body.split(/\n*\[b\]([^[\]]+)\[\/b\]\n?/);
+    const segs = d.body.split(SUBHEADING_SPLIT_RE);
     if (segs.length < 3) { toast.error('Nothing to split — no merged sub-features in this body.'); return; }
     const lvlOf = (b: string) => { const m = b.match(/(\d+)(?:st|nd|rd|th)\s+level/i); return m ? Number(m[1]) : 1; };
     const parts: FeatureDraft[] = [{ ...d, body: segs[0].trim() }];
@@ -1363,7 +1389,7 @@ function FeaturesPanel({ value, onChange }: { value: FeatureDraft[]; onChange: (
     const idxs = drafts.map((d, i) => [d.id, i] as const).filter(([id]) => sel.has(id)).map(([, i]) => i).sort((a, b) => a - b);
     if (idxs.length < 2) return;
     const first = drafts[idxs[0]];
-    const body = idxs.map((i, k) => (k === 0 ? drafts[i].body : `[b]${drafts[i].name}[/b]\n${drafts[i].body}`)).join('\n\n').trim();
+    const body = idxs.map((i, k) => (k === 0 ? drafts[i].body : `${subHeadingBBCode(drafts[i].name)}\n\n${drafts[i].body}`)).join('\n\n').trim();
     const drop = new Set(idxs.slice(1).map((i) => drafts[i].id));
     onChange(drafts.filter((d) => !drop.has(d.id)).map((d) => (d.id === first.id ? { ...d, body } : d)));
     setSel(new Set());
@@ -1393,7 +1419,7 @@ function FeaturesPanel({ value, onChange }: { value: FeatureDraft[]; onChange: (
               ) : d.kind === 'asi' || d.kind === 'subclass' ? (
                 <span className="font-mono text-[10px] text-ink/45" title="Levels">[{d.levels.join(',')}]</span>
               ) : null}
-              {/\[b\]/.test(d.body) ? (
+              {d.body.includes(`[${SUBHEADING_TAG}]`) ? (
                 <button type="button" onClick={() => split(d.id)} className="px-1 text-ink/40 hover:text-gold" title="Split back into separate features">⊟</button>
               ) : null}
               <button type="button" onClick={() => remove(d.id)} className="px-1 text-ink/40 hover:text-blood" title="Remove — collapses into the feature above">✕</button>
@@ -1406,7 +1432,7 @@ function FeaturesPanel({ value, onChange }: { value: FeatureDraft[]; onChange: (
                 </>
               ) : (
                 <div className="flex items-start gap-2">
-                  <div className="line-clamp-2 flex-1 text-[11px] text-ink/50">{d.body ? d.body.replace(/\[\/?b\]/g, '') : <span className="italic text-ink/30">No body</span>}</div>
+                  <div className="line-clamp-2 flex-1 text-[11px] text-ink/50">{d.body ? d.body.replace(/\[\/?(?:b|h[1-6])\]/g, '') : <span className="italic text-ink/30">No body</span>}</div>
                   <button type="button" onClick={() => toggleBody(d.id)} className="shrink-0 text-[10px] text-gold/60 hover:text-gold" title="Edit body (rich text)">edit</button>
                 </div>
               )}
@@ -1479,6 +1505,33 @@ function FieldControl({
           {attrs.length === 0 ? <p className="text-[10px] italic text-ink/30">{catalogs ? 'No attributes defined.' : 'Loading…'}</p> : null}
         </div>
         {field.help ? <p className="field-hint mt-0.5">{field.help}</p> : null}
+      </div>
+    );
+  }
+
+  if (field.kind === 'parentClass') {
+    // value = { id, identifier, name }; the picker sets all three from the chosen
+    // class row so the payload can fill class_id AND class_identifier.
+    const ref = (value && typeof value === 'object') ? value : { id: '', identifier: '', name: '' };
+    const classes: any[] = catalogs?.allClasses ?? [];
+    const options = classes.map((c) => ({ id: c.id, name: `${c.name || c.identifier || c.id}${c.identifier ? ` · ${c.identifier}` : ''}` }));
+    return (
+      <div className="sm:col-span-2" {...hover}>
+        <label className="field-label mb-1 block">{field.label}{field.required ? <span className="ml-1 text-blood">*</span> : null}</label>
+        <div className={`rounded${stateRing}`}>
+          <SingleSelectSearch
+            value={ref.id || ''}
+            onChange={(v) => {
+              const row = classes.find((c) => String(c.id) === String(v));
+              onChange(row ? { id: String(row.id), identifier: String(row.identifier ?? ''), name: String(row.name ?? '') } : { id: '', identifier: '', name: '' });
+            }}
+            options={options}
+            placeholder={catalogs ? '— choose a parent class —' : 'Loading classes…'}
+            noEntitiesText="No classes found."
+            triggerClassName="field-input w-full text-sm"
+          />
+        </div>
+        {flag ? <p className="mt-0.5 text-[10px] text-blood">{flagNote}</p> : field.help ? <p className="field-hint mt-0.5">{field.help}</p> : null}
       </div>
     );
   }
