@@ -36,6 +36,10 @@ interface Props {
   /** Extra classes for `text` block prose — lets a host (e.g. the lore article
    *  page) apply its own typography (prose-gold etc.). Homepages pass none. */
   textClassName?: string;
+  /** Anchor of a `definition` block to visually highlight (the section a reader
+   *  just jumped to from a Contents-rail click or a `&`-reference deep-link). The
+   *  system-page reader sets/clears this; other surfaces omit it. */
+  highlightedAnchor?: string;
 }
 
 /** Strip BBCode tags + collapse whitespace for a plain card excerpt. */
@@ -182,7 +186,7 @@ function EntityCard({ data, card, excerpt, title, description, viewContext }: { 
  *  map. Generic across surfaces — campaign homepages, lore articles, etc.; the
  *  campaign-only `recommended` block stays dormant unless `recommendedLore` is
  *  supplied. */
-export default function LayoutBlocks({ blocks, recommendedLore = null, campaignName = '', viewContext, className, textClassName }: Props) {
+export default function LayoutBlocks({ blocks, recommendedLore = null, campaignName = '', viewContext, className, textClassName, highlightedAnchor }: Props) {
   const refs = useMemo(() => collectRefs(blocks), [blocks]);
   // Stable signature of WHICH entities are referenced — so the resolve effect
   // fires only when the set of refs changes, not on every unrelated edit
@@ -443,8 +447,11 @@ export default function LayoutBlocks({ blocks, recommendedLore = null, campaignN
         if (!block.name && !block.body) return null;
         const aId = block.anchor || undefined;
         const aCls = block.anchor ? ' scroll-mt-24' : '';
+        // Jumped-to highlight (set by the system-page reader, cleared on next click).
+        const hot = !!block.anchor && block.anchor === highlightedAnchor;
+        const hotCls = hot ? 'border-gold bg-gold/[0.07]' : 'border-gold/35';
         return (
-          <section key={block.id} id={aId} className={`max-w-4xl border-l-2 border-gold/35 pl-4 py-1 space-y-1${aCls}`}>
+          <section key={block.id} id={aId} className={`max-w-4xl border-l-2 ${hotCls} pl-4 py-2 space-y-1 transition-colors duration-300${aCls}`}>
             {block.name && <h3 className="h3-title text-gold">{block.name}</h3>}
             {block.body && <BBCodeRenderer content={block.body} viewContext={viewContext} className="description-text" />}
           </section>

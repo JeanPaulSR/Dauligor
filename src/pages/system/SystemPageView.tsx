@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
+import { ChevronLeft } from 'lucide-react';
+import { Button } from '../../components/ui/button';
 import { fetchSystemPageDetail, type SystemPageDetail } from '../../lib/systemPages';
 import SystemPageGlossary from '../../components/compendium/SystemPageGlossary';
 
@@ -11,8 +13,18 @@ import SystemPageGlossary from '../../components/compendium/SystemPageGlossary';
  */
 export default function SystemPageView() {
   const { identifier } = useParams<{ identifier: string }>();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [detail, setDetail] = useState<SystemPageDetail | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Back to wherever the reader came from (often a `&`-reference link). When this
+  // page is the first history entry (direct visit / shared link), fall back home
+  // rather than leaving the app.
+  const goBack = () => {
+    if (location.key && location.key !== 'default') navigate(-1);
+    else navigate('/');
+  };
 
   useEffect(() => {
     let alive = true;
@@ -59,7 +71,14 @@ export default function SystemPageView() {
           </Link>
         </div>
       ) : (
-        <SystemPageGlossary page={detail.page} entries={detail.entries} blocks={detail.blocks} />
+        <>
+          <div className="mb-6">
+            <Button variant="ghost" onClick={goBack} className="text-ink/65 hover:text-gold gap-2 -ml-2">
+              <ChevronLeft className="w-4 h-4" /> Back
+            </Button>
+          </div>
+          <SystemPageGlossary page={detail.page} entries={detail.entries} blocks={detail.blocks} />
+        </>
       )}
     </div>
   );

@@ -16,6 +16,27 @@ import type { SystemPage, ResolvedEntry } from '../../lib/systemPages';
  * active entry resolves to the accent colour in serif. `#anchor` deep-links from
  * `&condition[prone]` light up the matching entry on arrival.
  */
+/* The space (px) the sticky site header / `scroll-mt-24` reserve at the top.
+   A jumped-to section must clear this so its heading isn't hidden behind it. */
+const HEADER_OFFSET = 96;
+
+/**
+ * Scroll a section into view CENTERED — but if the section is too tall to center
+ * without pushing its top up behind the header, align its top just below the
+ * header instead, so a large section always starts from the top rather than
+ * landing the reader in its middle with the heading off-screen.
+ */
+function scrollSectionIntoView(el: HTMLElement, behavior: ScrollBehavior) {
+  const rect = el.getBoundingClientRect();
+  const absTop = rect.top + window.scrollY;
+  // Where the section's top would sit in the viewport if perfectly centered.
+  const centeredViewportTop = (window.innerHeight - rect.height) / 2;
+  const top = centeredViewportTop >= HEADER_OFFSET
+    ? absTop - centeredViewportTop   // fits — center it
+    : absTop - HEADER_OFFSET;        // too tall — start at its top, below the header
+  window.scrollTo({ top: Math.max(0, top), behavior });
+}
+
 interface SystemPageGlossaryProps {
   page: SystemPage;
   entries: ResolvedEntry[];
@@ -41,9 +62,27 @@ export default function SystemPageGlossary({ page, entries, blocks = [] }: Syste
   const railKey = railItems.map((r) => r.id).join('|');
 
   const [activeId, setActiveId] = useState<string | null>(railItems[0]?.id ?? null);
+  // The section the reader just JUMPED to (rail click or `&`-ref deep-link). It
+  // stays visually highlighted until the next click anywhere on the page —
+  // distinct from `activeId`, which the scroll-spy keeps updating as you scroll.
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const railRef = useRef<HTMLElement | null>(null);
   // Suppresses the scroll-spy briefly after a click, so intermediate entries
   // don't steal the active state mid smooth-scroll. Stores an epoch ms cutoff.
   const scrollLockRef = useRef(0);
+
+  // Clear the jump highlight on the next click anywhere — except inside the
+  // Contents rail, where a click re-jumps (and re-highlights) instead. Attached
+  // a tick late so the click that set the highlight doesn't immediately clear it.
+  useEffect(() => {
+    if (!highlightedId) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (railRef.current?.contains(e.target as Node)) return;
+      setHighlightedId(null);
+    };
+    const t = window.setTimeout(() => document.addEventListener('click', onDocClick), 0);
+    return () => { window.clearTimeout(t); document.removeEventListener('click', onDocClick); };
+  }, [highlightedId]);
 
   // Scroll-spy: highlight the entry whose vertical center is nearest the
   // viewport's. Works for normal scrolling AND for centered clicks.
@@ -79,9 +118,10 @@ export default function SystemPageGlossary({ page, entries, blocks = [] }: Syste
   // until the scroll settles. Also updates the URL hash so deep-links work.
   const jumpTo = (entryId: string) => {
     setActiveId(entryId);
+    setHighlightedId(entryId);
     scrollLockRef.current = Date.now() + 800;
     const el = document.getElementById(entryId);
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (el) scrollSectionIntoView(el, 'smooth');
     if (typeof history !== 'undefined' && history.replaceState) {
       history.replaceState(null, '', `#${entryId}`);
     }
@@ -104,8 +144,9 @@ export default function SystemPageGlossary({ page, entries, blocks = [] }: Syste
       const el = document.getElementById(anchor);
       if (!el) return;
       setActiveId(anchor);
+      setHighlightedId(anchor);
       scrollLockRef.current = Date.now() + 800;
-      el.scrollIntoView({ behavior: 'auto', block: 'center' });
+      scrollSectionIntoView(el, 'auto');
     });
     return () => window.cancelAnimationFrame(raf);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -123,12 +164,12 @@ export default function SystemPageGlossary({ page, entries, blocks = [] }: Syste
         {unified ? (
           /* Unified: the whole page IS the block layout — body + definition
              entries (each rendered with its #anchor by LayoutBlocks). */
-          <LayoutBlocks blocks={blocks} className="space-y-6 max-w-none" />
+          <LayoutBlocks blocks={blocks} className="space-y-6 max-w-none" highlightedAnchor={highlightedId ?? undefined} />
         ) : (
           <>
             {/* Legacy: block (or description) body, then the entries glossary. */}
             {blocks.length > 0
-              ? <LayoutBlocks blocks={blocks} className="space-y-6 max-w-none" />
+              ? <LayoutBlocks blocks={blocks} className="space-y-6 max-w-none" highlightedAnchor={highlightedId ?? undefined} />
               : page.description ? <BBCodeRenderer content={page.description} /> : null}
 
             {entries.length === 0 ? (
@@ -139,15 +180,18 @@ export default function SystemPageGlossary({ page, entries, blocks = [] }: Syste
               <div className="flex flex-col">
                 {entries.map((entry) => {
                   const isActive = activeId === entry.identifier;
+                  const isHot = highlightedId === entry.identifier;
                   return (
                     <section
                       key={entry.identifier}
                       id={entry.identifier}
                       className={
                         'scroll-mt-24 px-5 py-4 border-l-2 transition-colors ' +
-                        (isActive
-                          ? 'bg-gold/[0.04] border-gold'
-                          : 'border-transparent hover:bg-gold/[0.04] hover:border-gold/45')
+                        (isHot
+                          ? 'bg-gold/[0.07] border-gold'
+                          : isActive
+                            ? 'bg-gold/[0.04] border-gold'
+                            : 'border-transparent hover:bg-gold/[0.04] hover:border-gold/45')
                       }
                     >
                       <div className="flex items-center gap-3 mb-1.5">
@@ -176,7 +220,7 @@ export default function SystemPageGlossary({ page, entries, blocks = [] }: Syste
 
       {/* Contents rail — pure typography. */}
       {railItems.length > 0 ? (
-        <aside className="hidden lg:block sticky top-24 self-start">
+        <aside ref={railRef} className="hidden lg:block sticky top-24 self-start">
           <p className="label-text text-gold/65 mb-3">Contents</p>
           <nav className="flex flex-col">
             {railItems.map((item) => {
