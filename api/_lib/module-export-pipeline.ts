@@ -225,11 +225,11 @@ export async function buildSourceClassCatalog(sourceSlug: string) {
   // whose label should read "TCE", not "PHB".
   const classIds = classes.map((c: any) => c.id);
   const sourcesById = new Map<string, any>(allSources.map((s: any) => [String(s.id), s]));
-  const subclassesByClassId = new Map<string, Array<{ identifier: string; name: string; shortName: string }>>();
+  const subclassesByClassId = new Map<string, Array<{ identifier: string; name: string; shortName: string; img: string }>>();
   if (classIds.length) {
     const placeholders = classIds.map(() => "?").join(",");
     const subRes = await executeD1QueryInternal({
-      sql: `SELECT id, class_id, identifier, name, source_id FROM subclasses WHERE class_id IN (${placeholders})`,
+      sql: `SELECT id, class_id, identifier, name, source_id, image_url FROM subclasses WHERE class_id IN (${placeholders})`,
       params: classIds,
     });
     for (const row of subRes.results || []) {
@@ -245,6 +245,7 @@ export async function buildSourceClassCatalog(sourceSlug: string) {
         identifier: row.identifier || row.id,
         name: row.name,
         shortName,
+        img: row.image_url || "",
       });
       subclassesByClassId.set(cid, list);
     }
@@ -253,7 +254,7 @@ export async function buildSourceClassCatalog(sourceSlug: string) {
   const entries = classes.map((cls: any) => {
     const identifier = cls.identifier || cls.id;
     const subList = (subclassesByClassId.get(cls.id) ?? [])
-      .map((sub) => ({ sourceId: `subclass-${sub.identifier}`, name: sub.name, shortName: sub.shortName }))
+      .map((sub) => ({ sourceId: `subclass-${sub.identifier}`, name: sub.name, shortName: sub.shortName, img: sub.img }))
       .sort((a, b) => a.name.localeCompare(b.name));
     return {
       sourceId: `class-${identifier}`,

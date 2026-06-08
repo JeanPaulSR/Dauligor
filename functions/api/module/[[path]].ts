@@ -290,11 +290,14 @@ export const onRequest = async (context: any): Promise<Response> => {
       const result = await getOrBuild(
         sourceClassCatalogKey(sourceSlug),
         () => buildSourceClassCatalog(sourceSlug),
-        // Self-heal catalogs cached before `category` was added: a cached blob
-        // whose entries lack a string `category` is treated as invalid and
-        // rebuilt on next read (handoff foundry-module → 2026-06-04).
+        // Self-heal catalogs cached before `category` / subclass `img` were
+        // added: a cached blob whose entries lack a string `category`, or whose
+        // subclasses lack a string `img`, is treated as invalid and rebuilt on
+        // next read (handoffs foundry-module → 2026-06-04 + 2026-06-07).
         (cached: any) => Array.isArray(cached?.entries)
-          && cached.entries.every((e: any) => typeof e?.category === "string"),
+          && cached.entries.every((e: any) =>
+            typeof e?.category === "string"
+            && (!Array.isArray(e?.subclasses) || e.subclasses.every((s: any) => typeof s?.img === "string"))),
       );
       if (result) return serveCached(result);
     }
