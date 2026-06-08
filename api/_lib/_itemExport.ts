@@ -298,12 +298,19 @@ export async function buildItemBundle(
     ? priceRaw
     : { value: Number(row.price ?? 0) || 0, denomination: "gp" };
 
+  // Chat Description (system.description.chat) + Unidentified Description
+  // (system.unidentified.description) — BBCode → HTML, mirroring the main
+  // description above. Both were previously dropped on export.
+  const chatHtml = trimString(row.chat_description) ? bbcodeToHtml(trimString(row.chat_description)) : "";
+  const unidentifiedHtml = trimString(row.unidentified_description) ? bbcodeToHtml(trimString(row.unidentified_description)) : "";
+
   const baseSystem: Record<string, any> = {
     identifier: sourceId.replace(/^item-/, ""),
     description: {
       value: descriptionHtml,
-      chat: "",
+      chat: chatHtml,
     },
+    unidentified: { description: unidentifiedHtml },
     properties: propertiesArr,
     rarity: trimString(row.rarity) || "common",
     attunement: trimString(row.attunement),

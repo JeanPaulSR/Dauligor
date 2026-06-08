@@ -15,6 +15,11 @@ export const D1_TABLE_MAP: Record<string, string> = {
   consumableCategories: 'consumable_categories',
   lootCategories: 'loot_categories',
   itemProperties: 'item_properties',
+  // Admin-managed consumable second-axis taxonomies (Foundry
+  // system.type.subtype) — drive the Ammunition Type / Poison Type
+  // dropdowns on the consumable Details tab. Migration 20260607-1300.
+  ammunitionTypes: 'ammunition_types',
+  poisonTypes: 'poison_types',
   damageTypes: 'damage_types',
   statuses: 'status_conditions',
   conditionCategories: 'condition_categories',

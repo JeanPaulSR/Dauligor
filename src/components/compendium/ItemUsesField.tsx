@@ -1,8 +1,9 @@
 import React from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { Input } from '../ui/input';
+import { Label } from '../ui/label';
 import { Checkbox } from '../ui/checkbox';
-import { ActivitySection, FieldRow } from './activity/primitives';
+import { FieldRow } from './activity/primitives';
 import SingleSelectSearch from '../ui/SingleSelectSearch';
 import { RECOVERY_PERIOD_OPTIONS, RECOVERY_TYPE_OPTIONS } from './activity/constants';
 
@@ -60,28 +61,36 @@ export default function ItemUsesField({ uses, onChange, showAutoDestroy = true }
   };
 
   return (
-    <div>
-      <ActivitySection label="USES">
-        <FieldRow label="Maximum">
-          <Input
-            value={uses?.max || ''}
-            onChange={e => onChange({ ...(uses || {}), max: e.target.value })}
-            className="field-input border-gold/15 text-xs"
-            placeholder="Formula or number"
-          />
-        </FieldRow>
-        <FieldRow label="Spent">
-          <Input
-            type="number"
-            value={uses?.spent || 0}
-            onChange={e => onChange({ ...(uses || {}), spent: parseInt(e.target.value) || 0 })}
-            className="field-input border-gold/15 text-xs text-center no-number-spin"
-          />
+    <div className="space-y-4">
+      {/* Usage — Foundry dnd5e: Limited Uses (Spent / Max) + Destroy on Empty. */}
+      <fieldset className="config-fieldset">
+        <legend className="section-label text-gold/60 px-1">Usage</legend>
+        <FieldRow label="Limited Uses">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-0.5">
+              <Label className="field-label">Spent</Label>
+              <Input
+                type="number"
+                value={uses?.spent || 0}
+                onChange={e => onChange({ ...(uses || {}), spent: parseInt(e.target.value) || 0 })}
+                className="h-8 bg-background/50 border-gold/15 text-sm text-center no-number-spin"
+              />
+            </div>
+            <div className="space-y-0.5">
+              <Label className="field-label">Max</Label>
+              <Input
+                value={uses?.max || ''}
+                onChange={e => onChange({ ...(uses || {}), max: e.target.value })}
+                className="h-8 bg-background/50 border-gold/15 text-sm"
+                placeholder="Formula or number"
+              />
+            </div>
+          </div>
         </FieldRow>
         {showAutoDestroy && (
           <FieldRow
-            label="Auto-Destroy When Empty"
-            hint="Destroys the item when uses reach 0 (potions, scrolls)."
+            label="Destroy on Empty"
+            hint="Reduce the item's quantity by 1 whenever all of its limited uses are expended."
             inline
           >
             <Checkbox
@@ -90,12 +99,14 @@ export default function ItemUsesField({ uses, onChange, showAutoDestroy = true }
             />
           </FieldRow>
         )}
-      </ActivitySection>
+      </fieldset>
 
-      <ActivitySection label="RECOVERY">
-        <div className="space-y-2 py-2">
+      {/* Recovery — when/how the uses regenerate. "Never" when empty. */}
+      <fieldset className="config-fieldset">
+        <legend className="section-label text-gold/60 px-1">Recovery</legend>
+        <div className="space-y-2 py-1">
           {recovery.map((entry, idx) => (
-            <div key={idx} className="flex gap-2 items-center p-2.5 bg-gold/5 border border-gold/5 rounded">
+            <div key={idx} className="flex gap-2 items-center">
               <SingleSelectSearch
                 value={entry.period || ''}
                 onChange={(val) => {
@@ -125,7 +136,7 @@ export default function ItemUsesField({ uses, onChange, showAutoDestroy = true }
                   next[idx] = { ...entry, formula: e.target.value };
                   patchRecovery(next);
                 }}
-                className="h-7 text-[10px] font-mono bg-background/40 border-gold/15 flex-1"
+                className="h-8 text-[10px] font-mono bg-background/40 border-gold/15 flex-1"
                 placeholder="1d4 or @prof"
               />
               <button
@@ -139,17 +150,17 @@ export default function ItemUsesField({ uses, onChange, showAutoDestroy = true }
             </div>
           ))}
           {recovery.length === 0 && (
-            <p className="text-center py-3 text-ink/35 italic text-[10px]">No recovery rules.</p>
+            <p className="text-center py-1 text-ink/35 italic text-xs">Never</p>
           )}
           <button
             type="button"
             onClick={() => patchRecovery([...recovery, { period: '', type: '', formula: '' }])}
             className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[10px] uppercase tracking-widest font-black text-gold/55 hover:text-gold border border-dashed border-gold/15 hover:border-gold/35 rounded transition-colors"
           >
-            <Plus className="w-3 h-3" /> Add Recovery Rule
+            <Plus className="w-3 h-3" /> Add Recovery
           </button>
         </div>
-      </ActivitySection>
+      </fieldset>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { X } from 'lucide-react';
+import { X, ChevronLeft, Pencil } from 'lucide-react';
 import ItemImportWorkbench from '../../components/compendium/ItemImportWorkbench';
 import ActivityEditor from '../../components/compendium/ActivityEditor';
 import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
@@ -48,8 +48,10 @@ import { ImageUpload } from '../../components/ui/ImageUpload';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import SingleSelectSearch from '../../components/ui/SingleSelectSearch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { ActivitySection, FieldRow } from '../../components/compendium/activity/primitives';
 import { ABILITY_OPTIONS, FALLBACK_ABILITY_LABELS, DAMAGE_TYPE_OPTIONS, DAMAGE_DIE_DENOMINATIONS } from '../../components/compendium/activity/constants';
+import DamagePartEditor from '../../components/compendium/activity/DamagePartEditor';
 
 // ─── Vocabularies ──────────────────────────────────────────────────
 //
@@ -57,13 +59,14 @@ import { ABILITY_OPTIONS, FALLBACK_ABILITY_LABELS, DAMAGE_TYPE_OPTIONS, DAMAGE_D
 // surfaces. Slug values stay Foundry-canonical for round-trip; labels
 // are display-only.
 
+// Alphabetized by label so the Item Type dropdown reads in order.
 const ITEM_TYPES: [string, string][] = [
-  ['weapon', 'Weapon'],
-  ['equipment', 'Equipment / Armor'],
   ['consumable', 'Consumable'],
-  ['tool', 'Tool'],
   ['container', 'Container'],
+  ['equipment', 'Equipment / Armor'],
   ['loot', 'Loot / Wondrous'],
+  ['tool', 'Tool'],
+  ['weapon', 'Weapon'],
 ];
 
 const ITEM_TYPE_LABEL: Record<string, string> =
@@ -112,15 +115,17 @@ const EQUIPMENT_SUBTYPES: [string, string][] = [
 
 const EQUIPMENT_ARMOR_SUBTYPES = new Set(['light', 'medium', 'heavy', 'shield']);
 
+// Alphabetized by label.
 const CONSUMABLE_SUBTYPES: [string, string][] = [
-  ['potion', 'Potion'],
-  ['scroll', 'Scroll'],
-  ['poison', 'Poison'],
   ['ammo', 'Ammunition'],
-  ['wand', 'Wand'],
-  ['rod', 'Rod'],
   ['food', 'Food / Drink'],
+  ['poison', 'Poison'],
+  ['potion', 'Potion'],
+  ['rod', 'Rod'],
+  ['scroll', 'Scroll'],
   ['trinket', 'Trinket'],
+  ['wand', 'Wand'],
+  ['wondrous', 'Wondrous Item'],
 ];
 
 const TOOL_SUBTYPES: [string, string][] = [
@@ -180,6 +185,7 @@ type ItemFormData = {
   // Type discriminators
   itemType: string;
   typeSubtype: string;
+  typeInnerSubtype: string;
 
   // Physical
   rarity: string;
@@ -193,6 +199,7 @@ type ItemFormData = {
   identified: boolean;
   magical: boolean;
   unidentifiedDescription: string;
+  chatDescription: string;
 
   // Properties (slug array)
   properties: string[];
@@ -257,6 +264,7 @@ const ITEM_DEFAULTS: Omit<ItemFormData, 'sourceId'> & { sourceId?: string } = {
   description: '',
   itemType: 'loot',
   typeSubtype: '',
+  typeInnerSubtype: '',
   rarity: 'none',
   quantity: 1,
   weight: { value: 0, units: 'lb' },
@@ -266,6 +274,7 @@ const ITEM_DEFAULTS: Omit<ItemFormData, 'sourceId'> & { sourceId?: string } = {
   identified: true,
   magical: false,
   unidentifiedDescription: '',
+  chatDescription: '',
   properties: [],
   uses: { max: '', spent: 0, recovery: [], autoDestroy: false },
   damage: null,
@@ -308,10 +317,14 @@ type ProficiencyBucket = {
   tools: any[];
   abilities: any[];
   weaponProperties: any[];
+  itemProperties: any[];
+  ammunitionTypes: any[];
+  poisonTypes: any[];
 };
 
 const EMPTY_BUCKET: ProficiencyBucket = {
   weapons: [], armor: [], tools: [], abilities: [], weaponProperties: [],
+  itemProperties: [], ammunitionTypes: [], poisonTypes: [],
 };
 
 // Property axis values — surfaced via the multi-axis property filter.
@@ -503,6 +516,9 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
           tagGroupRows,
           featRows,
           featureRows,
+          itemPropertyRows,
+          ammunitionTypeRows,
+          poisonTypeRows,
         ] = await Promise.all([
           fetchCollection<any>('items', { orderBy: 'name ASC' }),
           fetchCollection<any>('sources', { orderBy: 'name ASC' }),
@@ -519,6 +535,12 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
           // `availableFeats` source (`entries`).
           fetchCollection<any>('feats', { orderBy: 'name ASC' }),
           fetchCollection<any>('features', { orderBy: 'name ASC' }),
+          // Item taxonomies for the per-type Details sub-forms: item
+          // properties (carry valid_types) + the ammunition / poison
+          // second-axis lists.
+          fetchCollection<any>('itemProperties', { orderBy: 'name ASC' }),
+          fetchCollection<any>('ammunitionTypes', { orderBy: 'sort_order, name' }),
+          fetchCollection<any>('poisonTypes', { orderBy: 'sort_order, name' }),
         ]);
         if (cancelled) return;
 
@@ -594,6 +616,11 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
           tools: tools.map((r) => denormalizeCompendiumData(r)),
           abilities: abilities.map((r) => denormalizeCompendiumData(r)),
           weaponProperties: weaponProperties.map((r) => denormalizeCompendiumData(r)),
+          // Keep item_properties raw — valid_types stays a JSON string for
+          // the per-type filter (mirrors ActivityEditor's enchant usage).
+          itemProperties: itemPropertyRows,
+          ammunitionTypes: ammunitionTypeRows,
+          poisonTypes: poisonTypeRows,
         });
         // Phase C — feats + features for the ItemBumpUses target picker.
         // Raw rows are fine here; the AdvancementManager picker only
@@ -686,6 +713,7 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
         description: cached.description || '',
         itemType: cached.itemType || cached.item_type || 'loot',
         typeSubtype: cached.typeSubtype || cached.type_subtype || '',
+        typeInnerSubtype: cached.typeInnerSubtype || cached.type_inner_subtype || '',
         rarity: cached.rarity || 'none',
         quantity: Number(cached.quantity ?? 1) || 1,
         weight: cached.weight && typeof cached.weight === 'object'
@@ -704,6 +732,7 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
         identified: cached.identified !== false,
         magical: !!cached.magical,
         unidentifiedDescription: cached.unidentifiedDescription || cached.unidentified_description || '',
+        chatDescription: cached.chatDescription || cached.chat_description || '',
         properties: Array.isArray(cached.properties) ? cached.properties : [],
         uses: cached.uses && typeof cached.uses === 'object'
           ? {
@@ -855,6 +884,7 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
         description: formData.description || '',
         item_type: formData.itemType || 'loot',
         type_subtype: formData.typeSubtype || null,
+        type_inner_subtype: formData.typeInnerSubtype || null,
         rarity: formData.rarity || 'none',
         quantity: Number(formData.quantity) || 1,
         weight: formData.weight,
@@ -862,8 +892,12 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
         attunement: formData.attunement || '',
         equipped: formData.equipped ? 1 : 0,
         identified: formData.identified ? 1 : 0,
-        magical: formData.magical ? 1 : 0,
+        // Magical is now the `mgc` property (Details), not a Basics
+        // checkbox — keep the legacy boolean column in sync so the list
+        // filter + export's magical derivation still work.
+        magical: (Array.isArray(formData.properties) && formData.properties.includes('mgc')) ? 1 : 0,
         unidentified_description: formData.unidentifiedDescription || null,
+        chat_description: formData.chatDescription || null,
         properties: Array.isArray(formData.properties) ? formData.properties : [],
         uses: {
           max: formData.uses.max || '',
@@ -872,7 +906,7 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
           autoDestroy: !!formData.uses.autoDestroy,
         },
         // Weapon stats — only weapons populate these; null for everything else.
-        damage: formData.itemType === 'weapon' ? formData.damage : null,
+        damage: (formData.itemType === 'weapon' || formData.itemType === 'consumable') ? formData.damage : null,
         range: formData.itemType === 'weapon' ? formData.range : null,
         mastery: formData.mastery || null,
         magical_bonus: Number(formData.magicalBonus) || 0,
@@ -996,6 +1030,9 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
         const hit = String(entry.name || '').toLowerCase().includes(lowered)
           || String(entry.identifier || '').toLowerCase().includes(lowered)
           || String(entry.itemType || '').toLowerCase().includes(lowered)
+          // Subtype slug so "wondrous" finds the consumable AND the
+          // equipment wondrous items (both carry type_subtype = 'wondrous').
+          || String(entry.type_subtype || '').toLowerCase().includes(lowered)
           || sourceAbbrev.includes(lowered);
         if (!hit) return false;
       }
@@ -1091,7 +1128,7 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
     },
     {
       key: 'mechanics',
-      label: 'Mechanics',
+      label: 'Details',
       layout: 'scroll',
       render: () => (
         <MechanicsTab
@@ -1395,6 +1432,14 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
         identitySourceAbbrev={formData.sourceId ? String(sourceAbbrevById[formData.sourceId] || formData.sourceId) : undefined}
         identitySourceFullName={formData.sourceId ? String(sourceNameById[formData.sourceId] || formData.sourceId) : undefined}
         identitySubtitle={identitySubtitle}
+        headerActionsLeading={
+          <FieldSelect
+            value={formData.itemType || 'loot'}
+            onChange={(val) => setFormData((prev) => ({ ...prev, itemType: val, typeSubtype: '', typeInnerSubtype: '' }))}
+            options={ITEM_TYPES}
+            triggerClassName="w-44"
+          />
+        }
         onSave={(e) => void handleSave(e)}
         onDelete={editingId && !isProposalMode ? handleDelete : undefined}
         onReset={resetForm}
@@ -1454,11 +1499,75 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
   );
 }
 
+// ─── Description fields + focused editor window ────────────────────
+//
+// Foundry's item Description tab carries three rich-text blocks:
+// Description, Unidentified Description, Chat Description. On Basics we
+// show them as compact rows; clicking one opens a focused full-window
+// editor (with a Back button) so there's real room to write.
+const DESCRIPTION_FIELDS: {
+  key: 'description' | 'unidentified' | 'chat';
+  label: string;
+  hint?: string;
+  field: 'description' | 'unidentifiedDescription' | 'chatDescription';
+}[] = [
+  { key: 'description', label: 'Description', field: 'description' },
+  {
+    key: 'unidentified',
+    label: 'Unidentified Description',
+    hint: 'Shown to players before the item is identified. Optional.',
+    field: 'unidentifiedDescription',
+  },
+  {
+    key: 'chat',
+    label: 'Chat Description',
+    hint: 'Shown in the chat card when the item is used. Optional.',
+    field: 'chatDescription',
+  },
+];
+
+// Site-standard dropdown: the shared base-ui Select, styled to match
+// the form inputs (height / background / gold border) so dropdowns and
+// text inputs read as one consistent family instead of a mix of
+// controls. Takes the same `[value, label][]` option shape as the
+// vocabulary constants above.
+function FieldSelect({
+  value,
+  onChange,
+  options,
+  placeholder,
+  triggerClassName,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  options: [string, string][];
+  placeholder?: string;
+  triggerClassName?: string;
+}) {
+  return (
+    <Select value={value} onValueChange={(v) => { if (v == null) return; onChange(String(v)); }}>
+      <SelectTrigger
+        className={cn(
+          'rounded-md border-gold/15 bg-background/50 text-sm dark:bg-background/50 focus-visible:border-gold focus-visible:ring-0',
+          triggerClassName,
+        )}
+      >
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map(([v, l]) => (
+          <SelectItem key={v} value={v}>{l}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 // ─── Basics tab ───────────────────────────────────────────────────
 //
-// Identity + physical fields. The Item Type dropdown sits FIRST so it
-// reads as the discriminator that drives the Mechanics tab's sub-form.
-// Identifier auto-derives from name on initial entry.
+// Identity + physical fields, then the three description blocks. The
+// Item Type discriminator lives in the editor header (top-right, beside
+// Save) via `headerActionsLeading`. Identifier auto-derives from name.
 
 function BasicsTab({
   formData,
@@ -1471,43 +1580,51 @@ function BasicsTab({
   sources: any[];
   editingId: string | null;
 }) {
-  const subtypeOptions = getSubtypeOptions(formData.itemType);
+  const [editingDesc, setEditingDesc] = useState<null | 'description' | 'unidentified' | 'chat'>(null);
+  const editingMeta = editingDesc ? DESCRIPTION_FIELDS.find((d) => d.key === editingDesc) : null;
+
+  // Esc returns from the focused description editor to the field list.
+  useEffect(() => {
+    if (!editingDesc) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setEditingDesc(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [editingDesc]);
+
+  // Focused full-pane editor for one description — replaces the field
+  // list (same dark, fill-height experience as the feature editor).
+  if (editingMeta) {
+    return (
+      <div className="flex flex-1 min-h-0 flex-col">
+        <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-gold/15 pb-2">
+          <button
+            type="button"
+            onClick={() => setEditingDesc(null)}
+            className="flex items-center gap-1 text-sm font-medium text-gold transition-colors hover:text-gold/80"
+          >
+            <ChevronLeft className="h-4 w-4" /> Back
+          </button>
+          <span className="text-[11px] font-bold uppercase tracking-widest text-ink/65">{editingMeta.label}</span>
+          {editingMeta.hint ? (
+            <span className="text-[11px] italic text-ink/40">{editingMeta.hint}</span>
+          ) : null}
+        </div>
+        <div className="mt-2 flex min-h-0 flex-1 flex-col">
+          <MarkdownEditor
+            value={String(formData[editingMeta.field] || '')}
+            onChange={(v) => setFormData((prev) => ({ ...prev, [editingMeta.field]: v }))}
+            fillContainer
+            className="flex-1 min-h-0"
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
       {/* Type discriminator — distinctly styled to signal it drives
           the Mechanics tab. */}
-      <div className="rounded border-2 border-gold/25 bg-gold/5 p-3 space-y-2">
-        <Label className="text-[10px] font-bold uppercase tracking-widest text-gold/85">
-          Item Type — drives Mechanics tab
-        </Label>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          <SingleSelectSearch
-            value={formData.itemType || 'loot'}
-            onChange={(val) => setFormData((prev) => ({
-              ...prev,
-              itemType: val,
-              // Reset subtype when parent type changes — each type has
-              // its own enum.
-              typeSubtype: '',
-            }))}
-            options={ITEM_TYPES.map(([v, l]) => ({ id: v, name: l }))}
-            triggerClassName="w-full"
-          />
-          {subtypeOptions && (
-            <SingleSelectSearch
-              value={formData.typeSubtype || ''}
-              onChange={(val) => setFormData((prev) => ({ ...prev, typeSubtype: val }))}
-              options={[
-                { id: '', name: '— subtype —' },
-                ...subtypeOptions.map(([v, l]) => ({ id: v, name: l })),
-              ]}
-              triggerClassName="w-full"
-            />
-          )}
-        </div>
-      </div>
-
       {/* Identity row — image + name/identifier/source/page. */}
       <div className="grid gap-3 md:grid-cols-[80px_minmax(0,1fr)] shrink-0">
         <ImageUpload
@@ -1540,16 +1657,13 @@ function BasicsTab({
           </ReviewFieldHighlight>
           <ReviewFieldHighlight columnKey="source_id" className="space-y-0.5">
             <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/45">Source</Label>
-            <select
+            <FieldSelect
               value={formData.sourceId}
-              onChange={(e) => setFormData((prev) => ({ ...prev, sourceId: e.target.value }))}
-              className="w-full h-8 px-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm"
-            >
-              <option value="">Select a source</option>
-              {sources.map((source) => (
-                <option key={source.id} value={source.id}>{source.name}</option>
-              ))}
-            </select>
+              onChange={(val) => setFormData((prev) => ({ ...prev, sourceId: val }))}
+              options={sources.map((source): [string, string] => [String(source.id), String(source.name)])}
+              placeholder="Select a source"
+              triggerClassName="w-full"
+            />
           </ReviewFieldHighlight>
           <ReviewFieldHighlight columnKey="page" className="space-y-0.5">
             <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/45">Page</Label>
@@ -1563,14 +1677,15 @@ function BasicsTab({
         </div>
       </div>
 
-      {/* Physical grid — rarity / quantity / weight / price / magical. */}
-      <div className="grid gap-3 grid-cols-2 md:grid-cols-5">
+      {/* Physical grid — rarity / quantity / weight / price. (Magical
+          moved to each type's Details properties.) */}
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
         <div className="space-y-0.5">
           <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/45">Rarity</Label>
-          <SingleSelectSearch
+          <FieldSelect
             value={formData.rarity || 'none'}
             onChange={(val) => setFormData((prev) => ({ ...prev, rarity: val }))}
-            options={RARITIES.map(([v, l]) => ({ id: v, name: l }))}
+            options={RARITIES}
             triggerClassName="w-full"
           />
         </div>
@@ -1600,14 +1715,14 @@ function BasicsTab({
               }))}
               className="h-8 bg-background/50 border-gold/15 focus:border-gold text-sm flex-1"
             />
-            <SingleSelectSearch
+            <FieldSelect
               value={formData.weight?.units || 'lb'}
               onChange={(val) => setFormData((prev) => ({
                 ...prev,
                 weight: { value: prev.weight?.value ?? 0, units: val },
               }))}
-              options={WEIGHT_UNITS.map(([v, l]) => ({ id: v, name: l }))}
-              triggerClassName="w-16"
+              options={WEIGHT_UNITS}
+              triggerClassName="w-16 shrink-0"
             />
           </div>
         </div>
@@ -1624,35 +1739,38 @@ function BasicsTab({
               }))}
               className="h-8 bg-background/50 border-gold/15 focus:border-gold text-sm flex-1"
             />
-            <SingleSelectSearch
+            <FieldSelect
               value={formData.price?.denomination || 'gp'}
               onChange={(val) => setFormData((prev) => ({
                 ...prev,
                 price: { value: prev.price?.value ?? 0, denomination: val },
               }))}
-              options={DENOMINATIONS.map(([v, l]) => ({ id: v, name: l }))}
-              triggerClassName="w-16"
+              options={DENOMINATIONS}
+              triggerClassName="w-16 shrink-0"
             />
           </div>
         </div>
-        <label className="flex items-end gap-2 pb-1">
-          <Checkbox
-            checked={!!formData.magical}
-            onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, magical: !!checked }))}
-          />
-          <span className="text-xs text-ink/75">Magical</span>
-        </label>
       </div>
 
-      {/* Description — markdown editor takes remaining height via
-          `layout: 'fill'` on the sub-tab. */}
-      <div className="flex-1 flex flex-col min-h-0 space-y-1">
-        <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/45">Description</Label>
-        <MarkdownEditor
-          value={formData.description}
-          onChange={(description) => setFormData((prev) => ({ ...prev, description }))}
-          fillContainer
-        />
+      {/* Descriptions — each row opens a focused full-window editor. */}
+      <div className="space-y-2">
+        {DESCRIPTION_FIELDS.map(({ key, label, field }) => {
+          const filled = String(formData[field] || '').trim().length > 0;
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setEditingDesc(key)}
+              className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-md border border-gold/15 bg-background/30 hover:bg-gold/5 hover:border-gold/30 transition-colors text-left"
+            >
+              <span className="text-[11px] font-bold uppercase tracking-widest text-ink/65">{label}</span>
+              <span className="flex items-center gap-2 shrink-0">
+                <span className="text-[10px] italic text-ink/35">{filled ? 'Edit' : 'Empty'}</span>
+                <Pencil className="w-3.5 h-3.5 text-gold/60" />
+              </span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -1675,6 +1793,13 @@ function MechanicsTab({
   profs: ProficiencyBucket;
 }) {
   const itemType = formData.itemType || 'loot';
+
+  // Per-type Foundry-faithful Details layouts, built one type at a time.
+  // Consumable is done; the other types fall through to the generic
+  // layout below until each is rebuilt.
+  if (itemType === 'consumable') {
+    return <ConsumableDetails formData={formData} setFormData={setFormData} profs={profs} />;
+  }
 
   return (
     <div className="space-y-4 pt-4 border-t border-gold/15">
@@ -1767,6 +1892,144 @@ function MechanicsTab({
   );
 }
 
+// ─── Consumable Details (Foundry dnd5e 5.3.1 consumable sheet) ──────
+//
+// Two fieldsets mirroring the real sheet: CONSUMABLE DETAILS (type +
+// properties) and USAGE (limited uses + destroy-on-empty). Magical,
+// attunement, and the ammo-only magical bonus fold into the
+// "Consumable Properties" step (built next); equipped/identified are
+// dropped (Foundry doesn't surface them for consumables).
+function ConsumableDetails({
+  formData,
+  setFormData,
+  profs,
+}: {
+  formData: ItemFormData;
+  setFormData: React.Dispatch<React.SetStateAction<ItemFormData>>;
+  profs: ProficiencyBucket;
+}) {
+  const subtype = formData.typeSubtype || '';
+  const isAmmo = subtype === 'ammo';
+  const isPoison = subtype === 'poison';
+
+  // Properties available for this consumable: ammo pulls the ammunition
+  // set (item_properties whose valid_types includes 'ammo'); every other
+  // consumable pulls the 'consumable' set. Both come from the admin-managed
+  // item_properties table — same filter the Enchant activity uses.
+  // A consumable's properties = item_properties valid for 'consumable'
+  // (e.g. Magical) PLUS any valid for this specific subtype slug
+  // (ammo → Adamantine / Returning / Silvered; scroll → spell components).
+  const propertyCatalog = useMemo(() => {
+    const list = Array.isArray(profs.itemProperties) ? profs.itemProperties : [];
+    return list
+      .filter((p: any) => {
+        try {
+          const vt = JSON.parse(p.valid_types || '[]');
+          return vt.includes('consumable') || (!!subtype && vt.includes(subtype));
+        } catch { return false; }
+      })
+      .map((p: any) => ({ id: String(p.identifier || p.id), name: String(p.name || p.identifier) }));
+  }, [profs.itemProperties, subtype]);
+
+  const properties = Array.isArray(formData.properties) ? formData.properties : [];
+  const toggleProperty = (slug: string) => setFormData((prev) => {
+    const cur = Array.isArray(prev.properties) ? prev.properties : [];
+    return { ...prev, properties: cur.includes(slug) ? cur.filter((s) => s !== slug) : [...cur, slug] };
+  });
+
+  // Ammo damage rides the items.damage column in Foundry's `system.damage`
+  // shape: { base: <DamagePart>, replace: <bool> }.
+  const damage = (formData.damage && typeof formData.damage === 'object') ? formData.damage : {};
+  const basePart = (damage.base && typeof damage.base === 'object') ? damage.base : {};
+  const setDamage = (patch: Record<string, any>) =>
+    setFormData((prev) => ({
+      ...prev,
+      damage: { ...((prev.damage && typeof prev.damage === 'object') ? prev.damage : {}), ...patch },
+    }));
+
+  const innerSource = isAmmo ? profs.ammunitionTypes : isPoison ? profs.poisonTypes : [];
+  const innerOptions: [string, string][] = (Array.isArray(innerSource) ? innerSource : [])
+    .map((r: any): [string, string] => [String(r.identifier || r.id), String(r.name || r.identifier)]);
+
+  return (
+    <div className="space-y-4 pt-4 border-t border-gold/15">
+      <fieldset className="config-fieldset">
+        <legend className="section-label text-gold/60 px-1">Consumable Details</legend>
+        <FieldRow label="Consumable Type">
+          <FieldSelect
+            value={subtype}
+            onChange={(val) => setFormData((prev) => ({ ...prev, typeSubtype: val, typeInnerSubtype: '' }))}
+            options={CONSUMABLE_SUBTYPES}
+            placeholder="— select —"
+            triggerClassName="w-full"
+          />
+        </FieldRow>
+        {(isAmmo || isPoison) && (
+          <FieldRow label={isAmmo ? 'Ammunition Type' : 'Poison Type'}>
+            <FieldSelect
+              value={formData.typeInnerSubtype || ''}
+              onChange={(val) => setFormData((prev) => ({ ...prev, typeInnerSubtype: val }))}
+              options={innerOptions}
+              placeholder="— select —"
+              triggerClassName="w-full"
+            />
+          </FieldRow>
+        )}
+        {/* Properties — full-width checkbox grid (label on top), matching
+            Foundry's stacked checkbox-grid rather than a cramped FieldRow. */}
+        <div className="py-2 space-y-1.5">
+          <p className="text-xs font-semibold text-ink/85 leading-tight">
+            {isAmmo ? 'Ammunition Properties' : 'Consumable Properties'}
+          </p>
+          {propertyCatalog.length === 0 ? (
+            <p className="field-hint">No properties for this type.</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3">
+              {propertyCatalog.map((p) => (
+                <label key={p.id} className="flex items-center gap-2 cursor-pointer">
+                  <Checkbox
+                    checked={properties.includes(p.id)}
+                    onCheckedChange={() => toggleProperty(p.id)}
+                  />
+                  <span className="text-xs text-ink/75">{p.name}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      </fieldset>
+
+      {isAmmo && (
+        <fieldset className="config-fieldset">
+          <legend className="section-label text-gold/60 px-1">Ammunition Damage</legend>
+          <FieldRow
+            label="Replace Weapon Damage"
+            hint="Replace the firing weapon's damage with this, rather than adding to it."
+            inline
+          >
+            <Checkbox checked={!!damage.replace} onCheckedChange={(c) => setDamage({ replace: !!c })} />
+          </FieldRow>
+          <DamagePartEditor
+            parts={[basePart]}
+            onChange={(next) => setDamage({ base: next[0] || {} })}
+            typeOptions={DAMAGE_TYPE_OPTIONS}
+            canScale={false}
+          />
+        </fieldset>
+      )}
+
+      {/* Usage — the activity-level uses editor, always shown (a consumable
+          always carries uses; there's no "whether to consume" choice like an
+          activity's consumption config). */}
+      <ItemUsesField
+        uses={formData.uses}
+        onChange={(next) => setFormData((prev) => ({ ...prev, uses: next as any }))}
+        showAutoDestroy
+      />
+    </div>
+  );
+}
+
 // ─── Shared sub-sections ──────────────────────────────────────────
 
 function BaseItemSection({
@@ -1831,17 +2094,6 @@ function EquippabilitySection({
         <Checkbox
           checked={formData.identified !== false}
           onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, identified: !!checked }))}
-        />
-      </FieldRow>
-      <FieldRow
-        label="Unidentified Description"
-        hint="Shown to players before the item is identified. Optional."
-      >
-        <textarea
-          value={formData.unidentifiedDescription || ''}
-          onChange={(e) => setFormData((prev) => ({ ...prev, unidentifiedDescription: e.target.value }))}
-          className="w-full min-h-[60px] px-3 py-2 rounded-md border border-gold/15 bg-background/50 focus:border-gold outline-none text-sm"
-          placeholder="A nondescript [item]…"
         />
       </FieldRow>
     </ActivitySection>

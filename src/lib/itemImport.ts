@@ -487,6 +487,14 @@ function buildUnifiedItemSavePayload(
     ? convertFoundryHtmlToBbcode(String(system.unidentified.description))
     : null;
 
+  // ── chat description ──
+  // Foundry's `system.description.chat` — the rich-text "Chat Description"
+  // block shown on every item's Description tab. Distinct from
+  // `system.chatFlavor` (captured as chat_flavor for tools).
+  const chatDescription = system.description?.chat
+    ? convertFoundryHtmlToBbcode(String(system.description.chat))
+    : null;
+
   // Common fields — same shape every Foundry item type carries.
   const commonPayload: Record<string, any> = {
     name: item.name || sourceDocument.name || 'Item',
@@ -520,6 +528,7 @@ function buildUnifiedItemSavePayload(
     uses: usesPayload,
     type_subtype: typeSubtype,
     unidentified_description: unidentifiedDescription,
+    chat_description: chatDescription,
     tagIds: [],
   };
 

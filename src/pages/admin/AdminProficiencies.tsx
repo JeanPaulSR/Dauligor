@@ -11,6 +11,8 @@ import {
   Award,
   Wand2,
   ChevronLeft,
+  Target,
+  FlaskConical,
   type LucideIcon,
 } from 'lucide-react';
 import { queryD1 } from '../../lib/d1';
@@ -52,7 +54,7 @@ const TAXONOMY_TAB_BASE = {
 // feedback: authors build the categories first, then assign items to
 // them, so categories should be the top layer.
 
-type GroupKey = 'combat' | 'language' | 'system';
+type GroupKey = 'combat' | 'language' | 'system' | 'items';
 
 interface TabEntry {
   id: string;
@@ -69,6 +71,7 @@ const GROUP_LABELS: Record<GroupKey, string> = {
   combat: 'Combat',
   language: 'Language',
   system: 'Game System',
+  items: 'Items',
 };
 
 const TABS: TabEntry[] = [
@@ -90,6 +93,10 @@ const TABS: TabEntry[] = [
   // wide classification rather than combat-specific.
   { id: 'featCategories', label: 'Feat Categories', icon: Award, group: 'system', countTable: 'featCategories' },
   { id: 'spellcasting', label: 'Spellcasting', icon: Wand2, group: 'system' },
+  // Item taxonomies — consumable second-axis subtypes (Foundry
+  // system.type.subtype) surfaced on the consumable Details tab.
+  { id: 'ammunitionTypes', label: 'Ammunition Types', icon: Target, group: 'items', countTable: 'ammunitionTypes' },
+  { id: 'poisonTypes', label: 'Poison Types', icon: FlaskConical, group: 'items', countTable: 'poisonTypes' },
 ];
 
 const TAB_BY_ID: Record<string, TabEntry> = Object.fromEntries(
@@ -195,6 +202,7 @@ export default function AdminProficiencies({ userProfile }: { userProfile: any }
       combat: [],
       language: [],
       system: [],
+      items: [],
     };
     for (const tab of TABS) byGroup[tab.group].push(tab);
     return byGroup;
@@ -494,6 +502,30 @@ export default function AdminProficiencies({ userProfile }: { userProfile: any }
                 plural="Feat Categories"
                 icon={Award}
                 description="Define broad feat groupings such as General, Fighting Style, Epic Boon, Origin, or homebrew categories. The Feat Editor picker and the public compendium list both read from this list."
+                {...TAXONOMY_TAB_BASE}
+              />
+            )}
+            {activeTab === 'ammunitionTypes' && (
+              <ProficiencyEntityShell
+                userProfile={userProfile}
+                hideHeader
+                table="ammunitionTypes"
+                singular="Ammunition Type"
+                plural="Ammunition Types"
+                icon={Target}
+                description="Define the kinds of ammunition a consumable can be (Arrow, Bolt, Bullet, Energy Cell, Needle, or homebrew). Drives the Ammunition Type dropdown on a consumable's Details tab."
+                {...TAXONOMY_TAB_BASE}
+              />
+            )}
+            {activeTab === 'poisonTypes' && (
+              <ProficiencyEntityShell
+                userProfile={userProfile}
+                hideHeader
+                table="poisonTypes"
+                singular="Poison Type"
+                plural="Poison Types"
+                icon={FlaskConical}
+                description="Define poison delivery methods (Contact, Ingested, Inhaled, Injury, or homebrew). Drives the Poison Type dropdown on a consumable's Details tab."
                 {...TAXONOMY_TAB_BASE}
               />
             )}

@@ -193,6 +193,10 @@ export type CompendiumEditorShellProps<TRow> = {
   /** Italic subtitle after the source chip — e.g. "Lvl 1 Abjuration"
    *  or "Feat · General · Repeatable". */
   identitySubtitle?: React.ReactNode;
+  /** Optional control rendered in the editor header, immediately to the
+   *  left of the Save/Reset action buttons. Used by ItemsEditor to host
+   *  the Item Type selector up top instead of in the Basics body. */
+  headerActionsLeading?: React.ReactNode;
   /** Optional banner (pre-rendered ReactNode) rendered above the identity
    *  row — a generic context slot (e.g. a "Subspecies of X · ← Back"
    *  banner). Distinct from `cascadeBanner`, which is proposal-specific. */
@@ -279,6 +283,7 @@ export function CompendiumEditorShell<TRow>(props: CompendiumEditorShellProps<TR
     identitySourceAbbrev,
     identitySourceFullName,
     identitySubtitle,
+    headerActionsLeading,
     contextBanner,
     onSave,
     onDelete,
@@ -674,7 +679,10 @@ export function CompendiumEditorShell<TRow>(props: CompendiumEditorShellProps<TR
                     </span>
                   ) : null}
                 </div>
-                <div className="flex flex-wrap gap-1.5 shrink-0">{actionRow}</div>
+                <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                  {headerActionsLeading}
+                  {actionRow}
+                </div>
               </div>
 
               <TabsList variant="line" className="gap-1 bg-transparent p-0">
