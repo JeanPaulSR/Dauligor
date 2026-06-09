@@ -63,19 +63,32 @@ const trimString = (val: any) => String(val ?? "").trim();
 /**
  * Response payload shape. `item` is the Foundry-ready item document.
  */
+export interface ItemDoc {
+  name: string;
+  type: string;
+  img?: string;
+  system: Record<string, any>;
+  effects: unknown[];
+  flags: Record<string, any>;
+}
+
 export interface ItemDocBundle {
   kind: "dauligor.item-item.v1";
   schemaVersion: 1;
   dbId: string;
   sourceId: string;
-  item: {
-    name: string;
-    type: string;
-    img?: string;
-    system: Record<string, any>;
-    effects: unknown[];
-    flags: Record<string, any>;
-  };
+  item: ItemDoc;
+  /**
+   * Container recipe (option C) expanded into flat child item docs. Present
+   * only for container/backpack rows that carry `container_contents` entries.
+   * Each child is a full item doc with `system.container` (the container's
+   * sourceId slug) + `system.quantity`, plus a `flags.dauligor-pairing`
+   * membership marker (`container` slug, `contentKind` reference|custom,
+   * `contentQuantity`). The module materializes these as sibling items,
+   * remapping `system.container` to the newly-created container's id; app
+   * re-import collapses them back into `container_contents` rows by slug.
+   */
+  contents?: ItemDoc[];
   generatedAt: number;
 }
 
@@ -156,57 +169,90 @@ function buildTypeSpecificSystem(itemType: string, row: any): Record<string, any
     extras.range = parseJsonField(row.range, {}) || {};
     extras.mastery = trimString(row.mastery);
     extras.magicalBonus = Number(row.magical_bonus ?? 0) || 0;
-    extras.ammunition = row.ammunition || null;
+    extras.ammunition = parseJsonField(row.ammunition, null);
     extras.proficient = row.proficient != null ? Number(row.proficient) : null;
-    // `system.type` for weapons carries the base-item slug ("greatsword")
-    // under `baseItem` so dnd5e's per-weapon schema kicks in.
+    // `system.type.value` is the weapon CATEGORY. items.type_subtype holds our
+    // proficiency category (simple/martial/exotic/natural/improv/siege); for
+    // simple/martial the base weapon's Melee/Ranged is folded in by
+    // buildItemBundle to yield Foundry's split-type (simpleM/simpleR/…). Legacy
+    // rows fall back to the weapon_type mirror. baseItem carries the base-weapon
+    // slug ("greatsword") so dnd5e's per-weapon schema kicks in.
     extras.type = {
-      value: trimString(row.weapon_type) || "simpleM",
+      value: trimString(row.type_subtype) || trimString(row.weapon_type) || "simpleM",
       baseItem: trimString(row.base_item),
     };
   } else if (itemType === "equipment") {
-    // Equipment covers armor + non-armor wearables (rings, cloaks).
-    // armor.value=null + armor.dex=null means non-armor; populated
-    // values mean an actual armor piece.
+    // Equipment covers armor + non-armor wearables (rings, cloaks) + vehicle
+    // equipment (mountable). armor.value/dex populated = an armor piece;
+    // vehicle equipment pulls armor.value (AC) from the items.vehicle JSON.
+    const isVehicle = trimString(row.type_subtype) === "vehicle";
+    const veh = isVehicle ? (parseJsonField((row as any).vehicle, {}) || {}) : {};
+    const vehArmor = (veh.armor && typeof veh.armor === "object") ? veh.armor : {};
     extras.armor = {
-      value: row.armor_value != null ? Number(row.armor_value) : null,
+      value: isVehicle
+        ? (vehArmor.value != null ? Number(vehArmor.value) : null)
+        : (row.armor_value != null ? Number(row.armor_value) : null),
       dex: row.armor_dex != null ? Number(row.armor_dex) : null,
       magicalBonus: Number(row.armor_magical_bonus ?? 0) || 0,
     };
     extras.strength = trimString(row.strength) || null;
     extras.stealth = !!Number(row.stealth ?? 0);
     extras.proficient = row.proficient != null ? Number(row.proficient) : null;
+    // `system.type.value` ← items.type_subtype (the canonical subtype the
+    // editor writes); legacy rows fall back to the armor_type mirror.
     extras.type = {
-      value: trimString(row.armor_type) || "trinket",
+      value: trimString(row.type_subtype) || trimString(row.armor_type) || "trinket",
       baseItem: trimString(row.base_item),
     };
+    // Vehicle-equipment (mountable) extras — system.cover/crew/hp/speed from
+    // the items.vehicle JSON (pass-through; the module preserves system.*).
+    if (isVehicle) {
+      if (veh.cover != null) extras.cover = Number(veh.cover);
+      if (veh.crew && typeof veh.crew === "object") {
+        extras.crew = { max: veh.crew.max ?? null, value: Array.isArray(veh.crew.value) ? veh.crew.value : [] };
+      }
+      if (veh.hp && typeof veh.hp === "object") extras.hp = veh.hp;
+      if (veh.speed && typeof veh.speed === "object") extras.speed = veh.speed;
+    }
   } else if (itemType === "tool") {
-    extras.ability = trimString((row as any).ability);
+    // `system.ability` is resolved from items.ability_id in buildItemBundle
+    // (needs the attributes table) — placeholder here. Empty = Default.
+    extras.ability = "";
     extras.proficient = row.proficient != null ? Number(row.proficient) : null;
     extras.bonus = trimString(row.bonus);
+    // `system.type.value` ← items.type_subtype (the tool category the editor
+    // writes); legacy rows fall back to the tool_type mirror.
     extras.type = {
-      value: trimString(row.tool_type) || "art",
+      value: trimString(row.type_subtype) || trimString(row.tool_type) || "art",
       baseItem: trimString(row.base_item),
     };
   } else if (itemType === "container" || itemType === "backpack") {
     extras.capacity = parseJsonField((row as any).capacity, {}) || {};
+    // Coins the container itself holds → system.currency (5-coin grid).
+    extras.currency = parseJsonField((row as any).currency, {}) || {};
     extras.type = {
       value: itemType,
       baseItem: trimString(row.base_item),
     };
   } else if (itemType === "consumable") {
+    // Foundry `system.type.value` is the consumable subtype
+    // (potion/scroll/ammo/poison/…) — stored in items.type_subtype.
+    // `system.type.subtype` is the second axis (ammo arrow/bolt, poison
+    // contact/injury) — items.type_inner_subtype (migration 20260607-1300).
     extras.type = {
-      // Subtype lives in `consumable_type` if we have it, else fall
-      // through to a generic "potion". Foundry coerces unknown values
-      // gracefully.
-      value: trimString((row as any).consumable_type) || "potion",
+      value: trimString((row as any).type_subtype) || "potion",
+      subtype: trimString((row as any).type_inner_subtype),
       baseItem: trimString(row.base_item),
     };
+    // Ammo consumables carry damage in items.damage — same column as
+    // weapons, Foundry shape `{ base:<DamagePart>, replace:<bool> }`.
+    extras.damage = parseJsonField(row.damage, {}) || {};
   } else {
-    // loot, treasure, any future type — emit just a base type with
-    // the slug; dnd5e will accept the document with default schemas.
+    // loot, treasure, any future type — `system.type.value` is the loot
+    // subtype (art/gear/gem/…) from items.type_subtype; fall back to the
+    // item_type slug. dnd5e accepts the document with default schemas.
     extras.type = {
-      value: itemType || "loot",
+      value: trimString(row.type_subtype) || itemType || "loot",
       baseItem: trimString(row.base_item),
     };
   }
@@ -214,13 +260,88 @@ function buildTypeSpecificSystem(itemType: string, row: any): Record<string, any
 }
 
 /**
+ * Expand a container's `container_contents` recipe into Foundry child item
+ * documents (option C — flat siblings). Reference rows become a full copy of
+ * the referenced catalog item; custom rows become a minimal loot doc from
+ * `custom_data`. Each carries `system.container` + `system.quantity` + a
+ * `flags.dauligor-pairing` membership marker so re-import can collapse it back
+ * by slug. Children are built with `expandContents:false` so a container
+ * nested inside a container can't recurse without bound.
+ */
+async function buildContainerContents(
+  containerRow: any,
+  containerSourceId: string,
+  fetchers: ExportFetchers,
+): Promise<ItemDoc[]> {
+  let rows: any[] = [];
+  try {
+    rows = (await fetchers.fetchCollection<any>("container_contents", {
+      where: "container_id = ?",
+      params: [String(containerRow.id)],
+      orderBy: "sort_order, created_at",
+    })) || [];
+  } catch {
+    return [];
+  }
+  const children: ItemDoc[] = [];
+  for (const cc of rows) {
+    const qty = Number(cc.quantity ?? 1) || 1;
+    // Custom one-off → minimal loot doc from the snapshot.
+    if (Number(cc.is_custom) === 1 || !cc.item_id) {
+      const cd = parseJsonField(cc.custom_data, {}) || {};
+      children.push({
+        name: String(cd.name || "Custom item"),
+        type: "loot",
+        system: {
+          identifier: "",
+          description: { value: "", chat: "" },
+          quantity: qty,
+          container: containerSourceId,
+        },
+        effects: [],
+        flags: {
+          "dauligor-pairing": {
+            entityKind: "item",
+            container: containerSourceId,
+            contentKind: "custom",
+            contentQuantity: qty,
+            custom: cd,
+          },
+        },
+      });
+      continue;
+    }
+    // Reference → full copy of the catalog item, stamped as content.
+    const childBundle = await buildItemBundle(String(cc.item_id), fetchers, { expandContents: false });
+    if (!childBundle) continue;
+    const childItem = childBundle.item;
+    childItem.system = { ...childItem.system, container: containerSourceId, quantity: qty };
+    const dp = (childItem.flags?.["dauligor-pairing"] as Record<string, any>) || {};
+    childItem.flags = {
+      ...childItem.flags,
+      "dauligor-pairing": {
+        ...dp,
+        container: containerSourceId,
+        contentKind: "reference",
+        contentQuantity: qty,
+      },
+    };
+    children.push(childItem);
+  }
+  return children;
+}
+
+/**
  * Build the full Foundry-ready item bundle for one items-table row.
  *
- * Returns null when no row matches.
+ * Returns null when no row matches. `opts.expandContents` (default true)
+ * gates the container_contents → child-doc expansion; children are built
+ * with it false to bound nested-container recursion.
  */
 export async function buildItemBundle(
   itemId: string,
   fetchers: ExportFetchers,
+  opts: { expandContents?: boolean } = {},
 ): Promise<ItemDocBundle | null> {
   const { fetchDocument, fetchCollection } = fetchers;
   const row: any = await fetchDocument<any>("items", itemId);
@@ -338,10 +459,45 @@ export async function buildItemBundle(
 
   // Merge the per-type extras (system.type for every type;
   // damage/range/armor/etc. depending on item_type).
-  const system = {
+  const system: Record<string, any> = {
     ...baseSystem,
     ...buildTypeSpecificSystem(itemType, row),
   };
+
+  // Tool `system.ability` ← resolve items.ability_id → the attribute's
+  // identifier slug (str/dex/…). Empty = Default ability.
+  if (itemType === "tool" && (row as any).ability_id) {
+    try {
+      const attr: any = await fetchDocument<any>("attributes", String((row as any).ability_id));
+      // dnd5e `system.ability` is the lowercase slug (str/dex/…); our
+      // attributes identifiers are uppercase (STR/DEX/…).
+      if (attr?.identifier) system.ability = String(attr.identifier).toLowerCase();
+    } catch { /* leave placeholder */ }
+  }
+
+  // Weapon `system.type.value` — fold the base weapon's Melee/Ranged into our
+  // proficiency category (type_subtype) to produce Foundry's split weapon type
+  // (simple + Melee → simpleM, martial + Ranged → martialR, …). natural/improv/
+  // siege/exotic + homebrew categories pass through unchanged. The category
+  // lives in type_subtype; the Melee/Ranged classification rides the linked
+  // weapons proficiency row (items.base_weapon_id → weapons.weapon_type).
+  if (itemType === "weapon") {
+    const cat = trimString((row as any).type_subtype);
+    if (cat === "simple" || cat === "martial") {
+      // simple/martial MUST carry the melee/ranged suffix to be a valid Foundry
+      // weapon type. Read the base weapon's classification when linked; default
+      // to Melee for baseless weapons (rare magic items with no SRD base) so the
+      // export is always a real CONFIG.DND5E.weaponTypes key (never raw "simple").
+      let ranged = false;
+      if ((row as any).base_weapon_id) {
+        try {
+          const w: any = await fetchDocument<any>("weapons", String((row as any).base_weapon_id));
+          ranged = String(w?.weapon_type ?? "").toLowerCase() === "ranged";
+        } catch { /* default to melee */ }
+      }
+      system.type = { ...(system.type || {}), value: cat + (ranged ? "R" : "M") };
+    }
+  }
 
   const item = {
     name: String(row.name || ""),
@@ -366,12 +522,22 @@ export async function buildItemBundle(
     },
   };
 
+  // Container contents (option C): expand the recipe into flat child item
+  // docs the module materializes as siblings. Top-level only — children are
+  // built with expandContents:false to bound nested-container recursion.
+  let contents: ItemDoc[] | undefined;
+  if ((itemType === "container" || itemType === "backpack") && opts.expandContents !== false) {
+    const children = await buildContainerContents(row, sourceId, fetchers);
+    if (children.length) contents = children;
+  }
+
   return {
     kind: "dauligor.item-item.v1",
     schemaVersion: 1,
     dbId: String(row.id),
     sourceId,
     item,
+    ...(contents ? { contents } : {}),
     generatedAt: Date.now(),
   };
 }

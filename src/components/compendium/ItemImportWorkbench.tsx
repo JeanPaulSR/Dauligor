@@ -18,7 +18,7 @@ import { toast } from 'sonner';
 import { reportClientError, OperationType } from '../../lib/firebase';
 import { upsertItemBatch } from '../../lib/compendium';
 import { extractAndPersistScalingColumns } from '../../lib/scalingImport';
-import { fetchCollection } from '../../lib/d1';
+import { fetchCollection, upsertDocumentBatch, deleteDocuments } from '../../lib/d1';
 import { cn } from '../../lib/utils';
 import {
   buildItemImportCandidates,
@@ -430,12 +430,35 @@ export default function ItemImportWorkbench({ userProfile }: { userProfile: any 
       // their scale data lives in `scaling_columns` and authors edit it
       // through ItemsEditor's Scaling tab.
       const now = new Date().toISOString();
-      const entries = await Promise.all(importable.map(async (candidate) => {
+
+      // Mint an id for every importable candidate up front so a container's
+      // contents can reference their parent's (new) items.id.
+      const idByCandidate = new Map<string, string>();
+      for (const c of importable) idByCandidate.set(c.candidateId, c.existingEntryId || crypto.randomUUID());
+      const importableIds = new Set(importable.map((c) => c.candidateId));
+
+      // Container-contents collapse (option C): a candidate whose
+      // `containerContent.parentCandidateId` is also being imported becomes a
+      // `container_contents` row UNDER that container rather than a standalone
+      // catalog item. Contents whose parent isn't in scope fall back to a
+      // normal import, so a child imported alone isn't lost.
+      const contentIdSet = new Set(
+        importable
+          .filter((c) => c.containerContent && importableIds.has(c.containerContent.parentCandidateId))
+          .map((c) => c.candidateId),
+      );
+      const itemCandidates = importable.filter((c) => !contentIdSet.has(c.candidateId));
+      const contentCandidates = importable.filter((c) => contentIdSet.has(c.candidateId));
+
+      // ── Catalog items (containers + standalone). Phase B.3: id minted
+      // upfront so ScaleValue advancements persist as scaling_columns rows
+      // owned by the item before the upsert lands. ──
+      const entries = await Promise.all(itemCandidates.map(async (candidate) => {
         const existingRow = candidate.existingEntryId
           ? existingItems.find((r: any) => r.id === candidate.existingEntryId)
           : null;
         const createdAt = existingRow?.createdAt || existingRow?.created_at || now;
-        const itemId = candidate.existingEntryId || crypto.randomUUID();
+        const itemId = idByCandidate.get(candidate.candidateId)!;
         const payload: Record<string, any> = {
           ...candidate.savePayload,
           updated_at: now,
@@ -445,12 +468,6 @@ export default function ItemImportWorkbench({ userProfile }: { userProfile: any 
           if (payload[key] === undefined) delete payload[key];
         });
 
-        // Pull advancements off the Foundry `sourceDocument` and
-        // run them through the shared extractor. Foundry stores
-        // `system.advancement` as a `{ <_id>: Advancement }` keyed
-        // map; the extractor only cares about the ScaleValue
-        // entries. Failures here are caught + logged so the item
-        // upsert still proceeds.
         const rawAdvancement = candidate.sourceDocument?.system?.advancement;
         const incomingAdvancements = Array.isArray(rawAdvancement)
           ? rawAdvancement
@@ -472,14 +489,45 @@ export default function ItemImportWorkbench({ userProfile }: { userProfile: any 
         return { id: itemId, data: payload };
       }));
 
+      // ── Container contents (recipe rows). slug-match each content against
+      // the existing catalog → reference; no match → custom snapshot. ──
+      const sortByContainer = new Map<string, number>();
+      const contentRows = contentCandidates.map((candidate) => {
+        const containerId = idByCandidate.get(candidate.containerContent!.parentCandidateId)!;
+        const match = existingItems.find(
+          (r: any) => (r.identifier ?? '') === candidate.identifier
+            && String(r.source_id ?? r.sourceId ?? '') === String(candidate.matchedSourceId ?? ''),
+        ) || existingItems.find((r: any) => (r.identifier ?? '') === candidate.identifier);
+        const sort = sortByContainer.get(containerId) ?? 0;
+        sortByContainer.set(containerId, sort + 1);
+        const data: Record<string, any> = match
+          ? {
+              container_id: containerId, item_id: match.id, is_custom: 0, custom_data: null,
+              quantity: candidate.containerContent!.quantity, sort_order: sort,
+              created_at: now, updated_at: now,
+            }
+          : {
+              container_id: containerId, item_id: null, is_custom: 1,
+              custom_data: { name: candidate.name, identifier: candidate.identifier },
+              quantity: candidate.containerContent!.quantity, sort_order: sort,
+              created_at: now, updated_at: now,
+            };
+        return { id: crypto.randomUUID(), data };
+      });
+
       try {
-        await upsertItemBatch(entries);
-        // Create-vs-update count: every entry has a non-null `id`
-        // after the upfront mint, so derive from the original
-        // `importable` array via `existingEntryId`.
-        const created = importable.filter((c) => !c.existingEntryId).length;
-        const updated = importable.filter((c) => !!c.existingEntryId).length;
-        toast.success(`Imported ${entries.length} items (${created} new, ${updated} updated).`);
+        // Items first — containers must exist before container_contents' FK.
+        if (entries.length) await upsertItemBatch(entries);
+        // Replace each imported container's recipe (idempotent re-import).
+        const containerIds = Array.from(new Set(contentRows.map((r) => r.data.container_id)));
+        for (const cid of containerIds) {
+          await deleteDocuments('containerContents', 'container_id = ?', [cid]);
+        }
+        if (contentRows.length) await upsertDocumentBatch('containerContents', contentRows);
+        const created = itemCandidates.filter((c) => !c.existingEntryId).length;
+        const updated = itemCandidates.filter((c) => !!c.existingEntryId).length;
+        const ccMsg = contentRows.length ? `, ${contentRows.length} container contents` : '';
+        toast.success(`Imported ${entries.length} items (${created} new, ${updated} updated)${ccMsg}.`);
       } catch (err) {
         console.error('Error importing items:', err);
         reportClientError(err, OperationType.CREATE, 'items/(batch import)');

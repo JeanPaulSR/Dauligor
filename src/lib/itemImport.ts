@@ -175,6 +175,11 @@ export type ItemImportCandidate = {
   activities: any[];
   effects: any[];
   sourceDocument: any;
+  /** Set when this entry is a container's content — its `system.container`
+   *  matches a container in the same batch. Drives the import collapse:
+   *  written as a `container_contents` row under the parent (option C)
+   *  instead of a standalone catalog item. */
+  containerContent?: { parentCandidateId: string; quantity: number };
   // Ready-to-write payload (snake_case keys matching the target schema)
   savePayload: Record<string, any>;
 };
@@ -220,6 +225,19 @@ const FOUNDRY_WEAPON_TYPE_TO_DAULIGOR: Record<string, 'Melee' | 'Ranged'> = {
   natural: 'Melee',  // natural weapons are melee in practice
   improv: 'Melee',
   siege: 'Ranged',
+};
+
+// Foundry weapon `system.type.value` (the melee/ranged split: simpleM/simpleR/
+// martialM/martialR) → our weapon_categories.identifier (simple/martial). We
+// store just the proficiency category in items.type_subtype so the items
+// editor's Weapon Type dropdown matches weapon_categories; the melee/ranged
+// half is preserved via the base-weapon FK (base_weapon_id → weapons.weapon_type)
+// and re-folded on export. natural/improv/siege/exotic + homebrew pass through.
+const FOUNDRY_WEAPON_TYPE_TO_CATEGORY: Record<string, string> = {
+  simpleM: 'simple',
+  simpleR: 'simple',
+  martialM: 'martial',
+  martialR: 'martial',
 };
 
 // ─── Helpers (copied from spellImport / featImport) ─────────────────
@@ -474,13 +492,19 @@ function buildUnifiedItemSavePayload(
   // for the dynamic items editor so its dropdown logic doesn't have
   // to branch by shape.
   //
-  // The rare two-axis case (poison delivery contact/inhaled/ammo
-  // arrow/bolt) currently has nowhere to land — Foundry's
-  // `system.type.subtype` is dropped here on import. A future schema
-  // addition (e.g. items.type_inner_subtype) or a packed-slug
-  // convention ("poison:contact") would close that gap. Tracked in
-  // the C8 docs pass; not in scope for the C6 dynamic-editor landing.
-  const typeSubtype = String(system.type?.value ?? '').trim() || null;
+  // The two-axis case (poison delivery contact/inhaled, ammo arrow/bolt)
+  // lands in items.type_inner_subtype — Foundry's `system.type.subtype`
+  // (migration 20260607-1300, keyed to the ammunition_types /
+  // poison_types taxonomies).
+  // Weapons: map Foundry's melee/ranged split-type (simpleM/simpleR/…) back to
+  // our proficiency category (simple/martial) so it matches weapon_categories;
+  // the melee/ranged half survives via the base-weapon FK. Every other type
+  // uses system.type.value verbatim (potion/scroll/light/art/…).
+  const rawTypeValue = String(system.type?.value ?? '').trim();
+  const typeSubtype = (foundryType === 'weapon'
+    ? (FOUNDRY_WEAPON_TYPE_TO_CATEGORY[rawTypeValue] ?? rawTypeValue)
+    : rawTypeValue) || null;
+  const typeInnerSubtype = String(system.type?.subtype ?? '').trim() || null;
 
   // ── unidentified description ──
   const unidentifiedDescription = system.unidentified?.description
@@ -521,12 +545,16 @@ function buildUnifiedItemSavePayload(
     // when re-exporting. We do not attempt to invent reverse-mappings
     // for unknown Foundry codes (per user direction 2026-05-26).
     properties,
+    // Foundry `system.proficient`: null (Automatic) / 0 / 1. Weapon shape also
+    // sets it below (same value); equipment/tool pick it up here.
+    proficient: system.proficient ?? null,
     base_item: baseItemSlug || null,
     page: String(item.source?.page ?? system.source?.page ?? '') || null,
     activities: Object.values(system.activities ?? {}),
     effects: Array.isArray(sourceDocument.effects) ? sourceDocument.effects : [],
     uses: usesPayload,
     type_subtype: typeSubtype,
+    type_inner_subtype: typeInnerSubtype,
     unidentified_description: unidentifiedDescription,
     chat_description: chatDescription,
     tagIds: [],
@@ -586,6 +614,35 @@ function buildUnifiedItemSavePayload(
   if (foundryType === 'container' || foundryType === 'backpack') {
     shapePayload.capacity = system.capacity ?? null;
     shapePayload.currency = system.currency ?? null;
+  }
+
+  // Consumable ammo carries damage in items.damage (Foundry's
+  // `system.damage` = { base:<DamagePart>, replace:<bool> }). Consumables
+  // route to the 'items' shape, skipping the weapon branch above, so
+  // capture it here via foundryType.
+  if (foundryType === 'consumable') {
+    shapePayload.damage = system.damage ?? null;
+  }
+
+  // Equipment — the magical bonus rides `system.armor.magicalBonus` for every
+  // equipment subtype (the armor shape also sets it; same value). Vehicle
+  // equipment additionally gathers its mountable stats into items.vehicle.
+  if (foundryType === 'equipment') {
+    const armorBlock = system.armor ?? {};
+    shapePayload.armor_magical_bonus = Number(String(armorBlock.magicalBonus ?? '').replace(/[^0-9-]/g, '')) || 0;
+    if (String(system.type?.value ?? '').trim() === 'vehicle') {
+      shapePayload.vehicle = {
+        armor: { value: armorBlock.value ?? null },
+        cover: system.cover ?? null,
+        crew: { max: system.crew?.max ?? null },
+        hp: system.hp
+          ? { value: system.hp.value ?? null, max: system.hp.max ?? null, dt: system.hp.dt ?? null, conditions: system.hp.conditions ?? '' }
+          : null,
+        speed: system.speed
+          ? { value: system.speed.value ?? null, units: system.speed.units ?? 'ft', conditions: system.speed.conditions ?? '' }
+          : null,
+      };
+    }
   }
 
   // Nested-container reference. Foundry uses a `system.container` UUID
@@ -694,6 +751,21 @@ export function buildItemImportCandidates(
 ): ItemImportCandidate[] {
   const items = Array.isArray(entry.items) ? entry.items : [];
 
+  // Pre-pass for the container-contents collapse (option C): map each
+  // container/backpack entry's Foundry `_id` → its candidateId, so a child
+  // item (whose `system.container` = that `_id`) can be grouped under it.
+  // Mirrors the identifier + candidateId computation used in the main map.
+  const containerByFoundryId = new Map<string, string>();
+  items.forEach((it, index) => {
+    const ft = String(it.type ?? '');
+    if (ft !== 'container' && ft !== 'backpack') return;
+    const sys = it.sourceDocument?.system ?? {};
+    const ident = slugify(String(sys.identifier ?? '') || it.name || it.sourceDocument?.name || `item-${index + 1}`);
+    const candId = `${batchLabel}::${it.uuid || it.id || ident}`;
+    const fid = String(it.sourceDocument?._id ?? '').trim();
+    if (fid) containerByFoundryId.set(fid, candId);
+  });
+
   return items.map((item, index) => {
     const sourceDocument = item.sourceDocument ?? {};
     const system = sourceDocument.system ?? {};
@@ -748,6 +820,17 @@ export function buildItemImportCandidates(
     const attunement = String(system.attunement ?? '').trim();
     const isMagical = properties.includes('mgc') || (rarity !== 'none' && rarity !== '');
 
+    // Container-contents collapse (option C): if this item points at a
+    // container in the same batch via `system.container`, mark it as that
+    // container's content so commit writes a `container_contents` row under
+    // the parent instead of importing it as a standalone catalog item.
+    const containerRefId = String(system.container ?? '').trim();
+    const ownCandidateId = `${batchLabel}::${item.uuid || item.id || identifier}`;
+    const parentCandidateId = containerRefId ? containerByFoundryId.get(containerRefId) : undefined;
+    const containerContent = parentCandidateId && parentCandidateId !== ownCandidateId
+      ? { parentCandidateId, quantity: Number(system.quantity ?? 1) || 1 }
+      : undefined;
+
     return {
       candidateId: `${batchLabel}::${item.uuid || item.id || identifier}`,
       batchId: batchLabel,
@@ -791,6 +874,7 @@ export function buildItemImportCandidates(
       activities,
       effects,
       sourceDocument,
+      containerContent,
       savePayload,
     };
   });

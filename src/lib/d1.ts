@@ -321,7 +321,10 @@ export async function queryD1<T>(sql: string, params: any[] = [], options: { noC
         // `currency` is the 5-coin grid ({cp, sp, ep, gp, pp}).
         // `ammunition` is the weapon ammunition reference ({type,
         // quantity, denomination}).
-        'uses', 'capacity', 'currency', 'ammunition',
+        // `vehicle` = vehicle-equipment (mountable) stats (migration
+        // 20260608-1300): {armor:{value}, cover, crew:{max},
+        // hp:{value,max,dt,conditions}, speed:{value,units,conditions}}.
+        'uses', 'capacity', 'currency', 'ammunition', 'vehicle',
         // facilities JSON sub-blocks added 2026-05-26 (migration
         // 20260526-2000). `progress`={value, max, order, pct};
         // `trade`={creatures, profit, stock, pending}; `craft`={item,

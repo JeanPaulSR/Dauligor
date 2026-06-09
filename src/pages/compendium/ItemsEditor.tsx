@@ -49,7 +49,7 @@ import { ImageUpload } from '../../components/ui/ImageUpload';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import SingleSelectSearch from '../../components/ui/SingleSelectSearch';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { ActivitySection, FieldRow } from '../../components/compendium/activity/primitives';
 import { ABILITY_OPTIONS, FALLBACK_ABILITY_LABELS, DAMAGE_TYPE_OPTIONS, DAMAGE_DIE_DENOMINATIONS } from '../../components/compendium/activity/constants';
 import DamagePartEditor from '../../components/compendium/activity/DamagePartEditor';
@@ -116,6 +116,19 @@ const EQUIPMENT_SUBTYPES: [string, string][] = [
 
 const EQUIPMENT_ARMOR_SUBTYPES = new Set(['light', 'medium', 'heavy', 'shield']);
 
+// Non-armor equipment subtypes — the ungrouped part of the Equipment Type
+// dropdown. The "Armor" group is data-driven from the armor_categories table
+// (so homebrew categories like Exotic appear). Order mirrors the dnd5e sheet.
+const EQUIPMENT_BASE_SUBTYPES: [string, string][] = [
+  ['clothing', 'Clothing'],
+  ['ring', 'Ring'],
+  ['rod', 'Rod'],
+  ['trinket', 'Trinket'],
+  ['vehicle', 'Vehicle Equipment'],
+  ['wand', 'Wand'],
+  ['wondrous', 'Wondrous Item'],
+];
+
 // Alphabetized by label.
 const CONSUMABLE_SUBTYPES: [string, string][] = [
   ['ammo', 'Ammunition'],
@@ -140,7 +153,7 @@ const LOOT_SUBTYPES: [string, string][] = [
   ['gear', 'Adventuring Gear'],
   ['gem', 'Gemstone'],
   ['junk', 'Junk'],
-  ['material', 'Crafting Material'],
+  ['material', 'Material'],
   ['resource', 'Resource'],
   ['trade', 'Trade Good'],
   ['treasure', 'Treasure'],
@@ -172,6 +185,51 @@ const CONTAINER_ATTUNEMENT_OPTIONS: [string, string][] = [
   ['none', 'Attunement Not Required'],
   ['required', 'Attunement Required'],
   ['optional', 'Optional Attunement'],
+];
+
+// Foundry equipment proficiency — `system.proficient`: null (Automatic, sheet
+// decides from the wearer) / 0 (Not Proficient) / 1 (Proficient). The 'auto'
+// sentinel carries null so the Select never holds an empty value.
+const PROFICIENCY_LEVEL_OPTIONS: [string, string][] = [
+  ['auto', 'Automatic'],
+  ['no', 'Not Proficient'],
+  ['yes', 'Proficient'],
+];
+
+// Foundry tool proficiency — `system.proficient`: null (Automatic) / 0 (Not
+// Proficient) / 1 (Proficient) / 2 (Expertise) / 0.5 (Half Proficient). More
+// granular than equipment. The 'auto' sentinel carries null.
+const TOOL_PROFICIENCY_OPTIONS: [string, string][] = [
+  ['auto', 'Automatic'],
+  ['no', 'Not Proficient'],
+  ['yes', 'Proficient'],
+  ['expertise', 'Expertise'],
+  ['half', 'Half Proficient'],
+];
+
+// Tool ability — Default (the base tool's own) + the six standard abilities.
+const TOOL_ABILITY_OPTIONS: [string, string][] = [
+  ['', 'Default'],
+  ['str', 'Strength'],
+  ['dex', 'Dexterity'],
+  ['con', 'Constitution'],
+  ['int', 'Intelligence'],
+  ['wis', 'Wisdom'],
+  ['cha', 'Charisma'],
+];
+
+// Vehicle-equipment cover — Foundry `system.cover` is a 0..1 number; the
+// 'none' sentinel carries null. Order mirrors the dnd5e sheet.
+const VEHICLE_COVER_OPTIONS: [string, string][] = [
+  ['none', 'None'],
+  ['total', 'Total'],
+  ['half', 'Half'],
+  ['threeQuarters', 'Three Quarters'],
+];
+
+// Speed units — dnd5e CONFIG.DND5E.movementUnits keys (default ft).
+const VEHICLE_SPEED_UNITS: [string, string][] = [
+  ['ft', 'Feet'], ['mi', 'Miles'], ['m', 'Meters'], ['km', 'Kilometers'],
 ];
 
 function getSubtypeOptions(itemType: string): [string, string][] | null {
@@ -214,6 +272,8 @@ type ItemFormData = {
   equipped: boolean;
   identified: boolean;
   magical: boolean;
+  // Foundry `system.proficient`: null (Automatic) / 0 (Not Proficient) / 1 (Proficient).
+  proficient: number | null;
   unidentifiedDescription: string;
   chatDescription: string;
 
@@ -236,6 +296,9 @@ type ItemFormData = {
   armorMagicalBonus: number;
   strength: number | null;
   armorType: string;
+  // Vehicle-equipment (mountable) stats — JSON. { armor:{value}, cover,
+  // crew:{max}, hp:{value,max,dt,conditions}, speed:{value,units,conditions} }.
+  vehicle: any;
 
   // Tool-specific
   toolType: string;
@@ -289,6 +352,7 @@ const ITEM_DEFAULTS: Omit<ItemFormData, 'sourceId'> & { sourceId?: string } = {
   equipped: false,
   identified: true,
   magical: false,
+  proficient: null,
   unidentifiedDescription: '',
   chatDescription: '',
   properties: [],
@@ -303,6 +367,7 @@ const ITEM_DEFAULTS: Omit<ItemFormData, 'sourceId'> & { sourceId?: string } = {
   armorMagicalBonus: 0,
   strength: null,
   armorType: '',
+  vehicle: null,
   toolType: '',
   bonus: '',
   chatFlavor: '',
@@ -336,11 +401,16 @@ type ProficiencyBucket = {
   itemProperties: any[];
   ammunitionTypes: any[];
   poisonTypes: any[];
+  armorCategories: any[];
+  toolCategories: any[];
+  weaponCategories: any[];
+  damageTypes: any[];
 };
 
 const EMPTY_BUCKET: ProficiencyBucket = {
   weapons: [], armor: [], tools: [], abilities: [], weaponProperties: [],
-  itemProperties: [], ammunitionTypes: [], poisonTypes: [],
+  itemProperties: [], ammunitionTypes: [], poisonTypes: [], armorCategories: [], toolCategories: [],
+  weaponCategories: [], damageTypes: [],
 };
 
 // Property axis values — surfaced via the multi-axis property filter.
@@ -535,6 +605,9 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
           itemPropertyRows,
           ammunitionTypeRows,
           poisonTypeRows,
+          armorCategoryRows,
+          toolCategoryRows,
+          damageTypeRows,
         ] = await Promise.all([
           fetchCollection<any>('items', { orderBy: 'name ASC' }),
           fetchCollection<any>('sources', { orderBy: 'name ASC' }),
@@ -557,6 +630,9 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
           fetchCollection<any>('itemProperties', { orderBy: 'name ASC' }),
           fetchCollection<any>('ammunitionTypes', { orderBy: 'sort_order, name' }),
           fetchCollection<any>('poisonTypes', { orderBy: 'sort_order, name' }),
+          fetchCollection<any>('armorCategories', { orderBy: '"order", name ASC' }),
+          fetchCollection<any>('toolCategories', { orderBy: 'name ASC' }),
+          fetchCollection<any>('damageTypes', { orderBy: '"order", name ASC' }),
         ]);
         if (cancelled) return;
 
@@ -637,6 +713,23 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
           itemProperties: itemPropertyRows,
           ammunitionTypes: ammunitionTypeRows,
           poisonTypes: poisonTypeRows,
+          // Armor categories (light/medium/heavy/shields/exotic + homebrew) —
+          // raw rows; drive the Equipment Type "Armor" group + Base Equipment.
+          armorCategories: armorCategoryRows,
+          // Tool categories (art/game/music/vehicle/other + homebrew) — raw rows;
+          // drive Tool Type + Base Tool (the armor pattern).
+          toolCategories: toolCategoryRows,
+          // Weapon categories (simple/martial/exotic/natural/improv/siege +
+          // homebrew) — raw rows; drive Weapon Type + Base Weapon. NOTE these
+          // are proficiency categories, NOT Foundry's melee/ranged split
+          // (simpleM/simpleR/…); the export recombines category + the base
+          // weapon's Melee/Ranged into system.type.value.
+          weaponCategories: weaponCategoryRows,
+          // Damage types (admin-managed `damage_types`) — raw rows; drive the
+          // damage Type dropdown in the weapon/consumable DamagePartEditor so it
+          // isn't a hardcoded list. Our identifiers are UPPERCASE (ACID); the
+          // component lowercases them to Foundry's slug (acid).
+          damageTypes: damageTypeRows,
         });
         // Phase C — feats + features for the ItemBumpUses target picker.
         // Raw rows are fine here; the AdvancementManager picker only
@@ -747,6 +840,7 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
         equipped: !!cached.equipped,
         identified: cached.identified !== false,
         magical: !!cached.magical,
+        proficient: cached.proficient ?? null,
         unidentifiedDescription: cached.unidentifiedDescription || cached.unidentified_description || '',
         chatDescription: cached.chatDescription || cached.chat_description || '',
         properties: Array.isArray(cached.properties) ? cached.properties : [],
@@ -768,6 +862,7 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
         armorMagicalBonus: Number(cached.armorMagicalBonus ?? cached.armor_magical_bonus ?? 0) || 0,
         strength: cached.strength ?? null,
         armorType: cached.armorType || cached.armor_type || '',
+        vehicle: cached.vehicle ?? null,
         toolType: cached.toolType || cached.tool_type || '',
         bonus: cached.bonus || '',
         chatFlavor: cached.chatFlavor || cached.chat_flavor || '',
@@ -912,6 +1007,7 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
         // checkbox — keep the legacy boolean column in sync so the list
         // filter + export's magical derivation still work.
         magical: (Array.isArray(formData.properties) && formData.properties.includes('mgc')) ? 1 : 0,
+        proficient: formData.proficient,
         unidentified_description: formData.unidentifiedDescription || null,
         chat_description: formData.chatDescription || null,
         properties: Array.isArray(formData.properties) ? formData.properties : [],
@@ -933,6 +1029,8 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
         armor_magical_bonus: Number(formData.armorMagicalBonus) || 0,
         strength: formData.strength,
         armor_type: formData.armorType || null,
+        // Vehicle-equipment stats — only equipment subtype 'vehicle'.
+        vehicle: (formData.itemType === 'equipment' && formData.typeSubtype === 'vehicle') ? formData.vehicle : null,
         // Tool stats.
         tool_type: formData.toolType || null,
         bonus: formData.bonus || null,
@@ -1176,6 +1274,10 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
       });
       return tabs;
     }
+
+    // Loot is Foundry-simple: Description + Details only (no activities,
+    // effects, advancement, or scaling) — matches the loot sheet.
+    if ((formData.itemType || 'loot') === 'loot') return tabs;
 
     tabs.push(
     {
@@ -1845,6 +1947,18 @@ function MechanicsTab({
   if (itemType === 'container') {
     return <ContainerDetails formData={formData} setFormData={setFormData} profs={profs} />;
   }
+  if (itemType === 'equipment') {
+    return <EquipmentDetails formData={formData} setFormData={setFormData} profs={profs} />;
+  }
+  if (itemType === 'tool') {
+    return <ToolDetails formData={formData} setFormData={setFormData} profs={profs} />;
+  }
+  if (itemType === 'loot') {
+    return <LootDetails formData={formData} setFormData={setFormData} profs={profs} />;
+  }
+  if (itemType === 'weapon') {
+    return <WeaponDetails formData={formData} setFormData={setFormData} profs={profs} />;
+  }
 
   return (
     <div className="space-y-4 pt-4 border-t border-gold/15">
@@ -1995,6 +2109,17 @@ function ConsumableDetails({
   const innerOptions: [string, string][] = (Array.isArray(innerSource) ? innerSource : [])
     .map((r: any): [string, string] => [String(r.identifier || r.id), String(r.name || r.identifier)]);
 
+  // Damage types from the admin `damage_types` table (lowercased to Foundry's
+  // slug); static fallback if the table hasn't loaded. Same source the weapon
+  // damage editor uses.
+  const damageTypeOptions = useMemo(() => {
+    const rows = Array.isArray(profs.damageTypes) ? profs.damageTypes : [];
+    const list = rows
+      .map((d: any) => ({ value: String(d.identifier || '').toLowerCase(), label: String(d.name || d.identifier) }))
+      .filter((o) => o.value);
+    return list.length ? list : DAMAGE_TYPE_OPTIONS;
+  }, [profs.damageTypes]);
+
   return (
     <div className="space-y-4 pt-4 border-t border-gold/15">
       <fieldset className="config-fieldset">
@@ -2056,7 +2181,7 @@ function ConsumableDetails({
           <DamagePartEditor
             parts={[basePart]}
             onChange={(next) => setDamage({ base: next[0] || {} })}
-            typeOptions={DAMAGE_TYPE_OPTIONS}
+            typeOptions={damageTypeOptions}
             canScale={false}
           />
         </fieldset>
@@ -2223,6 +2348,289 @@ function PropertiesSection({
 
 // ─── Type-specific sub-forms ──────────────────────────────────────
 
+// ─── Weapon Details (Foundry dnd5e 5.3.1 weapon sheet) ─────────────
+//
+// Weapon Type = the weapon CATEGORY (data-driven from weapon_categories:
+// simple/martial/exotic/natural/improv/siege + homebrew, like armor/tool).
+// Base Weapon = a `weapons` proficiency row in that category. The melee vs.
+// ranged distinction is NOT in the category — it rides the chosen base
+// weapon (weapons.weapon_type); the export recombines category + Melee/Ranged
+// into Foundry's system.type.value (simpleM/simpleR/martialM/martialR; natural/
+// improv/siege/exotic pass through raw). Conditional reveals mirror the dnd5e
+// sheet: Ammunition property → Ammunition Type; Magical → Attunement + Bonus;
+// thrown / ranged → Normal + Long range alongside Reach. Mastery is captured
+// in the data model but intentionally hidden (we use 2014 weapons, not the
+// 2024 weapon-mastery system).
+
+function WeaponDetails({
+  formData,
+  setFormData,
+  profs,
+}: {
+  formData: ItemFormData;
+  setFormData: React.Dispatch<React.SetStateAction<ItemFormData>>;
+  profs: ProficiencyBucket;
+}) {
+  const subtype = formData.typeSubtype || ''; // weapon category identifier
+  const weaponCats = Array.isArray(profs.weaponCategories) ? profs.weaponCategories : [];
+  const allWeapons = Array.isArray(profs.weapons) ? profs.weapons : [];
+  const catId = (w: any) => String(w?.category_id ?? w?.categoryId ?? '');
+  // Resolve the category from the chosen Weapon Type, falling back to the linked
+  // base weapon's OWN category — so existing / imported weapons (which carry a
+  // `base_weapon_id` but may have no stored `type_subtype` yet) still resolve a
+  // category and surface the Base Weapon picker instead of hiding it.
+  const linkedWeapon = formData.baseWeaponId
+    ? allWeapons.find((w: any) => String(w.id) === String(formData.baseWeaponId))
+    : null;
+  const weaponCat = weaponCats.find((c: any) => String(c.identifier) === subtype)
+    || (linkedWeapon ? weaponCats.find((c: any) => String(c.id) === catId(linkedWeapon)) : undefined);
+  const effectiveSubtype = weaponCat ? String(weaponCat.identifier) : subtype;
+  const baseWeapons = weaponCat
+    ? allWeapons.filter((w: any) => catId(w) === String(weaponCat.id))
+    : [];
+
+  // Back-fill type_subtype from the derived category for legacy / imported
+  // weapons that have a base weapon but no stored category, so a save + the
+  // export carry the right weapon category.
+  const derivedCatIdentifier = weaponCat ? String(weaponCat.identifier) : '';
+  useEffect(() => {
+    if (!subtype && derivedCatIdentifier) {
+      setFormData((prev) => (prev.typeSubtype ? prev : { ...prev, typeSubtype: derivedCatIdentifier }));
+    }
+  }, [subtype, derivedCatIdentifier, setFormData]);
+
+  const propertyCatalog = useMemo(() => {
+    const list = Array.isArray(profs.itemProperties) ? profs.itemProperties : [];
+    return list
+      .filter((p: any) => { try { return JSON.parse(p.valid_types || '[]').includes('weapon'); } catch { return false; } })
+      .map((p: any) => ({ id: String(p.identifier || p.id), name: String(p.name || p.identifier) }));
+  }, [profs.itemProperties]);
+
+  // Damage types from the admin `damage_types` table (lowercased to Foundry's
+  // slug). Falls back to the static list if the table hasn't loaded.
+  const damageTypeOptions = useMemo(() => {
+    const rows = Array.isArray(profs.damageTypes) ? profs.damageTypes : [];
+    const list = rows
+      .map((d: any) => ({ value: String(d.identifier || '').toLowerCase(), label: String(d.name || d.identifier) }))
+      .filter((o) => o.value);
+    return list.length ? list : DAMAGE_TYPE_OPTIONS;
+  }, [profs.damageTypes]);
+
+  const properties = Array.isArray(formData.properties) ? formData.properties : [];
+  const isMagical = properties.includes('mgc');
+  const isAmmo = properties.includes('amm');
+  const isThrown = properties.includes('thr');
+  const toggleProperty = (slug: string) => setFormData((prev) => {
+    const cur = Array.isArray(prev.properties) ? prev.properties : [];
+    return { ...prev, properties: cur.includes(slug) ? cur.filter((s) => s !== slug) : [...cur, slug] };
+  });
+
+  // Proficiency: null (Automatic) / 0 (Not) / 1 (Proficient) — equipment shape.
+  const profLevel = formData.proficient == null ? 'auto' : (formData.proficient ? 'yes' : 'no');
+
+  // Ranged display — Normal + Long appear when the weapon attacks at range:
+  // the thrown property, or a ranged base weapon (weapons.weapon_type). Melee
+  // shows only Reach. Mirrors the dnd5e sheet's range-section toggle.
+  const baseWeapon = baseWeapons.find((w: any) => String(w.id) === String(formData.baseWeaponId));
+  const isRangedWeapon = String(baseWeapon?.weapon_type ?? baseWeapon?.weaponType ?? '').toLowerCase() === 'ranged';
+  const showNormalLong = isThrown || isRangedWeapon;
+
+  // Ammunition Type — the ammo subtype this weapon fires (system.ammunition =
+  // { type }); options from the ammunition_types admin table (same source as
+  // consumable ammo). Revealed by the Ammunition property.
+  const ammoType = (formData.ammunition && typeof formData.ammunition === 'object')
+    ? String(formData.ammunition.type ?? '') : '';
+  const ammoOptions: [string, string][] = (Array.isArray(profs.ammunitionTypes) ? profs.ammunitionTypes : [])
+    .map((r: any): [string, string] => [String(r.identifier || r.id), String(r.name || r.identifier)]);
+
+  // Range — system.range = { value (normal), long, reach, units }.
+  const range = (formData.range && typeof formData.range === 'object')
+    ? formData.range : { value: null, long: null, reach: null, units: 'ft' };
+  const updateRange = (patch: Record<string, any>) => setFormData((prev) => {
+    const cur = (prev.range && typeof prev.range === 'object') ? prev.range : { value: null, long: null, reach: null, units: 'ft' };
+    return { ...prev, range: { ...cur, ...patch } };
+  });
+  const rangeInt = (s: string) => (s === '' ? null : (parseInt(s, 10) || 0));
+
+  // Damage — intrinsic weapon dice, system.damage.base (DamagePart shape).
+  const basePart = (formData.damage && typeof formData.damage === 'object' && formData.damage.base && typeof formData.damage.base === 'object')
+    ? formData.damage.base : {};
+  const setBasePart = (next: any) => setFormData((prev) => ({
+    ...prev,
+    damage: { ...((prev.damage && typeof prev.damage === 'object') ? prev.damage : {}), base: next || {} },
+  }));
+
+  return (
+    <div className="space-y-4 pt-4 border-t border-gold/15">
+      <fieldset className="config-fieldset">
+        <legend className="section-label text-gold/60 px-1">Weapon Details</legend>
+        <FieldRow label="Weapon Type" hint="The weapon proficiency category. Melee vs. ranged comes from the base weapon.">
+          <FieldSelect
+            value={effectiveSubtype}
+            onChange={(val) => setFormData((prev) => ({ ...prev, typeSubtype: val, baseWeaponId: '', baseItem: '' }))}
+            options={weaponCats.map((c: any): [string, string] => [String(c.identifier), String(c.name || c.identifier)])}
+            placeholder="— select —"
+            triggerClassName="w-full"
+          />
+        </FieldRow>
+        {baseWeapons.length > 0 && (
+          <FieldRow label="Base Weapon" hint="Links to a row in the weapons proficiency table for the chosen category.">
+            <SingleSelectSearch
+              value={formData.baseWeaponId || ''}
+              onChange={(id) => setFormData((prev) => ({
+                ...prev,
+                baseWeaponId: id,
+                baseItem: id ? (baseWeapons.find((w: any) => String(w.id) === id)?.identifier || '') : '',
+              }))}
+              options={[{ id: '', name: '— none —' }, ...baseWeapons.map((w: any) => ({ id: String(w.id), name: String(w.name || w.identifier) }))]}
+              placeholder="Select base weapon…"
+              triggerClassName="w-full"
+            />
+          </FieldRow>
+        )}
+        <FieldRow
+          label="Proficiency Level"
+          hint="Automatic lets the character sheet decide from the wielder's proficiencies; override to force proficient / not."
+        >
+          <FieldSelect
+            value={profLevel}
+            onChange={(val) => setFormData((prev) => ({
+              ...prev,
+              proficient: val === 'auto' ? null : (val === 'yes' ? 1 : 0),
+            }))}
+            options={PROFICIENCY_LEVEL_OPTIONS}
+            triggerClassName="w-full"
+          />
+        </FieldRow>
+        {/* Weapon Properties — data-driven stacked grid. */}
+        <div className="py-2 space-y-1.5">
+          <p className="text-xs font-semibold text-ink/85 leading-tight">Weapon Properties</p>
+          {propertyCatalog.length === 0 ? (
+            <p className="field-hint">No properties for this type.</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3">
+              {propertyCatalog.map((p) => (
+                <label key={p.id} className="flex items-center gap-2 cursor-pointer">
+                  <Checkbox checked={properties.includes(p.id)} onCheckedChange={() => toggleProperty(p.id)} />
+                  <span className="text-xs text-ink/75">{p.name}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+        {/* Ammunition Type — revealed by the Ammunition property. */}
+        {isAmmo && (
+          <FieldRow label="Ammunition Type" hint="The kind of ammunition this weapon fires.">
+            <FieldSelect
+              value={ammoType}
+              onChange={(val) => setFormData((prev) => ({
+                ...prev,
+                ammunition: val
+                  ? { ...((prev.ammunition && typeof prev.ammunition === 'object') ? prev.ammunition : {}), type: val }
+                  : null,
+              }))}
+              options={ammoOptions}
+              placeholder="— select —"
+              triggerClassName="w-full"
+            />
+          </FieldRow>
+        )}
+        {/* Magical → Attunement + Bonus (Foundry reveals these when Magical). */}
+        {isMagical && (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 pt-1">
+            <div className="space-y-0.5">
+              <Label className="field-label">Attunement</Label>
+              <FieldSelect
+                value={formData.attunement ? formData.attunement : 'none'}
+                onChange={(val) => setFormData((prev) => ({ ...prev, attunement: val === 'none' ? '' : val }))}
+                options={CONTAINER_ATTUNEMENT_OPTIONS}
+                triggerClassName="w-full"
+              />
+            </div>
+            <div className="space-y-0.5">
+              <Label className="field-label">Magical Bonus</Label>
+              <Input
+                type="number"
+                value={formData.magicalBonus ?? 0}
+                onChange={(e) => setFormData((prev) => ({ ...prev, magicalBonus: parseInt(e.target.value || '0', 10) || 0 }))}
+                className="h-8 bg-background/50 border-gold/15 text-sm no-number-spin"
+              />
+            </div>
+          </div>
+        )}
+      </fieldset>
+
+      {/* Range — Reach always; Normal + Long appear when thrown / ranged. */}
+      <fieldset className="config-fieldset">
+        <legend className="section-label text-gold/60 px-1">Range</legend>
+        <div className={`grid gap-2 ${showNormalLong ? 'grid-cols-3' : 'grid-cols-1'}`}>
+          {showNormalLong && (
+            <>
+              <div className="space-y-0.5">
+                <Label className="field-label text-ink/45">Normal</Label>
+                <Input
+                  type="number" min={0} placeholder="—"
+                  value={range.value ?? ''}
+                  onChange={(e) => updateRange({ value: rangeInt(e.target.value) })}
+                  className="h-8 bg-background/50 border-gold/15 text-sm no-number-spin"
+                />
+              </div>
+              <div className="space-y-0.5">
+                <Label className="field-label text-ink/45">Long</Label>
+                <Input
+                  type="number" min={0} placeholder="—"
+                  value={range.long ?? ''}
+                  onChange={(e) => updateRange({ long: rangeInt(e.target.value) })}
+                  className="h-8 bg-background/50 border-gold/15 text-sm no-number-spin"
+                />
+              </div>
+            </>
+          )}
+          <div className="space-y-0.5">
+            <Label className="field-label text-ink/45">Reach</Label>
+            <Input
+              type="number" min={0} placeholder="5"
+              value={range.reach ?? ''}
+              onChange={(e) => updateRange({ reach: rangeInt(e.target.value) })}
+              className="h-8 bg-background/50 border-gold/15 text-sm no-number-spin"
+            />
+          </div>
+        </div>
+        <FieldRow label="Unit">
+          <FieldSelect
+            value={range.units || 'ft'}
+            onChange={(val) => updateRange({ units: val })}
+            options={WEAPON_RANGE_UNITS}
+            triggerClassName="w-full"
+          />
+        </FieldRow>
+      </fieldset>
+
+      {/* Damage — intrinsic weapon dice (system.damage.base). */}
+      <fieldset className="config-fieldset">
+        <legend className="section-label text-gold/60 px-1">Damage</legend>
+        <p className="field-hint mb-2">
+          Intrinsic damage dice from the weapon. The ability modifier and additional
+          damage parts are provided by the attack activity.
+        </p>
+        <DamagePartEditor
+          parts={[basePart]}
+          onChange={(next) => setBasePart(next[0] || {})}
+          typeOptions={damageTypeOptions}
+          canScale={false}
+        />
+      </fieldset>
+
+      {/* Usage — Limited Uses (Spent / Max). */}
+      <ItemUsesField
+        uses={formData.uses}
+        onChange={(next) => setFormData((prev) => ({ ...prev, uses: next as any }))}
+        showAutoDestroy={false}
+      />
+    </div>
+  );
+}
+
 function WeaponItemFields({
   formData,
   setFormData,
@@ -2334,6 +2742,534 @@ function WeaponItemFields({
         </FieldRow>
       </ActivitySection>
     </>
+  );
+}
+
+// ─── Tool Details (Foundry dnd5e 5.3.1 tool sheet) ─────────────────
+//
+// Tool Type = the tool category (data-driven from tool_categories, like
+// armor); Base Tool = a `tools` proficiency row in that category. Plus the
+// richer ability-check block (5-level proficiency incl. Expertise / Half +
+// a default ability), a check bonus, and attunement when Magical.
+
+function ToolDetails({
+  formData,
+  setFormData,
+  profs,
+}: {
+  formData: ItemFormData;
+  setFormData: React.Dispatch<React.SetStateAction<ItemFormData>>;
+  profs: ProficiencyBucket;
+}) {
+  const subtype = formData.typeSubtype || '';
+  const toolCats = Array.isArray(profs.toolCategories) ? profs.toolCategories : [];
+  const toolCat = toolCats.find((c: any) => String(c.identifier) === subtype);
+  const baseTools = toolCat
+    ? (Array.isArray(profs.tools) ? profs.tools : []).filter(
+        (t: any) => String(t.category_id ?? t.categoryId ?? '') === String(toolCat.id),
+      )
+    : [];
+
+  const propertyCatalog = useMemo(() => {
+    const list = Array.isArray(profs.itemProperties) ? profs.itemProperties : [];
+    return list
+      .filter((p: any) => { try { return JSON.parse(p.valid_types || '[]').includes('tool'); } catch { return false; } })
+      .map((p: any) => ({ id: String(p.identifier || p.id), name: String(p.name || p.identifier) }));
+  }, [profs.itemProperties]);
+
+  const properties = Array.isArray(formData.properties) ? formData.properties : [];
+  const isMagical = properties.includes('mgc');
+  const toggleProperty = (slug: string) => setFormData((prev) => {
+    const cur = Array.isArray(prev.properties) ? prev.properties : [];
+    return { ...prev, properties: cur.includes(slug) ? cur.filter((s) => s !== slug) : [...cur, slug] };
+  });
+
+  // Proficiency: null (Automatic) / 0 / 1 / 2 (Expertise) / 0.5 (Half).
+  const profValue = formData.proficient == null ? 'auto'
+    : formData.proficient === 2 ? 'expertise'
+    : formData.proficient === 0.5 ? 'half'
+    : formData.proficient ? 'yes' : 'no';
+  const setProf = (v: string) => setFormData((prev) => ({
+    ...prev,
+    proficient: v === 'auto' ? null : v === 'no' ? 0 : v === 'yes' ? 1 : v === 'expertise' ? 2 : 0.5,
+  }));
+
+  // Ability dropdown — Default + the six standard abilities, resolved to the
+  // attributes-table id (items.ability_id is that FK); slug fallback if the
+  // attribute row isn't loaded. 'default' sentinel carries the empty value.
+  const abilityOptions: [string, string][] = TOOL_ABILITY_OPTIONS.map(([slug, label]) => {
+    if (!slug) return ['default', label];
+    const row = (Array.isArray(profs.abilities) ? profs.abilities : []).find(
+      (a: any) => String(a.identifier).toLowerCase() === slug,
+    );
+    return [String(row?.id || slug), label];
+  });
+
+  return (
+    <div className="space-y-4 pt-4 border-t border-gold/15">
+      <fieldset className="config-fieldset">
+        <legend className="section-label text-gold/60 px-1">Tool Details</legend>
+        <FieldRow label="Tool Type">
+          <FieldSelect
+            value={subtype}
+            onChange={(val) => setFormData((prev) => ({ ...prev, typeSubtype: val, baseToolId: '', baseItem: '' }))}
+            options={toolCats.map((c: any): [string, string] => [String(c.identifier), String(c.name || c.identifier)])}
+            placeholder="— select —"
+            triggerClassName="w-full"
+          />
+        </FieldRow>
+        {baseTools.length > 0 && (
+          <FieldRow label="Base Tool" hint="Links to a row in the tools proficiency table for the chosen category.">
+            <SingleSelectSearch
+              value={formData.baseToolId || ''}
+              onChange={(id) => setFormData((prev) => ({
+                ...prev,
+                baseToolId: id,
+                baseItem: id ? (baseTools.find((t: any) => String(t.id) === id)?.identifier || '') : '',
+              }))}
+              options={[{ id: '', name: '— none —' }, ...baseTools.map((t: any) => ({ id: String(t.id), name: String(t.name || t.identifier) }))]}
+              placeholder="Select base tool…"
+              triggerClassName="w-full"
+            />
+          </FieldRow>
+        )}
+        {/* Tool Properties — Focus / Magical (data-driven, stacked grid). */}
+        <div className="py-2 space-y-1.5">
+          <p className="text-xs font-semibold text-ink/85 leading-tight">Tool Properties</p>
+          {propertyCatalog.length === 0 ? (
+            <p className="field-hint">No properties for this type.</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3">
+              {propertyCatalog.map((p) => (
+                <label key={p.id} className="flex items-center gap-2 cursor-pointer">
+                  <Checkbox checked={properties.includes(p.id)} onCheckedChange={() => toggleProperty(p.id)} />
+                  <span className="text-xs text-ink/75">{p.name}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+        {/* Ability Check — Proficiency + Ability. */}
+        <div className="space-y-1 py-1">
+          <Label className="field-label">Ability Check</Label>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-0.5">
+              <Label className="field-label text-ink/45">Proficiency</Label>
+              <FieldSelect value={profValue} onChange={setProf} options={TOOL_PROFICIENCY_OPTIONS} triggerClassName="w-full" />
+            </div>
+            <div className="space-y-0.5">
+              <Label className="field-label text-ink/45">Ability</Label>
+              <FieldSelect
+                value={formData.abilityId || 'default'}
+                onChange={(v) => setFormData((prev) => ({ ...prev, abilityId: v === 'default' ? '' : v }))}
+                options={abilityOptions}
+                triggerClassName="w-full"
+              />
+            </div>
+          </div>
+        </div>
+        <FieldRow label="Tool Bonus" hint="Formula added to checks made with this tool. e.g. '+1' or '@prof'.">
+          <Input
+            value={formData.bonus || ''}
+            onChange={(e) => setFormData((prev) => ({ ...prev, bonus: e.target.value }))}
+            className="h-8 bg-background/50 border-gold/15 text-sm font-mono"
+            placeholder="+1"
+          />
+        </FieldRow>
+        {/* Attunement — shown when Magical (Foundry behaviour). */}
+        {isMagical && (
+          <FieldRow label="Attunement">
+            <FieldSelect
+              value={formData.attunement ? formData.attunement : 'none'}
+              onChange={(val) => setFormData((prev) => ({ ...prev, attunement: val === 'none' ? '' : val }))}
+              options={CONTAINER_ATTUNEMENT_OPTIONS}
+              triggerClassName="w-full"
+            />
+          </FieldRow>
+        )}
+      </fieldset>
+
+      {/* Usage — Limited Uses (Spent / Max). */}
+      <ItemUsesField
+        uses={formData.uses}
+        onChange={(next) => setFormData((prev) => ({ ...prev, uses: next as any }))}
+        showAutoDestroy={false}
+      />
+    </div>
+  );
+}
+
+// ─── Loot Details (Foundry dnd5e 5.3.1 loot sheet — Loot Type + Magical) ──
+//
+// The simplest type: a Loot Type subtype + a single Magical property. No
+// usage, attunement, or bonus. Foundry's loot sheet is Description + Details
+// only, so the editor restricts loot to those two sub-tabs (see editorSubTabs).
+
+function LootDetails({
+  formData,
+  setFormData,
+  profs,
+}: {
+  formData: ItemFormData;
+  setFormData: React.Dispatch<React.SetStateAction<ItemFormData>>;
+  profs: ProficiencyBucket;
+}) {
+  // Loot properties from the admin-managed item_properties table (valid_types
+  // includes 'loot') — just Magical (mgc).
+  const propertyCatalog = useMemo(() => {
+    const list = Array.isArray(profs.itemProperties) ? profs.itemProperties : [];
+    return list
+      .filter((p: any) => { try { return JSON.parse(p.valid_types || '[]').includes('loot'); } catch { return false; } })
+      .map((p: any) => ({ id: String(p.identifier || p.id), name: String(p.name || p.identifier) }));
+  }, [profs.itemProperties]);
+
+  const properties = Array.isArray(formData.properties) ? formData.properties : [];
+  const toggleProperty = (slug: string) => setFormData((prev) => {
+    const cur = Array.isArray(prev.properties) ? prev.properties : [];
+    return { ...prev, properties: cur.includes(slug) ? cur.filter((s) => s !== slug) : [...cur, slug] };
+  });
+
+  return (
+    <div className="space-y-4 pt-4 border-t border-gold/15">
+      <fieldset className="config-fieldset">
+        <legend className="section-label text-gold/60 px-1">Loot Details</legend>
+        <FieldRow label="Loot Type">
+          <FieldSelect
+            value={formData.typeSubtype || ''}
+            onChange={(val) => setFormData((prev) => ({ ...prev, typeSubtype: val }))}
+            options={LOOT_SUBTYPES}
+            placeholder="— select —"
+            triggerClassName="w-full"
+          />
+        </FieldRow>
+        <div className="py-2 space-y-1.5">
+          <p className="text-xs font-semibold text-ink/85 leading-tight">Loot Properties</p>
+          {propertyCatalog.length === 0 ? (
+            <p className="field-hint">No properties for this type.</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3">
+              {propertyCatalog.map((p) => (
+                <label key={p.id} className="flex items-center gap-2 cursor-pointer">
+                  <Checkbox checked={properties.includes(p.id)} onCheckedChange={() => toggleProperty(p.id)} />
+                  <span className="text-xs text-ink/75">{p.name}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      </fieldset>
+    </div>
+  );
+}
+
+// ─── Equipment Details (Foundry dnd5e 5.3.1 equipment sheet — base) ──
+//
+// The base layout common to every equipment subtype: Equipment Type,
+// Proficiency Level, Equipment Properties (data-driven from item_properties
+// valid for 'equipment'), and — when Magical — Attunement + Bonus, then Usage.
+// Armor-bearing subtypes (light/medium/heavy/shield) get their AC / Dex-cap /
+// Strength block in a later "equipment types" pass; until then the legacy
+// `EquipmentItemFields` armor block stays defined for reuse.
+
+function EquipmentDetails({
+  formData,
+  setFormData,
+  profs,
+}: {
+  formData: ItemFormData;
+  setFormData: React.Dispatch<React.SetStateAction<ItemFormData>>;
+  profs: ProficiencyBucket;
+}) {
+  // Equipment properties from the admin-managed item_properties table
+  // (valid_types includes 'equipment') — Adamantine, Focus, Magical, Stealth
+  // Disadvantage. Same data-driven catalog the consumable + container use.
+  const propertyCatalog = useMemo(() => {
+    const list = Array.isArray(profs.itemProperties) ? profs.itemProperties : [];
+    return list
+      .filter((p: any) => {
+        try { return JSON.parse(p.valid_types || '[]').includes('equipment'); }
+        catch { return false; }
+      })
+      .map((p: any) => ({ id: String(p.identifier || p.id), name: String(p.name || p.identifier) }));
+  }, [profs.itemProperties]);
+
+  const properties = Array.isArray(formData.properties) ? formData.properties : [];
+  const isMagical = properties.includes('mgc');
+  const toggleProperty = (slug: string) => setFormData((prev) => {
+    const cur = Array.isArray(prev.properties) ? prev.properties : [];
+    return { ...prev, properties: cur.includes(slug) ? cur.filter((s) => s !== slug) : [...cur, slug] };
+  });
+
+  const profLevel = formData.proficient == null ? 'auto' : (formData.proficient ? 'yes' : 'no');
+
+  // Vehicle-equipment (mountable) stats — surfaced when Equipment Type = vehicle.
+  const subtype = formData.typeSubtype || '';
+  const vehicle = (formData.vehicle && typeof formData.vehicle === 'object') ? formData.vehicle : {};
+  const vArmor = (vehicle.armor && typeof vehicle.armor === 'object') ? vehicle.armor : {};
+  const vCrew = (vehicle.crew && typeof vehicle.crew === 'object') ? vehicle.crew : {};
+  const vHp = (vehicle.hp && typeof vehicle.hp === 'object') ? vehicle.hp : {};
+  const vSpeed = (vehicle.speed && typeof vehicle.speed === 'object') ? vehicle.speed : {};
+  const setVehicle = (patch: Record<string, any>) => setFormData((prev) => {
+    const cur = (prev.vehicle && typeof prev.vehicle === 'object') ? prev.vehicle : {};
+    return { ...prev, vehicle: { ...cur, ...patch } };
+  });
+  const coverSentinel = vehicle.cover == null ? 'none'
+    : vehicle.cover === 1 ? 'total'
+    : vehicle.cover === 0.5 ? 'half'
+    : vehicle.cover === 0.75 ? 'threeQuarters' : 'none';
+  const intOrNull = (s: string) => (s === '' ? null : (parseInt(s, 10) || 0));
+
+  // Armor subtypes — data-driven from the armor_categories table (so homebrew
+  // categories like Exotic appear). Base Equipment pulls the armor proficiency
+  // rows in the selected category; categories with none (e.g. natural) show no
+  // Base Equipment, per Foundry.
+  const armorCats = Array.isArray(profs.armorCategories) ? profs.armorCategories : [];
+  const armorCat = armorCats.find((c: any) => String(c.identifier) === subtype);
+  const isArmor = !!armorCat;
+  const baseArmors = isArmor
+    ? (Array.isArray(profs.armor) ? profs.armor : []).filter(
+        (a: any) => String(a.category_id ?? a.categoryId ?? '') === String(armorCat.id),
+      )
+    : [];
+
+  return (
+    <div className="space-y-4 pt-4 border-t border-gold/15">
+      <fieldset className="config-fieldset">
+        <legend className="section-label text-gold/60 px-1">Equipment Details</legend>
+        {/* Equipment Type — ungrouped base subtypes + an "Armor" group sourced
+            from the armor_categories table (Foundry-style optgroup). */}
+        <FieldRow label="Equipment Type">
+          <Select
+            value={subtype}
+            onValueChange={(v) => {
+              if (v == null) return;
+              // Switching subtype clears the base-armor link (re-pick per type).
+              setFormData((prev) => ({ ...prev, typeSubtype: String(v), baseArmorId: '', baseItem: '' }));
+            }}
+          >
+            <SelectTrigger className="w-full rounded-md border-gold/15 bg-background/50 text-sm dark:bg-background/50 focus-visible:border-gold focus-visible:ring-0">
+              <SelectValue placeholder="— select —" />
+            </SelectTrigger>
+            <SelectContent>
+              {EQUIPMENT_BASE_SUBTYPES.map(([v, l]) => (
+                <SelectItem key={v} value={v}>{l}</SelectItem>
+              ))}
+              {armorCats.length > 0 && (
+                <SelectGroup>
+                  <SelectLabel className="text-[10px] font-black uppercase tracking-wider text-gold/55 px-2 pt-2 pb-1">Armor</SelectLabel>
+                  {armorCats.map((c: any) => (
+                    <SelectItem key={String(c.id)} value={String(c.identifier)}>{c.name || c.identifier}</SelectItem>
+                  ))}
+                </SelectGroup>
+              )}
+            </SelectContent>
+          </Select>
+        </FieldRow>
+        {/* Base Equipment — armor proficiency rows in the selected category;
+            hidden when the category has none (e.g. natural armor). */}
+        {isArmor && baseArmors.length > 0 && (
+          <FieldRow label="Base Equipment" hint="Links to a row in the armor proficiency table for the chosen armor type.">
+            <SingleSelectSearch
+              value={formData.baseArmorId || ''}
+              onChange={(id) => setFormData((prev) => ({
+                ...prev,
+                baseArmorId: id,
+                baseItem: id ? (baseArmors.find((a: any) => String(a.id) === id)?.identifier || '') : '',
+              }))}
+              options={[{ id: '', name: '— none —' }, ...baseArmors.map((a: any) => ({ id: String(a.id), name: String(a.name || a.identifier) }))]}
+              placeholder="Select base armor…"
+              triggerClassName="w-full"
+            />
+          </FieldRow>
+        )}
+        <FieldRow
+          label="Proficiency Level"
+          hint="Automatic lets the character sheet decide from the wearer's proficiencies; override to force proficient / not."
+        >
+          <FieldSelect
+            value={profLevel}
+            onChange={(val) => setFormData((prev) => ({
+              ...prev,
+              proficient: val === 'auto' ? null : (val === 'yes' ? 1 : 0),
+            }))}
+            options={PROFICIENCY_LEVEL_OPTIONS}
+            triggerClassName="w-full"
+          />
+        </FieldRow>
+        {/* Armor — AC / Max Dex / Strength (armor subtypes). */}
+        {isArmor && (
+          <div className="space-y-1 py-1">
+            <Label className="field-label">Armor</Label>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="space-y-0.5">
+                <Label className="field-label text-ink/45">AC</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={formData.armorValue ?? ''}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, armorValue: e.target.value === '' ? 0 : (parseInt(e.target.value, 10) || 0) }))}
+                  className="h-8 bg-background/50 border-gold/15 text-sm no-number-spin"
+                />
+              </div>
+              <div className="space-y-0.5">
+                <Label className="field-label text-ink/45">Max Dex</Label>
+                <Input
+                  type="number"
+                  value={formData.armorDex ?? ''}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, armorDex: e.target.value === '' ? null : (parseInt(e.target.value, 10) || 0) }))}
+                  placeholder="∞"
+                  className="h-8 bg-background/50 border-gold/15 text-sm no-number-spin"
+                />
+              </div>
+              <div className="space-y-0.5">
+                <Label className="field-label text-ink/45">Strength</Label>
+                <Input
+                  type="number"
+                  value={formData.strength ?? ''}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, strength: e.target.value === '' ? null : (parseInt(e.target.value, 10) || 0) }))}
+                  placeholder="—"
+                  className="h-8 bg-background/50 border-gold/15 text-sm no-number-spin"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+        {/* Properties — full-width stacked grid (label on top), like consumable. */}
+        <div className="py-2 space-y-1.5">
+          <p className="text-xs font-semibold text-ink/85 leading-tight">Equipment Properties</p>
+          {propertyCatalog.length === 0 ? (
+            <p className="field-hint">No properties for this type.</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3">
+              {propertyCatalog.map((p) => (
+                <label key={p.id} className="flex items-center gap-2 cursor-pointer">
+                  <Checkbox checked={properties.includes(p.id)} onCheckedChange={() => toggleProperty(p.id)} />
+                  <span className="text-xs text-ink/75">{p.name}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+        {/* Magical → Attunement + Bonus (Foundry reveals these when Magical). */}
+        {isMagical && (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 pt-1">
+            <div className="space-y-0.5">
+              <Label className="field-label">Attunement</Label>
+              <FieldSelect
+                value={formData.attunement ? formData.attunement : 'none'}
+                onChange={(val) => setFormData((prev) => ({ ...prev, attunement: val === 'none' ? '' : val }))}
+                options={CONTAINER_ATTUNEMENT_OPTIONS}
+                triggerClassName="w-full"
+              />
+            </div>
+            <div className="space-y-0.5">
+              <Label className="field-label">Magical Bonus</Label>
+              <Input
+                type="number"
+                value={formData.armorMagicalBonus ?? 0}
+                onChange={(e) => setFormData((prev) => ({ ...prev, armorMagicalBonus: parseInt(e.target.value || '0', 10) || 0 }))}
+                className="h-8 bg-background/50 border-gold/15 text-sm no-number-spin"
+              />
+            </div>
+          </div>
+        )}
+      </fieldset>
+
+      {/* Vehicle Properties — dnd5e MountableTemplate, only for the vehicle subtype. */}
+      {subtype === 'vehicle' && (
+        <fieldset className="config-fieldset">
+          <legend className="section-label text-gold/60 px-1">Vehicle Properties</legend>
+          <div className="space-y-3 py-1">
+            <div className="space-y-0.5">
+              <Label className="field-label">Armor Class</Label>
+              <Input
+                type="number"
+                min={0}
+                value={vArmor.value ?? ''}
+                onChange={(e) => setVehicle({ armor: { ...vArmor, value: intOrNull(e.target.value) } })}
+                className="h-8 bg-background/50 border-gold/15 text-sm no-number-spin"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-0.5">
+                <Label className="field-label">Crew (Max)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={vCrew.max ?? ''}
+                  onChange={(e) => setVehicle({ crew: { ...vCrew, max: intOrNull(e.target.value) } })}
+                  className="h-8 bg-background/50 border-gold/15 text-sm no-number-spin"
+                />
+              </div>
+              <div className="space-y-0.5">
+                <Label className="field-label">Cover</Label>
+                <FieldSelect
+                  value={coverSentinel}
+                  onChange={(v) => setVehicle({ cover: v === 'none' ? null : v === 'total' ? 1 : v === 'half' ? 0.5 : 0.75 })}
+                  options={VEHICLE_COVER_OPTIONS}
+                  triggerClassName="w-full"
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="field-label">Hit Points</Label>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="space-y-0.5">
+                  <Label className="field-label text-ink/45">Current</Label>
+                  <Input type="number" min={0} value={vHp.value ?? ''} onChange={(e) => setVehicle({ hp: { ...vHp, value: intOrNull(e.target.value) } })} className="h-8 bg-background/50 border-gold/15 text-sm no-number-spin" />
+                </div>
+                <div className="space-y-0.5">
+                  <Label className="field-label text-ink/45">Max</Label>
+                  <Input type="number" min={0} value={vHp.max ?? ''} onChange={(e) => setVehicle({ hp: { ...vHp, max: intOrNull(e.target.value) } })} className="h-8 bg-background/50 border-gold/15 text-sm no-number-spin" />
+                </div>
+                <div className="space-y-0.5">
+                  <Label className="field-label text-ink/45">Threshold</Label>
+                  <Input type="number" min={0} value={vHp.dt ?? ''} onChange={(e) => setVehicle({ hp: { ...vHp, dt: intOrNull(e.target.value) } })} placeholder="—" className="h-8 bg-background/50 border-gold/15 text-sm no-number-spin" />
+                </div>
+              </div>
+              <Input
+                value={vHp.conditions ?? ''}
+                onChange={(e) => setVehicle({ hp: { ...vHp, conditions: e.target.value } })}
+                placeholder="Health conditions"
+                className="h-8 bg-background/50 border-gold/15 text-sm"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="field-label">Speed</Label>
+              <div className="grid grid-cols-[1fr_auto] gap-2">
+                <Input
+                  type="number"
+                  min={0}
+                  value={vSpeed.value ?? ''}
+                  onChange={(e) => setVehicle({ speed: { ...vSpeed, value: intOrNull(e.target.value), units: vSpeed.units || 'ft' } })}
+                  placeholder="Value"
+                  className="h-8 bg-background/50 border-gold/15 text-sm no-number-spin"
+                />
+                <FieldSelect
+                  value={vSpeed.units || 'ft'}
+                  onChange={(u) => setVehicle({ speed: { ...vSpeed, units: u } })}
+                  options={VEHICLE_SPEED_UNITS}
+                  triggerClassName="h-8 w-28"
+                />
+              </div>
+              <Input
+                value={vSpeed.conditions ?? ''}
+                onChange={(e) => setVehicle({ speed: { ...vSpeed, conditions: e.target.value } })}
+                placeholder="Speed conditions"
+                className="h-8 bg-background/50 border-gold/15 text-sm"
+              />
+            </div>
+          </div>
+        </fieldset>
+      )}
+
+      {/* Usage — Limited Uses (Spent / Max). Equipment doesn't self-destruct. */}
+      <ItemUsesField
+        uses={formData.uses}
+        onChange={(next) => setFormData((prev) => ({ ...prev, uses: next as any }))}
+        showAutoDestroy={false}
+      />
+    </div>
   );
 }
 
