@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, BookOpen, Download, FileJson, ImageOff, Layers3, Upload } from 'lucide-react';
+import { AlertTriangle, BookOpen, Download, FileJson, ImageOff, Layers3, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { reportClientError, OperationType } from '../../lib/firebase';
 import { fetchCollection, upsertDocument, upsertDocumentBatch } from '../../lib/d1';
@@ -87,6 +87,9 @@ export default function SpeciesBackgroundImportWorkbench({
   // Per-candidate manual source assignment (candidateId -> sourceId; '' = none).
   // Lets the importer set a source for entries whose book didn't auto-match.
   const [sourceOverrides, setSourceOverrides] = useState<Record<string, string>>({});
+  // Candidates the user removed from this import batch — excluded from the list
+  // + "Import Visible". Reversible via the header "restore" affordance.
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => new Set());
   const [search, setSearch] = useState('');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -178,6 +181,7 @@ export default function SpeciesBackgroundImportWorkbench({
   const visibleCandidates = useMemo(() => {
     const lowered = search.trim().toLowerCase();
     return candidates.filter((c) => {
+      if (dismissedIds.has(c.candidateId)) return false;
       if (!matchesSingleAxisFilter(c.matchedSourceId || '', axisFilters.source)) return false;
       if (!matchesMultiAxisFilter(statusFlagsOf(c), axisFilters.status)) return false;
       if (lowered) {
@@ -189,7 +193,7 @@ export default function SpeciesBackgroundImportWorkbench({
       }
       return true;
     });
-  }, [candidates, search, axisFilters]);
+  }, [candidates, search, axisFilters, dismissedIds]);
 
   // Filter axes — Source (only the matched sources present in the load) +
   // Status (resolved / unresolved / missing image / already imported).
@@ -365,6 +369,18 @@ export default function SpeciesBackgroundImportWorkbench({
                     />
                   </div>
                 ) : null}
+                {dismissedIds.size > 0 ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-2 h-8 border-gold/20 bg-background/40 text-ink/70 hover:bg-gold/5"
+                    onClick={() => setDismissedIds(new Set())}
+                    title={`Restore the ${meta.plural.toLowerCase()} you removed from this import`}
+                  >
+                    Restore {dismissedIds.size} removed
+                  </Button>
+                ) : null}
               </div>
             </div>
             <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-ink/70">
@@ -488,15 +504,28 @@ export default function SpeciesBackgroundImportWorkbench({
                                 </div>
                                 <p className="font-serif italic text-ink/70">{selectedCandidate.summary || meta.singular}</p>
                               </div>
-                              <Button
-                                type="button"
-                                className="gap-2 btn-gold-solid shrink-0"
-                                onClick={handleImportSelected}
-                                disabled={saving}
-                              >
-                                <Download className="h-4 w-4" />
-                                {resolveEntryId(selectedCandidate) ? `Update ${meta.singular}` : `Import ${meta.singular}`}
-                              </Button>
+                              <div className="flex gap-2 shrink-0">
+                                <Button
+                                  type="button"
+                                  className="gap-2 btn-gold-solid"
+                                  onClick={handleImportSelected}
+                                  disabled={saving}
+                                >
+                                  <Download className="h-4 w-4" />
+                                  {resolveEntryId(selectedCandidate) ? `Update ${meta.singular}` : `Import ${meta.singular}`}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="gap-2 border-blood/30 text-blood hover:bg-blood/10"
+                                  onClick={() => setDismissedIds((prev) => { const n = new Set(prev); n.add(selectedCandidate.candidateId); return n; })}
+                                  disabled={saving}
+                                  title={`Exclude this ${meta.singular.toLowerCase()} from the import (restorable)`}
+                                >
+                                  <X className="h-4 w-4" />
+                                  Remove
+                                </Button>
+                              </div>
                             </div>
                           </div>
 
