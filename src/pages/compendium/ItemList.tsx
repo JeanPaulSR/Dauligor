@@ -4,6 +4,7 @@ import { useCompendiumHashLink } from '../../lib/useCompendiumHashLink';
 import { Star } from 'lucide-react';
 import { auth } from '../../lib/firebase';
 import { fetchCollection } from '../../lib/d1';
+import { fetchItem } from '../../lib/compendium';
 import { cn } from '../../lib/utils';
 import { Button } from '../../components/ui/button';
 import { type FilterSection } from '../../components/compendium/SectionFilterPanel';
@@ -112,6 +113,15 @@ const ITEM_TYPE_LABEL: Record<string, string> = {
   backpack: 'Backpack',
 };
 
+// Slim projection for the browser LIST. The heavy per-item payload
+// (description + the per-type mechanics JSON) is fetched lazily via
+// `fetchItem(id)` only when a row is opened, so the catalog query ships
+// just what the list rows, search, filters, and the detail-panel HEADER
+// need. The detail BODY (description / weapon-armor-tool mechanics /
+// weight / price) loads on click. base_*_id resolve the base-item label.
+const ITEM_BROWSER_SELECT =
+  'id, name, identifier, source_id, item_type, rarity, magical, attunement, base_item, base_weapon_id, base_armor_id, base_tool_id, image_url';
+
 const AXIS_KEYS = ['itemType', 'rarity', 'source', 'property'] as const;
 
 // ─── Component ────────────────────────────────────────────────
@@ -143,7 +153,7 @@ export default function ItemList({ userProfile }: { userProfile: any }) {
       // an empty `tools` table on a fresh world) doesn't blank the
       // entire page.
       const settled = await Promise.allSettled([
-        fetchCollection<any>('items', { orderBy: 'name ASC' }),
+        fetchCollection<any>('items', { select: ITEM_BROWSER_SELECT, orderBy: 'name ASC' }),
         fetchCollection<any>('sources', { orderBy: 'name ASC' }),
         fetchCollection<any>('weapons'),
         fetchCollection<any>('armor'),
@@ -352,6 +362,39 @@ export default function ItemList({ userProfile }: { userProfile: any }) {
     [items, selectedId],
   );
 
+  // Lazy-load the FULL selected row (description + per-type mechanics) on
+  // click. The catalog list ships only the slim header columns (see
+  // ITEM_BROWSER_SELECT), so the rest is fetched the moment a row opens —
+  // the detail panel reads the slim `selectedRow` for an instant header
+  // and swaps to the full row when it arrives. The list-computed
+  // annotations (resolvedBaseItemName / flags / sourceId) are carried onto
+  // the full row so the header reads identically across the swap.
+  const [selectedFullRow, setSelectedFullRow] = useState<ItemRow | null>(null);
+  useEffect(() => {
+    if (!selectedId) { setSelectedFullRow(null); return; }
+    setSelectedFullRow(null);
+    const slim = items.find((r) => r.id === selectedId) || null;
+    let cancelled = false;
+    (async () => {
+      try {
+        const full = await fetchItem(selectedId);
+        if (cancelled || !full) return;
+        setSelectedFullRow({
+          ...full,
+          sourceId: slim?.sourceId ?? full.source_id ?? full.sourceId,
+          magicalFlag: slim?.magicalFlag,
+          attunementFlag: slim?.attunementFlag,
+          resolvedBaseItemName: slim?.resolvedBaseItemName,
+        } as ItemRow);
+      } catch (err) {
+        console.error('[ItemList] failed to load item details:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedId, items]);
+
+  const detailRow = selectedFullRow ?? selectedRow;
+
   return (
     <CompendiumBrowserShell<ItemRow>
       rows={filteredItems}
@@ -376,10 +419,10 @@ export default function ItemList({ userProfile }: { userProfile: any }) {
       favoritesEmptyMessage="Star an item to pin it here."
       detailPanel={
         <ItemDetailPanel
-          row={selectedRow}
-          source={selectedRow ? sourceById[String(selectedRow.sourceId ?? '')] : undefined}
-          starred={selectedRow ? isFavorite(selectedRow.id) : false}
-          onToggleFavorite={selectedRow ? () => toggleFavorite(selectedRow.id) : undefined}
+          row={detailRow}
+          source={detailRow ? sourceById[String(detailRow.sourceId ?? '')] : undefined}
+          starred={detailRow ? isFavorite(detailRow.id) : false}
+          onToggleFavorite={detailRow ? () => toggleFavorite(detailRow.id) : undefined}
         />
       }
       emptyMessage="No items match the current search and filters."

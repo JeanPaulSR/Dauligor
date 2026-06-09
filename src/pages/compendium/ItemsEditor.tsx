@@ -73,6 +73,19 @@ const ITEM_TYPES: [string, string][] = [
 const ITEM_TYPE_LABEL: Record<string, string> =
   Object.fromEntries(ITEM_TYPES.map(([v, l]) => [v, l]));
 
+// Slim projection for the catalog LIST + filter pre-compute. The heavy
+// per-item payload (description / activities / effects / advancements /
+// properties / vehicle / the per-type stat JSON) is fetched lazily via
+// `fetchItem(id)` only when a row is opened (see the form-hydrate
+// effect), so the list query stays cheap at ~1,700 items instead of
+// shipping every column for every row. Columns here = exactly what the
+// list display, the search box, and the filter axes read: name/source/
+// type/rarity/magical/attunement for display + filtering, and
+// base_weapon_id / armor_type / tool_type / damage which the weapon-
+// category / armor / tool / damage-type filters pre-compute from.
+const ITEM_LIST_SELECT =
+  'id, name, identifier, source_id, item_type, type_subtype, rarity, magical, attunement, base_weapon_id, armor_type, tool_type, damage, image_url';
+
 const RARITIES: [string, string][] = [
   ['none', 'None'],
   ['common', 'Common'],
@@ -609,7 +622,7 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
           toolCategoryRows,
           damageTypeRows,
         ] = await Promise.all([
-          fetchCollection<any>('items', { orderBy: 'name ASC' }),
+          fetchCollection<any>('items', { select: ITEM_LIST_SELECT, orderBy: 'name ASC' }),
           fetchCollection<any>('sources', { orderBy: 'name ASC' }),
           fetchCollection<any>('weapons', { orderBy: 'name ASC' }),
           fetchCollection<any>('armor', { orderBy: 'name ASC' }),
@@ -949,7 +962,7 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
   // ── Save / Delete ─────────────────────────────────────────────
   const refreshEntries = async () => {
     try {
-      const rows = await fetchCollection<any>('items', { orderBy: 'name ASC' });
+      const rows = await fetchCollection<any>('items', { select: ITEM_LIST_SELECT, orderBy: 'name ASC' });
       setEntries(rows.map((row: any) => ({
         ...row,
         sourceId: row.source_id,
@@ -1437,17 +1450,6 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
           </span>
         );
       },
-    },
-    {
-      key: 'type',
-      label: 'Type',
-      width: '90px',
-      align: 'center',
-      render: (entry: any) => (
-        <span className="text-[10px] uppercase tracking-widest text-ink/65 truncate">
-          {ITEM_TYPE_LABEL[String(entry.itemType || entry.item_type || 'loot')] || entry.itemType}
-        </span>
-      ),
     },
     {
       key: 'source',
