@@ -1,5 +1,5 @@
-import React from 'react';
-import { Star } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Star, Package } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { bbcodeToHtml } from '../../lib/bbcode';
 
@@ -33,6 +33,8 @@ export type ItemDetailRow = {
   id?: string;
   name?: string;
   identifier?: string;
+  image_url?: string;
+  imageUrl?: string;
   item_type?: string;
   itemType?: string;
   rarity?: string;
@@ -166,42 +168,47 @@ export default function ItemDetailPanel({
 
   return (
     <div className="space-y-0">
-      <div className="border-b border-gold/15 bg-[linear-gradient(180deg,rgba(255,255,255,0.02),transparent)] px-6 py-5 space-y-2">
-        <div className="flex items-center gap-3 flex-wrap">
-          <h3 className="font-serif text-3xl font-bold text-ink">{row.name || '—'}</h3>
-          {onToggleFavorite ? (
-            <button
-              type="button"
-              onClick={onToggleFavorite}
-              className={cn(
-                'inline-flex items-center justify-center w-7 h-7 rounded border transition-colors',
-                starred
-                  ? 'border-gold bg-gold/15 text-gold hover:bg-blood/10 hover:border-blood/40 hover:text-blood'
-                  : 'border-gold/25 text-ink/45 hover:border-gold hover:text-gold',
-              )}
-              title={starred ? 'Remove from favorites' : 'Add to favorites'}
-              aria-label={starred ? 'Remove from favorites' : 'Add to favorites'}
-            >
-              <Star className={cn('w-4 h-4', starred && 'fill-current')} />
-            </button>
-          ) : null}
-          {source ? (
-            <span className="text-xs font-bold uppercase tracking-widest text-gold">
-              {source.abbreviation || source.shortName || source.name}
-            </span>
-          ) : null}
+      <div className="border-b border-gold/15 bg-[linear-gradient(180deg,rgba(255,255,255,0.02),transparent)] px-6 py-5">
+        <div className="flex items-start gap-5">
+          <ItemArtPreview src={row.image_url ?? row.imageUrl} alt={row.name || 'Item'} size={88} />
+          <div className="flex-1 min-w-0 space-y-2">
+            <div className="flex items-center gap-3 flex-wrap">
+              <h3 className="font-serif text-3xl font-bold text-ink">{row.name || '—'}</h3>
+              {onToggleFavorite ? (
+                <button
+                  type="button"
+                  onClick={onToggleFavorite}
+                  className={cn(
+                    'inline-flex items-center justify-center w-7 h-7 rounded border transition-colors',
+                    starred
+                      ? 'border-gold bg-gold/15 text-gold hover:bg-blood/10 hover:border-blood/40 hover:text-blood'
+                      : 'border-gold/25 text-ink/45 hover:border-gold hover:text-gold',
+                  )}
+                  title={starred ? 'Remove from favorites' : 'Add to favorites'}
+                  aria-label={starred ? 'Remove from favorites' : 'Add to favorites'}
+                >
+                  <Star className={cn('w-4 h-4', starred && 'fill-current')} />
+                </button>
+              ) : null}
+              {source ? (
+                <span className="text-xs font-bold uppercase tracking-widest text-gold">
+                  {source.abbreviation || source.shortName || source.name}
+                </span>
+              ) : null}
+            </div>
+            <p className="font-serif italic text-ink/75 text-sm">
+              {typeLabel}
+              {row.rarity && row.rarity !== 'none' ? ` · ${rarityLabel}` : ''}
+              {needsAttunement ? ' · requires attunement' : ''}
+              {isMagical ? ' · magical' : ''}
+            </p>
+            {row.resolvedBaseItemName ? (
+              <p className="text-xs text-ink/65">
+                Base item: <span className="font-bold text-gold/85">{row.resolvedBaseItemName}</span>
+              </p>
+            ) : null}
+          </div>
         </div>
-        <p className="font-serif italic text-ink/75 text-sm">
-          {typeLabel}
-          {row.rarity && row.rarity !== 'none' ? ` · ${rarityLabel}` : ''}
-          {needsAttunement ? ' · requires attunement' : ''}
-          {isMagical ? ' · magical' : ''}
-        </p>
-        {row.resolvedBaseItemName ? (
-          <p className="text-xs text-ink/65">
-            Base item: <span className="font-bold text-gold/85">{row.resolvedBaseItemName}</span>
-          </p>
-        ) : null}
       </div>
 
       <div className="border-b border-gold/15 px-6 py-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
@@ -227,6 +234,63 @@ export default function ItemDetailPanel({
 }
 
 // ─── Internal helpers ─────────────────────────────────────────────
+
+// Slim item-art preview — mirrors FeatDetailPanel's `FeatArtPreview`
+// (in-JS `Image()` probe → Lucide glyph fallback). Foundry ships many
+// items with relative `systems/dnd5e/…` / `modules/…` icon paths that
+// aren't hosted on images.dauligor.com and 404; the probe swaps to a
+// `Package` glyph instead of rendering a broken image. Core Foundry
+// `icons/…` art and external (5e.tools) URLs load and display normally.
+function ItemArtPreview({ src, alt, size }: { src?: string; alt: string; size: number }) {
+  const [status, setStatus] = useState<'idle' | 'loading' | 'loaded' | 'error'>(() => (src ? 'loading' : 'idle'));
+
+  useEffect(() => {
+    const nextSrc = String(src ?? '').trim();
+    if (!nextSrc) {
+      setStatus('idle');
+      return;
+    }
+    let cancelled = false;
+    const image = new Image();
+    setStatus('loading');
+    image.onload = () => { if (!cancelled) setStatus('loaded'); };
+    image.onerror = () => { if (!cancelled) setStatus('error'); };
+    image.src = nextSrc;
+    return () => { cancelled = true; };
+  }, [src]);
+
+  const dimensionStyle = { width: size, height: size };
+  const showImage = status === 'loaded' && src;
+
+  return (
+    <div
+      className="relative shrink-0 overflow-hidden rounded-md border border-gold/15 bg-background/30"
+      style={dimensionStyle}
+    >
+      {showImage ? (
+        <img
+          src={src}
+          alt={alt}
+          loading="lazy"
+          decoding="async"
+          className="block rounded object-cover"
+          style={dimensionStyle}
+        />
+      ) : (
+        <div
+          className="flex items-center justify-center rounded bg-background/40 text-ink/35"
+          style={dimensionStyle}
+        >
+          {status === 'loading' ? (
+            <div className="h-7 w-7 rounded-full border-2 border-gold border-t-transparent animate-spin" />
+          ) : (
+            <Package className="h-8 w-8" />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function DetailRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
