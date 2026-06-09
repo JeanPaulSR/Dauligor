@@ -109,6 +109,31 @@ const ITEM_TYPE_LABEL: Record<string, string> = {
   backpack: 'Backpack',
 };
 
+// Readable labels for dnd5e item/weapon property slugs so the reader view shows
+// "Versatile" / "Two-Handed" instead of raw "ver" / "two" (5etools-style).
+// Unknown (homebrew) slugs fall back to a title-cased version.
+const ITEM_PROPERTY_LABEL: Record<string, string> = {
+  ada: 'Adamantine', amm: 'Ammunition', fin: 'Finesse', fir: 'Firearm', foc: 'Focus',
+  hvy: 'Heavy', lgt: 'Light', lod: 'Loading', mgc: 'Magical', rch: 'Reach',
+  ret: 'Returning', sil: 'Silvered', spc: 'Special', thr: 'Thrown', two: 'Two-Handed',
+  ver: 'Versatile', stealthDisadvantage: 'Stealth Disadvantage',
+};
+
+const TOOL_TYPE_LABEL: Record<string, string> = {
+  art: "Artisan's Tools", game: 'Gaming Set', music: 'Musical Instrument',
+  vehicle: 'Vehicle', other: 'Other', OTHER: 'Other',
+};
+
+function titleCase(s: string): string {
+  return String(s || '').replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).trim();
+}
+
+// "1d8 + @mod" from a DamagePart-shaped object; '' when there are no dice.
+function diceOf(part: any): string {
+  if (!part || (!part.number && !part.denomination)) return '';
+  return `${part.number || 1}d${part.denomination}${part.bonus ? ` + ${part.bonus}` : ''}`;
+}
+
 export default function ItemDetailPanel({
   row,
   source,
@@ -174,13 +199,11 @@ export default function ItemDetailPanel({
         {row.resolvedBaseItemName ? (
           <p className="text-xs text-ink/65">
             Base item: <span className="font-bold text-gold/85">{row.resolvedBaseItemName}</span>
-            <span className="text-ink/45"> — defined in /admin/proficiencies</span>
           </p>
         ) : null}
       </div>
 
       <div className="border-b border-gold/15 px-6 py-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-        <DetailRow label="Identifier" value={row.identifier || '—'} mono />
         <DetailRow label="Weight" value={formatWeight(row.weight)} />
         <DetailRow label="Price" value={formatPrice(row.price)} />
       </div>
@@ -216,30 +239,41 @@ function DetailRow({ label, value, mono }: { label: string; value: string; mono?
 
 function WeaponMechanics({ raw }: { raw: ItemDetailRow }) {
   const damage = raw?.damage;
-  const range = raw?.range;
-  const damageBase = damage?.base;
-  const damageStr = damageBase
-    ? [
-        damageBase.number ? `${damageBase.number}` : null,
-        damageBase.denomination ? `d${damageBase.denomination}` : null,
-        damageBase.bonus ? ` + ${damageBase.bonus}` : null,
-      ].filter(Boolean).join('')
+  const base = damage?.base;
+  const baseDice = diceOf(base);
+  const baseTypes = Array.isArray(base?.types) && base.types.length ? base.types.join(', ') : '';
+  const damageStr = baseDice ? `${baseDice}${baseTypes ? ' ' + baseTypes : ''}` : '';
+  const versatileDice = diceOf(damage?.versatile);
+
+  const range = raw?.range || {};
+  // "20/60 ft." style — normal[/long] + units. Empty for pure-melee weapons.
+  const rangeText = range.value
+    ? `${range.value}${range.long ? `/${range.long}` : ''} ${range.units || 'ft'}.`
     : '';
-  const damageTypes = Array.isArray(damageBase?.types) ? damageBase.types.join(', ') : '';
-  const rangeStr = range
-    ? [range.value, range.long ? `/ ${range.long}` : null, range.units]
-        .filter(Boolean).join(' ')
-    : '';
+
+  const props = Array.isArray(raw?.properties) ? raw.properties : [];
+  // Render properties as readable labels; fold the property-specific values in
+  // the 5etools way: Versatile shows its die, Thrown / Ammunition show the range.
+  const propLabels = props.map((slug) => {
+    const label = ITEM_PROPERTY_LABEL[slug] || titleCase(slug);
+    if (slug === 'ver' && versatileDice) return `${label} (${versatileDice})`;
+    if (slug === 'thr' && rangeText) return `${label} (${rangeText})`;
+    if (slug === 'amm' && rangeText) return `${label} (range ${rangeText})`;
+    return label;
+  });
+
   const magicBonus = raw?.magical_bonus ?? raw?.magicalBonus ?? 0;
+  const mastery = String(raw?.mastery ?? '').trim();
+  // Range gets its own row only when it isn't already surfaced by Thrown/Ammunition.
+  const showLooseRange = !!rangeText && !props.includes('thr') && !props.includes('amm');
+
   return (
     <div className="border-b border-gold/15 px-6 py-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-      <DetailRow label="Damage" value={damageStr ? `${damageStr}${damageTypes ? ' ' + damageTypes : ''}` : '—'} />
-      <DetailRow label="Range" value={rangeStr || '—'} />
-      <DetailRow label="Mastery" value={raw?.mastery || '—'} />
+      {damageStr ? <DetailRow label="Damage" value={damageStr} /> : null}
+      {showLooseRange ? <DetailRow label="Range" value={rangeText} /> : null}
       {magicBonus ? <DetailRow label="Magic Bonus" value={`+${magicBonus}`} /> : null}
-      {Array.isArray(raw?.properties) && raw.properties.length > 0 ? (
-        <DetailRow label="Properties" value={raw.properties.join(', ')} />
-      ) : null}
+      {mastery ? <DetailRow label="Mastery" value={titleCase(mastery)} /> : null}
+      {propLabels.length ? <DetailRow label="Properties" value={propLabels.join(', ')} /> : null}
     </div>
   );
 }
@@ -249,32 +283,49 @@ function ArmorMechanics({ raw }: { raw: ItemDetailRow }) {
   const dex = raw?.armor_dex ?? raw?.armorDex;
   const magicBonus = raw?.armor_magical_bonus ?? raw?.armorMagicalBonus ?? 0;
   const armorType = raw?.armor_type ?? raw?.armorType;
+  const strength = raw?.strength != null && Number(raw.strength) > 0 ? Math.trunc(Number(raw.strength)) : null;
+  // Stealth disadvantage lives on the `stealthDisadvantage` property (post the
+  // 20260526-1700 column drop); tolerate the legacy boolean flag too.
+  const props = Array.isArray(raw?.properties) ? raw.properties : [];
+  const stealthDisadv = !!raw?.stealth || props.includes('stealthDisadvantage');
+  // Max-Dex bonus only when the armor actually caps a positive value (medium).
+  // Heavy (0) adds no Dex and light (null) is uncapped — neither shows a row.
+  const maxDex = dex != null && Number(dex) > 0 ? Number(dex) : null;
   return (
     <div className="border-b border-gold/15 px-6 py-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
       <DetailRow label="Armor Class" value={ac != null ? String(ac) : '—'} />
-      <DetailRow label="Dex Cap" value={dex != null ? String(dex) : '—'} />
-      <DetailRow label="Strength Req" value={raw?.strength ? String(raw.strength) : '—'} />
-      <DetailRow label="Stealth" value={raw?.stealth ? 'Disadvantage' : 'Normal'} />
-      {armorType ? <DetailRow label="Type" value={String(armorType)} /> : null}
+      {maxDex != null ? <DetailRow label="Max Dex" value={`+${maxDex}`} /> : null}
+      {strength != null ? <DetailRow label="Strength Req" value={String(strength)} /> : null}
+      {stealthDisadv ? <DetailRow label="Stealth" value="Disadvantage" /> : null}
+      {armorType ? <DetailRow label="Type" value={titleCase(String(armorType))} /> : null}
       {magicBonus ? <DetailRow label="Magic Bonus" value={`+${magicBonus}`} /> : null}
     </div>
   );
 }
 
 function ToolMechanics({ raw }: { raw: ItemDetailRow }) {
-  const toolType = raw?.tool_type ?? raw?.toolType;
+  const toolType = String(raw?.tool_type ?? raw?.toolType ?? '');
+  const typeLabel = toolType ? (TOOL_TYPE_LABEL[toolType] || titleCase(toolType)) : '';
+  const bonusRaw = raw?.bonus;
+  const bonus = bonusRaw != null && String(bonusRaw).trim() !== '' ? String(bonusRaw).trim() : '';
+  const bonusStr = bonus ? (/^[+-]/.test(bonus) ? bonus : `+${bonus}`) : '';
+  if (!typeLabel && !bonusStr) return null;
   return (
     <div className="border-b border-gold/15 px-6 py-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-      <DetailRow label="Tool Type" value={toolType || '—'} />
-      <DetailRow label="Proficiency Bonus" value={raw?.bonus != null && raw.bonus !== '' ? `+${raw.bonus}` : '—'} />
+      {typeLabel ? <DetailRow label="Tool Type" value={typeLabel} /> : null}
+      {bonusStr ? <DetailRow label="Proficiency Bonus" value={bonusStr} /> : null}
     </div>
   );
 }
 
 function OtherMechanics({ raw }: { raw: ItemDetailRow }) {
+  // Only surface a quantity when it's a real stack (>1) — catalog entries are
+  // quantity 1 by default and "Quantity 1" is noise.
+  const qty = raw?.quantity != null ? Number(raw.quantity) : 1;
+  if (!(qty > 1)) return null;
   return (
     <div className="border-b border-gold/15 px-6 py-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-      <DetailRow label="Quantity" value={raw?.quantity != null ? String(raw.quantity) : '—'} />
+      <DetailRow label="Quantity" value={String(qty)} />
     </div>
   );
 }
