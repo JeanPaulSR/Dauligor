@@ -13,7 +13,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, BookOpen, Download, FileJson, Layers3, Shield, Sparkles, Sword, Upload, Wand2, Wrench } from 'lucide-react';
+import { AlertTriangle, BookOpen, Download, FileJson, Layers3, Shield, Sparkles, Sword, Upload, Wand2, Wrench, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { reportClientError, OperationType } from '../../lib/firebase';
 import { upsertItemBatch } from '../../lib/compendium';
@@ -136,6 +136,9 @@ export default function ItemImportWorkbench({ userProfile }: { userProfile: any 
   // Lets the importer set/override a source for items whose Foundry book didn't
   // auto-match, so they import with the right attribution instead of being stuck.
   const [sourceOverrides, setSourceOverrides] = useState<Record<string, string>>({});
+  // Candidates the user removed from this import batch — excluded from the list
+  // + "Import Visible". Reversible via the header "restore" affordance.
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => new Set());
   const [search, setSearch] = useState('');
   // Tri-state axis filters — replaces the single-value Target / Foundry
   // Type / Rarity / Source dropdowns. Same shape useSpellFilters'
@@ -363,6 +366,7 @@ export default function ItemImportWorkbench({ userProfile }: { userProfile: any 
   const visibleCandidates = useMemo(() => {
     const term = search.trim().toLowerCase();
     return candidates.filter((c) => {
+      if (dismissedIds.has(c.candidateId)) return false;
       const sourceLabel = c.matchedSourceLabel || c.sourceBook;
       // Match-status flag set — surfaced via the Status axis. Each
       // value corresponds to a derived boolean on the candidate.
@@ -382,7 +386,7 @@ export default function ItemImportWorkbench({ userProfile }: { userProfile: any 
         )
       );
     });
-  }, [candidates, axisFilters, search]);
+  }, [candidates, axisFilters, search, dismissedIds]);
 
   useEffect(() => {
     if (!visibleCandidates.length) {
@@ -733,6 +737,18 @@ export default function ItemImportWorkbench({ userProfile }: { userProfile: any 
                     />
                   </div>
                 ) : null}
+                {dismissedIds.size > 0 ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-2 h-8 border-gold/20 bg-background/40 text-ink/70 hover:bg-gold/5"
+                    onClick={() => setDismissedIds(new Set())}
+                    title="Restore the items you removed from this import"
+                  >
+                    Restore {dismissedIds.size} removed
+                  </Button>
+                ) : null}
               </div>
             </div>
 
@@ -880,6 +896,7 @@ export default function ItemImportWorkbench({ userProfile }: { userProfile: any 
                       effectiveSourceId={effectiveSourceId(selectedCandidate)}
                       willUpdate={!!resolveExistingId(selectedCandidate)}
                       onAssignSource={(id) => setSourceOverrides((prev) => ({ ...prev, [selectedCandidate.candidateId]: id }))}
+                      onRemove={() => setDismissedIds((prev) => { const n = new Set(prev); n.add(selectedCandidate.candidateId); return n; })}
                     />
                   ) : (
                     <Card className="border-gold/15 bg-background/25">
@@ -909,6 +926,7 @@ function DetailPane({
   effectiveSourceId,
   willUpdate,
   onAssignSource,
+  onRemove,
 }: {
   candidate: ItemImportCandidate;
   onImport: () => void;
@@ -917,6 +935,7 @@ function DetailPane({
   effectiveSourceId: string;
   willUpdate: boolean;
   onAssignSource: (sourceId: string) => void;
+  onRemove: () => void;
 }) {
   const TargetIcon = TARGET_ICONS[candidate.targetTable];
   const effSource = effectiveSourceId ? sources.find((s) => s.id === effectiveSourceId) : undefined;
@@ -961,6 +980,17 @@ function DetailPane({
                 {willUpdate
                   ? `Update ${candidate.targetTableLabel.slice(0, -1)}`
                   : `Import ${candidate.targetTableLabel.slice(0, -1)}`}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2 border-blood/30 text-blood hover:bg-blood/10"
+                onClick={onRemove}
+                disabled={saving}
+                title="Exclude this item from the import (restorable)"
+              >
+                <X className="h-4 w-4" />
+                Remove
               </Button>
             </div>
           </div>

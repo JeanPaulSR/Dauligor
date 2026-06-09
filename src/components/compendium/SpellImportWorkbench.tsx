@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, BookOpen, Download, FileJson, Layers3, Search, Sparkles, Tag, Upload, Wand2 } from 'lucide-react';
+import { AlertTriangle, BookOpen, Download, FileJson, Layers3, Search, Sparkles, Tag, Upload, Wand2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { reportClientError, OperationType } from '../../lib/firebase';
 import { upsertSpell, upsertSpellBatch } from '../../lib/compendium';
@@ -12,6 +12,7 @@ import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
 import { Input } from '../ui/input';
+import SingleSelectSearch from '../ui/SingleSelectSearch';
 import SpellArtPreview from './SpellArtPreview';
 import { FilterBar } from './FilterBar';
 import { SectionFilterPanel, type FilterSection } from './SectionFilterPanel';
@@ -90,6 +91,11 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
   const [allTags, setAllTags] = useState<TagRecord[]>([]);
   const [uploadedBatches, setUploadedBatches] = useState<UploadedBatch[]>([]);
   const [selectedCandidateId, setSelectedCandidateId] = useState('');
+  // Per-candidate manual source assignment (candidateId -> sourceId; '' = none).
+  const [sourceOverrides, setSourceOverrides] = useState<Record<string, string>>({});
+  // Candidates the user removed from this import batch — excluded from the list
+  // + "Import Visible". Reversible via the header "restore" affordance.
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => new Set());
   const [search, setSearch] = useState('');
   // Rich tri-state axis filters — replaces the single-value Level /
   // School / Source dropdowns. Same shape useSpellFilters / FeatList
@@ -296,6 +302,7 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
 
   const visibleCandidates = useMemo(() => {
     return candidates.filter((candidate) => {
+      if (dismissedIds.has(candidate.candidateId)) return false;
       const sourceLabel = candidate.matchedSourceLabel || candidate.sourceBook;
       const assignedTagIds = candidateTagIds[candidate.candidateId] || [];
       // Match-status flag set — surfaced via the Status axis. Each
@@ -318,7 +325,7 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
         )
       );
     });
-  }, [candidates, candidateTagIds, axisFilters, selectedFilterTagIds, search]);
+  }, [candidates, candidateTagIds, axisFilters, selectedFilterTagIds, search, dismissedIds]);
 
   useEffect(() => {
     if (!visibleCandidates.length) {
@@ -342,6 +349,50 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
       scalingSpells: candidates.filter((candidate) => candidate.descriptionHtml.toLowerCase().includes('higher level')).length
     };
   }, [candidates]);
+
+  // ── Source assignment (mirror items / species / background) ──────────
+  // effectiveSourceId = manual override (if set) else the auto-matched source;
+  // '' imports without a source. Lets unresolved books be assigned in-UI.
+  const sourceById = useMemo(
+    () => Object.fromEntries(sources.map((s) => [s.id, s])) as Record<string, SourceRecord>,
+    [sources],
+  );
+  const effectiveSourceId = (c: SpellImportCandidate) =>
+    sourceOverrides[c.candidateId] ?? c.matchedSourceId ?? '';
+  const sourceLabelOf = (id: string) => {
+    const s = id ? sourceById[id] : undefined;
+    return s ? String(s.abbreviation || s.shortName || s.name || s.id) : '';
+  };
+  // Existing spells keyed by (sourceId, identifier) — the spells table has a
+  // UNIQUE(source_id, identifier), so an assigned-source re-import must UPDATE
+  // the matching row, not insert a duplicate. Replicates the build-time dedupe
+  // (spellImport.ts) against the EFFECTIVE source.
+  const existingIdByNaturalKey = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const e of existingEntries) {
+      const key = `${String(e.sourceId ?? '')}|${String(e.identifier ?? '')}`;
+      if (!m.has(key)) m.set(key, String(e.id));
+    }
+    return m;
+  }, [existingEntries]);
+  const resolveExistingId = (c: SpellImportCandidate) =>
+    existingIdByNaturalKey.get(`${effectiveSourceId(c)}|${String(c.identifier ?? '')}`) || '';
+  const effectiveUnresolvedCount = useMemo(
+    () => candidates.filter((c) => !(sourceOverrides[c.candidateId] ?? c.matchedSourceId)).length,
+    [candidates, sourceOverrides],
+  );
+  // Bulk-assign a source to every VISIBLE spell with no effective source.
+  const assignSourceToUnresolvedVisible = (sourceId: string) => {
+    if (!sourceId) return;
+    const targets = visibleCandidates.filter((c) => !effectiveSourceId(c));
+    if (!targets.length) { toast.error('No unresolved spells in view.'); return; }
+    setSourceOverrides((prev) => {
+      const next = { ...prev };
+      for (const c of targets) next[c.candidateId] = sourceId;
+      return next;
+    });
+    toast.success(`Assigned ${sourceLabelOf(sourceId)} to ${targets.length} unresolved spell${targets.length === 1 ? '' : 's'}.`);
+  };
 
   // Axis descriptors for SectionFilterPanel. Four axes — Source,
   // Level, School, Status — built once per render. Source uses the
@@ -439,8 +490,11 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
   };
 
   const saveCandidate = async (candidate: SpellImportCandidate) => {
+    const existingId = resolveExistingId(candidate);
     const payload = {
       ...candidate.savePayload,
+      // Manual source assignment wins over the auto-matched sourceId.
+      sourceId: effectiveSourceId(candidate) || null,
       updatedAt: new Date().toISOString(),
       createdAt: undefined
     } as Record<string, any>;
@@ -449,13 +503,13 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
       if (payload[key] === undefined) delete payload[key];
     });
 
-    if (candidate.existingEntryId) {
+    if (existingId) {
       const updatedPayload = {
         ...payload,
         tagIds: candidateTagIds[candidate.candidateId] || [],
-        createdAt: existingEntries.find((entry) => entry.id === candidate.existingEntryId)?.createdAt || new Date().toISOString()
+        createdAt: existingEntries.find((entry) => entry.id === existingId)?.createdAt || new Date().toISOString()
       };
-      await upsertSpell(candidate.existingEntryId, updatedPayload);
+      await upsertSpell(existingId, updatedPayload);
       return 'updated';
     }
 
@@ -469,8 +523,8 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
 
   const handleImportSelected = async () => {
     if (!selectedCandidate) return;
-    if (!selectedCandidate.sourceResolved) {
-      toast.error('Resolve the source mapping before importing this spell.');
+    if (!effectiveSourceId(selectedCandidate)) {
+      toast.error('Assign a source before importing this spell.');
       return;
     }
 
@@ -483,8 +537,8 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
       toast.error(`Failed to import ${selectedCandidate.name}.`);
       reportClientError(
         error,
-        selectedCandidate.existingEntryId ? OperationType.UPDATE : OperationType.CREATE,
-        `spells/${selectedCandidate.existingEntryId || '(new)'}`
+        resolveExistingId(selectedCandidate) ? OperationType.UPDATE : OperationType.CREATE,
+        `spells/${resolveExistingId(selectedCandidate) || '(new)'}`
       );
     } finally {
       setSaving(false);
@@ -492,21 +546,24 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
   };
 
   const handleImportVisible = async () => {
-    const importable = visibleCandidates.filter((candidate) => candidate.sourceResolved);
+    const importable = visibleCandidates.filter((candidate) => !!effectiveSourceId(candidate));
     if (!importable.length) {
-      toast.error('No visible spells are ready to import.');
+      toast.error('No visible spells have a source — assign one to the unresolved spells first.');
       return;
     }
 
     setSaving(true);
     try {
       const entries = importable.map((candidate) => {
-        const existingCreatedAt = existingEntries.find((entry) => entry.id === candidate.existingEntryId)?.createdAt || new Date().toISOString();
+        const existingId = resolveExistingId(candidate);
+        const existingCreatedAt = existingEntries.find((entry) => entry.id === existingId)?.createdAt || new Date().toISOString();
         const payload = {
           ...candidate.savePayload,
+          // Manual source assignment wins over the auto-matched sourceId.
+          sourceId: effectiveSourceId(candidate) || null,
           tagIds: candidateTagIds[candidate.candidateId] || [],
           updatedAt: new Date().toISOString(),
-          createdAt: candidate.existingEntryId ? existingCreatedAt : new Date().toISOString()
+          createdAt: existingId ? existingCreatedAt : new Date().toISOString()
         } as Record<string, any>;
 
         Object.keys(payload).forEach((key) => {
@@ -514,7 +571,7 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
         });
 
         return {
-          id: candidate.existingEntryId || null,
+          id: existingId || null,
           data: payload
         };
       });
@@ -583,17 +640,41 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
                   size="sm"
                   className="gap-2 h-8 bg-primary hover:bg-primary/90 text-primary-foreground"
                   onClick={handleImportVisible}
-                  disabled={saving || !visibleCandidates.some((candidate) => candidate.sourceResolved)}
+                  disabled={saving || !visibleCandidates.some((candidate) => !!effectiveSourceId(candidate))}
                 >
                   <Download className="h-3.5 w-3.5" />
                   Import Visible
                 </Button>
+                {effectiveUnresolvedCount > 0 ? (
+                  <div className="w-[210px]" title="Assign a source to every unresolved spell currently in view">
+                    <SingleSelectSearch
+                      value=""
+                      onChange={(next) => { if (next) assignSourceToUnresolvedVisible(next); }}
+                      options={sources.map((s) => ({ id: s.id, name: sourceLabelOf(s.id) || s.id }))}
+                      placeholder="Set source for unresolved…"
+                      allowClear={false}
+                      triggerClassName="h-8 w-full"
+                    />
+                  </div>
+                ) : null}
+                {dismissedIds.size > 0 ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-2 h-8 border-gold/20 bg-background/40 text-ink/70 hover:bg-gold/5"
+                    onClick={() => setDismissedIds(new Set())}
+                    title="Restore the spells you removed from this import"
+                  >
+                    Restore {dismissedIds.size} removed
+                  </Button>
+                ) : null}
               </div>
             </div>
 
             <div className="relative mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-ink/75">
               <InlineStat icon={Layers3} label="loaded" value={batchSummary.totalSpells} />
-              <InlineStat icon={AlertTriangle} label="unresolved" value={batchSummary.unresolvedSources} tone="warn" />
+              <InlineStat icon={AlertTriangle} label="unresolved" value={effectiveUnresolvedCount} tone="warn" />
               <InlineStat icon={BookOpen} label="existing" value={batchSummary.existingMatches} />
               <InlineStat icon={Sparkles} label="scaling" value={batchSummary.scalingSpells} />
             </div>
@@ -786,9 +867,11 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
                               <div className="space-y-2">
                                 <div className="flex items-center gap-3">
                                   <h3 className="font-serif text-4xl font-bold text-ink">{selectedCandidate.name}</h3>
-                                  {selectedCandidate.matchedSourceLabel ? (
-                                    <Badge className="border-gold/25 bg-gold/15 text-gold">{selectedCandidate.matchedSourceLabel}</Badge>
-                                  ) : null}
+                                  {effectiveSourceId(selectedCandidate) ? (
+                                    <Badge className="border-gold/25 bg-gold/15 text-gold">{sourceLabelOf(effectiveSourceId(selectedCandidate))}</Badge>
+                                  ) : (
+                                    <Badge className="bg-blood/20 text-blood border-blood/30">Unresolved Source</Badge>
+                                  )}
                                   {selectedCandidate.sourcePage ? (
                                     <span className="text-xs uppercase tracking-widest text-ink/45">p{selectedCandidate.sourcePage}</span>
                                   ) : null}
@@ -798,15 +881,39 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
                                 </p>
                               </div>
 
-                              <div className="flex flex-wrap gap-2">
+                              <div className="flex flex-col items-stretch gap-2 lg:w-64">
+                                <div>
+                                  <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-gold/70">Source</div>
+                                  <SingleSelectSearch
+                                    value={effectiveSourceId(selectedCandidate)}
+                                    onChange={(next) => setSourceOverrides((prev) => ({ ...prev, [selectedCandidate.candidateId]: next }))}
+                                    options={sources.map((s) => ({ id: s.id, name: (s.abbreviation ? `${s.abbreviation} — ` : '') + (s.name || s.id) }))}
+                                    placeholder="— none (import without a source) —"
+                                    triggerClassName="h-8 w-full mt-1"
+                                  />
+                                  {!effectiveSourceId(selectedCandidate) ? (
+                                    <p className="mt-1 text-[10px] text-blood">Book "{selectedCandidate.sourceBook || '?'}" didn't auto-match — pick a source.</p>
+                                  ) : null}
+                                </div>
                                 <Button
                                   type="button"
                                   className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
                                   onClick={handleImportSelected}
-                                  disabled={saving || !selectedCandidate.sourceResolved}
+                                  disabled={saving || !effectiveSourceId(selectedCandidate)}
                                 >
                                   <Download className="h-4 w-4" />
-                                  {selectedCandidate.existingEntryId ? 'Update Spell' : 'Import Spell'}
+                                  {resolveExistingId(selectedCandidate) ? 'Update Spell' : 'Import Spell'}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="gap-2 border-blood/30 text-blood hover:bg-blood/10"
+                                  onClick={() => setDismissedIds((prev) => { const n = new Set(prev); n.add(selectedCandidate.candidateId); return n; })}
+                                  disabled={saving}
+                                  title="Exclude this spell from the import (restorable)"
+                                >
+                                  <X className="h-4 w-4" />
+                                  Remove
                                 </Button>
                               </div>
                             </div>

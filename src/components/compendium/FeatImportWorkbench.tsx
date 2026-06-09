@@ -26,7 +26,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, BookOpen, Download, FileJson, Layers3, Search, Sparkles, Tag, Upload, Wand2 } from 'lucide-react';
+import { AlertTriangle, BookOpen, Download, FileJson, Layers3, Search, Sparkles, Tag, Upload, Wand2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { reportClientError, OperationType } from '../../lib/firebase';
 import { upsertFeat, upsertFeatBatch } from '../../lib/compendium';
@@ -200,6 +200,9 @@ export default function FeatImportWorkbench({
   // inputs. Persists for the session so editing → switching rows →
   // coming back preserves the edits.
   const [candidateOverrides, setCandidateOverrides] = useState<Record<string, CandidateOverrides>>({});
+  // Candidates the user removed from this import batch — excluded from the list
+  // + "Import Visible". Reversible via the header "restore" affordance.
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => new Set());
   const setCandidateOverride = (candidateId: string, field: keyof CandidateOverrides, value: string) => {
     setCandidateOverrides((prev) => ({
       ...prev,
@@ -417,6 +420,7 @@ export default function FeatImportWorkbench({
 
   const visibleCandidates = useMemo(() => {
     return candidates.filter((candidate) => {
+      if (dismissedIds.has(candidate.candidateId)) return false;
       const sourceLabel = candidate.matchedSourceLabel || candidate.sourceBook;
       const assignedTagIds = candidateTagIds[candidate.candidateId] || [];
       // Subtype value normalized through the SUBTYPE_NONE sentinel so
@@ -441,7 +445,7 @@ export default function FeatImportWorkbench({
         )
       );
     });
-  }, [candidates, candidateTagIds, axisFilters, selectedFilterTagIds, search]);
+  }, [candidates, candidateTagIds, axisFilters, selectedFilterTagIds, search, dismissedIds]);
 
   useEffect(() => {
     if (!visibleCandidates.length) {
@@ -914,11 +918,23 @@ export default function FeatImportWorkbench({
                   size="sm"
                   className="gap-2 h-8 bg-primary hover:bg-primary/90 text-primary-foreground"
                   onClick={handleImportVisible}
-                  disabled={saving || !visibleCandidates.some((candidate) => candidate.sourceResolved)}
+                  disabled={saving || !visibleCandidates.some((candidate) => !!effectiveCandidateValues(candidate, candidateOverrides[candidate.candidateId], existingEntries).sourceId)}
                 >
                   <Download className="h-3.5 w-3.5" />
                   Import Visible
                 </Button>
+                {dismissedIds.size > 0 ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-2 h-8 border-gold/20 bg-background/40 text-ink/70 hover:bg-gold/5"
+                    onClick={() => setDismissedIds(new Set())}
+                    title="Restore the feats you removed from this import"
+                  >
+                    Restore {dismissedIds.size} removed
+                  </Button>
+                ) : null}
               </div>
             </div>
 
@@ -1147,6 +1163,17 @@ export default function FeatImportWorkbench({
                               >
                                 <Download className="h-4 w-4" />
                                 {selectedEff?.existingEntryId ? 'Update Feat' : 'Import Feat'}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="gap-2 border-blood/30 text-blood hover:bg-blood/10"
+                                onClick={() => setDismissedIds((prev) => { const n = new Set(prev); n.add(selectedCandidate.candidateId); return n; })}
+                                disabled={saving}
+                                title="Exclude this feat from the import (restorable)"
+                              >
+                                <X className="h-4 w-4" />
+                                Remove
                               </Button>
                             </div>
                           </div>
