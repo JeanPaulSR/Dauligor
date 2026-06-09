@@ -31,6 +31,7 @@ import { matchesSingleAxisFilter, matchesMultiAxisFilter } from '../../lib/spell
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
+import SingleSelectSearch from '../ui/SingleSelectSearch';
 import { FilterBar } from './FilterBar';
 import { SectionFilterPanel, type FilterSection } from './SectionFilterPanel';
 
@@ -131,6 +132,10 @@ export default function ItemImportWorkbench({ userProfile }: { userProfile: any 
 
   const [uploadedBatches, setUploadedBatches] = useState<UploadedBatch[]>([]);
   const [selectedCandidateId, setSelectedCandidateId] = useState('');
+  // Per-candidate manual source assignment (candidateId -> sourceId; '' = none).
+  // Lets the importer set/override a source for items whose Foundry book didn't
+  // auto-match, so they import with the right attribution instead of being stuck.
+  const [sourceOverrides, setSourceOverrides] = useState<Record<string, string>>({});
   const [search, setSearch] = useState('');
   // Tri-state axis filters — replaces the single-value Target / Foundry
   // Type / Rarity / Source dropdowns. Same shape useSpellFilters'
@@ -210,6 +215,41 @@ export default function ItemImportWorkbench({ userProfile }: { userProfile: any 
       labelAlt: String(s.name || s.shortName || s.abbreviation || s.id),
     }));
   }, [sources]);
+
+  // ── Source assignment ──────────────────────────────────────────────
+  // effectiveSourceId = manual override (if set) else the auto-matched source;
+  // '' means "no source" → imports as NULL (FK-safe). Mirrors the species /
+  // background importer so unresolved books can be assigned a source in-UI.
+  const sourceById = useMemo(
+    () => Object.fromEntries(sources.map((s) => [s.id, s])) as Record<string, SourceRecord>,
+    [sources],
+  );
+  const effectiveSourceId = (c: ItemImportCandidate) =>
+    sourceOverrides[c.candidateId] ?? c.matchedSourceId ?? '';
+  const sourceLabelOf = (id: string) => {
+    const s = id ? sourceById[id] : undefined;
+    return s ? String(s.abbreviation || s.shortName || s.name || s.id) : '';
+  };
+  // Existing catalog items keyed by (source_id, identifier) — the same natural
+  // key buildItemImportCandidates dedupes on. Resolving the target id at import
+  // time (against the EFFECTIVE source) means an item the user just assigned a
+  // source to UPDATES the matching row instead of inserting a colliding UUID.
+  const existingIdByNaturalKey = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const e of existingItems) {
+      const key = `${String(e.source_id ?? e.sourceId ?? '')}|${String(e.identifier ?? '')}`;
+      if (!m.has(key)) m.set(key, String(e.id));
+    }
+    return m;
+  }, [existingItems]);
+  const resolveExistingId = (c: ItemImportCandidate) =>
+    existingIdByNaturalKey.get(`${effectiveSourceId(c)}|${String(c.identifier ?? '')}`) || '';
+  // Entries with no effective source (auto-match failed AND no override) — drives
+  // the "unresolved" stat + whether the bulk source-assign control shows.
+  const effectiveUnresolvedCount = useMemo(
+    () => candidates.filter((c) => !(sourceOverrides[c.candidateId] ?? c.matchedSourceId)).length,
+    [candidates, sourceOverrides],
+  );
 
   // Axis-state cyclers + bulk controls — mirrors the FeatList /
   // SpellImportWorkbench / FeatImportWorkbench pattern.
@@ -409,10 +449,24 @@ export default function ItemImportWorkbench({ userProfile }: { userProfile: any 
     toast.success(`Loaded ${nextBatches.length} Foundry item export ${nextBatches.length === 1 ? 'file' : 'files'}.`);
   };
 
+  // Bulk-assign a source to every VISIBLE entry with no effective source — for
+  // when a whole unmatched book needs the same source in one go.
+  const assignSourceToUnresolvedVisible = (sourceId: string) => {
+    if (!sourceId) return;
+    const targets = visibleCandidates.filter((c) => !effectiveSourceId(c));
+    if (!targets.length) { toast.error('No unresolved items in view.'); return; }
+    setSourceOverrides((prev) => {
+      const next = { ...prev };
+      for (const c of targets) next[c.candidateId] = sourceId;
+      return next;
+    });
+    toast.success(`Assigned ${sourceLabelOf(sourceId)} to ${targets.length} unresolved item${targets.length === 1 ? '' : 's'}.`);
+  };
+
   const handleImportVisible = async () => {
-    const importable = visibleCandidates.filter((c) => c.sourceResolved);
+    const importable = visibleCandidates.filter((c) => !!effectiveSourceId(c));
     if (!importable.length) {
-      toast.error('No visible items have resolved sources — fix the source mapping first.');
+      toast.error('No visible items have a source — assign one to the unresolved items first.');
       return;
     }
 
@@ -434,7 +488,7 @@ export default function ItemImportWorkbench({ userProfile }: { userProfile: any 
       // Mint an id for every importable candidate up front so a container's
       // contents can reference their parent's (new) items.id.
       const idByCandidate = new Map<string, string>();
-      for (const c of importable) idByCandidate.set(c.candidateId, c.existingEntryId || crypto.randomUUID());
+      for (const c of importable) idByCandidate.set(c.candidateId, resolveExistingId(c) || crypto.randomUUID());
       const importableIds = new Set(importable.map((c) => c.candidateId));
 
       // Container-contents collapse (option C): a candidate whose
@@ -454,15 +508,19 @@ export default function ItemImportWorkbench({ userProfile }: { userProfile: any 
       // upfront so ScaleValue advancements persist as scaling_columns rows
       // owned by the item before the upsert lands. ──
       const entries = await Promise.all(itemCandidates.map(async (candidate) => {
-        const existingRow = candidate.existingEntryId
-          ? existingItems.find((r: any) => r.id === candidate.existingEntryId)
+        const existingId = resolveExistingId(candidate);
+        const existingRow = existingId
+          ? existingItems.find((r: any) => r.id === existingId)
           : null;
         const createdAt = existingRow?.createdAt || existingRow?.created_at || now;
         const itemId = idByCandidate.get(candidate.candidateId)!;
         const payload: Record<string, any> = {
           ...candidate.savePayload,
+          // Manual source assignment wins over the auto-matched source_id baked
+          // into the savePayload (so unresolved books import with the chosen source).
+          source_id: effectiveSourceId(candidate) || null,
           updated_at: now,
-          created_at: candidate.existingEntryId ? createdAt : now,
+          created_at: existingId ? createdAt : now,
         };
         Object.keys(payload).forEach((key) => {
           if (payload[key] === undefined) delete payload[key];
@@ -496,7 +554,7 @@ export default function ItemImportWorkbench({ userProfile }: { userProfile: any 
         const containerId = idByCandidate.get(candidate.containerContent!.parentCandidateId)!;
         const match = existingItems.find(
           (r: any) => (r.identifier ?? '') === candidate.identifier
-            && String(r.source_id ?? r.sourceId ?? '') === String(candidate.matchedSourceId ?? ''),
+            && String(r.source_id ?? r.sourceId ?? '') === String(effectiveSourceId(candidate) ?? ''),
         ) || existingItems.find((r: any) => (r.identifier ?? '') === candidate.identifier);
         const sort = sortByContainer.get(containerId) ?? 0;
         sortByContainer.set(containerId, sort + 1);
@@ -524,8 +582,8 @@ export default function ItemImportWorkbench({ userProfile }: { userProfile: any 
           await deleteDocuments('containerContents', 'container_id = ?', [cid]);
         }
         if (contentRows.length) await upsertDocumentBatch('containerContents', contentRows);
-        const created = itemCandidates.filter((c) => !c.existingEntryId).length;
-        const updated = itemCandidates.filter((c) => !!c.existingEntryId).length;
+        const created = itemCandidates.filter((c) => !resolveExistingId(c)).length;
+        const updated = itemCandidates.filter((c) => !!resolveExistingId(c)).length;
         const ccMsg = contentRows.length ? `, ${contentRows.length} container contents` : '';
         toast.success(`Imported ${entries.length} items (${created} new, ${updated} updated)${ccMsg}.`);
       } catch (err) {
@@ -540,23 +598,27 @@ export default function ItemImportWorkbench({ userProfile }: { userProfile: any 
 
   const handleImportSelected = async () => {
     if (!selectedCandidate) return;
-    if (!selectedCandidate.sourceResolved) {
-      toast.error('Resolve the source mapping before importing this item.');
+    if (!effectiveSourceId(selectedCandidate)) {
+      toast.error('Assign a source before importing this item.');
       return;
     }
 
+    // Declared outside the try so the catch block can reference it for error reporting.
+    const existingId = resolveExistingId(selectedCandidate);
     setSaving(true);
     try {
       const now = new Date().toISOString();
-      const existingRow = selectedCandidate.existingEntryId
-        ? existingItems.find((r: any) => r.id === selectedCandidate.existingEntryId)
+      const existingRow = existingId
+        ? existingItems.find((r: any) => r.id === existingId)
         : null;
       const createdAt = existingRow?.createdAt || existingRow?.created_at || now;
-      const itemId = selectedCandidate.existingEntryId || crypto.randomUUID();
+      const itemId = existingId || crypto.randomUUID();
       const payload: Record<string, any> = {
         ...selectedCandidate.savePayload,
+        // Manual source assignment wins over the auto-matched source_id.
+        source_id: effectiveSourceId(selectedCandidate) || null,
         updated_at: now,
-        created_at: selectedCandidate.existingEntryId ? createdAt : now,
+        created_at: existingId ? createdAt : now,
       };
       Object.keys(payload).forEach((key) => {
         if (payload[key] === undefined) delete payload[key];
@@ -587,14 +649,14 @@ export default function ItemImportWorkbench({ userProfile }: { userProfile: any 
       const entries = [{ id: itemId, data: payload }];
       await upsertItemBatch(entries);
 
-      toast.success(`${selectedCandidate.name} ${selectedCandidate.existingEntryId ? 'updated' : 'imported'}.`);
+      toast.success(`${selectedCandidate.name} ${existingId ? 'updated' : 'imported'}.`);
     } catch (error) {
       console.error('Error importing item:', error);
       toast.error(`Failed to import ${selectedCandidate.name}.`);
       reportClientError(
         error,
-        selectedCandidate.existingEntryId ? OperationType.UPDATE : OperationType.CREATE,
-        `items/${selectedCandidate.existingEntryId || '(new)'}`,
+        existingId ? OperationType.UPDATE : OperationType.CREATE,
+        `items/${existingId || '(new)'}`,
       );
     } finally {
       setSaving(false);
@@ -654,11 +716,23 @@ export default function ItemImportWorkbench({ userProfile }: { userProfile: any 
                   size="sm"
                   className="gap-2 h-8 bg-primary hover:bg-primary/90 text-primary-foreground"
                   onClick={handleImportVisible}
-                  disabled={saving || !visibleCandidates.some((c) => c.sourceResolved)}
+                  disabled={saving || !visibleCandidates.some((c) => !!effectiveSourceId(c))}
                 >
                   <Download className="h-3.5 w-3.5" />
                   Import Visible
                 </Button>
+                {effectiveUnresolvedCount > 0 ? (
+                  <div className="w-[210px]" title="Assign a source to every unresolved item currently in view">
+                    <SingleSelectSearch
+                      value=""
+                      onChange={(next) => { if (next) assignSourceToUnresolvedVisible(next); }}
+                      options={sources.map((s) => ({ id: s.id, name: sourceLabelOf(s.id) || s.id }))}
+                      placeholder="Set source for unresolved…"
+                      allowClear={false}
+                      triggerClassName="h-8 w-full"
+                    />
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -672,7 +746,7 @@ export default function ItemImportWorkbench({ userProfile }: { userProfile: any 
               <InlineStat icon={Shield}  label="armor"    value={batchSummary.byShape.armor} />
               <InlineStat icon={Wrench}  label="tools"    value={batchSummary.byShape.tools} />
               <InlineStat icon={Layers3} label="other"    value={batchSummary.byShape.items} />
-              <InlineStat icon={AlertTriangle} label="unresolved" value={batchSummary.unresolvedSources} tone="warn" />
+              <InlineStat icon={AlertTriangle} label="unresolved" value={effectiveUnresolvedCount} tone="warn" />
               <InlineStat icon={BookOpen} label="existing"  value={batchSummary.existingMatches} />
               <InlineStat icon={Sparkles} label="magical"   value={batchSummary.magical} />
             </div>
@@ -802,6 +876,10 @@ export default function ItemImportWorkbench({ userProfile }: { userProfile: any 
                       candidate={selectedCandidate}
                       onImport={handleImportSelected}
                       saving={saving}
+                      sources={sources}
+                      effectiveSourceId={effectiveSourceId(selectedCandidate)}
+                      willUpdate={!!resolveExistingId(selectedCandidate)}
+                      onAssignSource={(id) => setSourceOverrides((prev) => ({ ...prev, [selectedCandidate.candidateId]: id }))}
                     />
                   ) : (
                     <Card className="border-gold/15 bg-background/25">
@@ -827,12 +905,24 @@ function DetailPane({
   candidate,
   onImport,
   saving,
+  sources,
+  effectiveSourceId,
+  willUpdate,
+  onAssignSource,
 }: {
   candidate: ItemImportCandidate;
   onImport: () => void;
   saving: boolean;
+  sources: SourceRecord[];
+  effectiveSourceId: string;
+  willUpdate: boolean;
+  onAssignSource: (sourceId: string) => void;
 }) {
   const TargetIcon = TARGET_ICONS[candidate.targetTable];
+  const effSource = effectiveSourceId ? sources.find((s) => s.id === effectiveSourceId) : undefined;
+  const effSourceLabel = effSource
+    ? String(effSource.abbreviation || effSource.shortName || effSource.name || effSource.id)
+    : '';
   return (
     <Card className="border-gold/15 bg-background/25 overflow-hidden">
       <CardContent className="p-0">
@@ -845,9 +935,11 @@ function DetailPane({
                   <TargetIcon className="h-3 w-3" />
                   → {candidate.targetTableLabel}
                 </Badge>
-                {candidate.matchedSourceLabel ? (
-                  <Badge className="border-gold/25 bg-gold/15 text-gold">{candidate.matchedSourceLabel}</Badge>
-                ) : null}
+                {effSourceLabel ? (
+                  <Badge className="border-gold/25 bg-gold/15 text-gold">{effSourceLabel}</Badge>
+                ) : (
+                  <Badge className="bg-blood/20 text-blood border-blood/30">Unresolved Source</Badge>
+                )}
                 {candidate.sourcePage ? (
                   <span className="text-xs uppercase tracking-widest text-ink/45">p{candidate.sourcePage}</span>
                 ) : null}
@@ -863,10 +955,10 @@ function DetailPane({
                 type="button"
                 className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
                 onClick={onImport}
-                disabled={saving || !candidate.sourceResolved}
+                disabled={saving || !effectiveSourceId}
               >
                 <Download className="h-4 w-4" />
-                {candidate.existingEntryId
+                {willUpdate
                   ? `Update ${candidate.targetTableLabel.slice(0, -1)}`
                   : `Import ${candidate.targetTableLabel.slice(0, -1)}`}
               </Button>
@@ -934,10 +1026,24 @@ function DetailPane({
               <InfoBlock title="Batch File" value={candidate.batchLabel} />
               <InfoBlock title="Identifier" value={candidate.identifier} />
               <InfoBlock title="Foundry Type" value={`${candidate.foundryType}${candidate.foundryCategory ? ` · ${candidate.foundryCategory}` : ''}`} />
-              <InfoBlock
-                title="Source Match"
-                value={candidate.sourceResolved ? (candidate.matchedSourceLabel || candidate.matchedSourceId) : 'Unresolved'}
-              />
+              <div>
+                <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-gold/70">Source</div>
+                <SingleSelectSearch
+                  value={effectiveSourceId}
+                  onChange={(next) => onAssignSource(next)}
+                  options={sources.map((s) => ({ id: s.id, name: (s.abbreviation ? `${s.abbreviation} — ` : '') + (s.name || s.id) }))}
+                  placeholder="— none (import without a source) —"
+                  triggerClassName="h-8 w-full mt-1"
+                />
+                {!effectiveSourceId ? (
+                  <p className="mt-1 text-[10px] text-blood">
+                    Book "{candidate.sourceBook || '?'}" didn't auto-match — pick a source, or it imports without one.
+                  </p>
+                ) : null}
+                {!candidate.sourceResolved && effectiveSourceId ? (
+                  <p className="mt-1 text-[10px] text-ink/45">Manually assigned (book "{candidate.sourceBook || '?'}" didn't auto-match).</p>
+                ) : null}
+              </div>
               <InfoBlock title="Activities" value={String(candidate.activities.length)} />
               <InfoBlock title="Effects" value={String(candidate.effects.length)} />
               {candidate.existingEntryId ? (
