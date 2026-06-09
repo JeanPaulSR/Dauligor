@@ -408,15 +408,17 @@ export default function ItemImportWorkbench({ userProfile }: { userProfile: any 
     // import (e.g. "850 weapons + 200 consumables").
     const byShape: Record<ItemTargetTable, number> = { items: 0, weapons: 0, armor: 0, tools: 0 };
     let unresolvedSources = 0;
+    let unresolvedBase = 0;
     let existingMatches = 0;
     let magical = 0;
     for (const c of candidates) {
       byShape[c.targetTable]++;
       if (!c.sourceResolved) unresolvedSources++;
+      if (c.baseItemUnresolved) unresolvedBase++;
       if (c.existingEntryId) existingMatches++;
       if (c.magical) magical++;
     }
-    return { total: candidates.length, byShape, unresolvedSources, existingMatches, magical };
+    return { total: candidates.length, byShape, unresolvedSources, unresolvedBase, existingMatches, magical };
   }, [candidates]);
 
   const handleFiles = async (fileList: FileList | null) => {
@@ -795,6 +797,7 @@ export default function ItemImportWorkbench({ userProfile }: { userProfile: any 
               <InlineStat icon={Wrench}  label="tools"    value={batchSummary.byShape.tools} />
               <InlineStat icon={Layers3} label="other"    value={batchSummary.byShape.items} />
               <InlineStat icon={AlertTriangle} label="unresolved" value={effectiveUnresolvedCount} tone="warn" />
+              <InlineStat icon={AlertTriangle} label="no base item" value={batchSummary.unresolvedBase} tone="warn" />
               <InlineStat icon={BookOpen} label="existing"  value={batchSummary.existingMatches} />
               <InlineStat icon={Sparkles} label="magical"   value={batchSummary.magical} />
             </div>
@@ -899,6 +902,7 @@ export default function ItemImportWorkbench({ userProfile }: { userProfile: any 
                                   </Badge>
                                   {candidate.existingEntryId ? <Badge className="bg-sky-500/15 text-sky-200 border-sky-400/20">Saved</Badge> : null}
                                   {unresolved ? <Badge className="bg-blood/20 text-blood border-blood/30">Unresolved Source</Badge> : null}
+                                  {candidate.baseItemUnresolved ? <Badge className="bg-amber-500/15 text-amber-300 border-amber-400/30">Base item unlinked</Badge> : null}
                                   {candidate.magical ? <Badge className="bg-gold/15 text-gold border-gold/25">Magical</Badge> : null}
                                   {candidate.rarity !== 'none' && candidate.rarity !== '' ? (
                                     <Badge className="bg-violet-500/15 text-violet-200 border-violet-400/20">{candidate.rarityLabel}</Badge>

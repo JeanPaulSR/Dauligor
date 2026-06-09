@@ -172,6 +172,12 @@ export type ItemImportCandidate = {
   existingEntryName: string;
   // Bookkeeping
   importWarnings: string[];
+  /** True when a weapon/armor/tool candidate carries a Foundry baseItem
+   *  slug that didn't resolve to any proficiency row. Surfaced as a list
+   *  badge + summary stat in the workbench so the gap is visible (not just
+   *  buried in `importWarnings`). The item still imports; the base_*_id FK
+   *  stays null until the proficiency row is added + the item re-imported. */
+  baseItemUnresolved: boolean;
   activities: any[];
   effects: any[];
   sourceDocument: any;
@@ -419,6 +425,94 @@ function matchAbilityId(slug: string, abilities: AbilityRecord[]): string | null
   return found?.id ?? null;
 }
 
+// ─── Foundry activity → SemanticActivity ───────────────────────────
+
+/**
+ * Convert a raw Foundry dnd5e activity (the value side of
+ * `system.activities`, which Foundry keys by `_id`) into the app's
+ * `SemanticActivity` shape — the canonical form our `ActivityEditor`
+ * and the semantic exporter expect (see the foundry-module contract:
+ * the app stores SEMANTIC, the module does the Foundry-native
+ * conversion).
+ *
+ * Why this is needed: Foundry discriminates on `type` ("attack" /
+ * "cast" / …) with an `_id` key and nests the attack mode as
+ * `attack.type = { value, classification }`. Our editor discriminates
+ * on `kind` with an `id`, and stores the attack mode FLAT
+ * (`attack.type = "melee"`, `attack.classification = "weapon"`). Stored
+ * raw, imported activities carry no `kind`, so the kind-based
+ * ActivityEditor can't classify or render them — they show up blank.
+ * Every other sub-shape (activation / duration / range / target /
+ * consumption / uses / visibility / spell / effects) already matches
+ * dnd5e v5, so we preserve them by spread and only remap the three
+ * that differ (id/kind discriminators, `attack.type`, `save.ability`),
+ * plus surface `description.chatFlavor` → `chatFlavor`.
+ */
+export function foundryActivityToSemantic(raw: any, index: number): any {
+  if (!raw || typeof raw !== 'object') return raw;
+  const a: any = { ...raw };
+
+  // id / kind discriminators (drop Foundry's `_id` / `type` + ordering noise).
+  a.id = String(raw._id || raw.id || `act${String(index).padStart(13, '0')}`);
+  a.kind = String(raw.type || raw.kind || 'utility');
+  delete a.type;
+  delete a._id;
+  delete a.sort;
+
+  // name / img — Foundry leaves item-activity names blank; the editor
+  // falls back to the kind label, so '' is fine. Default the icon to the
+  // kind's activity glyph when Foundry shipped none.
+  a.name = String(raw.name ?? '');
+  a.img = String(raw.img || `systems/dnd5e/icons/svg/activity/${a.kind}.svg`);
+
+  // chatFlavor lives in `description` on the Foundry side (`{ chatFlavor }`
+  // in v5; a bare string in older exports).
+  a.chatFlavor = (raw.description && typeof raw.description === 'object')
+    ? String(raw.description.chatFlavor ?? '')
+    : String(raw.description ?? '');
+  delete a.description;
+
+  // attack — flatten `{ value, classification }` → flat fields.
+  if (raw.attack && typeof raw.attack === 'object') {
+    const at = raw.attack;
+    const atType = at.type;
+    a.attack = {
+      ability: at.ability ?? '',
+      bonus: String(at.bonus ?? ''),
+      flat: !!at.flat,
+      type: (atType && typeof atType === 'object') ? (atType.value ?? '') : String(atType ?? ''),
+      classification: (atType && typeof atType === 'object') ? (atType.classification ?? '') : (at.classification ?? ''),
+      critical: at.critical ?? { threshold: null },
+    };
+  }
+
+  // save — Foundry stores `ability` (a Set serialized to an array); the
+  // editor reads `abilities`.
+  if (raw.save && typeof raw.save === 'object') {
+    const rawAbility = raw.save.abilities ?? raw.save.ability;
+    a.save = {
+      abilities: Array.isArray(rawAbility) ? rawAbility : (rawAbility ? [rawAbility] : []),
+      dc: raw.save.dc ?? { calculation: '', formula: '' },
+    };
+  }
+
+  // damage — normalize the `critical` sub-shape (Foundry: `{ bonus }`;
+  // editor: `{ allow, bonus }`). Parts already match the dnd5e v5 shape.
+  if (raw.damage && typeof raw.damage === 'object') {
+    a.damage = {
+      ...raw.damage,
+      includeBase: raw.damage.includeBase ?? false,
+      parts: Array.isArray(raw.damage.parts) ? raw.damage.parts : [],
+      critical: {
+        allow: raw.damage.critical?.allow ?? false,
+        bonus: String(raw.damage.critical?.bonus ?? ''),
+      },
+    };
+  }
+
+  return a;
+}
+
 // ─── Unified items save-payload builder ────────────────────────────
 
 /**
@@ -550,7 +644,7 @@ function buildUnifiedItemSavePayload(
     proficient: system.proficient ?? null,
     base_item: baseItemSlug || null,
     page: String(item.source?.page ?? system.source?.page ?? '') || null,
-    activities: Object.values(system.activities ?? {}),
+    activities: Object.values(system.activities ?? {}).map((a, i) => foundryActivityToSemantic(a, i)),
     effects: Array.isArray(sourceDocument.effects) ? sourceDocument.effects : [],
     uses: usesPayload,
     type_subtype: typeSubtype,
@@ -853,7 +947,7 @@ export function buildItemImportCandidates(
     if (foundryType === 'consumable') consumablePreview = buildConsumablePreview(item);
     if (foundryType === 'container' || foundryType === 'backpack') containerPreview = buildContainerPreview(item);
 
-    const activities = Object.values(system.activities ?? {});
+    const activities = Object.values(system.activities ?? {}).map((a, i) => foundryActivityToSemantic(a, i));
     const effects = Array.isArray(sourceDocument.effects) ? sourceDocument.effects : [];
     const properties = Array.from(system.properties ?? []).map((v) => String(v));
     const rarity = String(system.rarity ?? '').trim() || 'none';
@@ -911,6 +1005,7 @@ export function buildItemImportCandidates(
       existingEntryId: existingEntry?.id || '',
       existingEntryName: existingEntry?.name || '',
       importWarnings: buildImportWarnings(item, shape, baseItemSlug, matchedSource, baseItemMatched),
+      baseItemUnresolved: (shape === 'weapons' || shape === 'armor' || shape === 'tools') && !!baseItemSlug && !baseItemMatched,
       activities,
       effects,
       sourceDocument,
