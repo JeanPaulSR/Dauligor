@@ -475,19 +475,24 @@ export async function deleteItem(id: string) {
 
 /**
  * Batch upsert for items. Mirrors `upsertSpellBatch` / `upsertFeatBatch`.
- * Used by `ItemImportWorkbench` to write the items-routed entries.
- *
- * Weapons / armor / tools imports go through `upsertDocumentBatch`
- * directly (no compendium-side wrapper needed) because they don't
- * carry the `tagIds → tags` remap items + features rely on. The
- * payloads produced by `itemImport.ts:buildWeaponSavePayload` (etc.)
- * are already snake_case + ready for upsertDocumentBatch.
+ * Used by `ItemImportWorkbench` to write every imported item (the unified
+ * `items` table — weapons / armor / tools included; `targetTable` is only a
+ * column-selection hint). Normalizes each entry AND applies the same
+ * `tagIds → tags` remap as `upsertItem`, since the import payload carries the
+ * tag list as `tagIds` but the column is `tags`.
  */
 export async function upsertItemBatch(entries: { id: string | null, data: Record<string, any> }[]) {
-  const normalizedEntries = entries.map((entry) => ({
-    id: entry.id,
-    data: normalizeCompendiumData(entry.data),
-  }));
+  const normalizedEntries = entries.map((entry) => {
+    const data = normalizeCompendiumData(entry.data);
+    // Same `tagIds` → `tags` remap upsertItem (singular) does — the items
+    // column is `tags` (JSON array), but the import + editors carry the list as
+    // `tagIds`. Without this the batch import hits "no column named tagIds".
+    if (data.tagIds !== undefined) {
+      data.tags = data.tagIds;
+      delete data.tagIds;
+    }
+    return { id: entry.id, data };
+  });
   return upsertDocumentBatch('items', normalizedEntries);
 }
 
