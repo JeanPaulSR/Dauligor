@@ -294,7 +294,13 @@ export function htmlToBbcode(html: string): string {
   bbcode = bbcode.replace(/<strong>([\s\S]*?)<\/strong>/gi, '[b]$1[/b]');
   bbcode = bbcode.replace(/<b>([\s\S]*?)<\/b>/gi, '[b]$1[/b]');
   bbcode = bbcode.replace(/<em>([\s\S]*?)<\/em>/gi, '[i]$1[/i]');
-  bbcode = bbcode.replace(/i>([\s\S]*?)<\/i>/gi, '[i]$1[/i]');
+  // NB: the opening `<` is REQUIRED here. A prior version was `/i>…<\/i>/`
+  // (missing the `<`), which matched only `i>…</i>` inside `<i>…</i>` and
+  // left the leading `<` orphaned — every Foundry-imported italic surfaced
+  // as a stray `<` (e.g. Blackrazor's "<[i]Blackrazor[/i]"). `<i\b[^>]*>`
+  // also tolerates attributes while never matching `<img>` (no word
+  // boundary between `i` and `m`).
+  bbcode = bbcode.replace(/<i\b[^>]*>([\s\S]*?)<\/i>/gi, '[i]$1[/i]');
   bbcode = bbcode.replace(/<u>([\s\S]*?)<\/u>/gi, '[u]$1[/u]');
   bbcode = bbcode.replace(/<del>([\s\S]*?)<\/del>/gi, '[s]$1[/s]');
   bbcode = bbcode.replace(/<s>([\s\S]*?)<\/s>/gi, '[s]$1[/s]');
