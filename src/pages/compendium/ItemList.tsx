@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useCompendiumHashLink } from '../../lib/useCompendiumHashLink';
-import { Lock, Sparkles, Star } from 'lucide-react';
+import { Star } from 'lucide-react';
 import { auth } from '../../lib/firebase';
 import { fetchCollection } from '../../lib/d1';
 import { cn } from '../../lib/utils';
@@ -274,12 +274,6 @@ export default function ItemList({ userProfile }: { userProfile: any }) {
             <span className="truncate font-serif text-sm text-ink">{row.name}</span>
             {starred && (
               <Star className="w-3 h-3 text-gold/75 fill-gold/45 shrink-0" aria-label="Favorite" />
-            )}
-            {row.attunementFlag && (
-              <Lock className="w-3 h-3 text-blood/70 shrink-0" aria-label="Requires attunement" />
-            )}
-            {row.magicalFlag && (
-              <Sparkles className="w-3 h-3 text-gold/75 shrink-0" aria-label="Magical" />
             )}
           </div>
         );

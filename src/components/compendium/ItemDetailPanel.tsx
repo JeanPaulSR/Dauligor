@@ -1,6 +1,7 @@
 import React from 'react';
 import { Star } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { bbcodeToHtml } from '../../lib/bbcode';
 
 /**
  * Read-only detail panel for a unified-items-table row. Used by:
@@ -215,12 +216,11 @@ export default function ItemDetailPanel({
         <OtherMechanics raw={row} />
       )}
 
-      {row.description ? (
-        <div className="px-6 py-5 prose prose-invert max-w-none prose-p:text-ink/95">
-          {typeof row.description === 'string' ? (
-            <p className="whitespace-pre-wrap">{row.description}</p>
-          ) : null}
-        </div>
+      {typeof row.description === 'string' && row.description.trim() ? (
+        <div
+          className="px-6 py-5 prose max-w-none prose-p:text-ink/95 prose-strong:text-ink prose-em:text-ink/85 prose-li:text-ink/85 prose-headings:text-ink"
+          dangerouslySetInnerHTML={{ __html: bbcodeToHtml(row.description) }}
+        />
       ) : null}
     </div>
   );
