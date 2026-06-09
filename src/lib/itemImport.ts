@@ -645,13 +645,13 @@ function buildUnifiedItemSavePayload(
     }
   }
 
-  // Nested-container reference. Foundry uses a `system.container` UUID
-  // pointing at another item document. Carry the string for now; the
-  // C6 dynamic editor will surface a container picker that turns this
-  // into a Dauligor items.id FK on save.
-  if (system.container) {
-    shapePayload.container_id = String(system.container);
-  }
+  // Nested-container reference. Foundry's `system.container` is the parent
+  // container's Foundry document _id — NOT a Dauligor items.id, so it can't go
+  // into the items.container_id FK (→ "FOREIGN KEY constraint failed"). The
+  // catalog container→contents relationship is captured by the container_contents
+  // collapse (option C) in the import workbench, so leave container_id NULL here.
+  // (Was: shapePayload.container_id = String(system.container) — the prod FK bug.)
+  shapePayload.container_id = null;
 
   // Polymorphic base-item FK. Only ever fills one of the three.
   const baseItemFkColumns = resolveBaseItemFkColumns(shape, baseItemSlug, proficiencies);
@@ -766,6 +766,42 @@ export function buildItemImportCandidates(
     if (fid) containerByFoundryId.set(fid, candId);
   });
 
+  // ── Per-source identifier uniqueness ───────────────────────────────
+  // The items_source_identifier_uniq invariant is "identifier unique within
+  // COALESCE(source_id,'')". Foundry ships DISTINCT variants under ONE shared
+  // `system.identifier` in the SAME source (e.g. "Ball Bearing" and "Ball
+  // Bearings (bag of 1,000)" are both `ball-bearings`; the 3 Armor of
+  // Vulnerability damage variants are all `armor-of-vulnerability`). Keying the
+  // identifier off system.identifier would make those collide on (source,id) —
+  // distinct items lost. So: when a candidate's base identifier is already taken
+  // within its source, fall back to the full NAME slug (which differs per
+  // variant) so each real item gets a unique (source, identifier). Genuinely
+  // same-NAMED rows keep the shared id and collapse to one entry — exactly the
+  // dual-key intent ("one source shipping X twice = one entry"). Deterministic
+  // (export order is stable) so re-imports resolve the same ids.
+  const usedIdsBySource = new Map<string, Set<string>>();
+  const resolvedIdentifierByIndex = new Map<number, string>();
+  items.forEach((it, idx) => {
+    const sd = it.sourceDocument ?? {};
+    const sys = sd.system ?? {};
+    const ms = matchSourceRecord(
+      String(it.source?.book ?? sys.source?.book ?? ''),
+      String(it.source?.rules ?? sys.source?.rules ?? ''),
+      sources,
+    );
+    const srcKey = ms?.id ?? '';
+    const base = slugify(String(sys.identifier ?? '') || it.name || sd.name || `item-${idx + 1}`);
+    const nameSlug = slugify(it.name || sd.name || base);
+    let used = usedIdsBySource.get(srcKey);
+    if (!used) { used = new Set<string>(); usedIdsBySource.set(srcKey, used); }
+    let id = base;
+    if (used.has(id) && nameSlug && nameSlug !== id && !used.has(nameSlug)) {
+      id = nameSlug; // distinct item sharing a system.identifier → name-based id
+    }
+    used.add(id);
+    resolvedIdentifierByIndex.set(idx, id);
+  });
+
   return items.map((item, index) => {
     const sourceDocument = item.sourceDocument ?? {};
     const system = sourceDocument.system ?? {};
@@ -779,9 +815,9 @@ export function buildItemImportCandidates(
       sources,
     );
 
-    const identifier = slugify(
-      String(system.identifier ?? '') || item.name || sourceDocument.name || `item-${index + 1}`,
-    );
+    // Unique within (COALESCE(source_id,''), identifier) — see the pass above.
+    const identifier = resolvedIdentifierByIndex.get(index)
+      ?? slugify(String(system.identifier ?? '') || item.name || sourceDocument.name || `item-${index + 1}`);
 
     // Dedupe against the items table by (identifier, source_id). All
     // items live in one table now, so the lookup is single-table.
@@ -794,6 +830,10 @@ export function buildItemImportCandidates(
     // Unified save payload — covers every shape; unused columns stay
     // null on the row.
     const savePayload = buildUnifiedItemSavePayload(item, matchedSource, abilities, proficiencies);
+    // Write the de-collided identifier (buildUnifiedItemSavePayload derives the
+    // base from system.identifier; the uniqueness pass above may have promoted it
+    // to the name slug). Keeps candidate.identifier === the row we write.
+    savePayload.identifier = identifier;
 
     // Track whether the base-item FK resolved. The save payload has
     // the three FK columns — only one is non-null when a match was
