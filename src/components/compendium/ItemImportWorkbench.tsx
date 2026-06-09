@@ -505,8 +505,40 @@ export default function ItemImportWorkbench({ userProfile }: { userProfile: any 
           .filter((c) => c.containerContent && importableIds.has(c.containerContent.parentCandidateId))
           .map((c) => c.candidateId),
       );
-      const itemCandidates = importable.filter((c) => !contentIdSet.has(c.candidateId));
+      const itemCandidates0 = importable.filter((c) => !contentIdSet.has(c.candidateId));
       const contentCandidates = importable.filter((c) => contentIdSet.has(c.candidateId));
+
+      // ── Intra-batch dedup ──────────────────────────────────────────
+      // items enforces UNIQUE(source_id, identifier). Two candidates in the
+      // same batch with the same EFFECTIVE (source, identifier) both pass the
+      // existing-row check (existingItems is the load-time snapshot) and then
+      // both INSERT — the 2nd fails the constraint. Common trigger: bulk-
+      // assigning one source to several unresolved items that share an
+      // identifier, or two export rows that slugify to the same identifier.
+      // Keep the FIRST per key; surface the rest in a toast so the author can
+      // edit the identifier/source on the duplicates and re-run.
+      const seenItemKey = new Map<string, string>();
+      const itemCandidates: typeof itemCandidates0 = [];
+      const dupSkipped: Array<{ name: string; keptName: string }> = [];
+      for (const c of itemCandidates0) {
+        const key = `${effectiveSourceId(c)}||${String(c.identifier ?? '')}`;
+        const keptName = seenItemKey.get(key);
+        if (keptName !== undefined) {
+          dupSkipped.push({ name: c.name, keptName });
+        } else {
+          seenItemKey.set(key, c.name);
+          itemCandidates.push(c);
+        }
+      }
+      if (dupSkipped.length) {
+        console.warn('Skipped duplicates within batch (same source + identifier):', dupSkipped);
+        const preview = dupSkipped.slice(0, 3).map((d) => `"${d.name}"`).join(', ');
+        const suffix = dupSkipped.length > 3 ? ` +${dupSkipped.length - 3} more` : '';
+        toast.warning(
+          `Skipping ${dupSkipped.length} duplicate item${dupSkipped.length === 1 ? '' : 's'} (same source + identifier): ${preview}${suffix}. Edit the identifier or source and re-run.`,
+          { duration: 8000 },
+        );
+      }
 
       // ── Catalog items (containers + standalone). Phase B.3: id minted
       // upfront so ScaleValue advancements persist as scaling_columns rows
