@@ -15,7 +15,7 @@ import {
   FlaskConical,
   type LucideIcon,
 } from 'lucide-react';
-import { queryD1 } from '../../lib/d1';
+import { queryD1, getTableName } from '../../lib/d1';
 import { Button } from '../../components/ui/button';
 import { SearchInput } from '../../components/ui/SearchInput';
 
@@ -179,8 +179,13 @@ export default function AdminProficiencies({ userProfile }: { userProfile: any }
     Promise.all(
       tablesToCount.map(async (table) => {
         try {
+          // `countTable` values are camelCase collection aliases (e.g.
+          // `ammunitionTypes`, `toolCategories`); resolve them to the real
+          // snake_case table name before interpolating, same as every other
+          // query path. Without this the multi-word aliases hit "no such
+          // table" and the count badge silently fell back to 0.
           const rows = await queryD1<{ n: number }>(
-            `SELECT COUNT(*) AS n FROM ${table}`,
+            `SELECT COUNT(*) AS n FROM ${getTableName(table)}`,
           );
           return [table, Number(rows?.[0]?.n ?? 0)] as const;
         } catch {
