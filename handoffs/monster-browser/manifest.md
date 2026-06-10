@@ -74,14 +74,15 @@ actor importer. The Foundry actor shape still *informs the table now* (see below
 
 ## Open requests to other branches
 
-- **→ `foundry-module`** (2026-06-09): enrich the `creature-folder-export` so
-  `creatureSummary` carries Foundry's **derived** values (resolved `ac.value`,
-  proficiency bonus, ability-save totals, skill totals, passive Perception, spell
-  DC/attack) — currently built from raw `actor.toObject()`, so they're 0/null. Plus
-  two stale-path fixes (`source`, `spellLevel`). Surgical: one function
-  (`buildCreatureSummary`, `export-service.js:1535`). Request:
-  [`handoffs/foundry-module/2026-06-09-from-monster-browser-enrich-creature-export.md`](../foundry-module/2026-06-09-from-monster-browser-enrich-creature-export.md).
-  **Non-blocking** — app imports best-effort + `ac_unverified` until it lands.
+- **→ `foundry-module`** (2026-06-09): enrich the `creature-folder-export` with
+  Foundry **derived** values (resolved `ac.value`, PB, save/skill totals, passive
+  Perception, spell DC/attack) + two path fixes. ✅ **RESOLVED — foundry-module did it
+  (`84424a2`).** Request:
+  [`...enrich-creature-export.md`](../foundry-module/2026-06-09-from-monster-browser-enrich-creature-export.md)
+  · their reply: `...reply-monster-browser-enrich-creature-export.md` · our ack:
+  [`...ack-enrich-done.md`](../foundry-module/2026-06-09-from-monster-browser-ack-enrich-done.md).
+  **⏳ Pending a fresh re-export** of the Creatures folder (derived values only
+  populate on a live export) — then validate + drop the `ac_unverified` path.
 
 ## Notes
 
