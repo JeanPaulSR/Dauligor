@@ -679,8 +679,14 @@ export async function buildCharacterExport(
   const primaryClassIdentifier = (() => {
     for (const group of progressionGroups) {
       const classDoc = group.classDocument;
-      const progression = classDoc?.spellcasting?.progression;
-      if (classDoc && progression && progression !== 'none') {
+      const sc = classDoc?.spellcasting;
+      const progression = sc?.progression;
+      // Pact casters store no `progression` string (they carry castingMode
+      // 'pact' + the Pact Master Chart drives slots), so recognise them via
+      // hasSpellcasting + castingMode in addition to the standard path.
+      const isPactCaster =
+        Boolean(sc?.hasSpellcasting) && String(sc?.castingMode || '').toLowerCase() === 'pact';
+      if (classDoc && ((progression && progression !== 'none') || isPactCaster)) {
         return trimString(classDoc.identifier) || slugify(classDoc.name) || '';
       }
     }

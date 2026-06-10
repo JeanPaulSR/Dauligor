@@ -486,6 +486,8 @@ export function normalizeSpellcastingForExport(spellcasting: any, fallbackLevel 
     level: Number(spellcasting.level || fallbackLevel) || fallbackLevel,
     hasSpellcasting: Boolean(spellcasting.hasSpellcasting),
     isRitualCaster: Boolean(spellcasting.isRitualCaster),
+    castingMode:
+      trimString(spellcasting.castingMode).toLowerCase() === "pact" ? "pact" : "spellcasting",
   } as any;
 
   if (!normalized.hasSpellcasting) {

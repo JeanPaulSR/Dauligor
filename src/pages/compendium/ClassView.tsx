@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { fetchCollection, fetchDocument } from '../../lib/d1';
 import { useClassRouteId } from '../../lib/useClassRouteId';
-import { calculateEffectiveCastingLevel, getSpellSlotsForLevel } from '../../lib/spellcasting';
+import { calculateEffectiveCastingLevel, getSpellSlotsForLevel, buildPactDisplayTable } from '../../lib/spellcasting';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
@@ -63,6 +63,7 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
   const [spellsKnown, setSpellsKnown] = useState<any>(null);
   const [spellcastingTypes, setSpellcastingTypes] = useState<any[]>([]);
   const [masterMulticlassChart, setMasterMulticlassChart] = useState<any | null>(null);
+  const [pactMasterChart, setPactMasterChart] = useState<any | null>(null);
   const [tagGroups, setTagGroups] = useState<any[]>([]);
   const [allTags, setAllTags] = useState<any[]>([]);
   const [allSkills, setAllSkills] = useState<any[]>([]);
@@ -162,7 +163,10 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
               };
             };
             
-            if (sc.manualProgressionId) {
+            if (sc.castingMode === 'pact') {
+              setSubclassSpellcasting(null);
+              setSubclassAltSpellcasting(buildPactDisplayTable(sc, spellcastingTypes, pactMasterChart));
+            } else if (sc.manualProgressionId) {
               const snap = await fetchDocument<any>('spellcastingScalings', sc.manualProgressionId);
               if (snap) setSubclassSpellcasting(parseLevels(snap));
             } else if (sc.progressionId && spellcastingTypes.length > 0 && masterMulticlassChart) {
@@ -178,10 +182,10 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
               }
             }
 
-            if (sc.altProgressionId) {
+            if (sc.castingMode !== 'pact' && sc.altProgressionId) {
               const snap = await fetchDocument<any>('pactMagicScalings', sc.altProgressionId);
               if (snap) setSubclassAltSpellcasting(parseLevels(snap));
-            } else {
+            } else if (sc.castingMode !== 'pact') {
               setSubclassAltSpellcasting(null);
             }
             if (sc.spellsKnownId) {
@@ -218,7 +222,7 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
     };
 
     loadSubclassData();
-  }, [selectedSubclassId, spellcastingTypes.length, !!masterMulticlassChart]);
+  }, [selectedSubclassId, spellcastingTypes.length, !!masterMulticlassChart, !!pactMasterChart]);
 
   const allFeaturesWithSpellcasting = useMemo(() => {
     if (!classData) return [];
@@ -366,7 +370,12 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
             };
           };
 
-          if (sc.manualProgressionId) {
+          if (sc.castingMode === 'pact') {
+            // Pact casters draw from the Pact Master Chart, displayed via the
+            // Slot Count / Slot Level (alt) columns — no standard 9-level table.
+            setSpellcasting(null);
+            setAltSpellcasting(buildPactDisplayTable(sc, spellcastingTypes, pactMasterChart));
+          } else if (sc.manualProgressionId) {
             const snap = await fetchDocument<any>('spellcastingScalings', sc.manualProgressionId);
             if (snap) setSpellcasting(parseLevels(snap));
           } else if (sc.progressionId && spellcastingTypes.length > 0 && masterMulticlassChart) {
@@ -382,7 +391,7 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
             }
           }
 
-          if (sc.altProgressionId) {
+          if (sc.castingMode !== 'pact' && sc.altProgressionId) {
             const snap = await fetchDocument<any>('pactMagicScalings', sc.altProgressionId);
             if (snap) setAltSpellcasting(parseLevels(snap));
           }
@@ -401,7 +410,7 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
       }
     };
     loadMainClassData();
-  }, [id, navigate, spellcastingTypes.length, !!masterMulticlassChart]);
+  }, [id, navigate, spellcastingTypes.length, !!masterMulticlassChart, !!pactMasterChart]);
 
   const allScalingColumns = useMemo(() => {
     return [...scalingColumns, ...subclassScalingColumns];
@@ -478,7 +487,8 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
           armorData,
           attrsData,
           scTypesData,
-          masterData
+          masterData,
+          pactMasterData
         ] = await Promise.all([
           fetchCollection<any>('tagGroups'),
           fetchCollection<any>('tags'),
@@ -491,7 +501,8 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
           fetchCollection<any>('armor'),
           fetchCollection<any>('attributes'),
           fetchCollection<any>('spellcastingTypes'),
-          fetchDocument<any>('standardMulticlassProgression', 'master')
+          fetchDocument<any>('standardMulticlassProgression', 'master'),
+          fetchDocument<any>('pactMasterChart', 'pact')
         ]);
 
         setTagGroups(tagGroupsData.map((tg: any) => ({
@@ -526,6 +537,10 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
         setMasterMulticlassChart(masterData ? {
           ...masterData,
           levels: typeof masterData.levels === 'string' ? JSON.parse(masterData.levels) : (masterData.levels || [])
+        } : null);
+        setPactMasterChart(pactMasterData ? {
+          ...pactMasterData,
+          levels: typeof pactMasterData.levels === 'string' ? JSON.parse(pactMasterData.levels) : (pactMasterData.levels || [])
         } : null);
 
         // Attributes unique logic

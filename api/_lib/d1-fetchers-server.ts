@@ -28,6 +28,7 @@ const D1_TABLE_MAP: Record<string, string> = {
   statuses: "status_conditions",
   conditionCategories: "condition_categories",
   standardMulticlassProgression: "multiclass_master_chart",
+  pactMasterChart: "multiclass_master_chart",
   attributes: "attributes",
   skills: "skills",
   tools: "tools",

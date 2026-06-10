@@ -167,7 +167,7 @@ import { ClassList } from "../compendium/ClassList";
 import BBCodeRenderer from "../../components/BBCodeRenderer";
 import FeatPickerDialog from "../../components/characters/FeatPickerDialog";
 import { exportCharacterJSON } from "../../lib/characterExport";
-import { calculateEffectiveCastingLevel, getSpellSlotsForLevel } from "../../lib/spellcasting";
+import { calculateEffectiveCastingLevel, getSpellSlotsForLevel, getPactSlotsForLevel } from "../../lib/spellcasting";
 import {
   getCanonicalTraitChoiceEntries,
   normalizeAdvancementListForEditor,
@@ -3408,6 +3408,9 @@ export default function CharacterBuilder({
   });
   const [spellcastingTypes, setSpellcastingTypes] = useState<any[]>([]);
   const [masterMulticlassChart, setMasterMulticlassChart] = useState<any | null>(null);
+  // Pact magic master chart (multiclass_master_chart row id 'pact'). Feeds
+  // pact-caster slot computation, parallel to the standard chart above.
+  const [pactMasterChart, setPactMasterChart] = useState<any | null>(null);
   const isStaff = ["admin", "co-dm"].includes(userProfile?.role);
   const isAdmin = userProfile?.role === "admin";
 
@@ -3960,6 +3963,14 @@ export default function CharacterBuilder({
         );
         if (multiclassMasterDoc) {
           setMasterMulticlassChart(multiclassMasterDoc);
+        }
+
+        const pactMasterDoc = await fetchDocument<any>(
+          "pactMasterChart",
+          "pact",
+        );
+        if (pactMasterDoc) {
+          setPactMasterChart(pactMasterDoc);
         }
 
       } catch (err) {
@@ -5461,6 +5472,11 @@ export default function CharacterBuilder({
           effectiveLevel: contribution > 0 ? contribution : classLevel,
           ability: String(spellcasting.ability || "").toUpperCase(),
           preparationType: spellcasting.type || "prepared",
+          // Pact casters draw from the Pact Master Chart instead of the
+          // standard multiclass chart; the Full/Half/Third formula above still
+          // scales the pact-caster level.
+          castingMode:
+            String(spellcasting.castingMode || "").toLowerCase() === "pact" ? "pact" : "spellcasting",
         });
       };
 
@@ -5477,7 +5493,19 @@ export default function CharacterBuilder({
     })
     .sort((left: any, right: any) => left.label.localeCompare(right.label));
 
-  const totalSpellcastingLevel = spellcastingContributors.reduce(
+  // Pact casters keep a SEPARATE slot pool from standard casters (a
+  // Warlock 3 / Wizard 5 has both pact slots and standard slots), so split the
+  // contributors by casting mode and sum / look up each independently. Pact
+  // slots come from the Pact Master Chart ({slots, slotLevel}); standard slots
+  // from the Multiclass Master Chart (a 9-length array).
+  const standardContributors = spellcastingContributors.filter(
+    (contributor: any) => contributor.castingMode !== "pact",
+  );
+  const pactContributors = spellcastingContributors.filter(
+    (contributor: any) => contributor.castingMode === "pact",
+  );
+
+  const totalSpellcastingLevel = standardContributors.reduce(
     (sum: number, contributor: any) => sum + (Number(contributor.effectiveLevel || 0) || 0),
     0,
   );
@@ -5486,6 +5514,16 @@ export default function CharacterBuilder({
     totalSpellcastingLevel > 0 && Array.isArray(spellSlotLevels)
       ? getSpellSlotsForLevel(totalSpellcastingLevel, spellSlotLevels)
       : Array(9).fill(0);
+
+  const totalPactLevel = pactContributors.reduce(
+    (sum: number, contributor: any) => sum + (Number(contributor.effectiveLevel || 0) || 0),
+    0,
+  );
+  const pactSlotTable = pactMasterChart?.levels || [];
+  const pactSpellSlots =
+    totalPactLevel > 0 && Array.isArray(pactSlotTable)
+      ? getPactSlotsForLevel(totalPactLevel, pactSlotTable)
+      : { slots: 0, slotLevel: 0 };
 
   const legacyAdvancementSelectionKeys = Object.keys(
     character.selectedOptions || {},
@@ -7111,6 +7149,25 @@ export default function CharacterBuilder({
                                   </div>
                                 ) : null,
                               )}
+                              {/* Pact slots — hollow pips, a fixed count all at
+                                  one spell level (Warlock-style), kept visually
+                                  distinct from the filled standard-slot pips. */}
+                              {pactSpellSlots.slots > 0 && (
+                                <div className="flex flex-col items-center gap-1">
+                                  <div className="flex gap-1">
+                                    {Array.from({ length: pactSpellSlots.slots }).map((_, j) => (
+                                      <span
+                                        key={`pact-pip-${j}`}
+                                        className="w-2 h-2 rounded-full border-2 border-gold bg-transparent"
+                                        title={`Pact slot ${j + 1} (cast at level ${pactSpellSlots.slotLevel})`}
+                                      />
+                                    ))}
+                                  </div>
+                                  <span className="text-[8px] font-black uppercase tracking-[0.16em] text-gold/70">
+                                    Pact L{pactSpellSlots.slotLevel}
+                                  </span>
+                                </div>
+                              )}
                             </div>
                           </div>
 
@@ -7312,10 +7369,17 @@ export default function CharacterBuilder({
                                 Highest Slot
                               </div>
                               <div className="text-xl font-black text-ink">
-                                {Math.max(
-                                  0,
-                                  ...multiclassSpellSlots.map((count: number, index: number) => (count > 0 ? index + 1 : 0)),
-                                ) || "None"}
+                                {(() => {
+                                  const standardHighest = Math.max(
+                                    0,
+                                    ...multiclassSpellSlots.map((count: number, index: number) => (count > 0 ? index + 1 : 0)),
+                                  );
+                                  const highest = Math.max(
+                                    standardHighest,
+                                    pactSpellSlots.slots > 0 ? pactSpellSlots.slotLevel : 0,
+                                  );
+                                  return highest || "None";
+                                })()}
                               </div>
                             </div>
                           </div>
@@ -7340,27 +7404,58 @@ export default function CharacterBuilder({
                             ))}
                           </div>
 
-                          <div className="border border-gold/15 bg-background/40 rounded-lg p-4">
-                            <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/45 mb-3">
-                              Multiclass Spell Slots
-                            </div>
-                            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                              {multiclassSpellSlots.map((count: number, index: number) => (
-                                <div
-                                  key={`slot-${index}`}
-                                  className="border border-gold/15 bg-card/40 rounded-md p-3 text-center"
-                                >
-                                  <div className="text-[10px] font-black uppercase tracking-[0.2em] text-gold/65">
-                                    {index + 1}
-                                    {index === 0 ? "st" : index === 1 ? "nd" : index === 2 ? "rd" : "th"}
+                          {multiclassSpellSlots.some((count: number) => count > 0) && (
+                            <div className="border border-gold/15 bg-background/40 rounded-lg p-4">
+                              <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/45 mb-3">
+                                Multiclass Spell Slots
+                              </div>
+                              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                                {multiclassSpellSlots.map((count: number, index: number) => (
+                                  <div
+                                    key={`slot-${index}`}
+                                    className="border border-gold/15 bg-card/40 rounded-md p-3 text-center"
+                                  >
+                                    <div className="text-[10px] font-black uppercase tracking-[0.2em] text-gold/65">
+                                      {index + 1}
+                                      {index === 0 ? "st" : index === 1 ? "nd" : index === 2 ? "rd" : "th"}
+                                    </div>
+                                    <div className="text-lg font-black text-ink mt-1">
+                                      {count}
+                                    </div>
                                   </div>
-                                  <div className="text-lg font-black text-ink mt-1">
-                                    {count}
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Pact slots — a fixed count all at one spell level,
+                              from the Pact Master Chart, separate from the
+                              standard multiclass slots above. */}
+                          {pactSpellSlots.slots > 0 && (
+                            <div className="border border-gold/15 bg-background/40 rounded-lg p-4">
+                              <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/45 mb-3">
+                                Pact Slots
+                              </div>
+                              <div className="flex items-center gap-4">
+                                <div className="border border-gold/25 bg-card/40 rounded-md px-4 py-3 text-center">
+                                  <div className="text-2xl font-black text-gold leading-none">
+                                    {pactSpellSlots.slots}
+                                  </div>
+                                  <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/45 mt-1">
+                                    Slots
                                   </div>
                                 </div>
-                              ))}
+                                <div className="text-sm font-serif text-ink/65">
+                                  All cast at{" "}
+                                  <span className="font-black text-gold">level {pactSpellSlots.slotLevel}</span>
+                                  {totalPactLevel > 0 ? ` · pact-caster level ${totalPactLevel}` : ""}.
+                                  <div className="text-[11px] text-ink/45 italic mt-0.5">
+                                    Regained on a short or long rest.
+                                  </div>
+                                </div>
+                              </div>
                             </div>
-                          </div>
+                          )}
                         </div>
                       ) : (
                         <div className="text-sm font-serif italic text-ink/35">

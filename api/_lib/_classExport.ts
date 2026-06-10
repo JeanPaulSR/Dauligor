@@ -576,6 +576,15 @@ function normalizeSpellcastingForExport(spellcasting: any, refs: any = {}, {
     delete normalized.progression;
   }
 
+  // Casting mode is the single source of truth for pact magic — mirror of
+  // src/lib/classExport.ts. Pact casters always export native `progression:
+  // 'pact'` so Foundry computes Warlock-style slots natively.
+  const castingMode = trimString(spellcasting.castingMode).toLowerCase() === 'pact' ? 'pact' : 'spellcasting';
+  normalized.castingMode = castingMode;
+  if (castingMode === 'pact') {
+    normalized.progression = 'pact';
+  }
+
   const alternativeProgressionId = trimString(spellcasting.altProgressionId);
   const alternativeProgression = refs.pactMagicScalingsById?.[alternativeProgressionId];
   if (alternativeProgressionId) {

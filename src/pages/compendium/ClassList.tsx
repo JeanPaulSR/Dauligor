@@ -72,6 +72,7 @@ export function ClassList({
   const [allAttributes, setAllAttributes] = useState<any[]>([]);
   const [spellcastingTypes, setSpellcastingTypes] = useState<any[]>([]);
   const [masterMulticlassChart, setMasterMulticlassChart] = useState<any | null>(null);
+  const [pactMasterChart, setPactMasterChart] = useState<any | null>(null);
   const [loadingStates, setLoadingStates] = useState({
     classes: true,
     foundation: true
@@ -173,7 +174,8 @@ export function ClassList({
           weaponsData,
           attrsData,
           typesData,
-          masterChartData
+          masterChartData,
+          pactMasterChartData
         ] = await Promise.all([
           fetchCollection<any>('sources', { orderBy: 'name ASC' }),
           fetchCollection<any>('tagGroups', { where: "classifications LIKE '%class%'" }),
@@ -187,7 +189,8 @@ export function ClassList({
           fetchCollection<any>('weapons'),
           fetchCollection<any>('attributes'),
           fetchCollection<any>('spellcastingTypes'),
-          fetchDocument<any>('standardMulticlassProgression', 'master')
+          fetchDocument<any>('standardMulticlassProgression', 'master'),
+          fetchDocument<any>('pactMasterChart', 'pact')
         ]);
 
         const sourceMap: Record<string, any> = {};
@@ -233,6 +236,12 @@ export function ClassList({
           levels: typeof masterChartData.levels === 'string' ? JSON.parse(masterChartData.levels) : (masterChartData.levels || [])
         } : null;
         setMasterMulticlassChart(chart);
+
+        const pactChart = pactMasterChartData ? {
+          ...pactMasterChartData,
+          levels: typeof pactMasterChartData.levels === 'string' ? JSON.parse(pactMasterChartData.levels) : (pactMasterChartData.levels || [])
+        } : null;
+        setPactMasterChart(pactChart);
         
         setLoadingStates(prev => ({ ...prev, foundation: false }));
       } catch (err) {
@@ -711,6 +720,7 @@ export function ClassList({
           sources,
           spellcastingTypes,
           masterMulticlassChart,
+          pactMasterChart,
         }}
         selectionMode={selectionMode}
         onSelect={(cls) => onSelectClass?.(cls)}

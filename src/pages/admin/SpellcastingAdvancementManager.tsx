@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { fetchCollection, deleteDocument } from '../../lib/d1';
 import { Button } from '../../components/ui/button';
-import { Plus, Edit, Trash2, Wand2, BookOpen, ShieldAlert, Calculator } from 'lucide-react';
+import { Plus, Edit, Trash2, Wand2, BookOpen, ShieldAlert, Calculator, Moon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import StandardMulticlassEditor from './StandardMulticlassEditor';
+import PactCastingMasterEditor from './PactCastingMasterEditor';
 import SpellcastingTypeEditor from './SpellcastingTypeEditor';
 
 export default function SpellcastingAdvancementManager({ userProfile }: { userProfile: any }) {
@@ -12,6 +13,7 @@ export default function SpellcastingAdvancementManager({ userProfile }: { userPr
   const [knownScalings, setKnownScalings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showMulticlassChart, setShowMulticlassChart] = useState(false);
+  const [showPactChart, setShowPactChart] = useState(false);
   const [showTypeEditor, setShowTypeEditor] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
 
@@ -80,6 +82,36 @@ export default function SpellcastingAdvancementManager({ userProfile }: { userPr
           {showMulticlassChart && (
             <div className="pt-4 border-t border-gold/5">
               <StandardMulticlassEditor />
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* Pact Magic Master Chart */}
+      <section className="p-1 border border-gold/15 rounded-2xl bg-card/20 shadow-sm">
+        <div className="p-6 space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gold/15 flex items-center justify-center border border-gold/25 shadow-inner">
+                <Moon className="w-5 h-5 text-gold" />
+              </div>
+              <div>
+                <h3 className="font-serif text-lg font-bold text-ink">Pact Casting Master Chart</h3>
+                <p className="text-xs text-ink/45">Fixed-level pact slots (Warlock-style), independent of the multiclass chart.</p>
+              </div>
+            </div>
+            <Button
+              onClick={() => setShowPactChart(!showPactChart)}
+              variant="outline"
+              className="border-gold/25 text-gold hover:bg-gold/5"
+            >
+              {showPactChart ? 'Hide Chart' : 'Edit Master Chart'}
+            </Button>
+          </div>
+
+          {showPactChart && (
+            <div className="pt-4 border-t border-gold/5">
+              <PactCastingMasterEditor />
             </div>
           )}
         </div>

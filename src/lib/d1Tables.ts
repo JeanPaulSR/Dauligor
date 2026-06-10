@@ -24,6 +24,9 @@ export const D1_TABLE_MAP: Record<string, string> = {
   statuses: 'status_conditions',
   conditionCategories: 'condition_categories',
   standardMulticlassProgression: 'multiclass_master_chart',
+  // Pact magic master chart shares the generic master-chart table; stored under a
+  // distinct row id ('pact') alongside the standard chart ('master').
+  pactMasterChart: 'multiclass_master_chart',
   attributes: 'attributes',
   skills: 'skills',
   tools: 'tools',

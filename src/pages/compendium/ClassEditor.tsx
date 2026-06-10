@@ -189,7 +189,15 @@ function buildEmptyClassSpellcastingState() {
     level: 1,
     ability: 'INT',
     type: 'prepared',
+    // Which slot system this class draws from. 'spellcasting' = standard
+    // slots (the Full/Half/Third progression feeds the Multiclass Master
+    // Chart); 'pact' = Warlock-style pact slots (the same progression feeds
+    // the Pact Master Chart instead). Replaces the deprecated
+    // progressionId === 'custom' + altProgressionId mechanism.
+    castingMode: 'spellcasting',
     progressionId: '',
+    // DEPRECATED — pact magic is now `castingMode: 'pact'`. Kept in the
+    // shape only so legacy rows lazy-migrate cleanly on load/save.
     altProgressionId: '',
     spellsKnownId: '',
     spellsKnownFormula: '',
@@ -212,11 +220,29 @@ function normalizeClassSpellcastingForEditor(spellcasting: any) {
     return buildEmptyClassSpellcastingState();
   }
 
+  // Casting mode + lazy migration off the deprecated custom/pact mechanism.
+  // Old pact classes were marked by progressionId === 'custom' plus an
+  // altProgressionId (or an exported progression === 'pact'); surface those as
+  // castingMode 'pact' and drop the 'custom' sentinel so the Progression Type
+  // dropdown (Full/Half/Third) shows a real selection again.
+  const rawCastingMode = String(spellcasting.castingMode || '').trim().toLowerCase();
+  const legacyProgressionId = String(spellcasting.progressionId || '').trim();
+  const looksLikeLegacyPact =
+    legacyProgressionId === 'custom'
+    || Boolean(String(spellcasting.altProgressionId || '').trim())
+    || String(spellcasting.progression || '').trim().toLowerCase() === 'pact';
+  const castingMode =
+    rawCastingMode === 'pact' || (!rawCastingMode && looksLikeLegacyPact)
+      ? 'pact'
+      : 'spellcasting';
+
   const normalized = {
     ...buildEmptyClassSpellcastingState(),
     ...spellcasting,
     hasSpellcasting: Boolean(spellcasting.hasSpellcasting),
     isRitualCaster: Boolean(spellcasting.isRitualCaster),
+    castingMode,
+    progressionId: legacyProgressionId === 'custom' ? '' : legacyProgressionId,
     ability: String(spellcasting.ability || 'INT').toUpperCase(),
     type: String(spellcasting.type || 'prepared').toLowerCase(),
     level: Number(spellcasting.level || 1) || 1,
@@ -244,6 +270,14 @@ function normalizeClassSpellcastingForSave(spellcasting: any) {
 
   if (hasLinkedScalingIds) {
     delete normalized.progression;
+  }
+
+  // Pact magic is expressed solely via castingMode now; retire the deprecated
+  // alternative-progression pointer so it can't shadow the Pact Master Chart.
+  // The Full/Half/Third progressionId still rides along — it just feeds the
+  // pact chart instead of the standard one at runtime/export.
+  if (normalized.castingMode === 'pact') {
+    normalized.altProgressionId = '';
   }
 
   return normalized;
@@ -319,7 +353,6 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   const [initialLoading, setInitialLoading] = useState(!!id);
   const [sources, setSources] = useState<any[]>([]);
   const [spellcastingTypes, setSpellcastingTypes] = useState<any[]>([]);
-  const [pactScalings, setPactScalings] = useState<any[]>([]);
   const [knownScalings, setKnownScalings] = useState<any[]>([]);
   const [allSkills, setAllSkills] = useState<any[]>([]);
   const [allTools, setAllTools] = useState<any[]>([]);
@@ -596,7 +629,6 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
         const [
           sourcesData,
           scTypesData,
-          pactData,
           knownData,
           skillsData,
           toolsData,
@@ -616,7 +648,6 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
         ] = await Promise.all([
           fetchCollection('sources', { orderBy: 'name ASC' }),
           fetchCollection('spellcastingTypes', { orderBy: 'name ASC' }),
-          fetchCollection('pactMagicScalings', { orderBy: 'name ASC' }),
           fetchCollection('spellsKnownScalings', { orderBy: 'name ASC' }),
           fetchCollection('skills', { orderBy: 'name ASC' }),
           fetchCollection('tools', { orderBy: 'name ASC' }),
@@ -642,10 +673,6 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
 
         setSources(sourcesData.map(s => denormalizeCompendiumData(s)));
         setSpellcastingTypes(scTypesData.map(t => denormalizeCompendiumData(t)));
-        setPactScalings(pactData.map((p: any) => ({
-          ...denormalizeCompendiumData(p),
-          levels: typeof p.levels === 'string' ? JSON.parse(p.levels) : (p.levels || [])
-        })));
         setKnownScalings(knownData.map((k: any) => ({
           ...denormalizeCompendiumData(k),
           levels: typeof k.levels === 'string' ? JSON.parse(k.levels) : (k.levels || [])
@@ -1839,6 +1866,37 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                           <span className="text-[10px] font-bold uppercase tracking-widest text-gold select-none">Ritual Caster</span>
                         </div>
                       </div>
+                      {/* Casting Mode — chooses which master chart the
+                          Full/Half/Third progression below feeds: standard
+                          spell slots (Multiclass Master Chart) or Warlock-style
+                          pact slots (Pact Master Chart). Replaces the retired
+                          "Custom / Pact" progression option + altProgressionId. */}
+                      <div className="space-y-1 col-span-full">
+                        <label className="label-text">Casting Mode</label>
+                        <div className="inline-flex rounded-md border border-gold/15 overflow-hidden bg-background/50">
+                          {([
+                            { key: 'spellcasting', label: 'Standard Spellcasting' },
+                            { key: 'pact', label: 'Pact Casting' },
+                          ] as const).map(opt => {
+                            const active = (spellcasting.castingMode || 'spellcasting') === opt.key;
+                            return (
+                              <button
+                                key={opt.key}
+                                type="button"
+                                onClick={() => setSpellcasting({ ...spellcasting, castingMode: opt.key })}
+                                className={`px-3 h-8 text-[11px] font-bold uppercase tracking-widest transition-colors ${active ? 'bg-gold text-[var(--primary-foreground)]' : 'text-ink/55 hover:text-gold hover:bg-gold/5'}`}
+                              >
+                                {opt.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <p className="text-[9px] text-ink/40 italic">
+                          {(spellcasting.castingMode || 'spellcasting') === 'pact'
+                            ? 'Warlock-style: a few slots, all the same level, drawn from the Pact Master Chart. The Progression Type below scales the pact-caster level (Full Caster = 1:1).'
+                            : 'Standard spell slots spread across levels 1–9, drawn from the Multiclass Master Chart via the Progression Type below.'}
+                        </p>
+                      </div>
                       <div className="space-y-1">
                         <label className="label-text">Level Obtained</label>
                         <Input
@@ -1859,7 +1917,6 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                           {spellcastingTypes.map(type => (
                             <option key={type.id} value={type.id}>{type.name}</option>
                           ))}
-                          <option value="custom">Custom / Pact</option>
                         </select>
                         {selectedSpellcastingType && (
                           <p className="text-[9px] text-ink/40 italic">
@@ -1998,25 +2055,6 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
 
                     <div className="space-y-4">
                       <div className="grid sm:grid-cols-2 gap-4">
-                        {spellcasting.progressionId === 'custom' && (
-                          <div className="space-y-1">
-                            <label className="label-text">Alternative Progression (Pact / Focus Slots)</label>
-                            <div className="flex gap-1">
-                              <select
-                                value={spellcasting.altProgressionId}
-                                onChange={e => setSpellcasting({ ...spellcasting, altProgressionId: e.target.value })}
-                                className="flex-1 h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink"
-                              >
-                                <option value="">None</option>
-                                {pactScalings.map(s => (
-                                  <option key={s.id} value={s.id}>{s.name}</option>
-                                ))}
-                              </select>
-                            </div>
-                            <p className="text-[9px] text-ink/40 italic">Use this only for separate alternative slot systems such as Pact-style casting. (Editing UI deprecated; uses existing entries only.)</p>
-                          </div>
-                        )}
-
                         <div className="space-y-1">
                           <label className="label-text">Spells Known Scaling (Cantrips / Spells)</label>
                           <div className="flex gap-1">

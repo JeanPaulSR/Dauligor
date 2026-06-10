@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Edit } from 'lucide-react';
 import { fetchCollection, fetchDocument } from '../../lib/d1';
-import { calculateEffectiveCastingLevel, getSpellSlotsForLevel } from '../../lib/spellcasting';
+import { calculateEffectiveCastingLevel, getSpellSlotsForLevel, buildPactDisplayTable } from '../../lib/spellcasting';
 import { cn } from '../../lib/utils';
 import { motion } from 'motion/react';
 import BBCodeRenderer from '../BBCodeRenderer';
@@ -30,6 +30,7 @@ export interface ClassPaneFoundation {
   sources: Record<string, any>;
   spellcastingTypes: any[];
   masterMulticlassChart: any | null;
+  pactMasterChart: any | null;
 }
 
 const EMPTY_FOUNDATION: ClassPaneFoundation = {
@@ -45,6 +46,7 @@ const EMPTY_FOUNDATION: ClassPaneFoundation = {
   sources: {},
   spellcastingTypes: [],
   masterMulticlassChart: null,
+  pactMasterChart: null,
 };
 
 /**
@@ -81,6 +83,7 @@ export function useClassPaneFoundation(enabled: boolean = true): { foundation: C
           attrsData,
           typesData,
           masterChartData,
+          pactChartData,
         ] = await Promise.all([
           fetchCollection<any>('sources', { orderBy: 'name ASC' }),
           fetchCollection<any>('tags'),
@@ -94,6 +97,7 @@ export function useClassPaneFoundation(enabled: boolean = true): { foundation: C
           fetchCollection<any>('attributes'),
           fetchCollection<any>('spellcastingTypes'),
           fetchDocument<any>('standardMulticlassProgression', 'master'),
+          fetchDocument<any>('pactMasterChart', 'pact'),
         ]);
 
         if (cancelled) return;
@@ -119,6 +123,16 @@ export function useClassPaneFoundation(enabled: boolean = true): { foundation: C
             }
           : null;
 
+        const pactChart = pactChartData
+          ? {
+              ...pactChartData,
+              levels:
+                typeof pactChartData.levels === 'string'
+                  ? JSON.parse(pactChartData.levels)
+                  : pactChartData.levels || [],
+            }
+          : null;
+
         setFoundation({
           sources: sourceMap,
           allTags: tagsData,
@@ -138,6 +152,7 @@ export function useClassPaneFoundation(enabled: boolean = true): { foundation: C
           allAttributes: Array.from(uniqueAttrsMap.values()),
           spellcastingTypes: typesData,
           masterMulticlassChart: chart,
+          pactMasterChart: pactChart,
         });
         setLoaded(true);
         setLoading(false);
@@ -186,6 +201,7 @@ export function useClassPreviewData(
   classInput: any | string | null,
   spellcastingTypes: any[],
   masterMulticlassChart: any | null,
+  pactMasterChart: any | null,
   enabled: boolean = true,
 ): ClassPreviewData {
   const [classData, setClassData] = useState<any | null>(
@@ -359,7 +375,14 @@ export function useClassPreviewData(
             };
           };
 
-          if (sc.manualProgressionId) {
+          if (sc.castingMode === 'pact') {
+            // Pact casters: slots from the Pact Master Chart, shown via the
+            // Slot Count / Slot Level (alt) columns — no standard slot table.
+            if (!cancelled) {
+              setSpellcasting(null);
+              setAltSpellcasting(buildPactDisplayTable(sc, spellcastingTypes, pactMasterChart));
+            }
+          } else if (sc.manualProgressionId) {
             allPromises.push(
               fetchDocument<any>('spellcastingScalings', sc.manualProgressionId).then(
                 (data) => !cancelled && setSpellcasting(parseLevels(data)),
@@ -380,7 +403,7 @@ export function useClassPreviewData(
               if (!cancelled) setSpellcasting({ name: type.name, levels: virtualLevels });
             }
           }
-          if (sc.altProgressionId) {
+          if (sc.castingMode !== 'pact' && sc.altProgressionId) {
             allPromises.push(
               fetchDocument<any>('pactMagicScalings', sc.altProgressionId).then(
                 (data) => !cancelled && setAltSpellcasting(parseLevels(data)),
@@ -443,7 +466,7 @@ export function useClassPreviewData(
     // (we set it here). Re-running on its change would loop. Resolution is
     // keyed on the input identity + the catalogue inputs used for virtual slots.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inputId, enabled, spellcastingTypes.length, !!masterMulticlassChart]);
+  }, [inputId, enabled, spellcastingTypes.length, !!masterMulticlassChart, !!pactMasterChart]);
 
   return {
     classData,
@@ -532,6 +555,7 @@ export default function ClassPreviewPane({
     sources,
     spellcastingTypes,
     masterMulticlassChart,
+    pactMasterChart,
   } = foundation;
 
   // The class identity passed to the data hook: prefer the object, else the id.
@@ -547,7 +571,7 @@ export default function ClassPreviewPane({
     optionGroups: previewOptionGroups,
     optionItems: previewOptionItems,
     loading: previewLoading,
-  } = useClassPreviewData(classInput, spellcastingTypes, masterMulticlassChart, open);
+  } = useClassPreviewData(classInput, spellcastingTypes, masterMulticlassChart, pactMasterChart, open);
 
   const [previewSelectedOptions, setPreviewSelectedOptions] = useState<Record<string, string>>({});
   const [selectedPreviewFeatureId, setSelectedPreviewFeatureId] = useState<string | null>(null);

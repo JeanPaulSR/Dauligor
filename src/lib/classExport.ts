@@ -299,6 +299,21 @@ function resolveImageUrl(record: any) {
 }
 
 /**
+ * Ensure an imported class/subclass spellcasting block carries an explicit
+ * `castingMode`. New exports preserve it; Foundry-originated and legacy bundles
+ * only carry the native Foundry `progression`, so derive 'pact' from
+ * `progression === 'pact'` and default everything else to 'spellcasting'.
+ */
+function applyDerivedCastingMode<T extends { spellcasting?: any }>(doc: T): T {
+  const sc = doc?.spellcasting;
+  if (sc && typeof sc === 'object' && !trimString(sc.castingMode)) {
+    sc.castingMode =
+      trimString(sc.progression).toLowerCase() === 'pact' ? 'pact' : 'spellcasting';
+  }
+  return doc;
+}
+
+/**
  * Imports a class semantic export bundle into D1. Client-only — pulls in
  * `./d1` for the upsert helpers via dynamic import so this module stays
  * loadable from the server.
@@ -369,7 +384,7 @@ export async function importClassSemantic(data: any) {
   }
   if (subclasses.length > 0) {
     await upsertDocumentBatch('subclasses',
-      subclasses.map((sub: any) => ({ id: sub.id, data: toSnakeKeys(sub) })));
+      subclasses.map((sub: any) => ({ id: sub.id, data: toSnakeKeys(applyDerivedCastingMode(sub)) })));
   }
   if (features.length > 0) {
     await upsertDocumentBatch('features',
@@ -377,7 +392,7 @@ export async function importClassSemantic(data: any) {
   }
 
   // 8. Handle the Class itself
-  await upsertDocument('classes', classData.id, toSnakeKeys(classData));
+  await upsertDocument('classes', classData.id, toSnakeKeys(applyDerivedCastingMode(classData)));
 
   return classData.id;
 }
@@ -570,6 +585,18 @@ function normalizeSpellcastingForExport(spellcasting: any, refs: any = {}, {
     normalized.progression = progression;
   } else {
     delete normalized.progression;
+  }
+
+  // Casting mode is the single source of truth for pact magic. Standard
+  // spellcasting maps the Full/Half/Third progression to a native Foundry
+  // progression (above). Pact casters always export the native `pact`
+  // progression so Foundry computes Warlock-style slots natively — regardless
+  // of which Full/Half/Third formula scales the pact-caster level in our own
+  // character builder (which reads the Pact Master Chart instead).
+  const castingMode = trimString(spellcasting.castingMode).toLowerCase() === 'pact' ? 'pact' : 'spellcasting';
+  normalized.castingMode = castingMode;
+  if (castingMode === 'pact') {
+    normalized.progression = 'pact';
   }
 
   const alternativeProgressionId = trimString(spellcasting.altProgressionId);

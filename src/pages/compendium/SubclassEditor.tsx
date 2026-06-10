@@ -97,6 +97,11 @@ function buildEmptySubclassSpellcastingState() {
     ability: 'INT',
     type: 'prepared',
     progression: 'none',
+    // Pact magic flag, kept in sync with progression === 'pact'. Subclasses
+    // pick pact directly from the Progression dropdown (unlike the class
+    // editor's explicit Casting Mode toggle); castingMode is derived so the
+    // character builder + export treat subclass pact casters consistently.
+    castingMode: 'spellcasting',
     progressionId: '',
     altProgressionId: '',
     spellsKnownId: '',
@@ -110,6 +115,13 @@ function normalizeSubclassSpellcastingForEditor(spellcasting: any) {
     return buildEmptySubclassSpellcastingState();
   }
 
+  const progression = String(spellcasting.progression || 'none').toLowerCase();
+  const castingMode =
+    progression === 'pact'
+    || String(spellcasting.castingMode || '').toLowerCase() === 'pact'
+      ? 'pact'
+      : 'spellcasting';
+
   return {
     ...buildEmptySubclassSpellcastingState(),
     ...spellcasting,
@@ -118,7 +130,9 @@ function normalizeSubclassSpellcastingForEditor(spellcasting: any) {
     ability: String(spellcasting.ability || 'INT').toUpperCase(),
     type: String(spellcasting.type || 'prepared').toLowerCase(),
     level: Number(spellcasting.level || 3) || 3,
-    progression: String(spellcasting.progression || 'none').toLowerCase()
+    // Keep the two in lockstep: choosing pact mode forces progression 'pact'.
+    progression: castingMode === 'pact' ? 'pact' : progression,
+    castingMode
   };
 }
 
@@ -1005,7 +1019,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                       <option value="full">Full Caster</option>
                       <option value="half">Half Caster</option>
                       <option value="third">Third Caster</option>
-                      <option value="pact">Custom / Pact</option>
+                      <option value="pact">Pact Casting</option>
                       <option value="artificer">Artificer</option>
                     </select>
                   </div>
