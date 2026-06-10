@@ -85,6 +85,26 @@ actor importer. The Foundry actor shape still *informs the table now* (see below
   **⏳ Pending a fresh re-export** of the Creatures folder (derived values only
   populate on a live export) — then validate + drop the `ac_unverified` path.
 
+## Local dev
+
+This branch's **isolated** dev stack — `node scripts/dev-monster-browser.mjs`:
+
+| service | URL |
+|---|---|
+| app (Express + Vite) | **http://localhost:3006** |
+| worker (wrangler dev — D1 + R2 sandbox) | **http://localhost:8793** |
+| wrangler inspector | :9234 |
+
+⚠ **NOT :3000** — that's the main checkout's default stack. Sibling branches:
+sysapp `:3001` · proposal `:3002` · manual-uploads `:3003` · character-creator `:3005`.
+
+Runs **no-watch** (`tsx server.ts`) — the junctioned `node_modules` makes `tsx watch`
+loop endlessly in a worktree; restart the launcher to pick up source edits. The
+monsters migration is already applied to this worktree's local D1; **seed the rest of
+the schema** (sources/spells/… for FK + spell-linking) from remote per the bootstrap
+in the script header, then re-apply the monsters migration. Copy the parent repo's
+`.env` + `worker/.dev.vars` into this worktree if absent.
+
 ## Notes
 
 - `main` = production (auto-deploys). Never push without explicit permission; show
