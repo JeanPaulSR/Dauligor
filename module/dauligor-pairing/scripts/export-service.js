@@ -883,6 +883,11 @@ function buildItemSummary(item, source) {
     // ↔ app `items.type_inner_subtype`. Pass-through identifiers.
     itemCategory: String(system.type?.value ?? ""),
     itemSubcategory: String(system.type?.subtype ?? ""),
+    // `system.type.baseItem` ↔ app `items.base_item` — the base weapon/armor/tool
+    // slug (e.g. "battleaxe"). For weapons `type.value` is Foundry's folded
+    // category+melee/ranged (simpleM/martialR/…) while `baseItem` is the
+    // proficiency base; the app resolves it to/from `base_*_id`, module is pass-through.
+    itemBaseItem: String(system.type?.baseItem ?? ""),
     identifier: String(system.identifier ?? ""),
     // `system.description.chat` ↔ app `items.chat_description` (all item types).
     chatDescription: String(system.description?.chat ?? ""),
@@ -910,29 +915,41 @@ function buildItemSummary(item, source) {
   // Type-specific projections — each branch reads only fields the
   // dnd5e v5 schema documents for that item type.
   if (item.type === "weapon") {
+    // `type.value` (base.itemCategory) is Foundry's folded category+melee/ranged
+    // (simpleM/martialR/…); the base weapon slug is `base.itemBaseItem`. Weapon
+    // `damage` is the `{base,versatile}` shape — NOT the consumable-ammo
+    // `{base,replace}` shape (branch on item type when reading).
     base.weapon = {
-      // `system.damage.base` carries the canonical damage line in
-      // dnd5e v5 (number of dice / die / bonus). Activities re-state
-      // it on the per-activity attack roll.
       damage: system.damage ?? {},
       range: system.range ?? {},
-      mastery: String(system.mastery ?? ""),
-      magicalBonus: Number(system.magicalBonus ?? 0) || 0,
-      ammunition: system.ammunition ?? null,
+      mastery: String(system.mastery ?? ""),        // captured but unused (2024 mastery); exports ''
+      magicalBonus: Number(system.magicalBonus ?? 0) || 0, // flat +N, shown when `mgc`
+      ammunition: system.ammunition ?? null,        // {type} the weapon fires, shown when `amm`
       proficient: system.proficient ?? null,
     };
   } else if (item.type === "equipment") {
     base.equipment = {
-      // `system.armor.value` is the AC; `.dex` is the dex bonus cap
-      // (null = no cap, 0 = no dex, 2 = medium-armor +2 cap, etc.).
-      // `.magicalBonus` is the +N enchant.
+      // `system.armor.value` is the AC; `.dex` is the dex bonus cap (null = no
+      // cap, 0 = no dex, 2 = medium-armor +2 cap, …); `.magicalBonus` is the +N
+      // enchant ("Magical → Bonus", all equipment). Armor base + category are in
+      // base.itemBaseItem / base.itemCategory; stealthDisadvantage is a property.
       armor: system.armor ?? {},
       strength: system.strength ?? null,
       stealth: !!system.stealth,
       proficient: system.proficient ?? null,
+      // Vehicle equipment (`type.value === "vehicle"`): mountable stats merged
+      // into `system.*` app-side; pure pass-through here (null for non-vehicles).
+      cover: system.cover ?? null,
+      crew: system.crew ?? null,
+      hp: system.hp ?? null,
+      speed: system.speed ?? null,
     };
   } else if (item.type === "tool") {
     base.tool = {
+      // Tool category is base.itemCategory (system.type.value; "" ≈ Foundry's
+      // blank/OTHER), base tool slug is base.itemBaseItem. `ability` is the
+      // lowercase Foundry slug (str/dex/…); `proficient` is REAL — supports
+      // 2 (expertise) / 0.5 (half) as well as null/0/1.
       ability: String(system.ability ?? ""),
       proficient: system.proficient ?? null,
       bonus: String(system.bonus ?? ""),
