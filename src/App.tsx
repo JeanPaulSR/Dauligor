@@ -70,6 +70,7 @@ import EnchantmentsList from './pages/compendium/EnchantmentsList';
 import ShopEditor from './pages/compendium/ShopEditor';
 import ShopList from './pages/compendium/ShopList';
 import ItemList from './pages/compendium/ItemList';
+import MonsterList from './pages/compendium/MonsterList';
 import FacilitiesEditor from './pages/compendium/FacilitiesEditor';
 import FacilitiesList from './pages/compendium/FacilitiesList';
 import RacesList from './pages/compendium/RacesList';
@@ -378,6 +379,11 @@ export default function App() {
                       backed by a loot-type items row (subtype 'material') minted on
                       save, so it's carryable + usable as a recipe input. */}
                   <Route path="/compendium/materials/manage" element={<CraftingMaterialsEditor userProfile={effectiveProfile} />} />
+                  {/* Monsters — public read-only stat-block browser. Own
+                      `monsters` table (Foundry npc actors, a different shape
+                      than Item-based items/feats/spells). No /manage editor
+                      yet (a separate later pass). */}
+                  <Route path="/compendium/monsters" element={<MonsterList userProfile={effectiveProfile} />} />
                   {/* Facilities (Bastions, 2024 DMG) — separate table
                       + page from items. Public browser at /facilities,
                       admin editor at /facilities/manage. Migration

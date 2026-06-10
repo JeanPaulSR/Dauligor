@@ -202,6 +202,8 @@ export default function Sidebar({
           // still placeholders.
           { label: 'Items', path: '/compendium/items' },
           { label: 'Magic Items', path: '/compendium/magic-items' },
+          // Monsters — public read-only stat-block browser (own table).
+          { label: 'Monsters', path: '/compendium/monsters' },
           // Facilities (Bastions, 2024 DMG) — separate browser at
           // /compendium/facilities, admin editor at /facilities/manage.
           { label: 'Facilities', path: '/compendium/facilities' },
