@@ -203,6 +203,12 @@
   flow (Tier 1) is what fills it.</p>
 
   <h3>5 · Shop tab</h3>
+  <p><strong>Multiple shops, not one global list (decided 2026-06-10).</strong> The shop supports many
+  distinct shops — a global one <em>and</em> per-campaign shops (e.g. "Waterdeep Smithy", "Black
+  Market") — so a DM can stock specific shops rather than being limited to a single price list. Implies
+  a <code>shops</code> table (<code>name, scope: global|campaign, campaignId?</code>) + a
+  <code>shop_inventory</code> join (<code>shopId, itemId, priceOverride?, stock?</code>), with
+  <code>items.price</code> as the fallback.</p>
   <p>Two layers, sequenced:</p>
   <ul>
     <li><strong>5a — Price view (read-only):</strong> a browser over <code>items.price</code> grouped/sorted by cost &amp; rarity. Buildable now; pure read.</li>
@@ -214,7 +220,7 @@
     <code>{cp,sp,ep,gp,pp}</code> grid; the character builder references currency only in copy.
     Before buy/sell, we add a character wallet — most naturally a <code>currency</code> JSON column
     on <code>characters</code> (matching Foundry's <code>system.currency</code>) so it round-trips.
-    Open question below: per-campaign shop inventories vs. one global price list.
+    Resolved (2026-06-10): support BOTH via named shops (see above), not a single price list.
   </div>
 
   <h2>Suggested sequencing</h2>
