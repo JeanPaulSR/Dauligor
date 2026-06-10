@@ -74,7 +74,14 @@ actor importer. The Foundry actor shape still *informs the table now* (see below
 
 ## Open requests to other branches
 
-None yet.
+- **→ `foundry-module`** (2026-06-09): enrich the `creature-folder-export` so
+  `creatureSummary` carries Foundry's **derived** values (resolved `ac.value`,
+  proficiency bonus, ability-save totals, skill totals, passive Perception, spell
+  DC/attack) — currently built from raw `actor.toObject()`, so they're 0/null. Plus
+  two stale-path fixes (`source`, `spellLevel`). Surgical: one function
+  (`buildCreatureSummary`, `export-service.js:1535`). Request:
+  [`handoffs/foundry-module/2026-06-09-from-monster-browser-enrich-creature-export.md`](../foundry-module/2026-06-09-from-monster-browser-enrich-creature-export.md).
+  **Non-blocking** — app imports best-effort + `ac_unverified` until it lands.
 
 ## Notes
 
