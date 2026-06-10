@@ -54,13 +54,24 @@ export interface FocalImageFieldProps {
   usingDefault?: boolean;        // show a small "default" badge
   backdrop?: boolean;            // dim + "page backdrop" hint (faint full-bleed art)
   browseRoot?: string;          // R2 prefix to browse for an existing image (omit → no browse)
+  // How to set/replace the image: an inline dropzone (default) or a button that
+  // opens the image manager (browse the library + upload).
+  uploadVariant?: 'dropzone' | 'manager';
+  // Render the set/replace control ABOVE the framed preview, so a row of fields
+  // keeps its controls aligned at the top while the variable-height previews hang
+  // below.
+  controlsOnTop?: boolean;
+  // Restrict the image manager's root to these folder names (the "System Images"
+  // sections), so the picker browses curated system art, not the user library.
+  imageManagerFolders?: readonly string[];
   className?: string;
 }
 
 export function FocalImageField({
   image, display, onDisplayChange, onDisplayCommit,
   storagePath, aspectClass = 'aspect-square',
-  label, subtitle, overrideImageUrl, onOverrideChange, overlay, usingDefault, backdrop, browseRoot, className,
+  label, subtitle, overrideImageUrl, onOverrideChange, overlay, usingDefault, backdrop, browseRoot,
+  uploadVariant = 'dropzone', controlsOnTop, imageManagerFolders, className,
 }: FocalImageFieldProps) {
   const positionable = !!onDisplayChange;
   const containerRef = useRef<HTMLDivElement>(null);
@@ -77,7 +88,6 @@ export function FocalImageField({
   const onDisplayCommitRef = useRef(onDisplayCommit);
   onDisplayCommitRef.current = onDisplayCommit;
 
-  const [showUpload, setShowUpload] = useState(false);
   const canOverride = !!onOverrideChange;
   const hasOverride = !!overrideImageUrl;
   const hasHeader = !!label || canOverride;
@@ -103,7 +113,10 @@ export function FocalImageField({
       el.removeEventListener('wheel', handler);
       if (wheelTimeoutRef.current) clearTimeout(wheelTimeoutRef.current);
     };
-  }, [positionable]);
+    // `image` is a dep so the listener (re)attaches when the positionable preview
+    // box mounts — e.g. right after the first upload swaps the empty uploader for
+    // the framed image.
+  }, [positionable, image]);
 
   const handlePointerDown = (e: React.PointerEvent) => {
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -142,6 +155,25 @@ export function FocalImageField({
     onDisplayCommit?.(next);
   };
 
+  // The set/replace control: either a button that opens the image manager, or the
+  // inline dropzone. Defined once so it can sit above OR below the preview.
+  const uploadControl = !canOverride ? null : uploadVariant === 'manager' ? (
+    <Button
+      type="button"
+      variant="outline"
+      className="w-full border-gold/25 hover:bg-gold/15 gap-2"
+      onClick={() => setPickerOpen(true)}
+    >
+      <ImageIcon className="w-4 h-4" /> {image ? 'Replace Image' : 'Choose Image'}
+    </Button>
+  ) : (
+    <ImageUpload
+      currentImageUrl=""
+      storagePath={storagePath}
+      onUpload={(url) => { if (url) onOverrideChange!(url); }}
+    />
+  );
+
   return (
     <div className={cn('space-y-2', className)}>
       {hasHeader && (
@@ -157,13 +189,13 @@ export function FocalImageField({
               {hasOverride && (
                 <button
                   type="button"
-                  onClick={() => { onOverrideChange!(''); setShowUpload(false); }}
+                  onClick={() => onOverrideChange!('')}
                   className="label-text text-ink/45 hover:text-blood flex items-center gap-1"
                 >
                   <X className="w-2.5 h-2.5" /> Reset
                 </button>
               )}
-              {browseRoot && (
+              {browseRoot && image && uploadVariant !== 'manager' && (
                 <Button
                   type="button" size="sm" variant="ghost"
                   className="h-6 w-6 p-0 btn-gold"
@@ -173,65 +205,60 @@ export function FocalImageField({
                   <Search className="w-3 h-3" />
                 </Button>
               )}
-              <Button
-                type="button" size="sm" variant="ghost"
-                className={cn('h-6 w-6 p-0', showUpload ? 'btn-gold-solid' : 'btn-gold')}
-                onClick={() => setShowUpload((v) => !v)}
-                title="Upload / replace the image"
-              >
-                <ImageIcon className="w-3 h-3" />
-              </Button>
             </div>
           )}
         </div>
       )}
 
-      {/* draggable / zoomable preview */}
-      <div
-        ref={containerRef}
-        className={cn(
-          'relative overflow-hidden rounded-lg select-none border border-gold/15',
-          image && positionable ? 'cursor-grab active:cursor-grabbing' : '',
-          aspectClass,
-        )}
-        onPointerDown={positionable ? handlePointerDown : undefined}
-        onPointerMove={positionable ? handlePointerMove : undefined}
-        onPointerUp={positionable ? handlePointerUp : undefined}
-        onPointerLeave={positionable ? handlePointerUp : undefined}
-      >
-        {image ? (
-          <>
-            <img
-              src={image}
-              className="absolute inset-0 w-full h-full object-cover pointer-events-none"
-              style={imageFocalStyle({ display })}
-              referrerPolicy="no-referrer"
-              draggable={false}
-              alt=""
-            />
-            {overlay}
-            {backdrop && (
-              <>
-                <div className="absolute inset-0 bg-gradient-to-t from-background/80 via-background/25 to-transparent pointer-events-none" />
-                <span className="absolute top-2 left-2 text-[9px] font-bold uppercase tracking-widest text-gold bg-background/70 px-2 py-0.5 rounded pointer-events-none">
-                  Page backdrop
-                </span>
-              </>
-            )}
-            {usingDefault && (
-              <div className="absolute top-1.5 left-1.5 pointer-events-none z-10">
-                <span className="text-[8px] font-black uppercase tracking-widest bg-black/50 text-white/50 px-1.5 py-0.5 rounded">
-                  default
-                </span>
-              </div>
-            )}
-          </>
-        ) : (
+      {/* Controls above the preview (opt-in) — keeps a row of fields aligned. */}
+      {controlsOnTop && uploadControl}
+
+      {/* Framed, draggable / zoomable preview — shown once an image exists. */}
+      {image ? (
+        <div
+          ref={containerRef}
+          className={cn(
+            'relative overflow-hidden rounded-lg select-none border border-gold/15',
+            positionable ? 'cursor-grab active:cursor-grabbing' : '',
+            aspectClass,
+          )}
+          onPointerDown={positionable ? handlePointerDown : undefined}
+          onPointerMove={positionable ? handlePointerMove : undefined}
+          onPointerUp={positionable ? handlePointerUp : undefined}
+          onPointerLeave={positionable ? handlePointerUp : undefined}
+        >
+          <img
+            src={image}
+            className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+            style={imageFocalStyle({ display })}
+            referrerPolicy="no-referrer"
+            draggable={false}
+            alt=""
+          />
+          {overlay}
+          {backdrop && (
+            <>
+              <div className="absolute inset-0 bg-gradient-to-t from-background/80 via-background/25 to-transparent pointer-events-none" />
+              <span className="absolute top-2 left-2 text-[9px] font-bold uppercase tracking-widest text-gold bg-background/70 px-2 py-0.5 rounded pointer-events-none">
+                Page backdrop
+              </span>
+            </>
+          )}
+          {usingDefault && (
+            <div className="absolute top-1.5 left-1.5 pointer-events-none z-10">
+              <span className="text-[8px] font-black uppercase tracking-widest bg-black/50 text-white/50 px-1.5 py-0.5 rounded">
+                default
+              </span>
+            </div>
+          )}
+        </div>
+      ) : !canOverride ? (
+        <div className={cn('relative overflow-hidden rounded-lg border border-gold/15', aspectClass)}>
           <div className="absolute inset-0 bg-ink/5 flex items-center justify-center">
             <ImageIcon className="w-8 h-8 text-gold/15" />
           </div>
-        )}
-      </div>
+        </div>
+      ) : null}
 
       {/* zoom controls */}
       {image && positionable && (
@@ -250,25 +277,18 @@ export function FocalImageField({
         </div>
       )}
 
-      {/* inline override upload */}
-      {canOverride && showUpload && (
-        <div className="border border-gold/15 rounded-md p-3 bg-card/30">
-          <ImageUpload
-            currentImageUrl={overrideImageUrl}
-            storagePath={storagePath}
-            onUpload={(url) => { onOverrideChange!(url); if (url) setShowUpload(false); }}
-          />
-        </div>
-      )}
+      {/* Set / replace control below the preview (default placement). */}
+      {!controlsOnTop && uploadControl}
 
-      {browseRoot && canOverride && (
+      {canOverride && (browseRoot || uploadVariant === 'manager') && (
         <IconPickerModal
           open={pickerOpen}
           onClose={() => setPickerOpen(false)}
           onSelect={(url) => { onOverrideChange!(url); setPickerOpen(false); }}
-          rootFolder={browseRoot}
-          title="Browse Images"
-          allowUpload={false}
+          rootFolder={browseRoot || storagePath}
+          title="Image Manager"
+          allowUpload={uploadVariant === 'manager'}
+          folderAllowList={imageManagerFolders}
         />
       )}
     </div>

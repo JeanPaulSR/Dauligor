@@ -65,6 +65,10 @@ export interface IconPickerModalProps {
   imageType?: 'icon' | 'token';
   title?: string;          // override the dialog title
   allowUpload?: boolean;   // false = pure picker (no in-browser upload/resize)
+  // When set, the SOURCE ROOT shows only these folder names and hides loose files
+  // there. Mirrors the Image Manager's "System Images" section, so an editor can
+  // browse curated system art without the general user library.
+  folderAllowList?: readonly string[];
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -136,6 +140,7 @@ export function IconPickerModal({
   rootFolder = 'icons',
   title: propTitle,
   allowUpload = true,
+  folderAllowList,
 }: IconPickerModalProps) {
   const [activeSource, setActiveSource] = useState<Source>(rootFolder);
 
@@ -258,15 +263,30 @@ export function IconPickerModal({
 
   // ── filtering ─────────────────────────────────────────────────────────────
 
-  const visibleFolders = useMemo(
-    () => showPrivate ? folders : folders.filter(f => !f.name.startsWith('_')),
-    [folders, showPrivate],
+  // When a folderAllowList is supplied (the "System Images" sections), the SOURCE
+  // ROOT shows only those folders and hides loose root files; deeper folders
+  // browse normally.
+  const atSourceRoot = currentPath === activeSource;
+  const allowSet = useMemo(
+    () => (folderAllowList && folderAllowList.length ? new Set(folderAllowList) : null),
+    [folderAllowList],
   );
+  const inAllowedTree = useCallback((key: string) => {
+    if (!allowSet || !atSourceRoot) return true;
+    const rest = key.startsWith(activeSource + '/') ? key.slice(activeSource.length + 1) : key;
+    return allowSet.has(rest.split('/')[0]);
+  }, [allowSet, atSourceRoot, activeSource]);
 
-  const visibleIcons = useMemo(
-    () => showPrivate ? icons : icons.filter(i => !isUnderPrivateFolder(i.key)),
-    [icons, showPrivate],
-  );
+  const visibleFolders = useMemo(() => {
+    let list = showPrivate ? folders : folders.filter(f => !f.name.startsWith('_'));
+    if (allowSet && atSourceRoot) list = list.filter(f => allowSet.has(f.name));
+    return list;
+  }, [folders, showPrivate, allowSet, atSourceRoot]);
+
+  const visibleIcons = useMemo(() => {
+    if (allowSet && atSourceRoot) return []; // system art lives in the subfolders
+    return showPrivate ? icons : icons.filter(i => !isUnderPrivateFolder(i.key));
+  }, [icons, showPrivate, allowSet, atSourceRoot]);
 
   // ── search ────────────────────────────────────────────────────────────────
 
@@ -300,11 +320,12 @@ export function IconPickerModal({
     if (!search) return visibleIcons;
     const base = (allIcons ?? []).filter(
       (i) =>
-        i.name.toLowerCase().includes(search.toLowerCase()) ||
-        i.key.toLowerCase().includes(search.toLowerCase()),
+        (i.name.toLowerCase().includes(search.toLowerCase()) ||
+          i.key.toLowerCase().includes(search.toLowerCase())) &&
+        inAllowedTree(i.key),
     );
     return showPrivate ? base : base.filter(i => !isUnderPrivateFolder(i.key));
-  }, [search, visibleIcons, allIcons, showPrivate]);
+  }, [search, visibleIcons, allIcons, showPrivate, inAllowedTree]);
 
   // ── upload ────────────────────────────────────────────────────────────────
 

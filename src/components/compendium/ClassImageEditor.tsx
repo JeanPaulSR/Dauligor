@@ -92,11 +92,15 @@ export function ClassImageEditor({
   const [modalImageUrl, setModalImageUrl] = useState<string | null>(null);
 
   return (
-    <div className={`space-y-2 ${className ?? ''}`}>
+    // `@container` + `@xl:` so the 3-up layout responds to the ACTUAL available
+    // width, not the viewport. In a wide host (the class editor's max-w-5xl
+    // dialog) it stays 3 columns; in a narrow host (the lore designer's settings
+    // side-panel) it stacks to 1 column instead of crushing the panels.
+    <div className={`@container space-y-2 ${className ?? ''}`}>
       <p className="label-text text-ink/45">
         Drag to pan · Scroll or use ± to zoom · <span className="text-gold/65">Camera icon</span> overrides the image for that view
       </p>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+      <div className="grid grid-cols-1 @xl:grid-cols-3 gap-6 items-start">
         {/* Detail View (primary, no override) */}
         <FocalImageField
           label={labels.detail.label}
@@ -160,7 +164,7 @@ export function ClassImageEditor({
       </div>
 
       {/* Metadata Buttons Row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
+      <div className="grid grid-cols-1 @xl:grid-cols-3 gap-6 pt-2">
         <div>
           {imageUrl && (
             <Button type="button" size="sm" variant="ghost" className="w-full h-8 text-xs border border-gold/15 text-gold/65 hover:text-gold hover:border-gold/35" onClick={() => setModalImageUrl(imageUrl)}>

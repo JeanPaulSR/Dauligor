@@ -39,7 +39,7 @@ import { cn } from '../../lib/utils';
 import { buildClassSlug } from '../../lib/useClassRouteId';
 import MarkdownEditor from '../../components/MarkdownEditor';
 import { ImageUpload } from '../../components/ui/ImageUpload';
-import { ClassImageEditor, ImageDisplay, DEFAULT_DISPLAY } from '../../components/compendium/ClassImageEditor';
+import { ImageSetEditor, type ImageDisplay, DEFAULT_DISPLAY } from '../../components/ui/ImageSetEditor';
 import { slugify } from '../../lib/utils';
 import { fetchCollection, fetchDocument, queryD1, upsertDocument, deleteDocument } from '../../lib/d1';
 import { normalizeFeatureData, denormalizeCompendiumData } from '../../lib/compendium';
@@ -201,7 +201,6 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
   const [cardDisplay, setCardDisplay] = useState<ImageDisplay>(DEFAULT_DISPLAY);
   const [previewImageUrl, setPreviewImageUrl] = useState('');
   const [previewDisplay, setPreviewDisplay] = useState<ImageDisplay>(DEFAULT_DISPLAY);
-  const [imageDialogOpen, setImageDialogOpen] = useState(false);
 
   const [tagIds, setTagIds] = useState<string[]>([]);
 
@@ -847,65 +846,54 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
             <h2 className="label-text text-gold border-b border-gold/15 pb-2">Basic Information</h2>
             <div className="flex flex-col md:flex-row gap-6">
               <div className="w-full md:w-1/3">
-                <label className="label-text mb-2 block text-xs uppercase tracking-widest text-gold/65">Subclass Art / Icon</label>
-                <ImageUpload 
-                  currentImageUrl={imageUrl}
+                <ImageSetEditor
+                  label="Subclass Art / Icon"
+                  baseImage={imageUrl}
+                  onBaseImageChange={setImageUrl}
                   storagePath={`images/classes/${parentClass?.id || classId || 'unknown'}/subclasses/${id || 'new'}/`}
-                  onUpload={setImageUrl}
+                  systemImages
+                  controlsOnTop
+                  windows={[
+                    {
+                      key: 'detail', base: true,
+                      label: 'Detail View', subtitle: 'Subclass page',
+                      aspectClass: 'aspect-square',
+                      display: imageDisplay, onDisplayChange: setImageDisplay,
+                    },
+                    {
+                      key: 'card',
+                      label: 'Card View', subtitle: 'Subclass grid',
+                      aspectClass: 'aspect-[4/5]',
+                      imageUrl: cardImageUrl, onImageUrlChange: setCardImageUrl,
+                      display: cardDisplay, onDisplayChange: setCardDisplay,
+                      overlay: (
+                        <>
+                          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-transparent opacity-80" />
+                          <div className="absolute inset-x-0 bottom-0 p-2 text-center z-10">
+                            <span className="text-[9px] font-black uppercase text-gold tracking-widest drop-shadow-sm">Subclass Name</span>
+                          </div>
+                        </>
+                      ),
+                    },
+                    {
+                      key: 'preview',
+                      label: 'Preview Header', subtitle: 'Quick-view panel',
+                      aspectClass: 'aspect-[3/1]',
+                      imageUrl: previewImageUrl, onImageUrlChange: setPreviewImageUrl,
+                      display: previewDisplay, onDisplayChange: setPreviewDisplay,
+                      overlay: (
+                        <>
+                          <div className="absolute inset-0 bg-gradient-to-t from-background to-background/20" />
+                          <div className="absolute inset-0 opacity-30 bg-black" />
+                          <div className="absolute inset-x-0 bottom-0 p-2 pl-3 z-10">
+                            <span className="text-[9px] font-black uppercase text-gold tracking-widest drop-shadow-sm">Subclass Name</span>
+                          </div>
+                        </>
+                      ),
+                    },
+                  ]}
                 />
-                {imageUrl && (
-                  <div className="space-y-2 mt-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="w-full btn-gold gap-2"
-                      onClick={() => setImageDialogOpen(true)}
-                    >
-                      <Sliders className="w-3 h-3" /> Edit Display
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="w-full h-8 text-xs text-blood/60 hover:text-blood hover:bg-blood/10 border border-blood/20 gap-2"
-                      onClick={() => setImageUrl('')}
-                    >
-                      <Trash2 className="w-3 h-3" /> Delete Image
-                    </Button>
-                  </div>
-                )}
               </div>
-
-              {/* Edit Display Dialog */}
-              <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
-                <DialogContent className="dialog-content sm:max-w-5xl w-[95vw]">
-                  <DialogHeader className="dialog-header">
-                    <DialogTitle className="dialog-title">Edit Image Display</DialogTitle>
-                  </DialogHeader>
-                  <div className="dialog-body max-h-[80vh] overflow-y-auto custom-scrollbar">
-                    <ClassImageEditor
-                      imageUrl={imageUrl}
-                      onImageUrlChange={setImageUrl}
-                      imageDisplay={imageDisplay}
-                      onImageDisplayChange={setImageDisplay}
-                      cardImageUrl={cardImageUrl}
-                      onCardImageUrlChange={setCardImageUrl}
-                      cardDisplay={cardDisplay}
-                      onCardDisplayChange={setCardDisplay}
-                      previewImageUrl={previewImageUrl}
-                      onPreviewImageUrlChange={setPreviewImageUrl}
-                      previewDisplay={previewDisplay}
-                      onPreviewDisplayChange={setPreviewDisplay}
-                      storagePath={`images/classes/${parentClass?.id || classId || 'unknown'}/subclasses/${id || 'new'}/`}
-                    />
-                  </div>
-                  <DialogFooter className="dialog-footer">
-                    <Button variant="ghost" onClick={() => setImageDialogOpen(false)} className="btn-gold-solid">
-                      <Check className="w-4 h-4 mr-2" /> Done
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
               <div className="flex-1 space-y-4 h-fit">
                 <div className="grid sm:grid-cols-2 gap-4">
                   <ReviewFieldHighlight columnKey="name" className="space-y-1">

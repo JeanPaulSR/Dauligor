@@ -476,12 +476,20 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
             className="fixed z-[9999] w-72 bg-card border border-gold/25 rounded-xl shadow-2xl overflow-hidden pointer-events-none animate-in fade-in zoom-in-95 duration-150"
             style={{ left: Math.min(hoverPos.x + 16, window.innerWidth - 300), top: hoverPos.y - 10 }}
           >
-            {hoveredArticleData.imageUrl && (
+            {(hoveredArticleData.previewImageUrl || hoveredArticleData.imageUrl) && (
               <div className="h-28 overflow-hidden">
+                {/* Prefer the dedicated "Hover Preview" image; fall back to the
+                    Article Header. The crop/focal metadata follows whichever
+                    image is shown. */}
                 <img
-                  src={hoveredArticleData.imageUrl}
+                  src={hoveredArticleData.previewImageUrl || hoveredArticleData.imageUrl}
                   alt={hoveredArticleData.title}
                   className="w-full h-full object-cover"
+                  style={ClassImageStyle({
+                    display: (hoveredArticleData.previewImageUrl
+                      ? hoveredArticleData.previewDisplay
+                      : hoveredArticleData.imageDisplay) || DEFAULT_DISPLAY,
+                  })}
                   referrerPolicy="no-referrer"
                 />
               </div>

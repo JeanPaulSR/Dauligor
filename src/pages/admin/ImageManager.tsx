@@ -51,6 +51,7 @@ import {
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
 import { getSessionToken } from "../../lib/auth";
+import { SYSTEM_IMAGE_FOLDERS } from '../../lib/imageLibrary';
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
@@ -58,7 +59,7 @@ const ALLOWED_ROLES = ['admin', 'co-dm', 'lore-writer'];
 
 // Subfolders of images/ whose contents are managed by entity editors.
 // Hidden in Image Library; shown (read-only) in System Images.
-const SYSTEM_FOLDER_NAMES = ['classes', 'subclasses', 'lore', 'characters', 'sources', 'users'];
+const SYSTEM_FOLDER_NAMES = SYSTEM_IMAGE_FOLDERS;
 
 const SYSTEM_SECTIONS = [
   {

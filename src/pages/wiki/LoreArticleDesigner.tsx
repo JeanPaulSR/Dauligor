@@ -13,7 +13,7 @@ import { getSessionToken } from '../../lib/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { ClassImageEditor } from '@/components/compendium/ClassImageEditor';
+import { ImageSetEditor, DEFAULT_DISPLAY } from '@/components/ui/ImageSetEditor';
 import MarkdownEditor from '@/components/MarkdownEditor';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
@@ -528,25 +528,40 @@ export default function LoreArticleDesigner({ userProfile }: { userProfile: any 
 
               {/* Imagery */}
               <Section title="Imagery" icon={ImageIcon} k="imagery" open={openSections.has('imagery')} onToggle={toggleSection}>
-                <ClassImageEditor
-                  imageUrl={formData.imageUrl || ''}
-                  onImageUrlChange={(val) => setForm({ imageUrl: val })}
-                  imageDisplay={formData.imageDisplay}
-                  onImageDisplayChange={(val) => setForm({ imageDisplay: val })}
-                  cardImageUrl={formData.cardImageUrl || ''}
-                  onCardImageUrlChange={(val) => setForm({ cardImageUrl: val })}
-                  cardDisplay={formData.cardDisplay}
-                  onCardDisplayChange={(val) => setForm({ cardDisplay: val })}
-                  previewImageUrl={formData.previewImageUrl || ''}
-                  onPreviewImageUrlChange={(val) => setForm({ previewImageUrl: val })}
-                  previewDisplay={formData.previewDisplay}
-                  onPreviewDisplayChange={(val) => setForm({ previewDisplay: val })}
+                <ImageSetEditor
+                  label="Article Header"
+                  baseImage={formData.imageUrl || ''}
+                  onBaseImageChange={(val) => setForm({ imageUrl: val })}
                   storagePath={`images/lore/${id || 'new'}`}
-                  panelLabels={{
-                    detail: { label: 'Article Header', subtitle: 'Full article page' },
-                    card: { label: 'Wiki Card', subtitle: 'Wiki grid listing' },
-                    preview: { label: 'Hover Preview', subtitle: 'Quick-peek popover' },
-                  }}
+                  systemImages
+                  controlsOnTop
+                  windows={[
+                    {
+                      key: 'header', base: true,
+                      label: 'Article Header', subtitle: 'Full article page',
+                      aspectClass: 'aspect-[5/2]',
+                      display: formData.imageDisplay || DEFAULT_DISPLAY,
+                      onDisplayChange: (val) => setForm({ imageDisplay: val }),
+                    },
+                    {
+                      key: 'card',
+                      label: 'Wiki Card', subtitle: 'Wiki grid listing',
+                      aspectClass: 'aspect-[4/5]',
+                      imageUrl: formData.cardImageUrl || '',
+                      onImageUrlChange: (val) => setForm({ cardImageUrl: val }),
+                      display: formData.cardDisplay || DEFAULT_DISPLAY,
+                      onDisplayChange: (val) => setForm({ cardDisplay: val }),
+                    },
+                    {
+                      key: 'preview',
+                      label: 'Hover Preview', subtitle: 'Quick-peek popover',
+                      aspectClass: 'aspect-[5/2]',
+                      imageUrl: formData.previewImageUrl || '',
+                      onImageUrlChange: (val) => setForm({ previewImageUrl: val }),
+                      display: formData.previewDisplay || DEFAULT_DISPLAY,
+                      onDisplayChange: (val) => setForm({ previewDisplay: val }),
+                    },
+                  ]}
                 />
               </Section>
 
