@@ -1,8 +1,9 @@
 # Crafting & Commerce system + requirements fixes — compaction pickup — 2026-06-10
 
 **Branch:** `compendium-editors` · **worktree:** `…/.claude/worktrees/nostalgic-lamport-76d78d`
-**origin/main = `79fb59c`** (requirements fixes ONLY — NOT the crafting work).
-**Branch local:** `f79c806 → ba44956 (R, also on main) → b4cbbb4 (W = all crafting WIP)` + uncommitted docs.
+**origin/main = `ed9f2a5`** (= `79fb59c` requirements fix + a later unrelated `feat(spellcasting): pact casting`;
+NONE of the crafting work is on main).
+**Branch local (clean tree):** `f79c806 → ba44956 (R, also on main) → b4cbbb4 (W = crafting WIP) → dc805f9 (docs)`.
 tsc baseline = **3**.
 
 ## TL;DR
@@ -37,9 +38,10 @@ Two tracks this session:
 
 ## Track 2 — crafting & commerce (built, COMMITTED `b4cbbb4`, NOT on main)
 **Data layer** (camelCase entity tables — Foundry-aligned; SKIP the `compendium.ts` alias layer):
-- **Migrations — UNAPPLIED to any DB (local files only):** `20260609-1300_create_enchantments` ·
-  `-1350_create_crafting_disciplines` (seeded taxonomy) · `-1400_create_recipes` ·
-  `-1500_create_crafting_materials`.
+- **Migrations — APPLIED to LOCAL D1 2026-06-10 (NOT remote):** `20260609-1300_create_enchantments` ·
+  `-1350_create_crafting_disciplines` (seeded 13 disciplines, verified) · `-1400_create_recipes` ·
+  `-1500_create_crafting_materials`. Applied via `d1 execute --local --file` (NOT `migrations apply`).
+  Remote apply still owed (one file at a time, `--remote`, with permission) before shipping.
 - **Wiring:** `D1_TABLE_MAP` (d1Tables.ts) += enchantments / recipes / craftingDisciplines /
   craftingMaterials; `jsonFields` (d1.ts) + server `JSON_COLUMNS` (api/_lib/d1-fetchers-server.ts) +=
   `restrictions`/`riders` (enchantments), `inputs`/`goldCost`/`craftTime`/`craftRequirements`
@@ -55,7 +57,8 @@ Two tracks this session:
   `docs/database/camelcase-column-migration.md`).
 
 ## Resume plan (NEXT)
-1. Apply the 4 crafting migrations to **LOCAL D1** (local-first; never `--remote` without permission).
+1. ~~Apply the 4 crafting migrations to **LOCAL D1**~~ — **DONE 2026-06-10** (all 4 applied, 13 disciplines
+   seeded + verified). Remote apply still owed before shipping. **Resume at step 2.**
 2. Live-test RecipesEditor (renders, saves, pickers populate). Add the **`trivial`** rarity tier to the
    app rarity vocab (zero migration — rarity is bare TEXT, app-validated).
 3. **EnchantmentsEditor** — copy RecipesEditor; reuse `ActivityEditor` (`enchant` kind) +
