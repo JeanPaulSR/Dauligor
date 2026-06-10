@@ -2778,6 +2778,19 @@ function resolveRemappedId(map, raw) {
   return /^[A-Za-z0-9]{16}$/.test(s) ? s : deterministicFoundryId(s);
 }
 
+/**
+ * Does this `system.activities` collection hold SEMANTIC-shaped activities?
+ * Semantic activities (authored features + app-exported items/feats) carry a
+ * `kind` string; raw-Foundry activities (e.g. a spell embed off preserved
+ * foundry_data) carry a string `type` + a nested `attack.type`. Only the former
+ * should be re-normalized — the guard in `normalizeWorldItem` keeps raw-Foundry
+ * passthroughs (notably spells) untouched.
+ */
+function hasSemanticActivities(activities) {
+  const list = Array.isArray(activities) ? activities : Object.values(activities || {});
+  return list.some((a) => a && typeof a === "object" && typeof a.kind === "string");
+}
+
 function normalizeSemanticActivityCollection(activities, idMaps) {
   const entries = Array.isArray(activities)
     ? activities
@@ -3974,6 +3987,23 @@ function normalizeWorldItem(item, sourceMeta = null) {
 
   if (clone.type === "class") {
     normalizeClassItem(clone);
+  }
+
+  // Standalone items + feats now ship SEMANTIC activities (kind/id, flat attack)
+  // — the same shape class features use — so run `system.activities` through the
+  // same converter the feature/option paths use (`normalizeSemanticActivityCollection`).
+  // Guarded on "looks semantic" so a raw-Foundry activity is never double-converted:
+  // a spell embed's activities come from its preserved foundry_data (already
+  // native, `type`/nested-attack), and handing those to the converter — which
+  // reads `kind ?? type` and rebuilds the nested attack — would corrupt them.
+  // See handoff 2026-06-09-normalizeworlditem-activity-wiring.md.
+  if (clone.system?.activities && hasSemanticActivities(clone.system.activities)) {
+    const idMaps = buildItemIdRemap({
+      activities: clone.system.activities,
+      effects: clone.effects,
+    });
+    const converted = normalizeSemanticActivityCollection(clone.system.activities, idMaps);
+    if (converted) clone.system.activities = converted;
   }
 
   applyReferenceNormalization(clone, { sourceMeta });
