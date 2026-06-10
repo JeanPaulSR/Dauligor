@@ -14,6 +14,14 @@ Bastion facilities live in a separate table + page — see
 [compendium-facilities.md](compendium-facilities.md). Spell items live in their own
 catalog with a different shape — see [compendium-spells.md](compendium-spells.md).
 
+Both pages load a **slim catalog projection** — name / source / type + the filter
+columns — and fetch the **full item row lazily on select** (`fetchItem`); the heavy
+`description` / `activities` / `effects` columns aren't shipped for every row. The
+read-only detail panel (`ItemDetailPanel`, shared by the public browser and the
+editor's live-preview pane) renders the item art (with a graceful fallback for
+unhosted Foundry icon paths) and the description through the BBCode displayer,
+matching the feat / spell panels.
+
 ## Data layer (D1)
 
 Items live in a single unified table since migration `20260525-1800` retired the
@@ -46,49 +54,55 @@ Full column reference: [`docs/database/structure/items.md`](../database/structur
 |---|---|---|
 | `weapon` | `item.type='weapon'` | damage / range / magicalBonus |
 | `equipment` | `item.type='equipment'` | armor block when armor subtype, else worn-gear |
-| `consumable` | `item.type='consumable'` | magical bonus + activity hint |
+| `consumable` | `item.type='consumable'` | subtype + ammo/poison inner subtype + damage |
 | `tool` | `item.type='tool'` | ability / bonus / chat flavor |
 | `container` | `item.type='container'` or `'backpack'` | capacity + currency 5-coin |
 | `loot` | `item.type='loot'` | no sub-form — subtype only |
 
 `items.type_subtype` carries Foundry's `system.type.value` (the primary subtype slug
-like `potion` / `light` / `art` / `simpleM`). For equipment it doubles up with
-`armor_type`; for tools with `tool_type`. The dynamic editor reads `type_subtype` as
-the canonical primary-axis value across all item shapes.
+like `potion` / `light` / `art`). For equipment it doubles up with `armor_type`; for
+tools with `tool_type`. The editor reads `type_subtype` as the canonical primary-axis
+value across all item shapes.
 
-> **Known gap**: Foundry's `system.type.subtype` (secondary axis — `'contact'` for
-> poison delivery, `'arrow'` for ammo shape) is currently dropped on import. The
-> primary axis (`system.type.value`) was prioritised because every shape needed a
-> landing column; the rare two-axis case loses the secondary until either a new
-> `items.type_inner_subtype` column lands or a packed-slug convention (e.g.
-> `type_subtype = "poison:contact"`) is adopted.
+> **Weapons are the exception.** For weapons, `type_subtype` carries our proficiency
+> **category** (`simple` / `martial` / `exotic` / …) — NOT Foundry's melee/ranged
+> split (`simpleM` / `simpleR` / …), which our categories don't have. The split rides
+> the linked base weapon (`weapons.weapon_type` = `Melee`/`Ranged`): import folds
+> `simpleM`→`simple` (`FOUNDRY_WEAPON_TYPE_TO_CATEGORY`), and export re-folds
+> category + base-weapon M/R back to `simpleM`. See [Foundry round-trip](#foundry-round-trip).
 
-## The dynamic editor — type-dispatching body
+Foundry's `system.type.subtype` (the **secondary** axis — `'contact'` for poison
+delivery, `'arrow'` for ammo shape) lands in `items.type_inner_subtype` as of
+migration `20260607-1300`, keyed to the `ammunition_types` / `poison_types`
+taxonomies. (An earlier revision of this doc flagged this axis as "dropped on
+import" — that gap is closed; see [`items.md`](../database/structure/items.md).)
 
-`ItemsEditor.tsx`'s `ItemManualEditor` is a thin wrapper around
-[`DevelopmentCompendiumManager`](../../src/components/compendium/DevelopmentCompendiumManager.tsx).
-The `renderSpecificFields` callback delegates to `DynamicItemFields`, which:
+## The editor — per-type Foundry-matching sheets
 
-1. Fetches the lookup tables once (`weapons`, `armor`, `tools`, `attributes`,
-   `weaponProperties`).
-2. Renders four shared sections that apply to every item type:
-   - **TYPE** — Item Type + Subtype + Base-item FK (where applicable)
-   - **PHYSICAL** — Rarity, Quantity, Weight, Price, Magical
-   - **EQUIPABILITY** — Attunement (3-state), Equipped, Identified, Unidentified
-     description (hidden for `loot`)
-   - **PROPERTIES** — multiselect from `weapon_properties` table (hidden for `loot`)
-3. Renders `ItemUsesField` for everything except `loot` and `container` —
-   `showAutoDestroy` is gated to consumables only.
-4. Renders ONE type-specific sub-form based on `formData.itemType`:
-   - `weapon` → damage editor (number / denomination / type / bonus / magicalBonus)
-     + range (value / long / reach / units)
-   - `equipment` → armor block when subtype is light/medium/heavy/shield
-     (armorValue / armorDex / armorMagicalBonus / strength); plain note otherwise
-   - `consumable` → magicalBonus + activity-authoring hint
-   - `tool` → default ability dropdown + bonus formula + chatFlavor
-   - `container` → capacity (count or weight-based) + currency 5-coin grid
+`ItemsEditor.tsx` was rebuilt (2026-06) to mirror **Foundry dnd5e 5.3.1 item sheets,
+one type at a time** (driven by per-type screenshots). It renders through
+[`CompendiumEditorShell`](../../src/components/compendium/CompendiumEditorShell.tsx)
+(catalog list · tabbed editor · live-preview pane). The per-type mechanics are
+dispatched by `MechanicsTab`, which early-returns to a dedicated `<XDetails>`
+component keyed off `formData.itemType`:
 
-Each sub-form receives the full `formData` + `setFormData` from the manager.
+| `item_type` | Component | Key fields |
+|---|---|---|
+| `weapon` | `WeaponDetails` | Weapon Type (`weapon_categories`) · Base Weapon (`weapons` by category) · damage (`DamagePartEditor`) · range (reach, or normal + long) · magical bonus · ammunition type · properties |
+| `equipment` | `EquipmentDetails` | base / armor (value · dex · magical bonus · strength) / vehicle sub-forms, chosen by subtype |
+| `consumable` | `ConsumableDetails` | subtype (potion/scroll/ammo/poison) · ammo or poison inner subtype · properties · damage |
+| `tool` | `ToolDetails` | tool category · base tool · ability · proficiency · bonus · chat flavor |
+| `container` | `ContainerDetails` | capacity · currency 5-coin grid · nested Contents panel |
+| `loot` | `LootDetails` | subtype only — Foundry-simple, no mechanics sub-form |
+
+Type-independent surfaces live on the other tabs: **Basics** (name / source / type /
+subtype / rarity / image), the shared Physical (quantity / weight / price / magical),
+Attunement (3-state) / Equipped / Identified, Properties (multiselect from
+`item_properties`), and Usage blocks, plus **Activities + Effects** (the shared
+`ActivityEditor` + Active Effect editor). Dropdown vocabularies are data-driven from
+the admin catalogs — `weapon_categories`, `armor_categories`, `tool_categories`,
+`damage_types`, `ammunition_types`, `poison_types`, `item_properties` — so homebrew
+entries appear without a code change.
 
 ## Foundry round-trip
 
@@ -117,6 +131,17 @@ Specifics worth noting:
   definition gets added.
 - **Mastery** (2024-only weapon mastery property) is captured in `items.mastery`
   for round-trip but is NOT surfaced in the editor — the game is 2014-rules base.
+- **Activities** are stored in the app's **semantic** shape (`SemanticActivity` —
+  `kind` / `id`, flat `attack.type`), the form the shared `ActivityEditor` edits. On
+  import, `foundryActivityToSemantic`
+  ([`foundryActivities.ts`](../../src/lib/foundryActivities.ts)) converts Foundry's raw
+  `system.activities` (`type` / `_id`, nested `attack.type`) into that shape so
+  imported activities render in the editor; on export the pairing module's
+  `normalizeSemanticActivity` converts back to Foundry-native (wired into
+  `normalizeWorldItem` for standalone items + feats). The same shared converter serves
+  items, feats, and spells — spells additionally keep the raw `foundry_data` block as
+  their round-trip source. (Earlier code stored raw Foundry activities, which the
+  kind-based editor couldn't render.)
 
 ## Proficiency badge
 
@@ -165,10 +190,14 @@ The workbench:
 
 1. Parses the dropped JSON (Foundry's `Item` folder export format).
 2. Resolves `system.source.book` against the `sources` table.
-3. For each item: classifies the shape (`classifyItemShape`), resolves the
-   base-item FK if applicable, dedupes by `(identifier, source_id)`, and builds
-   a write-ready `savePayload`.
-4. Surfaces a per-row preview + warnings; the admin approves the batch and
+3. For each item: classifies the shape (`classifyItemShape` — DB-driven off the live
+   `armor_categories`, so homebrew armor categories shape as `armor` rather than the
+   generic `items`), resolves the base-item FK if applicable, mints a
+   per-source-unique `identifier`, dedupes by `(identifier, source_id)`, and builds a
+   write-ready `savePayload`.
+4. Surfaces a per-row preview + warnings — unresolved **source** and unresolved
+   **base item** each get a header stat + a per-row badge. The admin can assign a
+   source to unresolved rows, remove individual candidates, then approve the batch;
    `upsertItemBatch` writes them via `ON CONFLICT(id) DO UPDATE`.
 
 **Not yet supported**: facility items. The workbench's per-shape routing is
