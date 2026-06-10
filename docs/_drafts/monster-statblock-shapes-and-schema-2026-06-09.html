@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monster stat blocks — shape study &amp; proposed schema</title>
+<style>
+  :root{
+    --parchment:#f4ecd8; --parchment-2:#ece2c8; --ink:#2b2419; --ink-soft:#5a4f3f;
+    --ink-faint:#8a7d68; --gold:#9a7d3b; --gold-bright:#b8923f; --blood:#6b2737;
+    --green:#4f6b42; --border:#c9b896; --card:#fbf6e9;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Iowan Old Style','Palatino Linotype','Book Antiqua',Palatino,Georgia,serif;
+    background:var(--parchment);color:var(--ink);line-height:1.62;padding:2.5rem 1.5rem;max-width:78rem;margin:0 auto}
+  h1{font-size:2.2rem;font-weight:700;letter-spacing:-.01em;margin-bottom:.3rem}
+  .subtitle{font-size:1.02rem;color:var(--ink-soft);font-style:italic;margin-bottom:1.8rem}
+  h2{font-size:1.5rem;margin-top:2.6rem;margin-bottom:.5rem;padding-bottom:.35rem;border-bottom:2px solid var(--gold)}
+  h3{font-size:1.18rem;margin-top:1.5rem;margin-bottom:.4rem;color:var(--gold-bright)}
+  h4{font-size:1rem;margin-top:1.1rem;margin-bottom:.3rem;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;font-size:.8rem}
+  p{margin-bottom:.7rem} ul,ol{margin:.3rem 0 .9rem 1.4rem} li{margin-bottom:.32rem}
+  code{background:var(--parchment-2);padding:.08rem .35rem;border-radius:3px;font-family:'SF Mono',Consolas,monospace;font-size:.82em}
+  pre{background:#2b2419;color:#e8dcc0;padding:.9rem 1.1rem;border-radius:6px;overflow-x:auto;font-family:'SF Mono',Consolas,monospace;font-size:.76rem;line-height:1.5;margin:.6rem 0}
+  table{width:100%;border-collapse:collapse;margin:.8rem 0;font-size:.84rem}
+  th,td{text-align:left;padding:.42rem .6rem;border-bottom:1px solid var(--border);vertical-align:top}
+  th{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-faint)}
+  td code{font-size:.82em}
+  .note{background:rgba(184,146,63,.1);border-left:4px solid var(--gold-bright);padding:.75rem 1.05rem;border-radius:3px;margin:1rem 0;font-size:.95rem}
+  .warn{background:rgba(107,39,55,.08);border-left:4px solid var(--blood);padding:.75rem 1.05rem;border-radius:3px;margin:1rem 0;font-size:.95rem}
+  .ok{background:rgba(79,107,66,.1);border-left:4px solid var(--green);padding:.75rem 1.05rem;border-radius:3px;margin:1rem 0;font-size:.95rem}
+  .tag{display:inline-block;font-size:.66rem;text-transform:uppercase;letter-spacing:.05em;padding:.1rem .5rem;border-radius:3px;background:var(--gold);color:var(--parchment);font-weight:700;vertical-align:middle}
+  .tag.green{background:var(--green)} .tag.blood{background:var(--blood)} .tag.soft{background:var(--ink-faint)}
+  .meta{font-size:.82rem;color:var(--ink-faint)}
+  .bad{color:var(--blood);font-weight:600}
+  .good{color:var(--green);font-weight:600}
+  .mono{font-family:'SF Mono',Consolas,monospace;font-size:.82em}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:1.2rem;margin:1rem 0}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:1rem 1.2rem}
+  @media(max-width:60rem){.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<h1>Monster stat blocks — shape study &amp; proposed <code>monsters</code> schema</h1>
+<p class="subtitle">Understanding the two data shapes the Monster Browser must bridge — the <strong>5etools rendered stat block</strong> (the visual target) and the <strong>Foundry creature export</strong> (the structured source) — and the <code>monsters</code> table they imply. Branch <code>monster-browser</code>, 2026-06-09. Grounded in the full <strong>1,001-creature</strong> Foundry export (<code>E:\DnD\Professional\Foundry Export\creatures</code>, dnd5e 5.3.1 / Foundry v13) and two canonical 5etools stat blocks (Aarakocra, Adult Black Dragon). Schema is <strong>adversarially reviewed</strong> — three structural blockers were found and folded in below.</p>
+
+<div class="ok"><strong>Bottom line.</strong> Foundry's <code>npc</code> actor is a faithful superset of a 5e stat block — every header field and every action/trait/legendary/lair entry is recoverable. The reconstruction has exactly one hard problem (<strong>Armor Class</strong>) and three shape decisions the naive model gets wrong (spellcasting and actions must be <strong>arrays of sub-blocks</strong>, not single objects). The single highest-leverage fix is <strong>module-side</strong>: have the creature exporter emit Foundry's <em>derived</em> values (resolved AC, proficiency bonus, save/skill totals, passive perception) instead of the raw source document — that erases most of the app-side precompute risk at a stroke. <strong>No migration is proposed yet</strong> — this is the survey that precedes it.</div>
+
+<div class="note"><strong>Read order.</strong> §1 the two shapes · §2 the stat-block ⇄ Foundry map (the meat) · §3 how the action economy reconstructs · §4 the proposed table · §5 the JSON shapes · §6 the adversarial fixes (must-read before any migration) · §7 the one module-side ask · §8 gaps &amp; decisions · §9 next steps. Full agent transcripts live in <code>E:\DnD\Professional\Foundry Export\_research\{finder1..4,SYNTHESIS,CRITIQUE}.md</code>.</p></div>
+
+<h2>1 · The two shapes</h2>
+
+<div class="grid2">
+  <div class="card">
+    <h4>Target — 5etools rendered stat block</h4>
+    <p class="meta" style="margin-bottom:.5rem">What the detail panel must reproduce.</p>
+    <p>A linear sequence of labelled rows + named entries: <em>Name / Source</em> → <em>Size Type (subtype), Alignment</em> → AC → HP → Speed → ability grid → Saving Throws → Skills → Damage Vuln/Res/Imm → Condition Immunities → Senses → Languages → Challenge / Proficiency Bonus → <strong>Traits</strong> (unnamed) → <strong>Actions</strong> → Bonus Actions → Reactions → <strong>Legendary Actions</strong> → <strong>Lair Actions</strong> → Regional Effects → variant/inset boxes → Environment → source footer.</p>
+    <p>It is a <em>render</em>: the "+11 to hit", "17 (2d10 + 6)", "(Recharge 5–6)", "(3/Day)", "Perception +11" are all <strong>synthesized</strong> from underlying numbers + prose.</p>
+  </div>
+  <div class="card">
+    <h4>Source — Foundry <code>creature-folder-export.v1</code></h4>
+    <p class="meta" style="margin-bottom:.5rem">109 MB · 1,001 npcs · the structured truth.</p>
+    <p>Envelope <code>{kind, schemaVersion, exportedAt, game, folder, summary, creatures[]}</code>. Each creature = <code>{id, uuid, name, type:"npc", folderId, folderPath, relativeFolderPath, creatureSummary, sourceDocument}</code>.</p>
+    <p><code>creatureSummary</code> is a slim preview projection; <code>sourceDocument</code> is the full Foundry npc actor — <code>system</code> (abilities, attributes, details, traits, skills, resources, spells, source) + embedded <code>items[]</code> (the traits/actions/spells) + <code>effects[]</code> + <code>prototypeToken</code>.</p>
+  </div>
+</div>
+
+<div class="warn"><strong>⚠ Read <code>sourceDocument.system.*</code>, never <code>creatureSummary</code>.</strong> The summary is lossy for everything load-bearing: <code>source.{book,page}</code> arrive <span class="bad">empty</span>, <code>proficiencyBonus</code> is always <span class="bad">0</span>, <code>spellcasting.level</code> is always <span class="bad">0</span>, the damage-trait <code>bypasses</code>/<code>custom</code> and language <code>telepathy</code>/<code>custom</code> are absent, and <code>biography</code> is truncated to ~200 chars. Use the summary only to cross-check. <em>(This is itself a symptom of the AC problem in §6 — the export serialises the raw source document, where these are runtime-derived.)</em></div>
+
+<h3>1a · The corpus at a glance</h3>
+<table>
+  <thead><tr><th>Dimension</th><th>Distribution (of 1,001)</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Creature type</strong></td><td>humanoid 226 · beast 138 · fiend 125 · monstrosity 122 · dragon 64 · aberration 62 · undead 54 · elemental 51 · fey 46 · giant 37 · construct 34 · plant 23 · ooze 10 · celestial 9</td></tr>
+    <tr><td><strong>CR</strong></td><td>REAL, fractions <code>0.125 / 0.25 / 0.5</code> (35 / 95 / 70) up to 30; 33 at CR 0; <span class="bad">1 null</span> (<code>Sacred Statue</code>)</td></tr>
+    <tr><td><strong>Spellcasters</strong></td><td>311 (and <span class="bad">38 carry TWO spellcasting blocks</span> — see §6)</td></tr>
+    <tr><td><strong>Legendary</strong></td><td>79 legendary-action creatures · lair + legendary are <em>orthogonal</em> (23 lair-without-legendary, 25 legendary-without-lair)</td></tr>
+    <tr><td><strong>Embedded items</strong> (11,643)</td><td>spell 5,562 · feat 4,245 (<code>type.value</code> always <code>"monster"</code>) · weapon 1,636 · equipment 197 · consumable 2 · loot 1</td></tr>
+    <tr><td><strong>Activity activation</strong></td><td>action 12,601 · <code>""</code> 840 · bonus 328 · lair 257 · legendary 230 · reaction 72 · special 64 · hour 48 · <span class="meta">(no <code>mythic</code> in this set)</span></td></tr>
+  </tbody>
+</table>
+
+<h2>2 · The stat-block ⇄ Foundry map</h2>
+<p>Every stat-block field, what 5etools renders, the authoritative Foundry path, the proposed column, and the catch. This table <em>is</em> the understanding.</p>
+<table>
+  <thead><tr><th>Stat-block field</th><th>5etools render</th><th>Foundry path (<code>system.*</code> unless noted)</th><th><code>monsters</code> column</th><th>Catch</th></tr></thead>
+  <tbody>
+    <tr><td>Name</td><td><code>Aarakocra</code></td><td><code>sourceDocument.name</code></td><td><code>name</code></td><td>Non-unique (1001 rows, 871 names) → <strong>PK = Foundry <code>id</code></strong>.</td></tr>
+    <tr><td>Source / page</td><td><code>MM'14 p12</code></td><td><code>source.{book,page,rules}</code></td><td><code>source_id</code> + <code>source_book</code> + <code>page</code> + <code>source_rules</code></td><td>Summary empty. <code>book</code> keeps apostrophe-year (<code>MM'14</code>).</td></tr>
+    <tr><td>Type line</td><td><code>Medium Humanoid (Aarakocra), Neutral Good</code></td><td><code>traits.size</code> + <code>details.type.{value,subtype,swarm}</code> + <code>details.alignment</code></td><td><code>size</code>+<code>creature_type</code>+<code>type_subtype</code>+<code>swarm_size</code>+<code>alignment</code></td><td>subtype is comma-multi (45 creatures); alignment is <strong>free text</strong> ("Any Alignment", "…(50%) or…").</td></tr>
+    <tr><td><strong>Armor Class</strong></td><td><code>19 (natural armor)</code></td><td><code>attributes.ac.{calc,flat,formula}</code> + armor items + AEs</td><td><code>ac</code> + <code>ac_note</code> + <code>ac_formula</code> + <code>ac_unverified</code></td><td><span class="bad">The hard one.</span> <code>ac.value</code> is 0/null for 478. See §6.1.</td></tr>
+    <tr><td>Hit Points</td><td><code>195 (17d12 + 85)</code></td><td><code>attributes.hp.{max,formula}</code></td><td><code>hp</code> + <code>hp_formula</code></td><td>"Maximum: N" tooltip is derived.</td></tr>
+    <tr><td>Speed</td><td><code>40 ft., fly 80 ft., swim 40 ft.</code></td><td><code>attributes.movement.*</code> <span class="meta">(values are STRINGS)</span></td><td><code>speeds</code> (JSON)</td><td><code>walk:"0"</code> AND missing-walk-key both mean "no walk" (7 aquatic have no key). Don't default to 30.</td></tr>
+    <tr><td>Abilities</td><td><code>23 (+6) …</code></td><td><code>abilities.{6}.value</code></td><td><code>abilities</code> (JSON)</td><td>Mods derive <code>floor((v-10)/2)</code>.</td></tr>
+    <tr><td>Saving Throws</td><td><code>Dex +7, Con +10 …</code></td><td><code>abilities.&lt;a&gt;.proficient</code> (0/1) + derive</td><td><code>saves</code> (JSON, <strong>precomputed</strong>)</td><td>The <code>+bonus</code> is NOT stored — = <code>mod + PB</code>.</td></tr>
+    <tr><td>Skills</td><td><code>Perception +11, Stealth +7</code></td><td><code>skills.&lt;s&gt;.{value,ability}</code> + derive</td><td><code>skills</code> (JSON, <strong>precomputed</strong>)</td><td><code>value 2 = EXPERTISE</code> (doubled PB → Dragon Perception +11). Must capture.</td></tr>
+    <tr><td>Damage V/R/I</td><td><code>… B/P/S from nonmagical attacks</code></td><td><code>traits.{dv,dr,di}.{value,bypasses,custom}</code></td><td><code>damage_vulnerabilities</code>/<code>_resistances</code>/<code>_immunities</code> (JSON)</td><td><code>bypasses</code> (<code>mgc</code>/<code>sil</code>/<code>ada</code>, 169 rows) MUST be stored or "nonmagical" is lost.</td></tr>
+    <tr><td>Condition Imm.</td><td><code>charmed, frightened …</code></td><td><code>traits.ci.{value,custom}</code></td><td><code>condition_immunities</code> (JSON)</td><td>—</td></tr>
+    <tr><td>Senses</td><td><code>blindsight 60 ft., darkvision 120 ft., passive Perception 21</code></td><td><code>attributes.senses.ranges.*</code> + derive</td><td><code>senses</code> (JSON) + <code>passive_perception</code> (scalar)</td><td>Passive Perception = <code>10 + Perception bonus</code>, not stored — precompute.</td></tr>
+    <tr><td>Languages</td><td><code>Common, Draconic</code> / <code>… telepathy 120 ft.</code></td><td><code>traits.languages.{value,custom,communication.telepathy}</code></td><td><code>languages</code> (JSON)</td><td>telepathy is SEPARATE (141); <code>custom</code> (296) carries rules ("any four languages").</td></tr>
+    <tr><td>Challenge</td><td><code>14 (11,500 XP)</code></td><td><code>details.cr</code> + derive</td><td><code>cr</code> (REAL) + <code>xp</code> (INT)</td><td>XP not in Foundry — derive from CR. Render <code>0.25→"1/4"</code>. CR null → suppress line.</td></tr>
+    <tr><td>Proficiency Bonus</td><td><code>+5</code></td><td>derive from CR</td><td><code>proficiency_bonus</code> (scalar)</td><td>Summary value is 0. <code>2 + max(0, floor((cr-1)/4))</code>.</td></tr>
+    <tr><td>Traits</td><td><strong>Amphibious.</strong> …</td><td>feat <code>flags.plutonium.page == monsterTrait</code></td><td><code>traits</code> (JSON[])</td><td>Legendary Resistance count = <code>resources.legres.max</code> (item <code>uses</code> empty).</td></tr>
+    <tr><td>Actions</td><td><strong>Bite.</strong> <em>Melee Weapon Attack:</em> +11 …</td><td><code>weapon</code> items + feat <code>monsterAction</code></td><td><code>actions</code> (JSON[])</td><td>Damage unions <code>activity.damage.parts</code> + weapon <code>system.damage.base</code>.</td></tr>
+    <tr><td>Bonus / Reactions</td><td><code>### Bonus Actions</code></td><td>feat <code>monsterBonus</code> / <code>monsterReaction</code></td><td><code>bonus_actions</code> / <code>reactions</code> (JSON[])</td><td>—</td></tr>
+    <tr><td>Legendary Actions</td><td>preamble + <strong>Wing Attack (Costs 2 Actions).</strong></td><td>feat <code>monsterLegendary</code>; count <code>resources.legact.max</code>; preamble = wrapper feat prose</td><td><code>legendary_actions</code> (JSON[]) + <code>legendary_action_count</code> + <code>legendary_actions_preamble</code></td><td>Don't blind-drop the wrapper — its prose is the 2024 preamble (§6.4).</td></tr>
+    <tr><td>Lair Actions</td><td>preamble + bullets + "Additional Lair Actions (FTD)"</td><td>feat <code>monsterLairActions</code>; <code>resources.lair.{value,initiative}</code></td><td><code>lair_actions</code> (JSON[]) + <code>lair_initiative</code> + <code>has_lair</code></td><td>MM bullets are unnamed (the <em>name</em> is the sentence). Per-entry <code>source_book</code>.</td></tr>
+    <tr><td>Regional Effects</td><td>bullets + "fade over 1d10 days"</td><td>feat <code>monsterRegionalEffects</code> (prose)</td><td><code>regional_effects</code> (JSON[])</td><td>Prose-faithful.</td></tr>
+    <tr><td>Spellcasting</td><td>"Innate Spellcasting" + list</td><td>feat(s) <code>monsterSpellcasting</code> + <code>spell</code> items + <code>attributes.spell.level</code></td><td><code>spellcasting</code> (JSON <strong>ARRAY</strong>) + <code>has_spellcasting</code></td><td>Up to TWO blocks (§6.2). DC lives in prose. <code>@UUID</code> → embedded item (§6.5).</td></tr>
+    <tr><td>Environment</td><td><code>Environment: Mountain</code></td><td><code>details.habitat.value[].type</code></td><td><code>habitat</code> (JSON)</td><td>Foundry's equivalent (835 creatures).</td></tr>
+    <tr><td>Variant / inset</td><td>"Customizing Dragons" boxes</td><td><code>ve-rd__b-inset</code> in <code>details.biography.value</code></td><td><code>variant_blocks</code> (JSON[])</td><td>Extract; rare.</td></tr>
+    <tr><td>Portrait / token</td><td>sheet art</td><td><code>sourceDocument.img</code> / <code>prototypeToken.texture.src</code></td><td><code>image_url</code> / <code>token_image_url</code></td><td>967/1001 hotlink <code>cdn.5e.tools</code> → R2 mirror.</td></tr>
+  </tbody>
+</table>
+
+<h2>3 · How the action economy reconstructs</h2>
+<p>The stat-block <em>body</em> (Traits / Actions / Bonus / Reactions / Legendary / Lair / Regional / Spellcasting) is rebuilt from <code>sourceDocument.items[]</code>. Two facts drive it:</p>
+<ul>
+  <li><strong>Weapons are always Actions</strong> (attacks). <code>feat</code> items (always <code>system.type.value:"monster"</code>) carry everything else. <code>spell</code> items are the spell list. <code>equipment</code> = worn gear (informs AC). <code>consumable</code>/<code>loot</code> = magic-item actions (rare — §6.4).</li>
+  <li><strong>The section a feature lands in is tagged by <code>flags.plutonium.page</code></strong> — <code>monsterTrait</code> · <code>monsterAction</code> · <code>monsterBonus</code> · <code>monsterReaction</code> · <code>monsterLegendary</code> · <code>monsterLairActions</code> · <code>monsterRegionalEffects</code> · <code>monsterSpellcasting</code>. This is present on 97.5% of feats and is <em>cleaner</em> than bucketing by <code>activation.type</code> (which scatters a <code>monsterTrait</code> that happens to carry an action activity).</li>
+</ul>
+<div class="note"><strong>Per-activity refinement.</strong> 174 items span buckets (e.g. a lair feat that also deals action damage; <code>Dancing Lights</code> = action + bonus). Bucket the <em>page</em>, then refine <em>per activity</em> by <code>activation.type</code>: <code>special</code> (64) → Trait (e.g. Legendary Resistance), <code>hour</code> (48) → a long-cast note. The only <code>plutonium.page:null</code> feats are the 78 "Legendary Actions" wrapper headers (§6.4).</div>
+<p>Each rendered entry needs <strong>both</strong> the prose body (the item's <code>system.description.value</code>, HTML → BBCode via our <code>htmlToBbcode</code>) <em>and</em> a structured tuple (to-hit, reach/range, damage parts, save DC/ability, recharge/uses) so the synthesized suffixes — <code>(3/Day)</code>, <code>(Recharge 5–6)</code>, <code>(Costs 2 Actions)</code>, <code>+11 to hit</code> — render exactly.</p>
+
+<h2>4 · Proposed <code>monsters</code> table <span class="tag">corrected for §6</span></h2>
+<p>Convention-following (mirrors <code>items</code>): <code>id TEXT PK</code>, <code>identifier UNIQUE</code>, <code>source_id</code> FK, timestamps, JSON columns for nested data, scalars only for what the <strong>list view renders, filters on, or sorts by</strong>. Every JSON column registers in <code>src/lib/d1.ts</code> <code>jsonFields</code> + <code>docs/platform/d1-architecture.md</code>.</p>
+
+<h3>4a · Scalars — identity &amp; catalog</h3>
+<table>
+  <thead><tr><th>Column</th><th>Type</th><th>Source / note</th></tr></thead>
+  <tbody>
+    <tr><td><code>id</code></td><td>TEXT PK</td><td>Foundry actor <code>id</code>. <strong>Not name</strong> — 130 names collide (true stat variants: Alhoon, Archmage, Vampire…).</td></tr>
+    <tr><td><code>name</code></td><td>TEXT NOT NULL</td><td><code>sourceDocument.name</code>. List column + search. Hand-patch 3 mojibake names (<code>Roth�</code>→<code>Rothé</code>) — unrecoverable algorithmically (§6.6).</td></tr>
+    <tr><td><code>identifier</code></td><td>TEXT UNIQUE</td><td>Slug + disambiguator on collision (<code>alhoon</code>, <code>alhoon-2</code>) — mirror the items importer's per-source idiom.</td></tr>
+    <tr><td><code>source_id</code></td><td>TEXT FK</td><td>→ <code>sources.id</code>, SET NULL. Resolve <code>system.source.book</code> (only 3 slugs today: MM'14/MPMM/VGM). Filter axis.</td></tr>
+    <tr><td><code>page</code> · <code>source_book</code> · <code>source_rules</code></td><td>TEXT</td><td><code>system.source.{page,book,rules}</code>. Keep <code>source_book</code> slug verbatim for re-resolution.</td></tr>
+    <tr><td><code>image_url</code> · <code>token_image_url</code></td><td>TEXT</td><td><code>img</code> / <code>prototypeToken.texture.src</code>. Plan R2 mirror; token is local, safe immediately.</td></tr>
+    <tr><td><code>tags</code></td><td>JSON <code>string[]</code></td><td>Tag-table FK array. Filter axis. Empty at import.</td></tr>
+    <tr><td><code>created_at</code> · <code>updated_at</code></td><td>TEXT</td><td>Standard.</td></tr>
+  </tbody>
+</table>
+
+<h3>4b · Scalars — stat-block header (list display / filter / sort axes)</h3>
+<table>
+  <thead><tr><th>Column</th><th>Type</th><th>Source / note</th></tr></thead>
+  <tbody>
+    <tr><td><code>cr</code></td><td>REAL null</td><td><code>details.cr</code>. <strong>Primary sort + banded filter axis.</strong> Render <code>0.125→"1/8"</code>. Nullable.</td></tr>
+    <tr><td><code>xp</code></td><td>INT null</td><td>Derived from CR (standard table; CR 0→10, ⅛→25). Null when CR null.</td></tr>
+    <tr><td><code>creature_type</code></td><td>TEXT NOT NULL</td><td><code>details.type.value</code>. <strong>Filter axis</strong> (14 enum). List column.</td></tr>
+    <tr><td><code>type_subtype</code> · <code>swarm_size</code></td><td>TEXT null</td><td><code>details.type.subtype</code> (comma-multi, display) · <code>details.type.swarm</code> (14 swarms → "Swarm of Tiny beasts"; null on non-swarms).</td></tr>
+    <tr><td><code>size</code></td><td>TEXT NOT NULL</td><td><code>traits.size</code> (<code>tiny/sm/med/lg/huge/grg</code>). <strong>Filter axis.</strong></td></tr>
+    <tr><td><code>alignment</code></td><td>TEXT null</td><td><code>details.alignment</code>. <strong>Free text, store verbatim</strong> — not a 9-cell enum.</td></tr>
+    <tr><td><code>ac</code> · <code>ac_note</code> · <code>ac_formula</code> · <code>ac_unverified</code></td><td>INT / TEXT / TEXT / INT(bool)</td><td>Computed (§6.1). <strong>List column + sort.</strong> <code>ac_unverified</code> flags the ~306 best-effort defaults until the export emits the resolved value.</td></tr>
+    <tr><td><code>hp</code> · <code>hp_formula</code></td><td>INT NOT NULL / TEXT</td><td><code>attributes.hp.{max,formula}</code>. <strong>List column + sort.</strong></td></tr>
+    <tr><td><code>proficiency_bonus</code> · <code>passive_perception</code></td><td>INT null</td><td>Derived (see §6.7 for the module-side alternative). Feed saves/skills precompute.</td></tr>
+    <tr><td><code>has_legendary</code> · <code>has_lair</code> · <code>has_spellcasting</code></td><td>INT(bool)</td><td><strong>Filter axes.</strong> <code>legact.max&gt;0</code> · <code>lair.value</code> or any lair action · any spell item/spellcasting feat. <strong>Independent</strong> — don't gate.</td></tr>
+    <tr><td><code>legendary_action_count</code> · <code>legendary_resistance_count</code> · <code>lair_initiative</code></td><td>INT null</td><td><code>resources.legact.max</code> / <code>legres.max</code> / <code>lair.initiative</code>. Three orthogonal fields.</td></tr>
+    <tr><td><code>legendary_actions_preamble</code></td><td>TEXT null</td><td>Extracted from the wrapper feat prose (§6.4) — the exact 2024 wording, not just the count.</td></tr>
+  </tbody>
+</table>
+
+<h3>4c · JSON columns (detail-only — not filter/sort axes)</h3>
+<table>
+  <thead><tr><th>Column</th><th>Shape (abridged — full TS in §5)</th></tr></thead>
+  <tbody>
+    <tr><td><code>speeds</code></td><td><code>{walk?,fly?,swim?,climb?,burrow?:number, hover?:boolean, units, special?}</code> — nullable ints (Foundry stores strings).</td></tr>
+    <tr><td><code>abilities</code></td><td><code>{str,dex,con,int,wis,cha: number}</code></td></tr>
+    <tr><td><code>saves</code> · <code>skills</code></td><td>sparse, <strong>precomputed</strong>. <code>saves:{[ab]:number}</code> · <code>skills:{[slug]:{bonus,expertise}}</code> (expertise = value 2).</td></tr>
+    <tr><td><code>senses</code></td><td><code>{blindsight?,darkvision?,tremorsense?,truesight?:number, units, special?}</code>.</td></tr>
+    <tr><td><code>damage_resistances</code> · <code>_immunities</code> · <code>_vulnerabilities</code></td><td><code>{value:string[], bypasses:string[], custom?}</code>.</td></tr>
+    <tr><td><code>condition_immunities</code></td><td><code>{value:string[], custom?}</code>.</td></tr>
+    <tr><td><code>languages</code></td><td><code>{value:string[], custom?, telepathy?:number}</code>.</td></tr>
+    <tr><td><code>habitat</code></td><td><code>{value:string[], custom?}</code> — the "Environment:" line.</td></tr>
+    <tr><td><code>traits</code> · <code>actions</code> · <code>bonus_actions</code> · <code>reactions</code> · <code>legendary_actions</code> · <code>lair_actions</code></td><td><code>Action[]</code> / <code>Trait[]</code> — each entry carries prose + an <strong>array</strong> of activity tuples (§5, §6.3).</td></tr>
+    <tr><td><code>regional_effects</code> · <code>variant_blocks</code></td><td><code>{name?,description,source_book?}[]</code> / <code>{title,source_book?,source_page?,description}[]</code>.</td></tr>
+    <tr><td><code>spellcasting</code></td><td><strong><code>Spellcasting[]</code></strong> (array — §6.2). Each block = ability/level/DC/method/slots/prose/spells[].</td></tr>
+    <tr><td><code>biography</code> · <code>description</code></td><td>TEXT (BBCode) — full flavor + short teaser. Not JSON.</td></tr>
+    <tr><td><code>foundry_data</code></td><td>JSON — <strong>slim</strong> round-trip blob <code>{source, resources, spells, _dauligorImport}</code>, NOT the full actor (§8.5).</td></tr>
+  </tbody>
+</table>
+<p class="meta"><strong>Indexes:</strong> <code>cr</code>, <code>creature_type</code>, <code>size</code>, <code>source_id</code> (the filter/sort axes). <strong>Dropped from the naive plan:</strong> <code>spellcasting_ability</code> scalar (fold into JSON — not a filter axis), a <code>dm</code>/damage-modification column (empty across all 1,001), and any UI around <code>*.custom</code>/<code>*.special</code> keys that never populate (keep the keys optional, build nothing on them).</p>
+
+<h2>5 · The section JSON shapes</h2>
+<p>Each action/trait stores prose <strong>and</strong> a structured copy. Note the two array-shape corrections from §6 are already baked in (an <code>Action</code> holds <code>activities[]</code>; <code>spellcasting</code> is an array).</p>
+<pre>type Action = {
+  name: string;                 // base name, NO usage suffix
+  description: string;          // BBCode (item system.description.value → htmlToBbcode)
+  pageBucket: string;           // plutonium.page (audit / re-bucket)
+  order: number;                // item `sort`
+  source_book?: string;         // for FTD "Additional X" sub-block grouping
+  uses?: { max?: string; recovery?: Array&lt;{period, formula?, type?}&gt; };
+                                // ITEM-level system.uses → "(Recharge 5–6)" | "(3/Day)" | "(Recharges at Dawn)"
+  costs?: number;               // legendary: activation.value &gt; 1 → "(Costs N Actions)"
+  activities: Array&lt;{          // ← ARRAY (332+ weapons have ≥2; 174 items span buckets)
+    kind: 'attack'|'save'|'utility'|'heal'|'damage';
+    activation: string;         // action|bonus|reaction|legendary|lair|special|''
+    attack?: { bonus: number;   // PRECOMPUTED mod(attack.ability)+PB+attack.bonus
+               type: 'melee'|'ranged'; classification?: string;
+               reach?: number; range?: number; long?: number; units: 'ft' };
+    save?:   { abilities: string[]; dc: number; onSave?: 'half'|'none' };
+    damageParts?: Array&lt;{ average: number; formula: string; types: string[] }&gt;;
+                                // average resolves @mod against THIS activity's attack.ability
+  }&gt;;
+};
+
+type Trait = { name; description; uses?; source_book?; order };  // passive; Legendary Resistance
+                                // injects resources.legres.max as uses (item uses is empty)
+
+type Spellcasting = {           // ← one PER monsterSpellcasting feat (38 creatures have 2)
+  ability: string; level: number;          // attributes.spell.level (summary is 0)
+  saveDc?: number; attackBonus?: number;   // compute 8+PB+mod / PB+mod; PROSE is authoritative fallback
+  method: 'spell'|'innate'|'pact'|'atwill';// header label hint only
+  slots?: Record&lt;string,number&gt;; pactSlots?: { count; level };
+  prose: string;                           // the feat description (pre-rendered, exact text)
+  spells: Array&lt;{ name; level; method; uses? }&gt;;  // resolved from EMBEDDED spell items (not the DB)
+};</pre>
+
+<h2>6 · Adversarial fixes <span class="tag blood">must-read before any migration</span></h2>
+<p>An independent critic tried to break the naive schema against all 1,001 creatures. The model held ~80%, but found <strong>three structural blockers</strong> (column-shape changes that are painful to migrate later) and several majors. All are folded into §4–§5 above; here's the why.</p>
+
+<h3>6.1 · Armor Class is not reliably reconstructable for ~306 creatures <span class="tag blood">BLOCKER</span></h3>
+<p>AC calc splits <code>{natural:523, default:462, custom:16}</code>. <code>natural</code> reads <code>ac.flat</code> cleanly. But of the 462 <code>default</code>, <strong>306 have no armor item and <code>flat:null</code></strong> — the formula collapses to <code>10 + dexMod</code>, which is a <em>guess</em>: some monsters print a higher AC with no armor item, and there is <strong>no AC number anywhere in the static export</strong> for them (biographies contain zero "Armor Class" text). Armored cases are also unvalidated (the canonical Guard prints AC 16; the export's shield math yields 17).</p>
+<div class="warn"><strong>Fix.</strong> Don't freeze a <code>10+dex</code> guess and present it as authoritative. <strong>Best:</strong> have the exporter emit Foundry's <em>resolved</em> <code>actor.system.attributes.ac.value</code> (§7) — the only ground truth. <strong>Interim:</strong> store <code>ac</code> nullable with a best-effort compute (apply the 11 "Other AC Bonus" ActiveEffects; their <code>value</code> is a signed string <code>"+4"</code>) and set <code>ac_unverified=true</code> on the 306 so QA/UI knows.</div>
+
+<h3>6.2 · <code>spellcasting</code> must be an ARRAY <span class="tag blood">BLOCKER</span></h3>
+<p><strong>38 creatures carry two <code>monsterSpellcasting</code> feats</strong> (innate + prepared, or a coven block + own block — Alhoon, Drow Priestess, every <code>*Hag (Coven)</code>, Arcanaloth). A single <code>spellcasting</code> object silently drops one whole block. → <code>Spellcasting[]</code>.</p>
+
+<h3>6.3 · <code>Action</code> must hold an ARRAY of activity tuples <span class="tag blood">BLOCKER</span></h3>
+<p><strong>332 weapons have 2 activities, 9 have 3, 1 has 4.</strong> Swarm of Bats "Bites" = full-HP 2d4 + bloodied-HP 1d4; Aboleth "Tentacle" = attack + a CON-save disease rider. A single <code>attack</code>/<code>save</code> field keeps only the first; the rest survive in prose but lose their structured suffix. → <code>activities: ActivityTuple[]</code> (this also subsumes the 174 multi-bucket items as a first-class case).</p>
+
+<h3>6.4 · Don't blind-drop the Legendary preamble; don't drop magic-item actions <span class="tag">MAJOR</span></h3>
+<p>The 78 <code>plutonium.page:null</code> "Legendary Actions" wrapper feats are activity-less — but their <em>description is the 2024 preamble prose</em> ("Legendary Action Uses: 3. Immediately after another creature's turn…"), which you can't reconstruct from <code>legact.max</code> alone. Extract it into <code>legendary_actions_preamble</code> before dropping the shell. Separately, 3 creatures have <code>consumable</code>/<code>loot</code> item-actions (Necklace of Fireballs, Rope of Entanglement, Net) that the naive "weapon/equipment/feat-only" bucketing drops — route them to Actions when they carry an activity.</p>
+
+<h3>6.5 · Reference / recharge / damage resolution targets <span class="tag">MAJOR</span></h3>
+<ul>
+  <li><strong><code>@UUID[.X]</code> resolves to the EMBEDDED spell item</strong> (<code>Actor.&lt;id&gt;.Item.&lt;X&gt;</code>), not the global spells DB. 694/824 sampled refs are label-less and REQUIRE the embedded item to get a name. Resolve embedded → store <code>{name,level,method}</code> in <code>spellcasting.spells[]</code> so render never needs a live join.</li>
+  <li><strong>Recharge/uses live on the ITEM <code>system.uses</code></strong>, not the activity: <code>{formula:"5", period:"recharge", type:"recoverAll"}</code> + <code>uses.max:"1"</code> → "(Recharge 5–6)". Periods seen: <code>recharge 207, day 1903, sr 65, dawn 2</code> — keep <code>type</code>, add <code>dawn</code>→"(Recharges at Dawn)" to the render map.</li>
+  <li><strong>Damage <code>@mod</code> resolves against the activity's <code>attack.ability</code></strong>, per-part (Bite = <code>[{2d10, @mod}, {1d8 acid, ""}]</code> → "17 (2d10 + 6) piercing plus 4 (1d8) acid"). Precompute per-part <code>average</code> + resolved <code>formula</code>; capture <code>save.onSave</code> (half/none) on save-with-damage activities (Acid Breath 12d8, half).</li>
+</ul>
+
+<h3>6.6 · Minor truths that change the plan</h3>
+<ul>
+  <li><strong>Mojibake is NOT repairable</strong> — the 3 bad names contain <code>U+FFFD</code>, the original bytes are already destroyed. Hand-patch a 2-entry rename map; fix the export to stop corrupting them.</li>
+  <li><strong>Drop dead modeling:</strong> <code>dm</code> (damage modification), <code>di.custom</code>, <code>ci.custom</code>, <code>senses.special</code>, <code>movement.special</code>, <code>habitat.custom</code> are empty across all 1,001. Keep the optional keys; build no columns/UI. (Contrast: <code>languages.custom</code> 296, <code>dr.bypasses</code> 169, <code>telepathy</code> 141 — these stay.)</li>
+  <li><code>swarm</code> is <code>null</code> (not <code>""</code>) on non-swarms; <code>cr</code> is int/float/null — ensure the fetcher doesn't coerce <code>0.0</code> to falsy and drop it.</li>
+  <li>Default the list thumbnail to <code>token_image_url</code> (local) to avoid 967 cross-origin <code>cdn.5e.tools</code> loads until the R2 mirror lands.</li>
+</ul>
+
+<h2>7 · The one module-side ask <span class="tag green">highest leverage</span></h2>
+<div class="note">Most of the app-side precompute risk — AC (§6.1), proficiency bonus, save/skill totals, passive Perception, spell save DC — exists only because the export serialises the <strong>raw</strong> <code>actor.toObject()</code>, where these are runtime-derived (hence <code>creatureSummary.ac.value=0</code>, <code>proficiencyBonus=0</code>). Foundry already computes all of them on the <em>prepared</em> actor. <strong>If the creature exporter emitted the prepared/derived values</strong> — <code>system.attributes.ac.value</code>, the real <code>pb</code>, each <code>abilities.&lt;a&gt;.save</code> total, each <code>skills.&lt;s&gt;.total</code>, <code>attributes.senses.passivePerception</code> (or <code>attributes.perception</code>), and each spellcasting block's <code>save</code>/<code>attack</code> — the importer becomes a near-trivial copy and the AC blocker disappears.</div>
+<p>This is a <strong>cross-branch change</strong> owned by the <code>foundry-module</code> branch (per the repo's "cross-branch = handoff, not self-modify" rule). It is the single most valuable follow-up. Recommend a handoff to <code>foundry-module</code> requesting an enriched <code>creature-folder-export</code> (or a <code>creatureSummary</code> that reads the prepared actor). Until then the app computes best-effort + flags <code>ac_unverified</code>.</p>
+
+<h2>8 · Gaps &amp; open decisions <span class="meta">— each with a recommended default</span></h2>
+<table>
+  <thead><tr><th>#</th><th>Question</th><th>Recommended default</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>Source/page empty in summary</td><td>Read <code>system.source.{book,page,rules}</code>; resolve book→<code>source_id</code>, keep slug verbatim.</td></tr>
+    <tr><td>2</td><td>No <code>environment</code> field</td><td>Use <code>system.details.habitat</code> (835 creatures) as the "Environment:" line.</td></tr>
+    <tr><td>3</td><td>XP not in Foundry</td><td>Derive from CR (standard table), store as precomputed INT (null when CR null).</td></tr>
+    <tr><td>4</td><td>PB / passive / save / skill bonuses not stored</td><td>Precompute &amp; store — OR get them from the enriched export (§7), the better path.</td></tr>
+    <tr><td>5</td><td>Keep raw <code>foundry_data</code>?</td><td>Slim blob <code>{source, resources, spells, _dauligorImport}</code> only. Browser is read-only; the 109 MB file is the archive.</td></tr>
+    <tr><td>6</td><td>Denormalize embedded items → rows or JSON?</td><td>JSON section arrays on the row. Monster actions are bespoke <code>"monster"</code> feats, never shared — don't FK into <code>items</code>. (Spells are the exception: resolve to the spells catalog by identifier.)</td></tr>
+    <tr><td>7</td><td>Mythic actions</td><td>None in this export — don't add a column now; the section-array pattern absorbs it later.</td></tr>
+    <tr><td>8</td><td>FTD inset/variant blocks</td><td>Extract <code>ve-rd__b-inset</code> → <code>variant_blocks</code>; leave FTD lair/regional <em>additions</em> inline in their section prose (they're <code>--3</code> blocks, not insets). Keep biography as the fallback.</td></tr>
+  </tbody>
+</table>
+
+<h2>9 · Next steps</h2>
+<ol>
+  <li><strong>Decide the AC strategy</strong> (§6.1 / §7): wait on an enriched export, or ship best-effort + <code>ac_unverified</code> now. This gates the migration.</li>
+  <li><strong>Lock the schema</strong> (§4–§5, corrected) → write <code>docs/database/structure/monsters.md</code> + the timestamped migration <code>worker/migrations/&lt;ts&gt;_create_monsters.sql</code>; register JSON cols in <code>d1.ts</code> + <code>d1-architecture.md</code>. Apply <strong>local-first</strong>.</li>
+  <li><strong>Build the importer</strong> (the §3 reconstruction + §6 fixes) over the 1,001-creature export → seed the table.</li>
+  <li><strong>Browser + detail panel</strong> — <code>MonsterList.tsx</code> (copy <code>ItemList</code>: Name/CR/Type/Size/Source + CR-banded/type/size/source/legendary/spellcasting filter axes; slim-load + lazy <code>fetchMonster</code>) and <code>MonsterDetailPanel.tsx</code> (render the §2 stat block).</li>
+  <li><em>(parallel)</em> Handoff to <code>foundry-module</code> for the enriched export (§7).</li>
+</ol>
+<p class="meta">Nothing here touches the database yet — this is the survey. The schema stays a proposal until you sign off on the AC strategy and the column shapes.</p>
+
+</body>
+</html>
