@@ -1,6 +1,7 @@
 import { slugify } from './utils';
 import { htmlToBbcode } from './bbcode';
 import { cleanFoundryHtml } from './foundryHtmlCleanup';
+import { foundryActivityToSemantic } from './foundryActivities';
 import { fetchCollection, updateDocument } from './d1';
 
 const IMAGE_CDN_BASE = 'https://images.dauligor.com';
@@ -317,7 +318,7 @@ function buildSavePayload(entry: FoundrySpellFolderExport, spell: FoundrySpellEx
     sourceId: matchedSource?.id || '',
     imageUrl: resolveFoundryImageUrl(sourceDocument.img || ''),
     description: convertFoundrySpellHtmlToBbcode(String(system.description?.value ?? '')),
-    activities: Object.values(system.activities ?? {}),
+    activities: Object.values(system.activities ?? {}).map((a, i) => foundryActivityToSemantic(a, i)),
     effects: Array.isArray(sourceDocument.effects) ? sourceDocument.effects : [],
     // The actual snake_case D1 column. Previously this was written as
     // `foundryDocument` which doesn't exist on the spells table —
@@ -371,7 +372,7 @@ export function buildSpellImportCandidates(
       String(candidate.identifier ?? '') === identifier
       && String(candidate.sourceId ?? '') === String(matchedSource?.id ?? '')
     );
-    const activities = Object.values(system.activities ?? {});
+    const activities = Object.values(system.activities ?? {}).map((a, i) => foundryActivityToSemantic(a, i));
     const effects = Array.isArray(sourceDocument.effects) ? sourceDocument.effects : [];
     const materialLabel = String(system.materials?.value ?? '').trim();
     const savePayload = buildSavePayload(entry, spell, matchedSource);

@@ -43,6 +43,7 @@
 
 import { slugify } from './utils';
 import { htmlToBbcode } from './bbcode';
+import { foundryActivityToSemantic } from './foundryActivities';
 import { cleanFoundryHtml } from './foundryHtmlCleanup';
 
 const IMAGE_CDN_BASE = 'https://images.dauligor.com';
@@ -353,7 +354,7 @@ function buildSavePayload(entry: FoundryFeatFolderExport, feat: FoundryFeatExpor
     uses_recovery: recovery,
     // dnd5e v5 stores activities as an object keyed by activity id;
     // serialise to a flat array (same as the spell importer does).
-    activities: Object.values(system.activities ?? {}),
+    activities: Object.values(system.activities ?? {}).map((a, i) => foundryActivityToSemantic(a, i)),
     effects: Array.isArray(sourceDocument.effects) ? sourceDocument.effects : [],
     // dnd5e stores `system.advancement` as a `{ "<uuid>": Advancement }`
     // object map keyed by each advancement's stable `_id`. Flatten to
@@ -404,7 +405,7 @@ export function buildFeatImportCandidates(
       String(candidate.identifier ?? '') === identifier
       && String(candidate.sourceId ?? '') === String(matchedSource?.id ?? '')
     );
-    const activities = Object.values(system.activities ?? {});
+    const activities = Object.values(system.activities ?? {}).map((a, i) => foundryActivityToSemantic(a, i));
     const effects = Array.isArray(sourceDocument.effects) ? sourceDocument.effects : [];
     const featType = String(system.type?.value ?? 'feat');
     const featSubtype = String(system.type?.subtype ?? '');
