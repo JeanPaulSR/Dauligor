@@ -2,7 +2,7 @@ import type { MouseEvent } from 'react';
 import { Shield, Trash2 } from 'lucide-react';
 import Markdown from 'react-markdown';
 import { Button } from '../ui/button';
-import { ClassImageStyle, DEFAULT_DISPLAY } from './ClassImageEditor';
+import { imageFocalStyle as ClassImageStyle, DEFAULT_DISPLAY } from '../ui/FocalImageEditor';
 
 // Heavy black outline so the gold title/source stay legible over any image.
 const TEXT_OUTLINE =

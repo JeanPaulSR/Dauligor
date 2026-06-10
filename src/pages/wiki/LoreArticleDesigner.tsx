@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useNavigate, useParams } from 'react-router-dom';
-import {
-  fetchLoreArticle, fetchLoreSecrets, upsertLoreArticle,
-} from '../../lib/lore';
+import { fetchLoreArticle, upsertLoreArticle } from '../../lib/lore';
 import { fetchLoreArticleBlocks, saveLoreArticleBlocks } from '../../lib/loreArticleBlocks';
 import { makeBlock, parseLayoutBlock, LAYOUT_BLOCK_TYPES, type LayoutBlock, type LayoutBlockType } from '../../lib/layoutBlocks';
 import LayoutEditor from '../../components/layout/LayoutEditor';
@@ -203,39 +201,14 @@ export default function LoreArticleDesigner({ userProfile }: { userProfile: any 
               metadata: { ...EMPTY_METADATA, ...(article.metadata || {}) },
               createdAt: article.createdAt,
             });
-            // Prefer blocks from the article packet; fall back to a dedicated fetch,
-            // then to wrapping the legacy `content` (articles authored in the classic
-            // editor after the migration won't have block rows yet).
+            // Blocks are the body. Prefer the article packet; fall back to a
+            // dedicated fetch. Every article is block-native (storyteller notes +
+            // secrets are `note`/`secret` blocks), so there are no legacy
+            // content/dm_notes/lore_secrets paths to migrate here anymore.
             let parsed: LayoutBlock[] = (Array.isArray((article as any).blocks) ? (article as any).blocks : [])
               .map(parseLayoutBlock).filter(Boolean) as LayoutBlock[];
             if (parsed.length === 0) {
-              const fetched = await fetchLoreArticleBlocks(id);
-              parsed = fetched;
-            }
-            if (parsed.length === 0) {
-              const tb = makeBlock('text', crypto.randomUUID()) as any;
-              tb.body = typeof article.content === 'string' ? article.content : '';
-              parsed = [tb];
-            }
-            // Lazy-migrate legacy dm_notes → a Storyteller Note block (once), so the
-            // staff note carries forward as a block when this article is re-saved.
-            const dm = typeof article.dmNotes === 'string' ? article.dmNotes : '';
-            if (dm.trim() && !parsed.some((b) => b.blockType === 'note')) {
-              const nb = makeBlock('note', crypto.randomUUID()) as any;
-              nb.body = dm;
-              parsed = [...parsed, nb];
-            }
-            // Lazy-migrate legacy lore_secrets → Secret blocks (once), so existing
-            // secrets carry forward as blocks when this article is re-saved.
-            if (!parsed.some((b) => b.blockType === 'secret')) {
-              const existingSecrets = await fetchLoreSecrets(id);
-              for (const s of existingSecrets) {
-                const sb = makeBlock('secret', crypto.randomUUID()) as any;
-                sb.body = s.content || '';
-                sb.eraIds = Array.isArray(s.eraIds) ? s.eraIds : [];
-                sb.revealedCampaignIds = Array.isArray(s.revealedCampaignIds) ? s.revealedCampaignIds : [];
-                parsed = [...parsed, sb];
-              }
+              parsed = await fetchLoreArticleBlocks(id);
             }
             if (!cancelled) setBlocks(parsed);
           }
@@ -337,9 +310,9 @@ export default function LoreArticleDesigner({ userProfile }: { userProfile: any 
     try {
       // Article row first (creates the row a new article's blocks FK-reference),
       // then the blocks (the PUT re-derives the same content mirror server-side).
-      // dm_notes is now authored as a Storyteller Note block, so clear the legacy
-      // column — the note block is the source of truth.
-      await upsertLoreArticle(articleId, payload, '');
+      // Storyteller notes + secrets are `note`/`secret` blocks — no separate
+      // dm_notes / lore_secrets writes.
+      await upsertLoreArticle(articleId, payload);
       await saveLoreArticleBlocks(articleId, blocks);
       toast.success(id ? 'Article updated' : 'Article created');
       // Stay in the designer after saving. For a brand-new article, switch to its

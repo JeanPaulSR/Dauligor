@@ -28,10 +28,7 @@ import {
   requireAuthenticatedUser,
 } from "../../../api/_lib/firebase-admin.js";
 import { executeD1QueryInternal } from "../../../api/_lib/d1-internal.js";
-import {
-  buildLoreArticleSaveQueries,
-  buildLoreSecretSaveQueries,
-} from "../../../api/_lib/_lore.js";
+import { buildLoreArticleSaveQueries } from "../../../api/_lib/_lore.js";
 
 /**
  * Parse `?fields=id,title,…` and intersect with an allow-list. Returns
@@ -81,7 +78,6 @@ function normalizeArticleRow(row: any): any {
   return {
     ...row,
     parentId: row.parent_id ?? null,
-    dmNotes: row.dm_notes ?? null,
     imageUrl: row.image_url ?? null,
     imageDisplay: typeof row.image_display === "string" ? safeJson(row.image_display) : row.image_display ?? null,
     cardImageUrl: row.card_image_url ?? null,
@@ -398,47 +394,6 @@ async function handleSingle(staff: boolean, uid: string, articleId: string): Pro
   return Response.json({ article, parent, mentions });
 }
 
-async function handleSecrets(staff: boolean, uid: string, articleId: string): Promise<Response> {
-  const resolved = await resolveArticle(articleId);
-  if (!resolved) {
-    return Response.json({ secrets: [] });
-  }
-  const sql = `
-    SELECT s.*,
-           (SELECT GROUP_CONCAT(era_id) FROM lore_secret_eras WHERE secret_id = s.id) AS era_ids,
-           (SELECT GROUP_CONCAT(campaign_id) FROM lore_secret_campaigns WHERE secret_id = s.id) AS revealed_campaign_ids
-    FROM lore_secrets s
-    WHERE s.article_id = ?
-  `;
-  const result = await executeD1QueryInternal({ sql, params: [resolved.id] });
-  const rows = Array.isArray(result?.results) ? result.results : [];
-
-  const all = rows.map((s: any) => ({
-    ...s,
-    eraIds: s.era_ids ? String(s.era_ids).split(",") : [],
-    revealedCampaignIds: s.revealed_campaign_ids ? String(s.revealed_campaign_ids).split(",") : [],
-    createdAt: s.created_at,
-    updatedAt: s.updated_at,
-  }));
-
-  if (staff) {
-    return Response.json({ secrets: all });
-  }
-
-  const userRes = await executeD1QueryInternal({
-    sql: "SELECT active_campaign_id FROM users WHERE id = ? LIMIT 1",
-    params: [uid],
-  });
-  const userRows = Array.isArray(userRes?.results) ? userRes.results : [];
-  const activeCampaignId: string | null = userRows[0] ? (userRows[0] as any).active_campaign_id ?? null : null;
-
-  const visible = activeCampaignId
-    ? all.filter((s) => s.revealedCampaignIds.includes(activeCampaignId))
-    : [];
-
-  return Response.json({ secrets: visible });
-}
-
 async function handleArticleBlocks(staff: boolean, uid: string, articleId: string): Promise<Response> {
   const resolved = await resolveArticle(articleId);
   if (!resolved) {
@@ -467,7 +422,6 @@ async function handleArticleBlocks(staff: boolean, uid: string, articleId: strin
 async function handleArticleUpsert(request: Request, decoded: any, articleId: string): Promise<Response> {
   const body = (await request.json().catch(() => ({}))) as any;
   const payload = body?.article;
-  const dmNotes: string = typeof body?.dmNotes === "string" ? body.dmNotes : "";
   if (!payload || typeof payload !== "object") {
     throw new HttpError(400, "Missing `article` in request body.");
   }
@@ -481,7 +435,7 @@ async function handleArticleUpsert(request: Request, decoded: any, articleId: st
     throw new HttpError(400, "Article `content` must be a string.");
   }
 
-  const queries = buildLoreArticleSaveQueries(articleId, payload, dmNotes, decoded.uid);
+  const queries = buildLoreArticleSaveQueries(articleId, payload, decoded.uid);
   await executeD1QueryInternal(queries);
 
   return Response.json({ ok: true, id: articleId });
@@ -541,38 +495,6 @@ async function handleArticleDelete(articleId: string): Promise<Response> {
     params: [articleId],
   });
   return Response.json({ ok: true, id: articleId });
-}
-
-async function handleSecretUpsert(request: Request, articleId: string, secretId: string): Promise<Response> {
-  const body = (await request.json().catch(() => ({}))) as any;
-  const payload = body?.secret ?? body;
-  if (!payload || typeof payload !== "object") {
-    throw new HttpError(400, "Missing secret payload in request body.");
-  }
-  if (typeof payload.content !== "string") {
-    throw new HttpError(400, "Secret `content` must be a string.");
-  }
-
-  const check = await executeD1QueryInternal({
-    sql: "SELECT id FROM lore_articles WHERE id = ? LIMIT 1",
-    params: [articleId],
-  });
-  if (!Array.isArray(check?.results) || check.results.length === 0) {
-    throw new HttpError(404, "Article not found.");
-  }
-
-  const queries = buildLoreSecretSaveQueries(articleId, secretId, payload);
-  await executeD1QueryInternal(queries);
-
-  return Response.json({ ok: true, articleId, secretId });
-}
-
-async function handleSecretDelete(secretId: string): Promise<Response> {
-  await executeD1QueryInternal({
-    sql: "DELETE FROM lore_secrets WHERE id = ?",
-    params: [secretId],
-  });
-  return Response.json({ ok: true, id: secretId });
 }
 
 async function handleWikiSettingsPut(request: Request, authHeader: string | undefined): Promise<Response> {
@@ -652,9 +574,6 @@ const handleLoreRequest = async (context: any): Promise<Response> => {
     if (request.method === "GET") {
       if (path.length === 1 && path[0] === "articles") return await handleList(searchParams, staff);
       if (path.length === 2 && path[0] === "articles") return await handleSingle(staff, uid, path[1]);
-      if (path.length === 3 && path[0] === "articles" && path[2] === "secrets") {
-        return await handleSecrets(staff, uid, path[1]);
-      }
       if (path.length === 3 && path[0] === "articles" && path[2] === "blocks") {
         return await handleArticleBlocks(staff, uid, path[1]);
       }
@@ -680,23 +599,6 @@ const handleLoreRequest = async (context: any): Promise<Response> => {
 
     if (path.length === 3 && path[0] === "articles" && path[2] === "blocks") {
       if (request.method === "PUT") return await handleArticleBlocksPut(request, path[1]);
-      return Response.json(
-        { error: `Method ${request.method} not allowed.` },
-        { status: 405 },
-      );
-    }
-
-    if (path.length === 4 && path[0] === "articles" && path[2] === "secrets") {
-      if (request.method === "PUT") return await handleSecretUpsert(request, path[1], path[3]);
-      if (request.method === "DELETE") return await handleSecretDelete(path[3]);
-      return Response.json(
-        { error: `Method ${request.method} not allowed.` },
-        { status: 405 },
-      );
-    }
-
-    if (path.length === 2 && path[0] === "secrets") {
-      if (request.method === "DELETE") return await handleSecretDelete(path[1]);
       return Response.json(
         { error: `Method ${request.method} not allowed.` },
         { status: 405 },

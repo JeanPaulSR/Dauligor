@@ -30,7 +30,6 @@ type Query = { sql: string; params?: any[] };
 export function buildLoreArticleSaveQueries(
   id: string,
   payload: any,
-  dmNotes: string,
   authorId: string,
 ): Query[] {
   const queries: Query[] = [];
@@ -38,7 +37,7 @@ export function buildLoreArticleSaveQueries(
   // 1. Lore article base — single ON CONFLICT DO UPDATE row.
   const articleColumns = [
     "id", "title", "slug", "category", "folder", "content", "excerpt",
-    "parent_id", "status", "author_id", "dm_notes", "image_url",
+    "parent_id", "status", "author_id", "image_url",
     "image_display", "card_image_url", "card_display",
     "preview_image_url", "preview_display", "updated_at",
   ];
@@ -61,7 +60,6 @@ export function buildLoreArticleSaveQueries(
     payload.parentId || null,
     payload.status || "draft",
     authorId,
-    dmNotes,
     payload.imageUrl || null,
     typeof payload.imageDisplay === "object" ? JSON.stringify(payload.imageDisplay) : payload.imageDisplay,
     payload.cardImageUrl || null,
@@ -154,40 +152,6 @@ export function buildLoreArticleSaveQueries(
   });
   (payload.linkedArticleIds || []).forEach((targetId: string) => {
     queries.push({ sql: "INSERT INTO lore_links (article_id, target_id) VALUES (?, ?)", params: [id, targetId] });
-  });
-
-  return queries;
-}
-
-/**
- * Build the batched query array for a single secret upsert + its
- * visibility junction reset.
- */
-export function buildLoreSecretSaveQueries(
-  articleId: string,
-  secretId: string,
-  data: any,
-): Query[] {
-  const queries: Query[] = [];
-
-  queries.push({
-    sql: `INSERT INTO lore_secrets (id, article_id, content, updated_at)
-          VALUES (?, ?, ?, ?)
-          ON CONFLICT(id) DO UPDATE SET
-            article_id = excluded.article_id,
-            content = excluded.content,
-            updated_at = excluded.updated_at`,
-    params: [secretId, articleId, data.content, data.updatedAt || new Date().toISOString()],
-  });
-
-  queries.push({ sql: "DELETE FROM lore_secret_eras WHERE secret_id = ?", params: [secretId] });
-  queries.push({ sql: "DELETE FROM lore_secret_campaigns WHERE secret_id = ?", params: [secretId] });
-
-  (data.eraIds || []).forEach((eraId: string) => {
-    queries.push({ sql: "INSERT INTO lore_secret_eras (secret_id, era_id) VALUES (?, ?)", params: [secretId, eraId] });
-  });
-  (data.revealedCampaignIds || []).forEach((campId: string) => {
-    queries.push({ sql: "INSERT INTO lore_secret_campaigns (secret_id, campaign_id) VALUES (?, ?)", params: [secretId, campId] });
   });
 
   return queries;

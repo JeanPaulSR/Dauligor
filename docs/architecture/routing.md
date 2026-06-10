@@ -17,7 +17,7 @@
 | `/auth/redeem?token=…` | `RedeemTokenPage.tsx` | Public — used by the admin-issued sign-in-link flow |
 | `/wiki` | `Wiki.tsx` | All authenticated |
 | `/wiki/article/:id` | `LoreArticle.tsx` | All authenticated (filtered by status) |
-| `/wiki/new`, `/wiki/edit/:id` | `LoreEditor.tsx` | Staff |
+| `/wiki/new`, `/wiki/edit/:id` | `LoreArticleDesigner.tsx` | Staff |
 | `/compendium` | Compendium landing | All authenticated |
 | `/compendium/classes` | `ClassList.tsx` | All authenticated |
 | `/compendium/classes/:id` | `ClassView.tsx` | All authenticated |

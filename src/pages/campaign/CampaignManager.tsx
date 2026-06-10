@@ -6,7 +6,7 @@ import { fetchDocument, fetchCollection } from '@/lib/d1';
 import { Shield, ChevronLeft, Calendar, Users, MapPin, Sparkles, Edit, FileText, Scroll, History, LayoutGrid } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ClassImageStyle, DEFAULT_DISPLAY } from '@/components/compendium/ClassImageEditor';
+import { imageFocalStyle as ClassImageStyle, DEFAULT_DISPLAY } from '@/components/ui/FocalImageEditor';
 import { getSessionToken } from "../../lib/auth";
 
 export default function CampaignManager({ userProfile }: { userProfile: any }) {

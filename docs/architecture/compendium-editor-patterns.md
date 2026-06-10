@@ -60,7 +60,7 @@ Same limitations as Pattern A.
 ### Pattern D — Relational entity helper
 
 **File**: [src/lib/lore.ts](../../src/lib/lore.ts) (and eventually `class.ts`, `character.ts`, etc.)
-**Used by**: [LoreEditor.tsx](../../src/pages/wiki/LoreEditor.tsx), [LoreArticle.tsx](../../src/pages/wiki/LoreArticle.tsx)
+**Used by**: [LoreArticleDesigner.tsx](../../src/pages/wiki/LoreArticleDesigner.tsx), [LoreArticle.tsx](../../src/pages/wiki/LoreArticle.tsx)
 
 Shape: page-level component calls library functions (`upsertLoreArticle`, `fetchLoreArticle`, `deleteLoreArticle`, etc.). Library uses `batchQueryD1` to write parent + metadata + junctions atomically with parameterised SQL.
 

@@ -16,7 +16,6 @@ import Navbar from './components/Navbar';
 
 import Home from './pages/core/Home';
 import Wiki from './pages/wiki/Wiki';
-import LoreEditor from './pages/wiki/LoreEditor';
 import LoreArticleDesigner from './pages/wiki/LoreArticleDesigner';
 import LoreArticle from './pages/wiki/LoreArticle';
 import SystemPageView from './pages/system/SystemPageView';
@@ -315,12 +314,9 @@ export default function App() {
                 <Route path="/" element={<Home userProfile={effectiveProfile} />} />
                   <Route path="/auth/redeem" element={<RedeemTokenPage />} />
                   <Route path="/wiki" element={<Wiki userProfile={effectiveProfile} />} />
-                  {/* Block-based article designer is the primary editor; the classic
-                      tabbed editor stays reachable at /wiki/*-classic until Phase 5 parity. */}
+                  {/* Block-based article designer is the article editor. */}
                   <Route path="/wiki/new" element={<LoreArticleDesigner userProfile={effectiveProfile} />} />
                   <Route path="/wiki/edit/:id" element={<LoreArticleDesigner userProfile={effectiveProfile} />} />
-                  <Route path="/wiki/new-classic" element={<LoreEditor userProfile={effectiveProfile} />} />
-                  <Route path="/wiki/edit-classic/:id" element={<LoreEditor userProfile={effectiveProfile} />} />
                   <Route path="/wiki/article/:id" element={<LoreArticle userProfile={effectiveProfile} />} />
                   {/* System pages — public reader for the reference-addressable
                       glossary type (&condition[prone] -> /system/condition#prone). */}

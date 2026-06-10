@@ -9,7 +9,7 @@ import FeaturesView from './FeaturesView';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Dialog, DialogContent } from '../ui/dialog';
-import { ClassImageStyle, DEFAULT_DISPLAY } from './ClassImageEditor';
+import { imageFocalStyle as ClassImageStyle, DEFAULT_DISPLAY } from '../ui/FocalImageEditor';
 
 /**
  * Foundation lookups the preview pane needs to render proficiency / tag /

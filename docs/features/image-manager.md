@@ -93,7 +93,7 @@ The single "system image with focal positioning" control — one image slot you 
 browse, remove, and optionally pan/zoom. It is **the** image manager for entity art that needs
 framing or a backdrop; it is not class-specific.
 
-`ClassImageEditor` composes three of these (Detail / Card / Preview). The campaign editor uses one
+`ImageSetEditor` composes several of these (one per window — e.g. Detail / Card / Preview). The campaign editor uses one
 for the Campaign Image and one for the Wiki Background; the world and era editors use one for their
 backgrounds. (This replaced an earlier `ImageUpload variant="backdrop"`, which has been removed so
 there is exactly one backdrop manager.)
@@ -110,8 +110,8 @@ there is exactly one backdrop manager.)
 | `label` / `subtitle` | `string?` | Header text; omit when the surrounding section already labels it |
 | `overlay` / `usingDefault` | node / boolean | Decorative overlay + "default" badge (used by the class card/preview panels) |
 
-`ImageDisplay`, `DEFAULT_DISPLAY`, and the `imageFocalStyle` helper (aliased as `ClassImageStyle`
-for back-compat) are exported from this file and re-exported from `ClassImageEditor` for existing callers.
+`ImageDisplay`, `DEFAULT_DISPLAY`, and the `imageFocalStyle` helper are exported from this file;
+several callers import `imageFocalStyle` aliased as `ClassImageStyle` (its historical name).
 
 ### `IconPickerModal` (`src/components/ui/IconPickerModal.tsx`)
 

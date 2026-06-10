@@ -46,45 +46,13 @@ async function jsonOrThrow(res: Response, fallbackMsg: string): Promise<any> {
  * `authorId` is NEVER sent — the server takes it from the verified
  * token. Any `payload.authorId` in the body is ignored.
  */
-export async function upsertLoreArticle(id: string, payload: any, dmNotes: string) {
+export async function upsertLoreArticle(id: string, payload: any) {
   const res = await fetch(`/api/lore/articles/${encodeURIComponent(id)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", ...(await authHeader()) },
-    body: JSON.stringify({ article: payload, dmNotes }),
+    body: JSON.stringify({ article: payload }),
   });
   return jsonOrThrow(res, "Failed to save article");
-}
-
-export async function upsertLoreSecret(articleId: string, secretId: string, data: any) {
-  const res = await fetch(
-    `/api/lore/articles/${encodeURIComponent(articleId)}/secrets/${encodeURIComponent(secretId)}`,
-    {
-      method: "PUT",
-      headers: { "Content-Type": "application/json", ...(await authHeader()) },
-      body: JSON.stringify({ secret: data }),
-    },
-  );
-  return jsonOrThrow(res, "Failed to save secret");
-}
-
-export async function deleteLoreSecret(secretId: string) {
-  // Server-side cascade does the work — `lore_secrets` rows have an
-  // FK that clears `lore_secret_eras` / `lore_secret_campaigns`
-  // automatically. The client no longer needs to look up the
-  // article id first; previously this round-tripped through
-  // `SELECT article_id FROM lore_secrets WHERE id = ?` just to build
-  // the `/articles/<articleId>/secrets/<secretId>` URL, but that
-  // direct SELECT path is now blocked by the proxy's
-  // PROTECTED_READ_TABLES gate (lore_secrets content is sensitive
-  // even for staff querying outside the per-route endpoint).
-  //
-  // The simpler URL `/api/lore/secrets/<secretId>` exists in
-  // api/lore.ts specifically to support this client flow.
-  const res = await fetch(
-    `/api/lore/secrets/${encodeURIComponent(secretId)}`,
-    { method: "DELETE", headers: await authHeader() },
-  );
-  return jsonOrThrow(res, "Failed to delete secret");
 }
 
 export async function deleteLoreArticle(articleId: string) {
@@ -139,24 +107,4 @@ export async function fetchLoreArticle(id: string) {
   return body?.article ?? null;
 }
 
-/**
- * Fetch the secrets for a lore article — server-filtered to the
- * caller's visibility (staff see all; players see only secrets
- * revealed to their active campaign).
- *
- * The per-route GET `/api/lore/articles/[id]/secrets` does the
- * GROUP_CONCAT'd era/campaign join and the visibility filter
- * server-side, so the client just consumes the normalized array. The
- * legacy direct `SELECT * FROM lore_secrets` path is blocked by the
- * proxy's PROTECTED_READ_TABLES gate — secrets MUST flow through
- * this endpoint so the visibility check actually runs.
- */
-export async function fetchLoreSecrets(articleId: string) {
-  const res = await fetch(
-    `/api/lore/articles/${encodeURIComponent(articleId)}/secrets`,
-    { headers: await authHeader() },
-  );
-  const body = await jsonOrThrow(res, "Failed to load secrets");
-  return Array.isArray(body?.secrets) ? body.secrets : [];
-}
 

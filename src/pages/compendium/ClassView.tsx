@@ -46,7 +46,7 @@ import SpellDetailPanel from '../../components/compendium/SpellDetailPanel';
 import SpellFilterShell from '../../components/compendium/SpellFilterShell';
 import { useSpellFilters } from '../../hooks/useSpellFilters';
 import { cn } from '../../lib/utils';
-import { ClassImageStyle, DEFAULT_DISPLAY } from '../../components/compendium/ClassImageEditor';
+import { imageFocalStyle as ClassImageStyle, DEFAULT_DISPLAY } from '../../components/ui/FocalImageEditor';
 import { toast } from 'sonner';
 
 export default function ClassView({ userProfile }: { userProfile: any }) {

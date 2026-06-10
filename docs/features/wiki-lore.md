@@ -8,7 +8,7 @@ The world-building layer: hierarchical articles, DM secrets, NPC/location/organi
 |---|---|---|
 | `/wiki` | [src/pages/wiki/Wiki.tsx](../../src/pages/wiki/Wiki.tsx) | Article browser (grid + tree views) |
 | `/wiki/article/:id` | [src/pages/wiki/LoreArticle.tsx](../../src/pages/wiki/LoreArticle.tsx) | Article reader |
-| `/wiki/new`, `/wiki/edit/:id` | [src/pages/wiki/LoreEditor.tsx](../../src/pages/wiki/LoreEditor.tsx) | Article authoring (staff only) |
+| `/wiki/new`, `/wiki/edit/:id` | [src/pages/wiki/LoreArticleDesigner.tsx](../../src/pages/wiki/LoreArticleDesigner.tsx) | Block-based article designer (staff only) |
 | `/map` | [src/pages/core/Map.tsx](../../src/pages/core/Map.tsx) | Geographic markers linked to lore articles |
 
 ## Data layer (D1)
@@ -58,15 +58,17 @@ Secrets layer on top of articles. A secret is visible to a player only if `lore_
 
 DM notes (a single `dm_notes` column on `lore_articles`) are staff-only — never returned to player clients.
 
-## Editor (`LoreEditor.tsx`)
+## Editor (`LoreArticleDesigner.tsx`)
 
-- **Metadata mapping**: form fields render conditionally based on `category`. Pickers for parent article (`parent_id`) come from a `fetchCollection('lore_articles', null, { select: 'id, title' })` query.
-- **Content**: BBCode via `MarkdownEditor` (TipTap visual + raw source toggle). See [../ui/bbcode.md](../ui/bbcode.md).
-- **Images**: hero, card, preview slots. Each uses `ImageUpload` with a path like `images/lore/<articleId>/`. The upload writes to R2 via [src/lib/r2.ts](../../src/lib/r2.ts) and stores the URL in the relevant column (`image_url`, `card_image_url`, `preview_image_url`).
+The block-based article designer (the classic tabbed `LoreEditor` was retired): a fullscreen layout editor (`LayoutEditor` / `LayoutBlocks`) for the body, plus a settings side-panel for everything else.
+
+- **Category metadata**: `TemplateFields` renders category-specific metadata sub-forms (character/deity, location, organisation/religion) into the `metadata` map — the same `lore_meta_*`-backed fields the classic editor had. Parent / era / tag pickers load via `fetchCollection`.
+- **Content**: authored as layout blocks; text blocks use BBCode via `MarkdownEditor` (TipTap visual + raw source toggle). See [../ui/bbcode.md](../ui/bbcode.md). Blocks persist to `lore_article_blocks`; a plain BBCode mirror is derived into `lore_articles.content` for search / excerpts / mention extraction.
+- **Images**: the **Article Header** (default), **Wiki Card**, and **Hover Preview** windows are authored with the shared `ImageSetEditor` — each a focal-positioned crop of the same artwork, individually overridable. Picking / uploading uses the image manager scoped to the **System Images** library (see [image-manager.md](image-manager.md)); URLs land in `image_url` / `card_image_url` / `preview_image_url`.
 - **Display config**: each image slot has a JSON column (`image_display`, `card_display`, `preview_display`) for focal-point and scale overrides.
 - **Tags**: writes to `lore_article_tags` junction.
 - **Era / campaign visibility**: writes to `lore_article_eras` / `lore_article_campaigns`.
-- **Secrets**: managed in a dedicated panel within the editor; CRUD on `lore_secrets` and the secret junction tables.
+- **Secrets**: authored as self-contained **secret blocks** in the layout (per-campaign reveal); the server strips them for viewers without access. Existing `lore_secrets` rows lazy-migrate to secret blocks when an article is re-saved.
 
 ## Reader (`LoreArticle.tsx`)
 
@@ -92,13 +94,13 @@ When deleting an image from the Image Manager, `scanForReferences(url)` queries 
 ## Common tasks
 
 ### Add a new article category
-1. Update the category enum in `LoreEditor.tsx`.
+1. Update the `CATEGORIES` list in `LoreArticleDesigner.tsx` (and its `TemplateFields` if it needs structured metadata).
 2. If structured metadata is needed, add `lore_meta_<category>` schema migration.
 3. Update the metadata-rendering switch in `LoreArticle.tsx`.
 4. Add the new category to the filter UI in `Wiki.tsx`.
 
 ### Make a secret visible to a campaign
-The secret editor in `LoreEditor.tsx` writes to `lore_secret_campaigns`. The reader query joins on `active_campaign_id`.
+Add a **secret block** in the designer and set its revealed campaigns; the reader shows it only when the viewer's `active_campaign_id` matches (staff always see secrets).
 
 ## Related docs
 

@@ -3,12 +3,12 @@ import { toast } from 'sonner';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { auth, OperationType, reportClientError } from '../../lib/firebase';
 import { fetchCollection } from '../../lib/d1';
-import { fetchLoreArticle, upsertLoreSecret, deleteLoreArticle } from '../../lib/lore';
+import { fetchLoreArticle, deleteLoreArticle } from '../../lib/lore';
 import BBCodeRenderer from '@/components/BBCodeRenderer';
 import LayoutBlocks from '@/components/layout/LayoutBlocks';
-import { makeBlock, parseLayoutBlock, type LayoutBlock } from '@/lib/layoutBlocks';
+import { parseLayoutBlock, type LayoutBlock } from '@/lib/layoutBlocks';
 import { useWikiPreview } from '@/lib/wikiPreviewContext';
-import { ClassImageStyle, DEFAULT_DISPLAY } from '@/components/compendium/ClassImageEditor';
+import { imageFocalStyle as ClassImageStyle, DEFAULT_DISPLAY } from '@/components/ui/FocalImageEditor';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -75,8 +75,6 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
   const navigate = useNavigate();
   const [article, setArticle] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [dmNotes, setDmNotes] = useState<any>(null);
-  const [secrets, setSecrets] = useState<any[]>([]);
   const [campaigns, setCampaigns] = useState<any[]>([]);
 
   const [parentArticle, setParentArticle] = useState<any>(null);
@@ -111,33 +109,13 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
     };
   })();
 
-  // Article body = block layout. Parse the packet's block rows; fall back to
-  // wrapping the legacy `content` in a single text block (articles authored in
-  // the classic editor after the migration have no block rows yet), so every
-  // article renders regardless of how it was created.
+  // Article body = block layout. Storyteller notes + secrets are `note` / `secret`
+  // blocks rendered in-flow (the server strips/gates them per viewer), so there
+  // are no legacy content / dm_notes / lore_secrets fallbacks here.
   const bodyBlocks: LayoutBlock[] = useMemo(() => {
     const raw = Array.isArray(article?.blocks) ? article.blocks : [];
-    const parsed = raw.map(parseLayoutBlock).filter(Boolean) as LayoutBlock[];
-    if (parsed.length > 0) return parsed;
-    const tb = makeBlock('text', 'body') as any;
-    tb.body = typeof article?.content === 'string' ? article.content : '';
-    return [tb];
+    return raw.map(parseLayoutBlock).filter(Boolean) as LayoutBlock[];
   }, [article]);
-
-  // Storyteller Notes now live as staff-only `note` blocks rendered in-flow. Only
-  // fall back to the legacy `dm_notes` box for articles that haven't been re-saved
-  // in the designer yet (no note block present).
-  const hasNoteBlock = useMemo(() => {
-    const visit = (bs: any[]): boolean => bs.some((b) => b?.blockType === 'note' || (Array.isArray(b?.children) && visit(b.children)));
-    return visit(bodyBlocks);
-  }, [bodyBlocks]);
-
-  // Same for secrets: secret blocks render inline, so suppress the legacy
-  // Revelations section once the article has been migrated to secret blocks.
-  const hasSecretBlock = useMemo(() => {
-    const visit = (bs: any[]): boolean => bs.some((b) => b?.blockType === 'secret' || (Array.isArray(b?.children) && visit(b.children)));
-    return visit(bodyBlocks);
-  }, [bodyBlocks]);
 
   useEffect(() => {
     if (!id) return;
@@ -173,32 +151,9 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
             setArticle(article);
             setParentArticle(parent);
             setMentions(mentions);
-            if (isStaff && article.dmNotes) {
-              setDmNotes({ content: article.dmNotes });
-            }
           } else {
             setArticle(null);
           }
-        }
-
-        // 2. Fetch Secrets via the per-route endpoint. Server-side
-        // visibility filter — non-staff readers only ever receive
-        // secrets whose `revealedCampaignIds` includes their active
-        // campaign. Closes H3.
-        const secretsRes = await fetch(
-          `/api/lore/articles/${encodeURIComponent(id)}/secrets`,
-          { headers: authHeaders },
-        );
-        if (secretsRes.status === 404) {
-          setSecrets([]);
-        } else if (!secretsRes.ok) {
-          // Don't bubble — secrets failing shouldn't take down the
-          // article page (the article is the primary content).
-          console.warn(`Failed to load secrets (HTTP ${secretsRes.status})`);
-          setSecrets([]);
-        } else {
-          const secretsBody = await secretsRes.json();
-          setSecrets(Array.isArray(secretsBody?.secrets) ? secretsBody.secrets : []);
         }
 
         // 4. Foundation Data. Campaigns come from /api/campaigns —
@@ -242,27 +197,6 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
   }, [id, isStaff]);
 
   const [eras, setEras] = useState<any[]>([]);
-
-  const handleToggleSecretReveal = async (secret: any, campaignId: string) => {
-    if (!id) return;
-    try {
-      const isRevealed = secret.revealedCampaignIds.includes(campaignId);
-      const newRevealed = isRevealed 
-        ? secret.revealedCampaignIds.filter((cid: string) => cid !== campaignId)
-        : [...secret.revealedCampaignIds, campaignId];
-      
-      const secretData = {
-        ...secret,
-        revealedCampaignIds: newRevealed,
-        updatedAt: new Date().toISOString()
-      };
-      await upsertLoreSecret(id, secret.id, secretData);
-      setSecrets(prev => prev.map(s => s.id === secret.id ? { ...s, revealedCampaignIds: newRevealed } : s));
-    } catch (error) {
-      console.error("Error toggling secret reveal:", error);
-      toast.error('Failed to update revelation');
-    }
-  };
 
   useEffect(() => {
     if (article && article.id) {
@@ -434,13 +368,6 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
   const CategoryIcon = CATEGORIES.find(c => c.id === article.category)?.icon || HelpCircle;
   const canEdit = isStaff;
 
-  // Filter secrets based on visibility and user campaign
-  const visibleSecrets = secrets.filter(secret => {
-    if (isStaff && !previewCampaign) return true;
-    const activeCid = previewCampaign?.id ?? userProfile?.active_campaign_id;
-    return activeCid && secret.revealedCampaignIds?.includes(activeCid);
-  });
-
   // Resolve background image — cascade: campaign → era → world → hard fallback.
   let backgroundImageUrl = worldBg || 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=2000&auto=format&fit=crop';
 
@@ -602,86 +529,6 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
                     textClassName="prose prose-invert max-w-none prose-gold leading-relaxed font-sans text-ink/95"
                   />
                 </div>
-
-                {/* Storyteller Notes — legacy fallback only when no note block exists. */}
-                {isStaff && dmNotes && !hasNoteBlock && (
-                  <div className="mt-12 p-6 rounded-2xl border border-primary/20 bg-primary/5 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h2 className="label-text text-primary flex items-center gap-2">
-                        <Lock className="w-4 h-4" /> Storyteller Notes
-                      </h2>
-                      <Badge variant="outline" className="border-primary/20 text-primary/60 text-[10px]">PRIVATE</Badge>
-                    </div>
-                    <BBCodeRenderer content={dmNotes.content} className="prose-sm italic" />
-                  </div>
-                )}
-
-                {/* Revelations Section — legacy fallback only when no secret block exists. */}
-                {!hasSecretBlock && visibleSecrets.length > 0 && (
-                  <div className="mt-8 space-y-4">
-                    <h2 className="label-text text-primary flex items-center gap-2">
-                      <Sparkles className="w-4 h-4" /> Revelations
-                    </h2>
-                    <div className="grid gap-4">
-                      {visibleSecrets.map((secret) => {
-                        const linkedEras = eras.filter(e => secret.eraIds?.includes(e.id));
-                        const isRevealedToMe = userProfile?.active_campaign_id && secret.revealedCampaignIds?.includes(userProfile.active_campaign_id);
-                        const eligibleCampaigns = campaigns.filter(c => secret.eraIds?.includes(c.eraId));
-                        
-                        return (
-                          <Card key={secret.id} className="border-primary/20 bg-primary/5 border-l-4 border-l-primary">
-                            <CardContent className="p-4 space-y-4">
-                              <div className="flex items-start gap-4">
-                                <div className="mt-1">
-                                  {isRevealedToMe || isStaff ? <Unlock className="w-4 h-4 text-primary" /> : <Lock className="w-4 h-4 text-ink/45" />}
-                                </div>
-                                <div className="flex-grow space-y-1">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    {linkedEras.map(era => (
-                                      <span key={era.id} className="label-text text-primary">
-                                        {era.name}
-                                      </span>
-                                    ))}
-                                  </div>
-                                  <p className="description-text text-sm italic">"{secret.content}"</p>
-                                </div>
-                              </div>
-
-                              {isStaff && (
-                                <div className="pt-4 border-t border-primary/10">
-                                  <p className="label-text text-primary/40 mb-2">Manage Revelations</p>
-                                  <div className="flex flex-wrap gap-2">
-                                    {eligibleCampaigns.map(campaign => {
-                                      const isRevealed = secret.revealedCampaignIds?.includes(campaign.id);
-                                      const isAdmin = userProfile?.role === 'admin';
-                                      const isAssignedCoDM = userProfile?.role === 'co-dm' && userProfile?.campaign_ids?.includes(campaign.id);
-                                      const canToggle = isAdmin || isAssignedCoDM;
-
-                                      return (
-                                        <Button
-                                          key={campaign.id}
-                                          variant="outline"
-                                          size="xs"
-                                          disabled={!canToggle}
-                                          onClick={() => handleToggleSecretReveal(secret, campaign.id)}
-                                          className={`h-7 text-[10px] gap-1 transition-all duration-200 ${isRevealed ? 'bg-primary text-primary-foreground border-primary shadow-md scale-105 z-10 font-bold ring-2 ring-primary/20' : 'border-primary/10 text-primary/40 hover:bg-primary/5'}`}
-                                        >
-                                          {isRevealed ? <Unlock className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
-                                          {campaign.name}
-                                          {!canToggle && <Shield className="w-2 h-2 ml-1 opacity-50" />}
-                                        </Button>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              )}
-                            </CardContent>
-                          </Card>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
 
                 {/* Mentions Section */}
                 {mentions.length > 0 && (

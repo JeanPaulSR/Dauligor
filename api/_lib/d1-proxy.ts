@@ -220,7 +220,7 @@ export async function handleD1Query(req: NodeLikeRequest, res: NodeLikeResponse)
     // down anyway). Normalized SQL is what we test, so quoted
     // identifiers (`"users"`, `` `users` ``, `[users]`) and SQL
     // comments can't slip past.
-    const PROTECTED_READ_TABLES = /\bFROM\s+(?:users|lore_secrets|characters|character_\w+)\b/i;
+    const PROTECTED_READ_TABLES = /\bFROM\s+(?:users|characters|character_\w+)\b/i;
 
     // `system_metadata` is a special case. The table holds two
     // distinct kinds of value:

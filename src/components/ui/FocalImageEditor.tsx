@@ -4,7 +4,8 @@
 //
 // A single image slot you can drag-to-pan, scroll/±-to-zoom, and swap via an
 // override upload. Not tied to any entity — classes, campaigns, eras, etc. can
-// all use it. ClassImageEditor composes three of these; campaigns use one.
+// all use it. ImageSetEditor composes several of these (one per window);
+// campaigns use one.
 // =============================================================================
 
 import React, { useRef, useEffect, useState } from 'react';
@@ -23,8 +24,8 @@ export interface ImageDisplay {
 export const DEFAULT_DISPLAY: ImageDisplay = { x: 50, y: 50, scale: 1 };
 
 // Shared style helper — use anywhere a focal image is rendered so every site
-// positions identically. (Exported from ClassImageEditor as ClassImageStyle
-// for back-compat with existing callers.)
+// positions identically. Several callers import it aliased as `ClassImageStyle`
+// (its historical name).
 export function imageFocalStyle({ display }: { display?: ImageDisplay | null }): React.CSSProperties {
   const cur = display || DEFAULT_DISPLAY;
   return {

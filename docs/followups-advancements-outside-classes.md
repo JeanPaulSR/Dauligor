@@ -194,16 +194,15 @@ refactor to handle the array case.
 
 ## 4. Quality / cleanup (not part of this track but adjacent)
 
-### 4.1 Pre-existing TypeScript errors (7)
+### 4.1 Pre-existing TypeScript errors (3)
 
-`npx tsc --noEmit` reports 7 errors that have been around since before
+`npx tsc --noEmit` reports 3 errors that have been around since before
 this track started. They're flagged in every verification doc so they
 don't get confused with new regressions. Worth a focused cleanup pass
 sometime:
 
-- 5× `asChild` on `Button` — `CompendiumBrowserShell.tsx`, `CampaignEditor.tsx`, `SpellList.tsx`, `LoreEditor.tsx` (3 instances).
+- `asChild` on `Button` (2×) — `CompendiumBrowserShell.tsx:405`, `SpellList.tsx:779`. The `Button`'s prop types don't include `asChild`, so passing it is a type error (harmless at runtime — Radix `Slot` still renders). The `CampaignEditor.tsx` and retired `LoreEditor.tsx` instances are already resolved.
 - 1× `getTotalCharacterLevel` arg count in `characterShared.ts` line ~520 — the caller passes 3 args but the signature is 2 args; the third arg is silently ignored. Fix is either tighten the signature or drop the arg at the call site.
-- 1× `asChild` on `Button` — `LoreEditor.tsx` (another instance).
 
 ### 4.2 Stash hygiene
 
