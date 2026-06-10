@@ -333,11 +333,26 @@ export function formatFoundryItemDescriptionForDisplay(html: string) {
  * preview helpers, even though the "target" terminology is now a
  * misnomer (there is only one target table).
  */
-export function classifyItemShape(foundryType: string, foundryCategory: string): ItemTargetTable {
+export function classifyItemShape(
+  foundryType: string,
+  foundryCategory: string,
+  armorCategoryIdentifiers?: Iterable<string>,
+): ItemTargetTable {
   if (foundryType === 'weapon') return 'weapons';
   if (foundryType === 'tool') return 'tools';
   if (foundryType === 'equipment') {
-    return ARMOR_CATEGORIES.has(foundryCategory) ? 'armor' : 'items';
+    // Armor-shaped equipment = equipment whose Foundry `system.type.value`
+    // is a known ARMOR category. The hardcoded set is the 2014 SRD
+    // baseline; the importer ALSO passes the live `armor_categories`
+    // identifiers so HOMEBREW categories (e.g. `exotic`) shape as armor the
+    // moment an admin adds them — instead of silently falling through to
+    // the generic `items` shape. (Magic items that merely SET an AC but
+    // aren't worn armor — Barrier Tattoo, Bracers of Defense — keep their
+    // own non-armor category like `wondrous` and correctly stay `items`.)
+    const armorCats = armorCategoryIdentifiers
+      ? new Set<string>([...ARMOR_CATEGORIES, ...armorCategoryIdentifiers])
+      : ARMOR_CATEGORIES;
+    return armorCats.has(foundryCategory) ? 'armor' : 'items';
   }
   // consumable / loot / container / backpack
   return 'items';
@@ -453,13 +468,14 @@ function buildUnifiedItemSavePayload(
   matchedSource: SourceRecord | null,
   abilities: AbilityRecord[],
   proficiencies: { weapons?: BaseItemRow[]; armor?: BaseItemRow[]; tools?: BaseItemRow[] },
+  armorCategoryIdentifiers?: Iterable<string>,
 ): Record<string, any> {
   const sourceDocument = item.sourceDocument ?? {};
   const system = sourceDocument.system ?? {};
   const properties = Array.from(system.properties ?? []).map((v) => String(v));
   const foundryType = String(item.type ?? '');
   const foundryCategory = String(system.type?.value ?? '');
-  const shape = classifyItemShape(foundryType, foundryCategory);
+  const shape = classifyItemShape(foundryType, foundryCategory, armorCategoryIdentifiers);
   const baseItemSlug = String(system.type?.baseItem ?? '').trim();
 
   // `magical` derivation matches the export's flag — `mgc` property OR
@@ -759,6 +775,11 @@ export function buildItemImportCandidates(
    *  importer matches Foundry's `system.type.baseItem` slug against
    *  each table's `identifier` column. */
   proficiencies: { weapons?: BaseItemRow[]; armor?: BaseItemRow[]; tools?: BaseItemRow[] },
+  /** Live `armor_categories` identifiers (light/medium/heavy/shield + any
+   *  homebrew like `exotic`). Equipment whose Foundry category is one of
+   *  these shapes as `armor`; everything else falls to `items`. Unioned
+   *  with the SRD baseline inside `classifyItemShape`. */
+  armorCategoryIdentifiers?: Iterable<string>,
 ): ItemImportCandidate[] {
   const items = Array.isArray(entry.items) ? entry.items : [];
 
@@ -818,7 +839,7 @@ export function buildItemImportCandidates(
     const system = sourceDocument.system ?? {};
     const foundryType = String(item.type ?? '');
     const foundryCategory = String(system.type?.value ?? item.itemSummary?.itemCategory ?? '');
-    const shape = classifyItemShape(foundryType, foundryCategory);
+    const shape = classifyItemShape(foundryType, foundryCategory, armorCategoryIdentifiers);
 
     const matchedSource = matchSourceRecord(
       String(item.source?.book ?? system.source?.book ?? ''),
@@ -840,7 +861,7 @@ export function buildItemImportCandidates(
 
     // Unified save payload — covers every shape; unused columns stay
     // null on the row.
-    const savePayload = buildUnifiedItemSavePayload(item, matchedSource, abilities, proficiencies);
+    const savePayload = buildUnifiedItemSavePayload(item, matchedSource, abilities, proficiencies, armorCategoryIdentifiers);
     // Write the de-collided identifier (buildUnifiedItemSavePayload derives the
     // base from system.identifier; the uniqueness pass above may have promoted it
     // to the name slug). Keeps candidate.identifier === the row we write.

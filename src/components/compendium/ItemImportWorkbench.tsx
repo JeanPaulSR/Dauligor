@@ -129,6 +129,10 @@ export default function ItemImportWorkbench({ userProfile }: { userProfile: any 
   const [weaponProficiencies, setWeaponProficiencies] = useState<any[]>([]);
   const [armorProficiencies, setArmorProficiencies] = useState<any[]>([]);
   const [toolProficiencies, setToolProficiencies] = useState<any[]>([]);
+  // Live armor-category identifiers (light/medium/heavy/shield + homebrew
+  // like `exotic`) — fed to classifyItemShape so homebrew armor categories
+  // shape as `armor` instead of the generic `items` fallback.
+  const [armorCategoryIds, setArmorCategoryIds] = useState<string[]>([]);
 
   const [uploadedBatches, setUploadedBatches] = useState<UploadedBatch[]>([]);
   const [selectedCandidateId, setSelectedCandidateId] = useState('');
@@ -173,10 +177,11 @@ export default function ItemImportWorkbench({ userProfile }: { userProfile: any 
         fetchCollection<any>('weapons'),
         fetchCollection<any>('armor'),
         fetchCollection<any>('tools'),
+        fetchCollection<any>('armorCategories'),
       ]);
       if (cancelled) return;
 
-      const [sourcesRes, abilitiesRes, itemsRes, weaponsRes, armorRes, toolsRes] = settled;
+      const [sourcesRes, abilitiesRes, itemsRes, weaponsRes, armorRes, toolsRes, armorCategoriesRes] = settled;
       const pickOrEmpty = <T,>(r: PromiseSettledResult<T[]>, label: string): T[] => {
         if (r.status === 'fulfilled') return r.value;
         console.error(`[ItemImportWorkbench] failed to load ${label}:`, r.reason);
@@ -192,6 +197,11 @@ export default function ItemImportWorkbench({ userProfile }: { userProfile: any 
       setWeaponProficiencies(pickOrEmpty(weaponsRes, 'weapons'));
       setArmorProficiencies(pickOrEmpty(armorRes, 'armor'));
       setToolProficiencies(pickOrEmpty(toolsRes, 'tools'));
+      setArmorCategoryIds(
+        pickOrEmpty(armorCategoriesRes, 'armorCategories')
+          .map((r: any) => String(r.identifier ?? '').trim().toLowerCase())
+          .filter(Boolean),
+      );
     })();
 
     return () => { cancelled = true; };
@@ -203,9 +213,9 @@ export default function ItemImportWorkbench({ userProfile }: { userProfile: any 
         weapons: weaponProficiencies,
         armor: armorProficiencies,
         tools: toolProficiencies,
-      })
+      }, armorCategoryIds)
     )
-  ), [uploadedBatches, sources, abilities, existingItems, weaponProficiencies, armorProficiencies, toolProficiencies]);
+  ), [uploadedBatches, sources, abilities, existingItems, weaponProficiencies, armorProficiencies, toolProficiencies, armorCategoryIds]);
 
   // Source axis values — built from the loaded Dauligor `sources`
   // table so filtering pairs cleanly with the candidate-side
