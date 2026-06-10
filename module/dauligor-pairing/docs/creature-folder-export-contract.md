@@ -63,27 +63,36 @@ exports — see [feat-folder-export-contract.md](feat-folder-export-contract.md)
 
 ## Per-entry — `creatureSummary` (the fields to model)
 
-Every entry also carries the full `sourceDocument`; this digest surfaces the
-table-relevant fields. dnd5e v5 npc paths.
+Every entry also carries the full `sourceDocument` (raw `actor.toObject()`); this
+digest surfaces the table-relevant fields. dnd5e v5 npc paths.
 
-| Field | Source | Notes |
-|---|---|---|
-| `creatureType` | `system.details.type` | `{value, subtype, swarm, custom}`. |
-| `size` | `system.traits.size` | e.g. `"med"`. |
-| `alignment` | `system.details.alignment` | — |
-| `cr` | `system.details.cr` | number (`0.25`, `5`, …). |
-| `proficiencyBonus` | `system.attributes.prof` | — |
-| `source` | `system.details.source` | `{book, page}`. |
-| `hp` | `system.attributes.hp` | `{value, max, formula, temp}` — `formula` is the HD expression. |
-| `ac` | `system.attributes.ac` | `{value, flat, formula, calc}`. |
-| `abilities` | `system.abilities.*` | `{value, proficient}` per ability (derived mods aren't in source). |
-| `skills` | `system.skills.*` | proficient/expertise skills only (`value > 0`) + their `ability`. |
-| `movement` | `system.attributes.movement` | `{walk, fly, swim, climb, burrow, hover, units}`. |
-| `senses` | `system.attributes.senses` | `{darkvision, blindsight, tremorsense, truesight, special, units}`. |
-| `traits` | `system.traits.{di,dr,dv,ci,languages}` | damage immunities/resistances/vulnerabilities, condition immunities, languages. |
-| `spellcasting` | `system.attributes.spellcasting` + `system.details.spellLevel` + `system.spells` | `{ability, level, slots}`; `slots` skips empty levels. |
-| `legendary` | `system.resources.{legact,legres,lair}` | `{actions:{value,max}, resistance:{value,max}, lair}`. |
-| `embeddedTypeCounts` | `items[]` | histogram by `item.type` (feat / weapon / spell / consumable / …) — the actual actions/attacks/spells live in `sourceDocument.items`. |
+**Authored vs derived (contract split — 2026-06-09).** AUTHORED fields read from the
+raw `sourceDocument.system.*`. **DERIVED/computed** numbers — resolved AC, PB, ability
+saves, skill totals, passive Perception, spell DC/attack/level — read from the **live
+prepared `actor.system.*`** (Foundry's `prepareDerivedData()` output). `toObject()`
+never carries those, so the app cannot recompute them from the static export — most
+critically the resolved AC for the ~306 `default`-calc creatures with no armor item.
+`sourceDocument` stays raw (authored) as the fidelity fallback.
+
+| Field | Source | Kind | Notes |
+|---|---|---|---|
+| `creatureType` | `system.details.type` | authored | `{value, subtype, swarm, custom}`. |
+| `size` | `system.traits.size` | authored | e.g. `"med"`. |
+| `alignment` | `system.details.alignment` | authored | — |
+| `cr` | `system.details.cr` | authored | number (`0.25`, `5`, …). |
+| `proficiencyBonus` | `actor.system.attributes.prof` | **derived** | PB from CR — absent in raw `toObject()`. |
+| `passivePerception` | `actor.system.skills.prc.passive` | **derived** | the Senses-line passive Perception. |
+| `source` | `system.source` | authored | `{book, page, rules}` — top-level in v5 (was the stale `system.details.source`). |
+| `hp` | `system.attributes.hp` | authored | `{value, max, formula, temp}` — `formula` is the HD expression. |
+| `ac` | `actor.system.attributes.ac.value` + raw `flat/formula/calc` | **derived value** | `{value, flat, formula, calc}`. `value` = RESOLVED AC; `flat/formula/calc` stay raw for provenance. |
+| `abilities` | raw `system.abilities.*` + `actor.system.abilities.*` | mixed | per ability `{value, proficient}` (authored) + `{mod, save}` (derived; `save` = total save bonus). |
+| `skills` | raw `system.skills.*` + `actor.system.skills.*` | mixed | proficient/expertise only (`value > 0`): `{value, ability}` (authored) + `{total, passive}` (derived). |
+| `movement` | `system.attributes.movement` | authored | `{walk, fly, swim, climb, burrow, hover, units}`. |
+| `senses` | `system.attributes.senses` | authored | `{darkvision, blindsight, tremorsense, truesight, special, units}`. |
+| `traits` | `system.traits.{di,dr,dv,ci,languages}` | authored | damage immunities/resistances/vulnerabilities, condition immunities, languages. |
+| `spellcasting` | `system.attributes.spellcasting` (authored) + `actor.system.attributes.spell.{level,dc,attack}` (derived) + `system.spells` | mixed | `{ability, level, dc, attack, slots}`; `slots` skips empty levels. `dc/attack` compute for non-casters too — key off `ability` being set. Per-spellcasting-feat DCs live in `sourceDocument.items`. |
+| `legendary` | `system.resources.{legact,legres,lair}` | authored | `{actions:{value,max}, resistance:{value,max}, lair}`. |
+| `embeddedTypeCounts` | `items[]` | authored | histogram by `item.type` (feat / weapon / spell / consumable / …) — the actual actions/attacks/spells live in `sourceDocument.items`. |
 
 ## Relationship to the import side
 

@@ -1533,22 +1533,46 @@ function summarizeCreatureCounts(creatures) {
  * dnd5e v5 npc paths; read defensively so a missing field defaults clean.
  */
 function buildCreatureSummary(actor, source) {
-  const system = source.system ?? {};
+  const system = source.system ?? {};            // RAW (actor.toObject()) — AUTHORED fields
+  // PREPARED (live Actor5e) — Foundry's DERIVED/computed numbers. `toObject()`
+  // never carries these (resolved AC, PB, ability saves, skill totals, passive
+  // Perception, spell DC/attack), so read them from `actor.system` instead. Falls
+  // back to raw (0/null) if `actor` is somehow absent. Contract split: authored →
+  // sourceDocument.system.*; derived/computed → creatureSummary. See handoff
+  // 2026-06-09-from-monster-browser-enrich-creature-export.md.
+  const derived = actor?.system ?? {};
   const items = Array.isArray(source.items) ? source.items : [];
   const hp = system.attributes?.hp ?? {};
   const ac = system.attributes?.ac ?? {};
 
   const abilities = {};
   for (const k of ["str", "dex", "con", "int", "wis", "cha"]) {
-    const a = system.abilities?.[k] ?? {};
-    abilities[k] = { value: Number(a.value ?? 0) || 0, proficient: Number(a.proficient ?? 0) || 0 };
+    const a = system.abilities?.[k] ?? {};        // raw: value, proficient
+    const d = derived.abilities?.[k] ?? {};       // derived: mod, save (total bonuses)
+    abilities[k] = {
+      value: Number(a.value ?? 0) || 0,
+      proficient: Number(a.proficient ?? 0) || 0,
+      mod: Number(d.mod ?? 0) || 0,
+      // Save TOTAL bonus (e.g. "Dex +7"). Defensive read: number or {value}.
+      save: Number(d.save?.value ?? d.save ?? 0) || 0,
+    };
   }
 
   // Only proficient/expertise skills (value > 0) — keeps the digest tight.
+  // `total` is the +N we render ("Perception +11", expertise doubling included);
+  // `passive` is that skill's passive score. Both are DERIVED (live actor).
   const skills = {};
   for (const [k, v] of Object.entries(system.skills ?? {})) {
     const prof = Number(v?.value ?? 0) || 0;
-    if (prof > 0) skills[k] = { value: prof, ability: String(v?.ability ?? "") };
+    if (prof > 0) {
+      const d = derived.skills?.[k] ?? {};
+      skills[k] = {
+        value: prof,
+        ability: String(v?.ability ?? ""),
+        total: Number(d.total ?? 0) || 0,
+        passive: Number(d.passive ?? 0) || 0,
+      };
+    }
   }
 
   return {
@@ -1563,10 +1587,17 @@ function buildCreatureSummary(actor, source) {
     size: String(system.traits?.size ?? "").trim(),
     alignment: String(system.details?.alignment ?? "").trim(),
     cr: system.details?.cr ?? null,
-    proficiencyBonus: Number(system.attributes?.prof ?? 0) || 0,
+    // DERIVED PB (from CR) — absent in raw toObject; read from the live actor so
+    // the app can compute every save/skill bonus + passive Perception off it.
+    proficiencyBonus: Number(derived.attributes?.prof ?? system.attributes?.prof ?? 0) || 0,
+    // Passive Perception (the Senses line) — DERIVED (`skills.prc.passive`).
+    passivePerception: Number(derived.skills?.prc?.passive ?? 0) || 0,
+    // Publication source moved to top-level `system.source` in dnd5e v5 (was the
+    // now-stale `system.details.source`); also carry `rules` ("2014"/"2024").
     source: {
-      book: String(system.details?.source?.book ?? "").trim(),
-      page: system.details?.source?.page ?? null,
+      book: String(system.source?.book ?? "").trim(),
+      page: system.source?.page ?? null,
+      rules: String(system.source?.rules ?? "").trim(),
     },
     hp: {
       value: Number(hp.value ?? 0) || 0,
@@ -1575,7 +1606,10 @@ function buildCreatureSummary(actor, source) {
       temp: Number(hp.temp ?? 0) || 0,
     },
     ac: {
-      value: Number(ac.value ?? 0) || 0,
+      // DERIVED resolved AC — the one number the app can't recompute for the ~306
+      // `default`-calc creatures with no armor item + `flat:null`. Keep
+      // `flat`/`formula`/`calc` from raw for provenance.
+      value: Number(derived.attributes?.ac?.value ?? ac.value ?? 0) || 0,
       flat: ac.flat ?? null,
       formula: String(ac.formula ?? ""),
       calc: String(ac.calc ?? ""),
@@ -1593,7 +1627,14 @@ function buildCreatureSummary(actor, source) {
     },
     spellcasting: {
       ability: String(system.attributes?.spellcasting ?? "").trim(),
-      level: Number(system.details?.spellLevel ?? 0) || 0,
+      // Caster level: `system.attributes.spell.level` (was the stale
+      // `system.details.spellLevel`, which is why `level` always read 0).
+      level: Number(derived.attributes?.spell?.level ?? system.attributes?.spell?.level ?? 0) || 0,
+      // DERIVED spell save DC + to-hit — the stat-block line that was only in prose
+      // before. Non-casters still compute these (8+PB / PB); the app keys off
+      // `ability` being set. Per-spellcasting-feat DCs live in sourceDocument.items.
+      dc: Number(derived.attributes?.spell?.dc ?? 0) || 0,
+      attack: Number(derived.attributes?.spell?.attack ?? 0) || 0,
       slots: extractSpellSlotSummary(system.spells ?? {}),
     },
     legendary: {
