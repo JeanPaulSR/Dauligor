@@ -37,6 +37,18 @@ export const SKILL_NAME: Record<string, string> = {
   ste: 'Stealth', sur: 'Survival',
 };
 
+// Each skill's governing ability — drives save/skill bonus prefills in the editor.
+export const SKILL_ABILITY: Record<string, string> = {
+  acr: 'dex', ani: 'wis', arc: 'int', ath: 'str', dec: 'cha', his: 'int',
+  ins: 'wis', itm: 'cha', inv: 'int', med: 'wis', nat: 'int', prc: 'wis',
+  prf: 'cha', per: 'cha', rel: 'int', slt: 'dex', ste: 'dex', sur: 'wis',
+};
+
+// Stable skill order for the editor's skill grid (alphabetical by display name).
+export const SKILL_ORDER = Object.keys(SKILL_NAME).sort(
+  (a, b) => SKILL_NAME[a].localeCompare(SKILL_NAME[b]),
+);
+
 export const SIZE_LABEL: Record<string, string> = {
   tiny: 'Tiny', sm: 'Small', med: 'Medium', lg: 'Large', huge: 'Huge', grg: 'Gargantuan',
 };

@@ -2,32 +2,31 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { fetchCollection } from '../../lib/d1';
 import { upsertMonster, fetchMonster, deleteMonster } from '../../lib/compendium';
 import { makeFoundryId, slugify } from '../../lib/utils';
-import { Input } from '../../components/ui/input';
 import {
   CompendiumEditorShell,
   type EditorListColumn,
 } from '../../components/compendium/CompendiumEditorShell';
-import { type FilterSection } from '../../components/compendium/SectionFilterPanel';
-import { SectionFilterPanel } from '../../components/compendium/SectionFilterPanel';
+import { SectionFilterPanel, type FilterSection } from '../../components/compendium/SectionFilterPanel';
 import { useAxisFilters } from '../../hooks/useAxisFilters';
 import { matchesSingleAxisFilter } from '../../lib/spellFilters';
 import MonsterDetailPanel from '../../components/compendium/MonsterDetailPanel';
 import {
-  formatCr, crToXp, crToProfBonus, formatXp,
-  CREATURE_TYPE_LABEL, SIZE_LABEL, CR_BANDS, crToBand,
+  formatCr, crToXp, CREATURE_TYPE_LABEL, SIZE_LABEL, CR_BANDS, crToBand,
 } from '../../lib/monsterDisplay';
+import MonsterBasicsTab from '../../components/compendium/monster/MonsterBasicsTab';
+import MonsterDefensesTab from '../../components/compendium/monster/MonsterDefensesTab';
+import MonsterMovementSensesTab from '../../components/compendium/monster/MonsterMovementSensesTab';
+import { numOrNull, type MonsterForm, type SetForm } from '../../components/compendium/monster/fields';
 
 /**
- * Admin monster (NPC) editor — `/compendium/monsters/manage`. Mirrors
- * ItemsEditor/FeatsEditor via the shared `CompendiumEditorShell`: list | form |
- * live preview (the public `MonsterDetailPanel` renders the in-progress form
- * state via its `row` prop).
+ * Admin monster (NPC) editor — `/compendium/monsters/manage`. Built on the
+ * shared `CompendiumEditorShell` (list | form sub-tabs | live preview, the
+ * public `MonsterDetailPanel` via its `row` prop). The `monsters` table is
+ * camelCase with NO alias layer, so `upsertMonster` writes form keys verbatim.
  *
- * Phase 1: scaffold + header scalars + camelCase save + preview. The `monsters`
- * table is camelCase with NO alias layer, so `upsertMonster` writes form keys
- * verbatim (it does NOT run normalizeCompendiumData). Loaded rows keep their
- * structured JSON columns (actions/traits/spellcasting/…) in form state and
- * round-trip untouched until later phases add their sub-editors.
+ * P1 = Basics header. P2 = abilities + saves/skills (Defenses) + movement/senses.
+ * Loaded rows keep their structured JSON columns (actions/traits/spellcasting/…)
+ * in form state and round-trip untouched until later phases add their sub-editors.
  */
 
 type SourceRecord = {
@@ -39,22 +38,10 @@ type MonsterRow = {
   cr?: number | null; creatureType?: string; size?: string; [k: string]: any;
 };
 
-// The editable form shape is just "a monster row" (camelCase === columns).
-type MonsterForm = Record<string, any>;
-
-// Slim list projection (display + filter columns only; the full row loads on select).
-const MONSTER_EDITOR_SELECT =
-  'id, name, identifier, sourceId, cr, creatureType, size';
-
-// Standard 5e challenge ratings, value = numeric column value.
-const CR_OPTIONS: ReadonlyArray<[string, string]> = [
-  ['0', '0'], ['0.125', '1/8'], ['0.25', '1/4'], ['0.5', '1/2'],
-  ...Array.from({ length: 30 }, (_, i) => [String(i + 1), String(i + 1)] as [string, string]),
-];
+const MONSTER_EDITOR_SELECT = 'id, name, identifier, sourceId, cr, creatureType, size';
 
 const CREATURE_TYPE_OPTIONS = Object.entries(CREATURE_TYPE_LABEL);
 const SIZE_OPTIONS = Object.entries(SIZE_LABEL);
-
 const AXIS_KEYS = ['cr', 'creatureType', 'size', 'source'] as const;
 
 function blankForm(): MonsterForm {
@@ -63,12 +50,15 @@ function blankForm(): MonsterForm {
     cr: null, xp: null, creatureType: '', typeSubtype: '', swarmSize: '', size: '', alignment: '',
     ac: null, acNote: '', acFormula: '', hp: null, hpFormula: '',
     proficiencyBonus: null, passivePerception: null,
+    abilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+    saves: {}, skills: {},
+    movement: { walk: 30, units: 'ft' },
+    senses: { units: 'ft' },
   };
 }
 
 export default function MonstersEditor({ userProfile }: { userProfile: any }) {
-  const isAdmin = userProfile?.role === 'admin';
-  const canManage = isAdmin || userProfile?.role === 'co-dm';
+  const canManage = userProfile?.role === 'admin' || userProfile?.role === 'co-dm';
 
   const [monsters, setMonsters] = useState<MonsterRow[]>([]);
   const [sources, setSources] = useState<SourceRecord[]>([]);
@@ -79,6 +69,7 @@ export default function MonstersEditor({ userProfile }: { userProfile: any }) {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [formData, setFormData] = useState<MonsterForm>(blankForm);
+  const set: SetForm = (patch) => setFormData((prev) => ({ ...prev, ...patch }));
 
   const { axisFilters, cyclers, activeFilterCount, resetAll: resetFilters } =
     useAxisFilters(AXIS_KEYS);
@@ -200,7 +191,6 @@ export default function MonstersEditor({ userProfile }: { userProfile: any }) {
     try {
       const id = selectedId || makeFoundryId();
       const identifier = String(formData.identifier ?? '').trim() || slugify(name);
-      // Strip id (passed separately to upsert) + coerce the numeric header columns.
       const { id: _omit, ...rest } = formData;
       const payload: MonsterForm = {
         ...rest,
@@ -217,7 +207,6 @@ export default function MonstersEditor({ userProfile }: { userProfile: any }) {
       const rows = await reloadList();
       setSelectedId(id);
       const saved = rows.find((r) => r.id === id);
-      // Keep the form in sync with what persisted (identifier/xp may have changed).
       setFormData((prev) => ({ ...prev, ...payload, id, ...(saved || {}) }));
     } catch (err) {
       console.error('[MonstersEditor] save failed:', err);
@@ -240,111 +229,11 @@ export default function MonstersEditor({ userProfile }: { userProfile: any }) {
     }
   };
 
-  // ─── Derived preview values ─────────────────────────────────────
+  // Live-preview row: form state + derived XP.
   const previewRow = useMemo(() => ({
     ...formData,
     xp: crToXp(numOrNull(formData.cr)),
   }), [formData]);
-
-  const suggestedProf = crToProfBonus(numOrNull(formData.cr));
-  const showProfNudge =
-    suggestedProf != null && numOrNull(formData.proficiencyBonus) !== suggestedProf;
-
-  // ─── Basics form body ───────────────────────────────────────────
-  const set = (patch: Partial<MonsterForm>) => setFormData((prev) => ({ ...prev, ...patch }));
-
-  const basicsBody = (
-    <div className="space-y-4">
-      <fieldset className="config-fieldset">
-        <legend className="text-[10px] font-bold uppercase tracking-widest text-gold/75 px-1">Identity</legend>
-        <div className="grid gap-3 grid-cols-2 md:grid-cols-4 pt-1">
-          <Field label="Name">
-            <Input value={formData.name ?? ''} onChange={(e) => set({ name: e.target.value })}
-              className="h-8 bg-background/50 border-gold/15 focus:border-gold text-sm" placeholder="e.g. Goblin Boss" required />
-          </Field>
-          <Field label="Identifier">
-            <Input value={formData.identifier ?? ''} onChange={(e) => set({ identifier: e.target.value })}
-              className="h-8 bg-background/50 border-gold/15 focus:border-gold font-mono text-sm"
-              placeholder={slugify(formData.name || 'monster')} />
-          </Field>
-          <Field label="Source">
-            <Sel value={formData.sourceId ?? ''} onChange={(v) => set({ sourceId: v })}
-              options={[['', '— none —'], ...sources.map((s): [string, string] => [String(s.id), String(s.name || s.abbreviation || s.id)])]} />
-          </Field>
-          <Field label="Page">
-            <Input value={formData.page ?? ''} onChange={(e) => set({ page: e.target.value })}
-              className="h-8 bg-background/50 border-gold/15 focus:border-gold text-sm" placeholder="12" />
-          </Field>
-        </div>
-      </fieldset>
-
-      <fieldset className="config-fieldset">
-        <legend className="text-[10px] font-bold uppercase tracking-widest text-gold/75 px-1">Type line</legend>
-        <div className="grid gap-3 grid-cols-2 md:grid-cols-4 pt-1">
-          <Field label="Size">
-            <Sel value={formData.size ?? ''} onChange={(v) => set({ size: v })}
-              options={[['', '— size —'], ...SIZE_OPTIONS as [string, string][]]} />
-          </Field>
-          <Field label="Type">
-            <Sel value={formData.creatureType ?? ''} onChange={(v) => set({ creatureType: v })}
-              options={[['', '— type —'], ...CREATURE_TYPE_OPTIONS as [string, string][]]} />
-          </Field>
-          <Field label="Subtype">
-            <Input value={formData.typeSubtype ?? ''} onChange={(e) => set({ typeSubtype: e.target.value || null })}
-              className="h-8 bg-background/50 border-gold/15 focus:border-gold text-sm" placeholder="goblinoid" />
-          </Field>
-          <Field label="Alignment">
-            <Input value={formData.alignment ?? ''} onChange={(e) => set({ alignment: e.target.value })}
-              className="h-8 bg-background/50 border-gold/15 focus:border-gold text-sm" placeholder="Neutral Evil" />
-          </Field>
-        </div>
-      </fieldset>
-
-      <fieldset className="config-fieldset">
-        <legend className="text-[10px] font-bold uppercase tracking-widest text-gold/75 px-1">Core stats</legend>
-        <div className="grid gap-3 grid-cols-2 md:grid-cols-4 pt-1">
-          <Field label={`Challenge${formData.cr != null ? ` · ${formatXp(crToXp(numOrNull(formData.cr)))} XP` : ''}`}>
-            <Sel value={formData.cr == null ? '' : String(Number(formData.cr))} onChange={(v) => set({ cr: v === '' ? null : Number(v) })}
-              options={[['', '— CR —'], ...CR_OPTIONS]} />
-          </Field>
-          <Field label="Armor Class">
-            <Input type="number" value={formData.ac ?? ''} onChange={(e) => set({ ac: e.target.value === '' ? null : Number(e.target.value) })}
-              className="h-8 bg-background/50 border-gold/15 focus:border-gold text-sm" placeholder="15" />
-          </Field>
-          <Field label="AC Note">
-            <Input value={formData.acNote ?? ''} onChange={(e) => set({ acNote: e.target.value })}
-              className="h-8 bg-background/50 border-gold/15 focus:border-gold text-sm" placeholder="natural armor" />
-          </Field>
-          <Field label="Hit Points">
-            <Input type="number" value={formData.hp ?? ''} onChange={(e) => set({ hp: e.target.value === '' ? null : Number(e.target.value) })}
-              className="h-8 bg-background/50 border-gold/15 focus:border-gold text-sm" placeholder="21" />
-          </Field>
-          <Field label="HP Formula">
-            <Input value={formData.hpFormula ?? ''} onChange={(e) => set({ hpFormula: e.target.value })}
-              className="h-8 bg-background/50 border-gold/15 focus:border-gold font-mono text-sm" placeholder="6d8 + 6" />
-          </Field>
-          <Field label="Proficiency Bonus">
-            <div className="flex items-center gap-1.5">
-              <Input type="number" value={formData.proficiencyBonus ?? ''} onChange={(e) => set({ proficiencyBonus: e.target.value === '' ? null : Number(e.target.value) })}
-                className="h-8 bg-background/50 border-gold/15 focus:border-gold text-sm" placeholder="2" />
-              {showProfNudge ? (
-                <button type="button" onClick={() => set({ proficiencyBonus: suggestedProf })}
-                  className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-gold/80 hover:text-gold border border-gold/30 rounded px-1.5 h-8"
-                  title={`Set to the CR-derived proficiency bonus (+${suggestedProf})`}>
-                  →&nbsp;+{suggestedProf}
-                </button>
-              ) : null}
-            </div>
-          </Field>
-        </div>
-        <p className="text-[10px] text-ink/45 pt-1 px-1">XP follows the Challenge rating automatically. Proficiency bonus, saves, skills, and passive Perception keep their authored values — use the nudge to adopt the CR-derived value.</p>
-      </fieldset>
-
-      <p className="text-xs text-ink/50 italic px-1">
-        Abilities, defenses, movement/senses, actions &amp; traits, spellcasting, lore, and tags arrive in the next phases — a loaded monster keeps all of those columns intact while you edit the header.
-      </p>
-    </div>
-  );
 
   // ─── Render ─────────────────────────────────────────────────────
   return (
@@ -398,7 +287,11 @@ export default function MonstersEditor({ userProfile }: { userProfile: any }) {
       onReset={handleReset}
       saving={saving}
       formId="monster-manual-editor-form"
-      editorSubTabs={[{ key: 'basics', label: 'Basics', layout: 'scroll', render: () => basicsBody }]}
+      editorSubTabs={[
+        { key: 'basics', label: 'Basics', layout: 'scroll', render: () => <MonsterBasicsTab form={formData} set={set} sources={sources} /> },
+        { key: 'defenses', label: 'Defenses', layout: 'scroll', render: () => <MonsterDefensesTab form={formData} set={set} /> },
+        { key: 'movement', label: 'Move & Senses', layout: 'scroll', render: () => <MonsterMovementSensesTab form={formData} set={set} /> },
+      ]}
       tagsSubTabs={[{ key: 'tags', label: 'Tags', render: () => (
         <p className="text-sm text-ink/50 italic">Tag editing arrives in a later phase.</p>
       ) }]}
@@ -410,33 +303,5 @@ export default function MonstersEditor({ userProfile }: { userProfile: any }) {
         />
       )}
     />
-  );
-}
-
-// ─── small form helpers ───────────────────────────────────────────
-function numOrNull(v: any): number | null {
-  if (v === '' || v == null) return null;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}
-
-function Field({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <label className="space-y-0.5 block">
-      <span className="block text-[10px] font-bold uppercase tracking-widest text-ink/45">{label}</span>
-      {children}
-    </label>
-  );
-}
-
-function Sel({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: ReadonlyArray<[string, string]> }) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="h-8 w-full bg-background/50 border border-gold/15 focus:border-gold rounded-md px-2 text-sm text-ink"
-    >
-      {options.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
-    </select>
   );
 }
