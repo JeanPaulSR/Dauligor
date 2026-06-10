@@ -6,7 +6,7 @@
 - ✅ **Phase 1 (schema)** — migration `20260609-1600_create_monsters.sql` applied local + verified (57 cols, indexes); registered in `d1.ts`/`d1-fetchers-server.ts` jsonFields, `d1Tables.ts`, `d1-architecture.md` + `monsters.md`.
 - ✅ **Phase 2 (seed)** — local D1 seeded from remote (93 tables, 84 sources, 542 spells).
 - ✅ **Phase 3 (importer)** — `src/lib/monsterImport.ts` (transform) + `scripts/import-monsters.ts` (runner); all **1001 creatures imported to local D1** + adversarially verified (9-archetype + completeness-critic workflow). 5 reconstruction bugs found & fixed: spell-list dedup, weapon `includeBase` damage-mod, melee reach labeling, unnamed lair/regional bullets, `monsterTrait`→bonusAction refinement (97 features). Deferred: dual-caster per-feat spell grouping (38 creatures, prose intact), 1 recharge edge (Black Abishai), add MPMM source row (291 `sourceId` null).
-- ⏭ **Next: Phase 4** — `MonsterList` + `MonsterDetailPanel` UI (needs the dev server + parent `.env`/`worker/.dev.vars`).
+- ⏭ **Next: Phase 4** — `MonsterList` + `MonsterDetailPanel` UI. **Full resume doc (read first): [2026-06-10-phase3-done-phase4-resume.md](2026-06-10-phase3-done-phase4-resume.md)** — ties together the data layer, importer, dev server, styling conventions, the Phase 4 build plan, and where memory lives.
 
 ## What this branch is doing
 
