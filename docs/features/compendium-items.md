@@ -98,7 +98,7 @@ component keyed off `formData.itemType`:
 Type-independent surfaces live on the other tabs: **Basics** (name / source / type /
 subtype / rarity / image), the shared Physical (quantity / weight / price / magical),
 Attunement (3-state) / Equipped / Identified, Properties (multiselect from
-`item_properties`), and Usage blocks, plus **Activities + Effects** (the shared
+`item_properties`), and a Usage block (Limited Uses — shown on weapon / equipment / consumable / tool, not loot / container; auto-destroy only on consumables), plus **Activities + Effects** (the shared
 `ActivityEditor` + Active Effect editor). Dropdown vocabularies are data-driven from
 the admin catalogs — `weapon_categories`, `armor_categories`, `tool_categories`,
 `damage_types`, `ammunition_types`, `poison_types`, `item_properties` — so homebrew
