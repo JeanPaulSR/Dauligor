@@ -393,6 +393,11 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
   const [classes, setClasses] = useState<any[]>([]);
   const [subclasses, setSubclasses] = useState<any[]>([]);
   const [spellRules, setSpellRules] = useState<any[]>([]);
+  // Spells + features — wire the `spell` / `feature` requirement leaf
+  // pickers in the RequirementsEditor (the leaf types existed but their
+  // lookups were never passed). Slim {id,name} loads — the picker is searchable.
+  const [spells, setSpells] = useState<any[]>([]);
+  const [features, setFeatures] = useState<any[]>([]);
   const [allOptionGroups, setAllOptionGroups] = useState<Array<{
     id: string;
     name: string;
@@ -442,6 +447,8 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
           featCategoryRows,
           tagRows,
           tagGroupRows,
+          spellRows,
+          featureRows,
         ] = await Promise.all([
           fetchCollection<any>('feats', { orderBy: 'name ASC' }),
           fetchCollection<any>('sources', { orderBy: 'name ASC' }),
@@ -473,6 +480,9 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
           // at render time, so unscoped tags drop out naturally.
           fetchCollection<any>('tags', { orderBy: 'name ASC' }),
           fetchCollection<any>('tagGroups', { where: "classifications LIKE '%feat%'" }),
+          // Spells + features for the `spell` / `feature` requirement leaf pickers.
+          fetchCollection<any>('spells', { select: 'id, name', orderBy: 'name ASC' }),
+          fetchCollection<any>('features', { select: 'id, name', orderBy: 'name ASC' }),
         ]);
         if (cancelled) return;
 
@@ -531,6 +541,8 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
         setClasses(classRows);
         setSubclasses(subclassRows);
         setSpellRules(spellRuleRows);
+        setSpells(spellRows);
+        setFeatures(featureRows);
 
         const groupsWithItems = optionGroupRows.map((g: any) => ({
           id: g.id,
@@ -707,12 +719,14 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
     classes: [...classes.map((c: any) => ({ id: c.id, name: c.name })), ...classDraftOptions],
     subclasses: [...subclasses.map((s: any) => ({ id: s.id, name: s.name })), ...subclassDraftOptions],
     spellRules: [...spellRules.map((r: any) => ({ id: r.id, name: r.name })), ...spellRuleDraftOptions],
+    spells: spells.map((s: any) => ({ id: s.id, name: s.name })),
+    features: features.map((f: any) => ({ id: f.id, name: f.name })),
     optionGroups: [
       ...allOptionGroups.map((g) => ({ id: g.id, name: g.name, items: g.items })),
       ...optionGroupDraftOptions.map((d) => ({ id: d.id, name: d.name, items: null })),
     ],
     proficiencies: proficiencyPools,
-  }), [classes, subclasses, spellRules, allOptionGroups, proficiencyPools, classDraftOptions, subclassDraftOptions, spellRuleDraftOptions, optionGroupDraftOptions]);
+  }), [classes, subclasses, spellRules, spells, features, allOptionGroups, proficiencyPools, classDraftOptions, subclassDraftOptions, spellRuleDraftOptions, optionGroupDraftOptions]);
 
   const requirementsTextLookup = useMemo(() => {
     // Proficiency pools land keyed by their Foundry identifier
@@ -729,6 +743,8 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
       classNameById: Object.fromEntries(classes.map((c: any) => [c.id, c.name])),
       subclassNameById: Object.fromEntries(subclasses.map((s: any) => [s.id, s.name])),
       spellRuleNameById: Object.fromEntries(spellRules.map((r: any) => [r.id, r.name])),
+      spellNameById: Object.fromEntries(spells.map((s: any) => [s.id, s.name])),
+      featureNameById: Object.fromEntries(features.map((f: any) => [f.id, f.name])),
       optionItemNameById: Object.fromEntries(
         allOptionGroups.flatMap((g) => g.items.map((it) => [it.id, it.name] as const)),
       ),
@@ -738,7 +754,7 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
       toolNameById: profMap('tool'),
       languageNameById: profMap('language'),
     };
-  }, [classes, subclasses, spellRules, allOptionGroups, proficiencyPools]);
+  }, [classes, subclasses, spellRules, spells, features, allOptionGroups, proficiencyPools]);
 
   const resetForm = () => {
     const initial = makeInitialFeatForm(sources);

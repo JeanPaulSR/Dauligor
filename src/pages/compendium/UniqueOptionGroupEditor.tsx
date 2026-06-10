@@ -172,6 +172,10 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
   // until wired.
   const [subclasses, setSubclasses] = useState<any[]>([]);
   const [spellRules, setSpellRules] = useState<any[]>([]);
+  // Spells — wires the `spell` requirement leaf picker (features already load
+  // as `allFeatures` below). The leaf types existed but their lookups weren't
+  // passed; the pickers are searchable now so the old "deferred" reason is moot.
+  const [spells, setSpells] = useState<any[]>([]);
   /**
    * All Modular Option Groups with their items pre-attached, used by the
    * `optionItem` requirement leaf for its cascading group → item picker.
@@ -239,6 +243,8 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
       classNameById: Object.fromEntries(classes.map((c: any) => [c.id, c.name])),
       subclassNameById: Object.fromEntries(subclasses.map((s: any) => [s.id, s.name])),
       spellRuleNameById: Object.fromEntries(spellRules.map((r: any) => [r.id, r.name])),
+      spellNameById: Object.fromEntries(spells.map((s: any) => [s.id, s.name])),
+      featureNameById: Object.fromEntries(allFeatures.map((f: any) => [f.id, f.name])),
       optionItemNameById: Object.fromEntries(
         allOptionGroups.flatMap(g => g.items.map(it => [it.id, it.name] as const)),
       ),
@@ -248,7 +254,7 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
       toolNameById: profMap('tool'),
       languageNameById: profMap('language'),
     };
-  }, [classes, subclasses, spellRules, allOptionGroups, proficiencyPools]);
+  }, [classes, subclasses, spellRules, spells, allFeatures, allOptionGroups, proficiencyPools]);
 
   // Overlay the active block's drafted options for THIS group onto the
   // live `items` so a proposed option persists in the Options column
@@ -316,7 +322,7 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
           allGroups, allOptionItems,
           weapons, weaponCategories, armor, armorCategories,
           tools, toolCategories, skills, languages, languageCategories,
-          featsData, featuresData,
+          featsData, featuresData, spellsData,
         ] = await settleAll([
           fetchCollection('sources', { orderBy: 'name ASC' }),
           fetchCollection('classes', { orderBy: 'name ASC' }),
@@ -347,6 +353,8 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
           // Global feature compendium — Item Uses consumption targets for
           // option-feature activities (any feature carrying `uses`).
           fetchCollection('features', { orderBy: 'name ASC' }),
+          // Spells for the `spell` requirement leaf picker.
+          fetchCollection('spells', { select: 'id, name', orderBy: 'name ASC' }),
         ]);
         setSources(sourcesData);
         setClasses(classesData);
@@ -368,6 +376,7 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
         setAllOptionItems((allOptionItems as any[]).map((it: any) => denormalizeCompendiumData(it)));
         setFeats(featsData as any[]);
         setAllFeatures(featuresData as any[]);
+        setSpells(spellsData as any[]);
 
         // Merge per-kind proficiency pools. Each row's `identifier`
         // is what gets stored on the leaf and round-trips as the
@@ -1109,6 +1118,8 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                       classes: [...classes.map((c: any) => ({ id: c.id, name: c.name })), ...classDraftOptions],
                       subclasses: [...subclasses.map((s: any) => ({ id: s.id, name: s.name })), ...subclassDraftOptions],
                       spellRules: [...spellRules.map((r: any) => ({ id: r.id, name: r.name })), ...spellRuleDraftOptions],
+                      spells: spells.map((s: any) => ({ id: s.id, name: s.name })),
+                      features: allFeatures.map((f: any) => ({ id: f.id, name: f.name })),
                       optionGroups: [...allOptionGroups, ...optionGroupDraftOptions.map((d) => ({ id: d.id, name: d.name, items: null }))],
                       proficiencies: proficiencyPools,
                     }}

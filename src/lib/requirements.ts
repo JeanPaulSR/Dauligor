@@ -690,11 +690,33 @@ export function extractTopLevelLevelLeaf(
  * for the flat fallback. `parseRequirementTree` makes the tree read safe
  * whether the value arrived parsed or as a string.
  */
+/**
+ * Numeric level gate for DISPLAY / SORT of an option item — the value shown in
+ * the AdvancementManager's choice-selection levels column. Unlike
+ * `extractTopLevelLevelLeaf` (which is `level`-only and feeds the flat
+ * character-level mirror), this ALSO counts a `levelInClass` ("Class Level")
+ * gate, so an option gated by e.g. "Warlock 5" shows "Lvl 5+" instead of
+ * "Lvl 0+". Scans the root leaf or the direct children of a root `all` group,
+ * returning the highest such gate (most restrictive), or 0.
+ */
+export function topLevelLevelGate(tree: Requirement | null | undefined): number {
+  if (!tree) return 0;
+  const leafLevel = (node: Requirement): number => {
+    if (isLeaf(node) && (node.type === 'level' || node.type === 'levelInClass')) {
+      return Number(node.minLevel) || 0;
+    }
+    return 0;
+  };
+  if (isLeaf(tree)) return leafLevel(tree);
+  if (tree.kind !== 'all') return 0;
+  return tree.children.reduce((best, child) => Math.max(best, leafLevel(child)), 0);
+}
+
 export function effectiveOptionLevel(item: any): number {
   if (!item) return 0;
   const tree = parseRequirementTree(item.requirementsTree ?? item.requirements_tree);
-  const leaf = extractTopLevelLevelLeaf(tree);
-  if (leaf) return Number(leaf.minLevel) || 0;
+  const gate = topLevelLevelGate(tree);
+  if (gate > 0) return gate;
   return Number(item.levelPrerequisite ?? item.level_prerequisite) || 0;
 }
 
