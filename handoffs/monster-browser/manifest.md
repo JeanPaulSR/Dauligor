@@ -1,7 +1,8 @@
 # Branch: `monster-browser`
 
-**Status:** planned · **Owner:** Claude · **Started:** 2026-06-09
+**Status:** active · **Owner:** Claude · **Started:** 2026-06-09
 **Base:** `origin/main` @ `f79c806` (NOT `compendium-editors`)
+**Progress:** ✅ Phase 1 (schema) — `monsters` table migration `20260609-1600_create_monsters.sql` applied **local** + verified (57 cols, indexes); `monsters.md`, `d1.ts`/`d1-fetchers-server.ts` jsonFields, `d1Tables.ts`, `d1-architecture.md` registered. Next: Phase 2 seed / Phase 3 importer.
 
 ## What this branch is doing
 

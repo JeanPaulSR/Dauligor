@@ -45,6 +45,10 @@ export const D1_TABLE_MAP: Record<string, string> = {
   loreLinks: 'lore_links',
   campaigns: 'campaigns',
   items: 'items',
+  // Public monster / creature stat-block catalog (Foundry `npc` actors).
+  // Dedicated table — Actors are a different shape than Item-based compendium
+  // types. Migration 20260609-1600. camelCase columns.
+  monsters: 'monsters',
   // Catalog/template container recipe — a container item's contents as
   // references to catalog items (+ qty) or custom one-offs. Migration
   // 20260608-1200. Distinct from `character_inventory` (per-character

@@ -182,7 +182,13 @@ proficiencies, spellcasting, activities, effects, tags, class_ids,
 class_levels, progression, selections, inventory, spells, meta_data,
 classifications, values, levels, option_ids, fixed_ids, category_ids,
 optionIds, fixedIds, categoryIds, prerequisites_items, tag_ids, tagIds,
-properties, advancements, uses_recovery
+properties, advancements, uses_recovery,
+… plus the species/monsters camelCase JSON columns (movement, senses,
+creatureType, startingEquipment, foundryData) and the monsters stat-block
+columns (abilities, saves, skills, damageResistances, damageImmunities,
+damageVulnerabilities, conditionImmunities, languages, habitat, traits, actions,
+bonusActions, reactions, legendaryActions, lairActions, regionalEffects,
+variantBlocks) — migration 20260609-1600
 ```
 
 If you add a new JSON-stored column, also add it to the auto-parse list in `d1.ts`. Otherwise callers will see strings instead of objects and silently break.

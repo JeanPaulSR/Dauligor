@@ -361,6 +361,15 @@ export async function queryD1<T>(sql: string, params: any[] = [], options: { noC
         // shops JSON column (migration 20260610-1400). shopItems =
         // [{itemId, priceOverride?:{value,denomination}}] — the shop's pool.
         'shopItems',
+        // monsters JSON columns (migration 20260609-1600). camelCase, auto-parse
+        // only — the table is read-mostly via fetchCollection/fetchDocument.
+        // `spellcasting`, `senses`, `movement`, `tags`, `foundryData` are already
+        // above (reused). `creatureType` is also above (species JSON) — for
+        // monsters it's a scalar enum string; the parse safely skips it.
+        'abilities', 'saves', 'skills', 'damageResistances', 'damageImmunities',
+        'damageVulnerabilities', 'conditionImmunities', 'languages', 'habitat',
+        'traits', 'actions', 'bonusActions', 'reactions', 'legendaryActions',
+        'lairActions', 'regionalEffects', 'variantBlocks',
       ];
       const parsedResults = (data.results || []).map((row: any) => {
         const parsed: any = { ...row };

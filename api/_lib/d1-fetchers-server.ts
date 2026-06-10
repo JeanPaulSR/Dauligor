@@ -47,6 +47,7 @@ const D1_TABLE_MAP: Record<string, string> = {
   loreLinks: "lore_links",
   campaigns: "campaigns",
   items: "items",
+  monsters: "monsters",
   feats: "feats",
   features: "features",
   users: "users",
@@ -96,6 +97,13 @@ const JSON_COLUMNS = new Set([
   "usedFor",
   // shops JSON column (migration 20260610-1400)
   "shopItems",
+  // monsters JSON columns (migration 20260609-1600). `spellcasting`/`tags`
+  // already above; `senses`/`movement`/`foundryData` reused from the client list.
+  "senses", "movement", "foundryData", "abilities", "saves", "skills",
+  "damageResistances", "damageImmunities", "damageVulnerabilities",
+  "conditionImmunities", "languages", "habitat", "traits", "actions",
+  "bonusActions", "reactions", "legendaryActions", "lairActions",
+  "regionalEffects", "variantBlocks",
 ]);
 
 function autoParseJsonColumns(row: any): any {
