@@ -474,6 +474,26 @@ export async function deleteItem(id: string) {
 }
 
 /**
+ * Monster (NPC) helpers. The `monsters` table is **camelCase with NO alias
+ * layer** (unlike items/feats/spells) — so these intentionally DO NOT run
+ * `normalizeCompendiumData`/`denormalizeCompendiumData`, which map to/from
+ * snake_case columns that don't exist here. Form-state keys must equal the
+ * column names exactly. JSON columns are passed as objects/arrays;
+ * `upsertDocument` JSON.stringifies them and `queryD1` auto-parses on read.
+ */
+export async function upsertMonster(id: string, data: Record<string, any>) {
+  return upsertDocument('monsters', id, data);
+}
+
+export async function fetchMonster(id: string) {
+  return fetchDocument<any>('monsters', id);
+}
+
+export async function deleteMonster(id: string) {
+  return deleteDocument('monsters', id);
+}
+
+/**
  * Batch upsert for items. Mirrors `upsertSpellBatch` / `upsertFeatBatch`.
  * Used by `ItemImportWorkbench` to write every imported item (the unified
  * `items` table — weapons / armor / tools included; `targetTable` is only a

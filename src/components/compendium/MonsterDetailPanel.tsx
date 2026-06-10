@@ -124,6 +124,11 @@ interface Props {
   monsterId: string | null;
   source?: MonsterDetailSource;
   emptyMessage?: string;
+  /** Pre-loaded row (e.g. the editor's live form state). When provided the
+   *  panel renders it directly — uncommitted, no fetch — so the editor preview
+   *  updates as you type. The row is camelCase (same shape fetchDocument returns);
+   *  Partial because a not-yet-saved monster has no `id` and sparse fields. */
+  row?: Partial<MonsterRecord> | null;
 }
 
 const SECTION_OFFSETS = ['st', 'nd', 'rd'];
@@ -137,12 +142,15 @@ export default function MonsterDetailPanel({
   monsterId,
   source,
   emptyMessage = 'Select a monster from the list to view its stat block.',
+  row,
 }: Props) {
   const [byId, setById] = useState<Record<string, MonsterRecord>>({});
   const [loading, setLoading] = useState(false);
   const [showLore, setShowLore] = useState(false);
 
   useEffect(() => {
+    // When a row is supplied (editor live preview), render it directly — no fetch.
+    if (row) return;
     if (!monsterId) return;
     if (byId[monsterId]) return;
     let active = true;
@@ -155,16 +163,16 @@ export default function MonsterDetailPanel({
       .catch((err) => console.error('[MonsterDetailPanel] failed to load monster:', err))
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [monsterId, byId]);
+  }, [monsterId, byId, row]);
 
   // Collapse lore whenever the selected monster changes.
   useEffect(() => { setShowLore(false); }, [monsterId]);
 
-  const monster = monsterId ? byId[monsterId] : null;
+  const monster = row ?? (monsterId ? byId[monsterId] : null);
 
   const sourceAbbrev = source?.abbreviation || source?.shortName || monster?.sourceBook || '';
 
-  if (!monsterId) {
+  if (!row && !monsterId) {
     return <div className="px-8 py-20 text-center text-ink/45">{emptyMessage}</div>;
   }
   if (loading && !monster) {

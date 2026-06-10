@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NPC / Monster Editor — design &amp; phasing</title>
+<style>
+  :root{
+    --parchment:#f4ecd8; --parchment-2:#ece2c8; --ink:#2b2419; --ink-soft:#5a4f3f;
+    --ink-faint:#8a7d68; --gold:#9a7d3b; --gold-bright:#b8923f; --blood:#6b2737;
+    --green:#4f6b42; --border:#c9b896; --card:#fbf6e9;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Iowan Old Style','Palatino Linotype','Book Antiqua',Palatino,Georgia,serif;
+    background:var(--parchment);color:var(--ink);line-height:1.62;padding:2.5rem 1.5rem;max-width:78rem;margin:0 auto}
+  h1{font-size:2.2rem;font-weight:700;letter-spacing:-.01em;margin-bottom:.3rem}
+  .subtitle{font-size:1.02rem;color:var(--ink-soft);font-style:italic;margin-bottom:1.8rem}
+  h2{font-size:1.5rem;margin-top:2.6rem;margin-bottom:.5rem;padding-bottom:.35rem;border-bottom:2px solid var(--gold)}
+  h3{font-size:1.18rem;margin-top:1.5rem;margin-bottom:.4rem;color:var(--gold-bright)}
+  h4{margin-top:1.1rem;margin-bottom:.3rem;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;font-size:.8rem}
+  p{margin-bottom:.7rem} ul,ol{margin:.3rem 0 .9rem 1.4rem} li{margin-bottom:.32rem}
+  code{background:var(--parchment-2);padding:.08rem .35rem;border-radius:3px;font-family:'SF Mono',Consolas,monospace;font-size:.82em}
+  pre{background:#2b2419;color:#e8dcc0;padding:.9rem 1.1rem;border-radius:6px;overflow-x:auto;font-family:'SF Mono',Consolas,monospace;font-size:.76rem;line-height:1.5;margin:.6rem 0}
+  table{width:100%;border-collapse:collapse;margin:.8rem 0;font-size:.84rem}
+  th,td{text-align:left;padding:.42rem .6rem;border-bottom:1px solid var(--border);vertical-align:top}
+  th{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-faint)}
+  td code{font-size:.82em}
+  .note{background:rgba(184,146,63,.1);border-left:4px solid var(--gold-bright);padding:.75rem 1.05rem;border-radius:3px;margin:1rem 0;font-size:.95rem}
+  .warn{background:rgba(107,39,55,.08);border-left:4px solid var(--blood);padding:.75rem 1.05rem;border-radius:3px;margin:1rem 0;font-size:.95rem}
+  .ok{background:rgba(79,107,66,.1);border-left:4px solid var(--green);padding:.75rem 1.05rem;border-radius:3px;margin:1rem 0;font-size:.95rem}
+  .tag{display:inline-block;font-size:.66rem;text-transform:uppercase;letter-spacing:.05em;padding:.1rem .5rem;border-radius:3px;background:var(--gold);color:var(--parchment);font-weight:700;vertical-align:middle}
+  .tag.green{background:var(--green)} .tag.blood{background:var(--blood)} .tag.soft{background:var(--ink-faint)}
+  .meta{font-size:.82rem;color:var(--ink-faint)}
+  .bad{color:var(--blood);font-weight:600}
+  .good{color:var(--green);font-weight:600}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:1.2rem;margin:1rem 0}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:1rem 1.2rem}
+  @media(max-width:60rem){.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<h1>NPC / Monster Editor — design &amp; phasing</h1>
+<p class="subtitle">The admin authoring surface for monster stat blocks, at <code>/compendium/monsters/manage</code>.
+Companion to the read-only browser (already shipped) and the <a href="monster-statblock-shapes-and-schema-2026-06-09.html">stat-block shape study</a>. Drafted 2026-06-10 from the <code>understand-npc-editor</code> research pass.</p>
+
+<div class="note"><strong>Locked decisions (user, 2026-06-10):</strong>
+<strong>Write access</strong> = admins + co-DMs · <strong>Action editor</strong> = full structured (embedded
+<code>ActivityEditor</code>) in v1 · <strong>Foundry import UI</strong> = manual editor first, import is a fast-follow ·
+<strong>Derived values</strong> = XP auto-follows CR; proficiency bonus / saves / skills / passive Perception keep
+authored values with a "recompute?" nudge when inputs change.</div>
+
+<h2>1 · Architecture</h2>
+<p>A new admin page <code>MonstersEditor.tsx</code> mirroring <code>ItemsEditor</code>: left <strong>list</strong> · middle
+<strong>form</strong> (flat sub-tabs) · right <strong>live preview</strong>. The single biggest reuse: the public
+<code>MonsterDetailPanel</code> read-only stat block <em>is</em> the live preview — form state feeds it directly, no round-trip.</p>
+
+<div class="grid2">
+  <div class="card"><h4>New files</h4>
+    <ul>
+      <li><code>src/pages/compendium/MonstersEditor.tsx</code> — page shell, form state, save handler, sub-tabs</li>
+      <li><code>src/components/compendium/monster/MonsterBasicsTab.tsx</code> — header scalars + ability grid + type line</li>
+      <li><code>…/MonsterDefensesTab.tsx</code> — saves / skills / damage R·I·V / conditions / languages</li>
+      <li><code>…/MonsterMovementSensesTab.tsx</code> — movement + senses + habitat</li>
+      <li><code>…/MonsterSectionListEditor.tsx</code> — generic accordion (name + prose + uses/costs + <code>ActivityEditor</code>), shared by every action-like section</li>
+      <li><code>…/MonsterActionsTab.tsx</code> — traits / actions / bonus / reactions / legendary / lair / regional</li>
+      <li><code>…/MonsterSpellcastingTab.tsx</code> — spellcasting block array editor</li>
+    </ul>
+  </div>
+  <div class="card"><h4>Edited files (append-only / additive)</h4>
+    <ul>
+      <li><code>src/lib/compendium.ts</code> — <code>upsertMonster</code> / <code>fetchMonster</code> / <code>deleteMonster</code> (<span class="bad">NO snake_case normalization</span>)</li>
+      <li><code>src/lib/monsterDisplay.ts</code> — derived helpers <code>crToXp</code>, <code>crToProfBonus</code>, <code>computePassivePerception</code> (<code>abilityMod</code> already exists)</li>
+      <li><code>src/components/compendium/MonsterDetailPanel.tsx</code> — add an optional <code>row</code> prop (render uncommitted form state, not just self-fetch by id)</li>
+      <li><code>src/App.tsx</code> — route <code>/compendium/monsters/manage</code></li>
+      <li><code>src/components/Sidebar.tsx</code> — admin "Manage Monsters" link</li>
+      <li><code>api/_lib/d1-proxy.ts</code> — gate <code>monsters</code> writes to admin + co-DM</li>
+    </ul>
+  </div>
+</div>
+
+<h3>Sub-tabs (flat — NOT the items polymorphic <code>MechanicsTab</code> switch)</h3>
+<p>Monsters have no per-type dispatch, so the form is a fixed tab strip (the <code>FeatsEditor</code> pattern):
+<strong>Basics · Defenses · Movement &amp; Senses · Actions &amp; Traits · Spellcasting · Lore · Tags</strong>.</p>
+
+<h3>Save path <span class="tag blood">camelCase-native</span></h3>
+<pre>formData (camelCase keys === column names)
+  → upsertMonster(id, formData)            // does NOT call normalizeCompendiumData
+  → upsertDocument('monsters', id, data)   // d1.ts auto-JSON.stringify(objects)
+  → /api/d1/query  → d1-proxy mutation gate (admin + co-DM)
+  → INSERT … ON CONFLICT(id) DO UPDATE     // never INSERT OR REPLACE
+after save: clearCache('monsters') + bump previewBustKey</pre>
+<div class="warn"><strong>The #1 footgun.</strong> <code>upsertItem</code>/<code>upsertFeat</code> run
+<code>normalizeCompendiumData</code> (snake↔camel). Monsters are camelCase with no alias layer — running that
+would map every key to a non-existent snake_case column and silently drop the data. <code>upsertMonster</code> writes
+keys verbatim. JSON columns pass as <em>objects</em> (never pre-stringify → double-encode); confirm every monster JSON
+column is in <code>d1.ts</code>'s <code>jsonFields</code> allowlist (the read side already parses them, so this is likely complete — verify in P1).</div>
+
+<h3>Write gating — admin + co-DM</h3>
+<p><code>monsters</code> is currently <em>staff</em>-writable (not in <code>PROTECTED_WRITE_TABLES</code>). Per the decision,
+add an admin-or-co-DM gate. Implementation in P1: a dedicated proxy branch for <code>monsters</code> writes calling the
+admin-or-co-DM role check (the same role set campaign management uses), rather than the generic staff path. No route-level
+<code>AdminOnly</code> wrapper — the Sidebar link visibility + proxy gate match the items/feats convention; co-DMs reach the
+editor via the public list's admin affordance.</p>
+
+<h2>2 · The form, section by section</h2>
+<table>
+  <thead><tr><th>Section</th><th>Widget</th><th>Reuse vs bespoke</th><th>Auto-computed</th></tr></thead>
+  <tbody>
+    <tr><td>Header scalars (name, identifier, source, page, size, type/subtype/swarm, alignment, AC+note+formula, HP+formula, CR)</td><td><code>Input</code>, <code>SingleSelectSearch</code> (size/type/source), bespoke grid</td><td>reuse primitives</td><td><code>identifier</code> slug on create; <code>xp</code> ← CR (silent); <code>proficiencyBonus</code> ← CR (nudge)</td></tr>
+    <tr><td>Ability scores</td><td>bespoke 6-cell grid</td><td>BESPOKE</td><td>live modifier <code>floor((v-10)/2)</code></td></tr>
+    <tr><td>Saving throws</td><td>bespoke 6-toggle grid</td><td>BESPOKE (ProficienciesEditor is items-shaped — pattern, not component)</td><td>bonus pre-fills <code>mod+PB</code> on toggle; nudge on change</td></tr>
+    <tr><td>Skills</td><td>bespoke 18-row toggle + bonus + expertise</td><td>BESPOKE</td><td>bonus pre-fill; <code>passivePerception</code> = 10 + Perception bonus (nudge)</td></tr>
+    <tr><td>Movement / Senses</td><td>bespoke grids (walk/fly/swim/climb/burrow + hover; blindsight/darkvision/tremorsense/truesight)</td><td>BESPOKE (simple)</td><td>—</td></tr>
+    <tr><td>Damage R / I / V</td><td><code>EntityPicker</code> + bypass checkboxes (mgc/sil/ada) + custom</td><td>reuse picker; bespoke bypass wrapper</td><td>—</td></tr>
+    <tr><td>Condition immunities · Languages (+telepathy) · Habitat</td><td><code>EntityPicker</code> (+ number / custom)</td><td>reuse</td><td>—</td></tr>
+    <tr><td>Traits · Actions · Bonus · Reactions · Legendary · Lair</td><td><code>MonsterSectionListEditor</code>: name + <code>MarkdownEditor</code> prose + uses/costs + <strong>embedded <code>ActivityEditor</code></strong></td><td>reuse ActivityEditor + Damage/Activation/Range sub-editors; bespoke list wrapper</td><td><code>hasLegendary</code>/<code>hasLair</code> ← presence; legendary <code>costs</code> + preamble, lair <code>lairInitiative</code> as scalars</td></tr>
+    <tr><td>Regional effects</td><td>same component, activities off (prose only)</td><td>reuse</td><td>—</td></tr>
+    <tr><td>Spellcasting</td><td><code>MonsterSpellcastingTab</code>: block array (ability/method/DC/slots) + spell catalog picker + <code>MarkdownEditor</code> prose</td><td>bespoke outer; reuse picker + editor</td><td><code>hasSpellcasting</code> ← length&gt;0; spells linked by <code>identifier</code></td></tr>
+    <tr><td>Biography (Lore) · Images (portrait + token) · Tags</td><td><code>MarkdownEditor</code> · <code>ImageUpload</code> ×2 · <code>TagPicker</code></td><td>reuse verbatim</td><td>—</td></tr>
+  </tbody>
+</table>
+
+<div class="note"><strong>Derived-value UX (per decision).</strong> <code>xp</code> silently tracks CR. <code>proficiencyBonus</code>,
+each proficient save/skill bonus, and <code>passivePerception</code> are <em>authored values</em> that stay as-is; when a
+driving input changes (CR, an ability score, a proficiency toggle) the affected field shows a subtle "recompute to N?"
+affordance the author can accept or ignore. This protects hand-tuned imported stat blocks (the whole 1001-creature corpus).</div>
+
+<h2>3 · Phasing <span class="meta">— each phase independently shippable; the save path persists the full row from P1, so later tabs just populate more columns</span></h2>
+<table>
+  <thead><tr><th>Phase</th><th>Scope</th><th>Verify</th></tr></thead>
+  <tbody>
+    <tr><td><strong>P1</strong> — scaffold + header + save + preview</td><td><code>MonstersEditor</code> shell, list, Basics-header fields, <code>upsertMonster</code>/<code>fetchMonster</code>/<code>deleteMonster</code>, <code>MonsterDetailPanel</code> <code>row</code>-prop preview, route + sidebar, proxy gate, derived <code>xp</code>/<code>profBonus</code> helpers</td><td>edit an imported monster's name/AC/HP/CR/alignment → save → preview + public browser reflect it</td></tr>
+    <tr><td><strong>P2</strong> — abilities + defenses scalars</td><td>ability grid (live mods), saves/skills toggles (prefill + nudge), passive recompute, movement/senses grids</td><td>round-trip all scalar + simple-JSON columns</td></tr>
+    <tr><td><strong>P3</strong> — pickers + media + lore</td><td>damage/condition/languages/habitat (EntityPicker + bypass flags), Tags, Images ×2, biography</td><td>JSON persistence incl. <code>bypasses</code> preserved</td></tr>
+    <tr><td><strong>P4</strong> — section-list editor <span class="tag">the big one</span></td><td><code>MonsterSectionListEditor</code> for traits/actions/bonus/reactions/legendary/lair/regional — prose + uses/costs + <strong>embedded <code>ActivityEditor</code></strong> (full structured, per decision)</td><td>author a multi-activity action; reader renders prose + the entry round-trips</td></tr>
+    <tr><td><strong>P5</strong> — spellcasting</td><td><code>MonsterSpellcastingTab</code> block array + spell-catalog picker linked by identifier</td><td>author a caster; spells link into the catalog</td></tr>
+    <tr><td><strong>P6</strong> — Foundry import workbench <span class="tag soft">fast-follow</span></td><td>surface <code>monsterImport.ts</code> behind a "Foundry Import" mode tab: single/folder paste → <code>creatureEntryToMonsterRow</code> → preview → batch save</td><td>import one real npc export → matches the seed-script output</td></tr>
+  </tbody>
+</table>
+
+<h2>4 · Risks &amp; guardrails</h2>
+<ul>
+  <li><span class="bad">camelCase write path</span> — never reuse <code>upsertItem</code> wholesale; <code>upsertMonster</code> writes camelCase verbatim.</li>
+  <li><span class="bad">JSON columns</span> — pass objects, never pre-stringify; verify all monster JSON cols in <code>jsonFields</code>.</li>
+  <li><span class="bad"><code>foundryData</code> + <code>bypasses</code> must survive edits</span> — treat <code>foundryData</code> as read-only round-trip state (merge, never clobber); losing <code>bypasses</code> breaks "from nonmagical attacks" and Foundry re-export.</li>
+  <li><span class="bad">Shared widgets are compendium-editors' territory</span> — <code>ActivityEditor</code>, <code>MarkdownEditor</code>, <code>EntityPicker</code>, <code>ImageUpload</code>, <code>TagPicker</code>, <code>CompendiumEditorShell</code> are <strong>import/read-only</strong> on this branch. If one needs a change (e.g. <code>ActivityEditor</code> for monster context), write a cross-branch handoff — don't edit it here. Prefer bespoke for the saves/skills grids rather than bending the items-shaped <code>ProficienciesEditor</code>.</li>
+  <li><span class="bad">Column renames</span> hit the module export contract — if any monster column is renamed, flag <code>schema-crosswalk.md</code> + handoff.</li>
+  <li>tsc baseline = 2 (post the asChild fix). New code must not exceed it; verify headless (tsc + route 200 + module transform; full render needs browser auth).</li>
+  <li><code>main</code> = production — nothing pushed without explicit permission; migrations local-first.</li>
+</ul>
+
+<p class="meta">Key anchors: <code>ItemsEditor.tsx</code> (shell/state/save/preview), <code>FeatsEditor.tsx</code> (flat sub-tab strip),
+<code>d1.ts</code> <code>upsertDocument</code> + <code>jsonFields</code>, <code>api/_lib/d1-proxy.ts</code> (mutation gate),
+<code>src/lib/monsterImport.ts</code> (transform), <code>MonsterDetailPanel.tsx</code> (preview), <code>docs/database/structure/monsters.md</code> (schema).</p>
+
+</body>
+</html>

@@ -82,6 +82,34 @@ export function formatXp(xp: number | null | undefined): string {
   return Number(xp).toLocaleString('en-US');
 }
 
+// Standard 5e CR → XP table. Kept in lockstep with src/lib/monsterImport.ts's
+// CR_XP so editor-authored XP matches the seeded corpus.
+const CR_XP: Record<string, number> = {
+  '0': 10, '0.125': 25, '0.25': 50, '0.5': 100, '1': 200, '2': 450, '3': 700,
+  '4': 1100, '5': 1800, '6': 2300, '7': 2900, '8': 3900, '9': 5000, '10': 5900,
+  '11': 7200, '12': 8400, '13': 10000, '14': 11500, '15': 13000, '16': 15000,
+  '17': 18000, '18': 20000, '19': 22000, '20': 25000, '21': 33000, '22': 41000,
+  '23': 50000, '24': 62000, '25': 75000, '26': 90000, '27': 105000, '28': 120000,
+  '29': 135000, '30': 155000,
+};
+
+/** XP for a CR (standard table). null when CR is null/off-table. */
+export function crToXp(cr: number | null | undefined): number | null {
+  if (cr == null) return null;
+  return CR_XP[String(Number(cr))] ?? null;
+}
+
+/** Proficiency bonus for a CR: 2 + max(0, floor((cr-1)/4)). */
+export function crToProfBonus(cr: number | null | undefined): number | null {
+  if (cr == null) return null;
+  return 2 + Math.max(0, Math.floor((Number(cr) - 1) / 4));
+}
+
+/** Passive Perception = 10 + the Perception skill bonus (or +wisMod if untrained). */
+export function computePassivePerception(perceptionBonus: number | null | undefined): number {
+  return 10 + Math.trunc(Number(perceptionBonus) || 0);
+}
+
 // The banded CR filter axis. A creature's `cr` maps to exactly one band; the
 // list filters on the band string via matchesSingleAxisFilter.
 export const CR_BANDS: ReadonlyArray<{ value: string; label: string }> = [

@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useCompendiumHashLink } from '../../lib/useCompendiumHashLink';
 import { fetchCollection } from '../../lib/d1';
+import { Button } from '../../components/ui/button';
 import { type FilterSection } from '../../components/compendium/SectionFilterPanel';
 import {
   CompendiumBrowserShell,
@@ -66,7 +68,8 @@ const PROPERTY_AXIS_VALUES: ReadonlyArray<{ value: string; label: string }> = [
 
 const AXIS_KEYS = ['cr', 'creatureType', 'size', 'source', 'property'] as const;
 
-export default function MonsterList({ userProfile: _userProfile }: { userProfile?: any }) {
+export default function MonsterList({ userProfile }: { userProfile?: any }) {
+  const canManage = userProfile?.role === 'admin' || userProfile?.role === 'co-dm';
   const [monsters, setMonsters] = useState<MonsterRow[]>([]);
   const [sources, setSources] = useState<SourceRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -244,6 +247,15 @@ export default function MonsterList({ userProfile: _userProfile }: { userProfile
       columns={columns}
       columnsLocalStorageKey="dauligor.monsterListColumns"
       hideFavorites
+      trailingActions={
+        canManage ? (
+          <Link to="/compendium/monsters/manage">
+            <Button type="button" variant="outline" size="sm" className="h-8 border-gold/25 text-gold hover:bg-gold/5">
+              Monster Manager
+            </Button>
+          </Link>
+        ) : null
+      }
       detailPanel={
         <MonsterDetailPanel
           monsterId={selectedId || null}

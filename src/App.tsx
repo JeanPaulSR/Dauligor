@@ -71,6 +71,7 @@ import ShopEditor from './pages/compendium/ShopEditor';
 import ShopList from './pages/compendium/ShopList';
 import ItemList from './pages/compendium/ItemList';
 import MonsterList from './pages/compendium/MonsterList';
+import MonstersEditor from './pages/compendium/MonstersEditor';
 import FacilitiesEditor from './pages/compendium/FacilitiesEditor';
 import FacilitiesList from './pages/compendium/FacilitiesList';
 import RacesList from './pages/compendium/RacesList';
@@ -379,11 +380,14 @@ export default function App() {
                       backed by a loot-type items row (subtype 'material') minted on
                       save, so it's carryable + usable as a recipe input. */}
                   <Route path="/compendium/materials/manage" element={<CraftingMaterialsEditor userProfile={effectiveProfile} />} />
-                  {/* Monsters — public read-only stat-block browser. Own
-                      `monsters` table (Foundry npc actors, a different shape
-                      than Item-based items/feats/spells). No /manage editor
-                      yet (a separate later pass). */}
+                  {/* Monsters — public read-only stat-block browser + admin
+                      editor. Own `monsters` table (Foundry npc actors, a
+                      different shape than Item-based items/feats/spells). The
+                      /manage editor mirrors the items/feats convention (no
+                      route-level AdminOnly — the public list's admin entry
+                      point + the proxy mutation gate scope write access). */}
                   <Route path="/compendium/monsters" element={<MonsterList userProfile={effectiveProfile} />} />
+                  <Route path="/compendium/monsters/manage" element={<MonstersEditor userProfile={effectiveProfile} />} />
                   {/* Facilities (Bastions, 2024 DMG) — separate table
                       + page from items. Public browser at /facilities,
                       admin editor at /facilities/manage. Migration
