@@ -64,6 +64,19 @@ export const D1_TABLE_MAP: Record<string, string> = {
   // Build, …) attached to species via species.speciesOptionIds and granted as
   // features on export (migration 20260603-1600).
   speciesOptions: 'species_options',
+  // Enchantments — reusable enchantment definitions (the crafting system's
+  // first step). Own table because an enchantment is a reusable EFFECT applied
+  // to many bases, not a carried item. camelCase columns. Migration 20260609-1300.
+  enchantments: 'enchantments',
+  // Recipes — the universal crafting "inputs → output" rule (the crafting
+  // system's spine; authored before the enchantments editor). Output is one of
+  // item / enchantment / enchant-item. camelCase columns. Migration 20260609-1400.
+  recipes: 'recipes',
+  // Crafting disciplines taxonomy (Alchemy/Blacksmithing/Enchanting/...) + the
+  // crafting materials catalog (each backed by a loot-type items row). The
+  // organizing axis + inputs of the crafting system. Migrations 20260609-1350 / -1500.
+  craftingDisciplines: 'crafting_disciplines',
+  craftingMaterials: 'crafting_materials',
   // Admin-managed taxonomy that groups feats into player-facing
   // buckets (General / Fighting Style / Epic Boon / Origin / …).
   // Authored via /admin/feat-categories; feats reference rows here

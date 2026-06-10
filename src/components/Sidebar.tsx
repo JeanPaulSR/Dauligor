@@ -219,6 +219,10 @@ export default function Sidebar({
           // links: `/compendium/items/manage`, `/compendium/races/manage`,
           // `/compendium/backgrounds/manage`.
           ...(isAdmin ? [
+            // Crafting recipes — admin authoring editor (no public browser
+            // yet; Phase A = authoring). Disciplines live under Admin →
+            // Proficiencies (Items group).
+            { label: 'Recipes', path: '/compendium/recipes/manage' },
             { label: 'Tags', path: '/compendium/tags' },
             { label: 'Spell Rules', path: '/compendium/spell-rules' },
             { label: 'Spell Lists', path: '/compendium/spell-lists' },

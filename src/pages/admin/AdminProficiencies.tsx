@@ -97,6 +97,11 @@ const TABS: TabEntry[] = [
   // system.type.subtype) surfaced on the consumable Details tab.
   { id: 'ammunitionTypes', label: 'Ammunition Types', icon: Target, group: 'items', countTable: 'ammunitionTypes' },
   { id: 'poisonTypes', label: 'Poison Types', icon: FlaskConical, group: 'items', countTable: 'poisonTypes' },
+  // Crafting professions taxonomy — the organizing axis for all recipes +
+  // crafting materials (Alchemy/Blacksmithing/Enchanting/...). Migration
+  // 20260609-1350. Lives in the Items group alongside the other crafting/item
+  // taxonomies; execution fields (ability/tool/facility) deferred to Phase D.
+  { id: 'craftingDisciplines', label: 'Crafting Disciplines', icon: Hammer, group: 'items', countTable: 'craftingDisciplines' },
 ];
 
 const TAB_BY_ID: Record<string, TabEntry> = Object.fromEntries(
@@ -531,6 +536,19 @@ export default function AdminProficiencies({ userProfile }: { userProfile: any }
                 plural="Poison Types"
                 icon={FlaskConical}
                 description="Define poison delivery methods (Contact, Ingested, Inhaled, Injury, or homebrew). Drives the Poison Type dropdown on a consumable's Details tab."
+                {...TAXONOMY_TAB_BASE}
+              />
+            )}
+            {activeTab === 'craftingDisciplines' && (
+              <ProficiencyEntityShell
+                userProfile={userProfile}
+                hideHeader
+                table="craftingDisciplines"
+                singular="Crafting Discipline"
+                plural="Crafting Disciplines"
+                icon={Hammer}
+                description="The crafting professions that organize every recipe and material (Alchemy, Blacksmithing, Enchanting, …)."
+                columnCase="camel"
                 {...TAXONOMY_TAB_BASE}
               />
             )}

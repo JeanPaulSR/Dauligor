@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crafting &amp; Commerce — in plain words</title>
+<style>
+  :root{
+    --paper:#f6efdd; --paper-2:#efe4c9; --ink:#2c2318; --ink-soft:#675844;
+    --gold:#9a7b33; --gold-deep:#7d6228; --rule:#d6c69e; --panel:#fcf8ec; --good:#4f7a3f;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; background:#e8ddc2; color:var(--ink);
+    font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif; line-height:1.7; padding:42px 16px}
+  .sheet{max-width:780px; margin:0 auto; background:var(--paper); border:1px solid var(--rule);
+    box-shadow:0 16px 38px rgba(40,28,10,.2); padding:44px 50px 56px}
+  h1{font-size:30px; margin:0 0 6px}
+  h1 .sub{display:block; font-size:14px; font-weight:400; letter-spacing:2px; text-transform:uppercase; color:var(--gold); margin-top:10px}
+  h2{font-size:20px; margin:34px 0 8px; color:var(--gold-deep); display:flex; align-items:center; gap:10px}
+  h2 .em{font-size:22px}
+  p{margin:10px 0; font-size:16px}
+  .intro{font-size:17px; color:var(--ink-soft)}
+  .cards{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:16px 0}
+  .card{background:var(--panel); border:1px solid var(--rule); border-top:3px solid var(--gold); padding:14px 16px}
+  .card h3{margin:0 0 4px; font-size:16px}
+  .card .tag{font-size:12px; letter-spacing:1px; text-transform:uppercase; color:var(--gold-deep)}
+  .card p{font-size:14.5px; margin:6px 0 0; color:var(--ink-soft)}
+  .key{background:var(--panel); border:1px solid var(--rule); border-left:4px solid var(--gold); padding:16px 20px; margin:18px 0; font-size:16px}
+  .key b{color:var(--gold-deep)}
+  ul{margin:10px 0; padding-left:24px}
+  li{margin:7px 0}
+  .steps{list-style:none; padding:0; margin:14px 0}
+  .steps li{display:flex; gap:12px; align-items:baseline; margin:9px 0; padding:8px 12px; background:var(--panel); border:1px solid var(--rule)}
+  .steps .mark{flex:0 0 auto; width:22px; font-size:16px; text-align:center}
+  .steps .done{color:var(--good); font-weight:700}
+  .steps .now{color:var(--gold-deep); font-weight:700}
+  .steps .todo{color:#b9a87f}
+  .steps .lab b{display:block; font-size:15px}
+  .steps .lab span{font-size:13.5px; color:var(--ink-soft)}
+  .foot{margin-top:34px; padding-top:14px; border-top:1px solid var(--rule); font-size:13.5px; color:var(--ink-soft); font-style:italic}
+  @media(max-width:620px){.sheet{padding:26px 22px}.cards{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <h1>Crafting &amp; Commerce
+    <span class="sub">The plain-words version</span>
+  </h1>
+  <p class="intro">We're building three things that turn out to be one system: a way to make
+  <strong>magic items</strong>, the <strong>ingredients and upgrades</strong> that go into them,
+  and a <strong>shop</strong> where players buy and sell. Here's the whole picture without the
+  technical vocabulary.</p>
+
+  <h2><span class="em">🧩</span> Four pieces, four everyday ideas</h2>
+  <div class="cards">
+    <div class="card">
+      <span class="tag">Ingredient</span>
+      <h3>Crafting Material</h3>
+      <p>Stuff you carry in your bag — dragon scales, a bar of mithral, a vial of essence. You
+      collect it, stack it, and use it up when you make something.</p>
+    </div>
+    <div class="card">
+      <span class="tag">Upgrade</span>
+      <h3>Enchantment</h3>
+      <p>A reusable power-up, like "Flame Tongue" (adds fire). You don't carry one around — you
+      <em>apply</em> it. The same enchantment can go on a sword, an axe, or a dagger.</p>
+    </div>
+    <div class="card">
+      <span class="tag">Finished product</span>
+      <h3>Magic Item</h3>
+      <p>What you get when an upgrade is put on a base item: an ordinary greatsword + "Flame
+      Tongue" = a flaming greatsword. These will eventually get their own tab.</p>
+    </div>
+    <div class="card">
+      <span class="tag">The store</span>
+      <h3>Shop</h3>
+      <p>A place to see prices and buy or sell. Looking at prices is easy (items already have
+      them); actually spending money needs one thing we don't have yet — see below.</p>
+    </div>
+  </div>
+
+  <h2><span class="em">💡</span> The one idea that shaped the plan</h2>
+  <div class="key">
+    A <b>material</b> is a <em>thing you hold</em>. An <b>enchantment</b> is <em>something you
+    apply</em>. They feel similar ("both are stuff in the compendium"), but that one difference
+    decides how the app stores each one — so we treat them differently on purpose.
+  </div>
+  <p>Because a material is a real object you carry, we let it ride on the app's normal "item"
+  machinery (so it drops onto a character sheet like anything else) and add a thin crafting label
+  on top. Because an enchantment is <em>not</em> a carried object, it gets its own dedicated list —
+  a library of upgrades you can apply to many different base items.</p>
+
+  <h2><span class="em">✅</span> What we decided</h2>
+  <ul>
+    <li><strong>Enchantments get their own library.</strong> The good news: the app already knows
+    how to describe an enchantment's effect (the same tool that handles other special abilities
+    handles these), so we're reusing that rather than building it twice.</li>
+    <li><strong>Materials are normal items with a crafting tag.</strong> In the virtual tabletop
+    (Foundry) they'll show up as their own "crafting material" category — and conveniently, that
+    category already exists there, so they'll slot in cleanly.</li>
+    <li><strong>First, build the two libraries — nothing more.</strong> Just the catalogs of
+    enchantments and materials. The actual "combine them into something" crafting logic, the magic
+    items tab, and the shop all come <em>after</em>, each as its own step.</li>
+  </ul>
+
+  <h2><span class="em">📜</span> The piece that ties it together: recipes</h2>
+  <p>A <strong>recipe</strong> is just what it sounds like — a card that says "combine these
+  ingredients (and maybe a base item and an upgrade) to make this result." It turns out to be the
+  single way <em>everything</em> gets made: potions, refined materials, magic items, and even the
+  upgrades (enchantments) themselves. That's why we're building the recipe screen <strong>first</strong>
+  — it's the engine the rest plugs into. <em>(You just decided this — recipes are the foundation.)</em></p>
+
+  <h2><span class="em">📍</span> Where we are right now</h2>
+  <ul class="steps">
+    <li><span class="mark done">✓</span><span class="lab"><b>Plan agreed</b><span>The roadmap and the two big decisions above are settled and written down.</span></span></li>
+    <li><span class="mark done">✓</span><span class="lab"><b>All the storage is built</b><span>The behind-the-scenes places to keep recipes, enchantments, crafting materials, and the list of crafting disciplines are all set up and checked — empty, ready to fill. (Shaped to match the Kibbles crafting book you pointed me to.)</span></span></li>
+    <li><span class="mark now">▶</span><span class="lab"><b>Recipe screen — up next</b><span>The "recipes tab" where you define how things are made. It comes first because recipes are how everything — including enchantments — gets created.</span></span></li>
+    <li><span class="mark todo">○</span><span class="lab"><b>Enchantment screen</b><span>Create and edit the upgrades themselves; it plugs into recipes.</span></span></li>
+    <li><span class="mark todo">○</span><span class="lab"><b>Crafting materials</b><span>The same treatment for materials: a place to keep them, then a screen to edit them.</span></span></li>
+    <li><span class="mark todo">○</span><span class="lab"><b>Magic items tab</b><span>A filtered view that gathers all the magical gear in one place. (Later.)</span></span></li>
+    <li><span class="mark todo">○</span><span class="lab"><b>Shop</b><span>Browse prices first; buying and selling after we give characters a coin purse. (Later.)</span></span></li>
+  </ul>
+
+  <h2><span class="em">🪙</span> The one missing piece for the shop</h2>
+  <p>Right now characters don't actually have a <strong>coin purse</strong> in the app — there's
+  no place that tracks how much gold someone is carrying. Browsing a shop's prices works without
+  it, but buying and selling can't happen until we add one. So the shop will start as a
+  "window-shopping" view and gain real transactions once the purse exists.</p>
+
+  <h2><span class="em">🧹</span> A small housekeeping note</h2>
+  <p>Separately, I left a reminder for myself to tidy up something invisible to you: the app has
+  two slightly different internal naming styles for older vs. newer data, and there's a little
+  translation layer bridging them. Once we standardize the older parts, that translator can be
+  deleted — fewer moving parts, fewer bugs. It's written down so it doesn't get forgotten; it
+  doesn't change anything you see.</p>
+
+  <p class="foot">Want the detailed, technical version? That lives in
+  <code>crafting-commerce-design-2026-06-09.html</code>. This page is the friendly summary.</p>
+
+</div>
+</body>
+</html>

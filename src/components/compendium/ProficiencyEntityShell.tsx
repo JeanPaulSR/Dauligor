@@ -171,6 +171,15 @@ export interface ProficiencyEntityShellProps<
    */
   includeOrder?: boolean;
   /**
+   * Column-naming convention of the backing table. Default 'snake'
+   * (legacy taxonomies persist `order` + `updated_at`). Set 'camel'
+   * for new camelCase tables (persist `sort` + `updatedAt`) — Foundry
+   * is camelCase end-to-end and we are migrating taxonomies off
+   * snake_case. Only the persisted column names change; the form state
+   * still uses `order` internally.
+   */
+  columnCase?: 'snake' | 'camel';
+  /**
    * Optional transform applied to the auto-generated identifier slug
    * before save. Default is identity. The Attributes tab uses
    * `s => s.toUpperCase()` to keep STR/DEX/CON/etc. uppercase even
@@ -236,6 +245,7 @@ export default function ProficiencyEntityShell<
     includeSource = true,
     includeBasicRules = true,
     includeOrder = false,
+    columnCase = 'snake',
     identifierTransform,
     extraLookups = [],
     extraDefaults,
@@ -245,6 +255,12 @@ export default function ProficiencyEntityShell<
     hydrateExtras,
     isAuthorized,
   } = props;
+
+  // DB column names differ between the legacy snake_case taxonomies and the
+  // new camelCase tables. Form state always uses `order` internally; only the
+  // persisted column name varies (order→sort, updated_at→updatedAt for camel).
+  const orderColumn = columnCase === 'camel' ? 'sort' : 'order';
+  const updatedColumn = columnCase === 'camel' ? 'updatedAt' : 'updated_at';
 
   const authorized = isAuthorized
     ? isAuthorized(userProfile)
@@ -416,7 +432,7 @@ export default function ProficiencyEntityShell<
       source: entry.source || '',
       page: entry.page ?? '',
       basicRules: !!entry.basic_rules,
-      order: entry.order ?? '',
+      order: entry[orderColumn] ?? '',
       ...(hydrateExtras ? hydrateExtras(entry) : ({} as Partial<TExtra>)),
     } as StandardProficiencyForm & TExtra;
     setFormData(next);
@@ -460,7 +476,7 @@ export default function ProficiencyEntityShell<
       name: formData.name.trim(),
       identifier: finalIdentifier,
       description: formData.description,
-      updated_at: new Date().toISOString(),
+      [updatedColumn]: new Date().toISOString(),
     };
     if (includeFoundryAlias) payload.foundry_alias = formData.foundryAlias.trim();
     if (includeSource) {
@@ -468,7 +484,7 @@ export default function ProficiencyEntityShell<
       payload.page = formData.page === '' ? null : Number(formData.page);
     }
     if (includeBasicRules) payload.basic_rules = formData.basicRules ? 1 : 0;
-    if (includeOrder) payload.order = formData.order === '' ? null : Number(formData.order);
+    if (includeOrder) payload[orderColumn] = formData.order === '' ? null : Number(formData.order);
     if (includeAbility) payload.ability_id = abilityId;
     if (categoryFK) payload[categoryFK.column] = formData.categoryId || null;
     if (categoryFreeText) payload[categoryFreeText.column] = formData.categoryText.trim() || null;
@@ -546,8 +562,8 @@ export default function ProficiencyEntityShell<
     const sorted = [...filtered].sort((a, b) => {
       // Numeric ordering for `order` so 2 < 10. Null sorts last.
       if (sortKey === 'order') {
-        const an = typeof a.order === 'number' ? a.order : Number.POSITIVE_INFINITY;
-        const bn = typeof b.order === 'number' ? b.order : Number.POSITIVE_INFINITY;
+        const an = typeof a[orderColumn] === 'number' ? a[orderColumn] : Number.POSITIVE_INFINITY;
+        const bn = typeof b[orderColumn] === 'number' ? b[orderColumn] : Number.POSITIVE_INFINITY;
         if (an < bn) return sortDir === 'asc' ? -1 : 1;
         if (an > bn) return sortDir === 'asc' ? 1 : -1;
         return 0;
@@ -608,7 +624,7 @@ export default function ProficiencyEntityShell<
       minBreakpoint: 'sm',
       render: (entry) => (
         <div className="text-[10px] text-ink/65 font-mono">
-          {typeof entry.order === 'number' ? entry.order : '—'}
+          {typeof entry[orderColumn] === 'number' ? entry[orderColumn] : '—'}
         </div>
       ),
     });

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kibbles Crafting → Our Schema (Reconciliation)</title>
+<style>
+  :root{--parchment:#f4ecd8;--parchment-2:#ece0c4;--ink:#2b2117;--ink-soft:#5c4f3d;--gold:#9a7b33;--gold-deep:#7d6228;--rule:#cdbb92;--blood:#7c2d2d;--good:#4f7a3f;--panel:#fbf6e9;}
+  *{box-sizing:border-box}
+  body{margin:0;background:#e7dcc1;color:var(--ink);font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;line-height:1.6;padding:40px 16px}
+  .sheet{max-width:940px;margin:0 auto;background:var(--parchment);border:1px solid var(--rule);box-shadow:0 18px 40px rgba(40,28,10,.22);padding:46px 54px 60px}
+  h1{font-size:29px;margin:0 0 4px}
+  h1 .sub{display:block;font-size:14px;font-weight:400;color:var(--gold);letter-spacing:2px;text-transform:uppercase;margin-top:8px}
+  h2{font-size:20px;margin:34px 0 10px;padding-bottom:6px;border-bottom:2px solid var(--gold)}
+  h3{font-size:15.5px;margin:18px 0 6px;color:var(--gold-deep)}
+  p{margin:9px 0}
+  .meta{font-size:13px;color:var(--ink-soft);font-style:italic}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.85em;background:var(--parchment-2);padding:1px 5px;border:1px solid var(--rule);color:#4a3a1f}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  th,td{text-align:left;padding:7px 10px;border:1px solid var(--rule);vertical-align:top}
+  th{background:var(--parchment-2);font-variant:small-caps;letter-spacing:.5px}
+  .keep{border-left:4px solid var(--good)}
+  .defer{border-left:4px solid var(--gold)}
+  .cut{border-left:4px solid var(--blood)}
+  .tag{display:inline-block;font-size:11px;letter-spacing:.5px;text-transform:uppercase;padding:1px 7px;border-radius:2px;color:#fff;font-weight:600}
+  .tag.k{background:var(--good)} .tag.d{background:var(--gold-deep)} .tag.c{background:var(--blood)}
+  .callout{background:var(--panel);border:1px solid var(--rule);border-left:4px solid var(--gold);padding:14px 18px;margin:16px 0}
+  .callout .lab{display:block;font-variant:small-caps;letter-spacing:1px;font-size:12px;color:var(--gold);margin-bottom:4px}
+  ul{margin:8px 0 8px 4px;padding-left:22px}li{margin:5px 0}
+  .lede{font-size:16px;color:var(--ink-soft)}
+  @media(max-width:680px){.sheet{padding:28px 22px}}
+</style>
+</head>
+<body>
+<div class="sheet">
+  <h1>Kibbles' Crafting → Our Schema
+    <span class="sub">Reconciliation &amp; Phase-A decisions</span>
+  </h1>
+  <p class="meta">2026-06-09 · source: Kibbles' Compendium of Craft &amp; Creation v1.2.1, Chapter 6
+  (printed p.179+). Text extracted (no poppler) and analyzed by a 9-reader + reconcile + 2-critic
+  workflow. The two critics deliberately disagreed on scope; this doc is the synthesis.</p>
+
+  <p class="lede">Good news first: <strong>our core model held up.</strong> Kibbles' "inputs → output"
+  is exactly our <code>recipes</code> table; its reusable <strong>+1/+2/+3</strong> enhancements are
+  our <code>enchant-item</code> mode + <code>enchantments</code>; its named magic items are
+  <code>outputType:'item'</code>. The refinements below are additive, not a rethink.</p>
+
+  <h2>How Kibbles models crafting (the relevant shape)</h2>
+  <ul>
+    <li><strong>The loop:</strong> accumulate <em>progress</em> via crafting <em>rolls</em> (a success = hours of progress) until you reach the item's <em>crafting time</em>. Every recipe table shares 7 columns: <strong>Name · Materials · Crafting Time · Checks · Difficulty (DC) · Rarity · Value</strong>.</li>
+    <li><strong>Materials</strong> are a rich taxonomy: a <em>category</em> (reagent / essence / ingot / hide / part / wood / gem), a <em>rarity tier</em> (Trivial → Legendary), a <em>property</em> (reagents: curative/poisonous/reactive · essences: arcane/primal/divine/psionic), a <em>"used-for" discipline</em>, and a price. Lower materials refine into higher ones (reagents → essences; ore → ingots).</li>
+    <li><strong>Disciplines</strong> (Alchemy, Blacksmithing, <strong>Enchanting</strong>, Poisoncraft, Cooking, Leatherworking, Tinkering, Runecarving, Engineering…) are the organizing axis — each fixes a tool + ability + special rules.</li>
+    <li><strong>Enchanting</strong> = combine a <em>base item</em> + spell <em>scrolls</em> + <em>essences</em> → a magic item (rarity + value), plus generic <em>+N</em> for any base. Uses Intelligence.</li>
+  </ul>
+
+  <h2>Decisions — what we change for Phase A (authoring the catalogs)</h2>
+  <p>The guiding line: <strong>add what is intrinsic to a recipe; don't denormalize the output's
+  own fields, and don't build execution-time machinery.</strong></p>
+
+  <h3>✅ Keep — applying now</h3>
+  <table>
+    <tr><th>Change</th><th>Why</th></tr>
+    <tr class="keep"><td><span class="tag k">done</span> <code>recipes.craftChecks INTEGER</code> + <code>recipes.craftDifficultyDC INTEGER</code></td><td>The two canonical Kibbles columns; intrinsic to the recipe (not on any output item); stored, not computed (real checks≠time/2 exceptions). <strong>Applied to the migration.</strong></td></tr>
+    <tr class="keep"><td><span class="tag k">next</span> Build <code>crafting_materials</code> table</td><td>The only genuinely new table. Slim, authoring-focused: <code>id, name, identifier, sourceId, page, description, imageUrl, itemId</code> (the backing loot row), <code>category</code>, <code>rarity</code>, <code>subtype</code> (freeform flavor, discriminated by category), <code>usedFor</code> (discipline list), <code>price</code>, <code>weight</code>, <code>tags</code>, <code>contentHash</code>, timestamps.</td></tr>
+    <tr class="keep"><td><span class="tag k">next</span> Add <code>trivial</code> rarity tier</td><td>Kibbles' bulk mundane materials are "Trivial" (below Common). <strong>Zero migration</strong> — rarity columns are bare TEXT with no CHECK; it's an app-side vocabulary/ordering edit.</td></tr>
+    <tr class="keep"><td><span class="tag k">editor</span> Richer <code>inputs</code> shape</td><td>Kibbles inputs include spell scrolls, typed/tiered essences, and OR-alternatives. <code>inputs</code> is already free JSON — <strong>no migration</strong>; the RecipesEditor grows the shape (kinds: <code>item</code> / <code>spellScroll</code> / <code>material</code>, with optional OR-groups) as real recipes need it.</td></tr>
+  </table>
+
+  <h3>↦ Defer — capture later, not now</h3>
+  <table>
+    <tr><th>Deferred</th><th>Why later</th></tr>
+    <tr class="defer"><td>Denormalized <code>recipes.rarity</code> / <code>recipes.outputValue</code></td><td>These live on the output item/enchantment (<code>items.price</code>, <code>enchantments.rarity</code>/<code>price</code>). Read them lazily like the items list already does. Add only if the recipe browser needs the filter.</td></tr>
+    <tr class="defer"><td>Base-item constraints (<code>"sword ≥500gp"</code>, <code>"a +1 weapon"</code>) + recursive upgrade chain</td><td>Craft-time validation = execution (Phase D). <code>outputBaseItemId</code> (concrete or NULL=any) is enough to author.</td></tr>
+    <tr class="defer"><td>Recipe <code>familyId</code>/<code>variantName</code> grouping (Figurine ×9, Horn ×4)</td><td>A browse nicety; a shared tag or name prefix covers it until the browser exists.</td></tr>
+    <tr class="defer"><td>Materials: <code>equivalentGoldValue</code>, <code>salvageable</code>, <code>sourceMetadata</code></td><td>Shop-era (Phase C) and harvesting/execution (Phase D). <code>price</code> already carries value.</td></tr>
+    <tr class="defer"><td>Parametric "Custom Weapon" generator; in-place gear modification/repair</td><td>Advanced authoring / execution. For now, author each result as a plain item+recipe; property-adds can ride an <code>enchant-item</code> recipe.</td></tr>
+  </table>
+
+  <h3>✕ Cut — already covered or redundant</h3>
+  <table>
+    <tr><th>Cut</th><th>Already covered by</th></tr>
+    <tr class="cut"><td>Caster-level / spell-known gating</td><td><code>recipes.craftRequirements {minLevel, spells[], features[]}</code> — already exists.</td></tr>
+    <tr class="cut"><td>Charges / attunement of the produced item</td><td><code>items.attunement</code> + uses/recovery on the output item (correctly NOT on the recipe).</td></tr>
+    <tr class="cut"><td><code>recipes.consumable</code> flag</td><td>Derivable from the output's <code>item_type='consumable'</code>.</td></tr>
+    <tr class="cut"><td>Harvesting/looting/gathering d100 tables, crafting-job state, shelf-life</td><td>Execution-time (Phase D), explicitly out of Phase-A scope.</td></tr>
+  </table>
+
+  <div class="callout">
+    <span class="lab">The one open fork — disciplines</span>
+    Kibbles organizes <em>all</em> crafting by discipline (Alchemy / Blacksmithing / Enchanting…), and
+    materials are "used for" disciplines. The completeness critic calls this the biggest missing
+    concept; the scope critic calls a full discipline table premature execution machinery. The honest
+    middle: we need the <em>organizing axis</em> now, but not the execution fields (ability / tool /
+    forge facility) until Phase D. Three ways to seat it — your call drives whether
+    <code>recipes</code> gets a <code>discipline</code> slug or a <code>disciplineId</code> FK, and
+    whether <code>crafting_materials.usedFor</code> holds slugs or ids.
+  </div>
+
+  <p class="meta">Decisions captured in <code>memory/project_crafting_commerce_roadmap.md</code>. Raw
+  reconciliation + critic output: the workflow result JSON in the session task dir. Extracted source
+  text: <code>E:\DnD\Crafting\_kibbles_text\page_*.txt</code>.</p>
+</div>
+</body>
+</html>

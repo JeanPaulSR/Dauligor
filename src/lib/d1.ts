@@ -345,6 +345,19 @@ export async function queryD1<T>(sql: string, params: any[] = [], options: { noC
         // species.speciesOptionIds — JSON id array of attached species_options
         // (migration 20260603-1600).
         'speciesOptionIds',
+        // enchantments JSON columns (migration 20260609-1300). restrictions =
+        // {allowMagical,type,categories[],properties[]} (the enchant-activity
+        // gate); riders = {activity[],effect[],item[]} granted alongside.
+        // effects / tags / price are already in the list above.
+        'restrictions', 'riders',
+        // recipes JSON columns (migration 20260609-1400). Distinctive names on
+        // purpose (NOT bare time/cost/requirements) since this list is global.
+        // inputs=[{itemId,quantity}]; goldCost={value,denomination};
+        // craftTime={value,unit}; craftRequirements={tools[],minLevel,spells[],…}.
+        'inputs', 'goldCost', 'craftTime', 'craftRequirements',
+        // crafting_materials JSON column (migration 20260609-1500). usedFor =
+        // crafting_disciplines id array. price/weight/tags already global above.
+        'usedFor',
       ];
       const parsedResults = (data.results || []).map((row: any) => {
         const parsed: any = { ...row };

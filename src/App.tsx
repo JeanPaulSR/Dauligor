@@ -61,6 +61,7 @@ import SpellRulesEditor from './pages/compendium/SpellRulesEditor';
 import FeatsEditor from './pages/compendium/FeatsEditor';
 import FeatList from './pages/compendium/FeatList';
 import ItemsEditor from './pages/compendium/ItemsEditor';
+import RecipesEditor from './pages/compendium/RecipesEditor';
 import ItemList from './pages/compendium/ItemList';
 import FacilitiesEditor from './pages/compendium/FacilitiesEditor';
 import FacilitiesList from './pages/compendium/FacilitiesList';
@@ -346,6 +347,9 @@ export default function App() {
                       /<entity>/manage for the admin CRUD surface). */}
                   <Route path="/compendium/items" element={<ItemList userProfile={effectiveProfile} />} />
                   <Route path="/compendium/items/manage" element={<ItemsEditor userProfile={effectiveProfile} />} />
+                  {/* Crafting recipes — admin authoring editor (the crafting
+                      system spine). No public browser yet (Phase A = authoring). */}
+                  <Route path="/compendium/recipes/manage" element={<RecipesEditor userProfile={effectiveProfile} />} />
                   {/* Facilities (Bastions, 2024 DMG) — separate table
                       + page from items. Public browser at /facilities,
                       admin editor at /facilities/manage. Migration

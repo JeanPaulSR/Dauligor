@@ -87,6 +87,13 @@ const JSON_COLUMNS = new Set([
   "classifications", "values", "levels", "option_ids", "fixed_ids", "category_ids",
   "optionIds", "fixedIds", "categoryIds", "prerequisites_items", "tag_ids", "tagIds",
   "properties", "advancements", "uses_recovery",
+  // enchantments JSON columns (migration 20260609-1300) — keep in sync with
+  // src/lib/d1.ts jsonFields. effects/tags already present above.
+  "restrictions", "riders",
+  // recipes JSON columns (migration 20260609-1400)
+  "inputs", "goldCost", "craftTime", "craftRequirements",
+  // crafting_materials JSON column (migration 20260609-1500)
+  "usedFor",
 ]);
 
 function autoParseJsonColumns(row: any): any {
