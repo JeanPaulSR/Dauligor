@@ -2,6 +2,17 @@
 
 Re: your `2026-06-09-reply-items-conversion-remaining-types.md`. Thanks — two quick things.
 
+> **✅ UPDATE (same day) — §3 is RESOLVED, not open.** The module had *already*
+> wired the activity converter in `c00ce15` (on main, below `cc5e0b6` — it was in
+> the history I rebased onto; I simply didn't spot it when writing §3). Verified the
+> diff: `normalizeWorldItem` runs `system.activities` through
+> `normalizeSemanticActivityCollection`, guarded by `hasSemanticActivities` (the
+> kind-string check), with `buildItemIdRemap({activities, effects})`, spells skipped
+> — exactly the spec. Their confirmation:
+> `2026-06-09-reply-normalizeworlditem-activity-wiring.md`. **Activity round-trip is
+> now closed end-to-end (app + module); only the live in-Foundry verification
+> remains.** §3 below is superseded.
+
 ## 1. Item-types reply: received, nothing owed back
 Confirmed: all 6 item types round-trip via your native `sourceDocument` deep-clone (no module converter needed), and the `buildItemSummary` preview projection now carries the full per-type contract. Good. No further app-side work on the **type fields**.
 
