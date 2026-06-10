@@ -1,9 +1,10 @@
 import React from 'react';
-import { abilityMod, computePassivePerception } from '../../../lib/monsterDisplay';
+import { abilityMod, computePassivePerception, HABITATS } from '../../../lib/monsterDisplay';
 import {
   Field, TextField, NumField, Nudge, MonsterFieldset, numOrNull,
   type MonsterForm, type SetForm,
 } from './fields';
+import ChipMultiSelect from './ChipMultiSelect';
 
 const MOVE_MODES: [string, string][] = [
   ['walk', 'Walk'], ['fly', 'Fly'], ['swim', 'Swim'], ['climb', 'Climb'], ['burrow', 'Burrow'],
@@ -78,6 +79,14 @@ export default function MonsterMovementSensesTab({ form, set }: { form: MonsterF
             <TextField value={senses.special} onChange={(v) => setSense('special', v || undefined)} placeholder="e.g. can't be surprised while…" />
           </Field>
         </div>
+      </MonsterFieldset>
+
+      <MonsterFieldset legend="Habitat / environment">
+        <ChipMultiSelect options={HABITATS} value={form.habitat?.value}
+          onChange={(v) => set({ habitat: { ...(form.habitat || {}), value: v } })} />
+        <TextField className="mt-2" value={form.habitat?.custom}
+          onChange={(v) => set({ habitat: { ...(form.habitat || {}), custom: v || undefined } })}
+          placeholder="custom environment note" />
       </MonsterFieldset>
     </div>
   );

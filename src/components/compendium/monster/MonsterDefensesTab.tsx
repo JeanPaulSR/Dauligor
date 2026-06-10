@@ -2,18 +2,25 @@ import React from 'react';
 import { cn } from '../../../lib/utils';
 import {
   abilityMod, formatBonus, crToProfBonus,
-  ABILITY_ORDER, ABILITY_ABBR, ABILITY_NAME, SKILL_ORDER, SKILL_NAME, SKILL_ABILITY,
+  ABILITY_ORDER, ABILITY_ABBR, ABILITY_NAME, SKILL_ORDER, SKILL_NAME, SKILL_ABILITY, CONDITIONS,
 } from '../../../lib/monsterDisplay';
-import { NumField, Nudge, MonsterFieldset, numOrNull, type MonsterForm, type SetForm } from './fields';
+import { Field, TextField, NumField, Nudge, MonsterFieldset, numOrNull, type MonsterForm, type SetForm } from './fields';
+import ChipMultiSelect from './ChipMultiSelect';
+import DamageModEditor from './DamageModEditor';
 
 /**
- * Defenses tab (P2 scope = saving throws + skills). Each is a sparse map keyed
- * by ability/skill; toggling a proficiency prefills the bonus from
- * `abilityMod + proficiencyBonus` (×2 PB for expertise) but the value stays
- * editable, and a nudge offers to re-adopt the computed value when an input
- * drifts. Damage R/I/V, condition immunities, and languages land in P3.
+ * Defenses tab: saving throws + skills (prefill + recompute nudge) and the
+ * damage modifiers / condition immunities / languages pickers. Saves & skills
+ * are sparse maps keyed by ability/skill; toggling a proficiency prefills the
+ * bonus from `abilityMod + proficiencyBonus` (×2 PB for expertise) but stays
+ * editable, with a nudge to re-adopt the computed value when an input drifts.
+ *
+ * `languages` (the option list) is supplied by the editor from the languages
+ * catalog so authored slugs match the imported corpus.
  */
-export default function MonsterDefensesTab({ form, set }: { form: MonsterForm; set: SetForm }) {
+export default function MonsterDefensesTab({ form, set, languages }: {
+  form: MonsterForm; set: SetForm; languages: ReadonlyArray<[string, string]>;
+}) {
   const pb = numOrNull(form.proficiencyBonus) ?? crToProfBonus(numOrNull(form.cr)) ?? 2;
   const abScore = (ab: string) => Number(form.abilities?.[ab] ?? 10);
 
@@ -97,6 +104,38 @@ export default function MonsterDefensesTab({ form, set }: { form: MonsterForm; s
           })}
         </div>
         <p className="text-[10px] text-ink/45 pt-1.5 px-1">Toggling a save/skill prefills its bonus from the ability modifier + proficiency bonus. Edit freely; the nudge re-adopts the computed value if you change an ability or the proficiency bonus.</p>
+      </MonsterFieldset>
+
+      <MonsterFieldset legend="Damage modifiers">
+        <div className="space-y-2">
+          <DamageModEditor label="Vulnerabilities" block={form.damageVulnerabilities} onChange={(b) => set({ damageVulnerabilities: b })} />
+          <DamageModEditor label="Resistances" block={form.damageResistances} onChange={(b) => set({ damageResistances: b })} />
+          <DamageModEditor label="Immunities" block={form.damageImmunities} onChange={(b) => set({ damageImmunities: b })} />
+        </div>
+      </MonsterFieldset>
+
+      <MonsterFieldset legend="Condition immunities">
+        <ChipMultiSelect options={CONDITIONS} value={form.conditionImmunities?.value}
+          onChange={(v) => set({ conditionImmunities: { ...(form.conditionImmunities || {}), value: v } })} />
+        <TextField className="mt-2" value={form.conditionImmunities?.custom}
+          onChange={(v) => set({ conditionImmunities: { ...(form.conditionImmunities || {}), custom: v || undefined } })}
+          placeholder="custom condition-immunity note" />
+      </MonsterFieldset>
+
+      <MonsterFieldset legend="Languages">
+        <ChipMultiSelect options={languages} value={form.languages?.value}
+          onChange={(v) => set({ languages: { ...(form.languages || {}), value: v } })} />
+        <div className="flex flex-wrap gap-3 mt-2">
+          <Field label="Telepathy (ft)" className="w-28">
+            <NumField value={form.languages?.telepathy ?? null}
+              onChange={(v) => set({ languages: { ...(form.languages || {}), telepathy: v ?? undefined } })} />
+          </Field>
+          <Field label="Custom" className="flex-1 min-w-[12rem]">
+            <TextField value={form.languages?.custom}
+              onChange={(v) => set({ languages: { ...(form.languages || {}), custom: v || undefined } })}
+              placeholder="e.g. understands Common but can't speak it" />
+          </Field>
+        </div>
       </MonsterFieldset>
     </div>
   );

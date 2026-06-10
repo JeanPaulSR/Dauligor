@@ -17,6 +17,8 @@ import MonsterBasicsTab from '../../components/compendium/monster/MonsterBasicsT
 import MonsterDefensesTab from '../../components/compendium/monster/MonsterDefensesTab';
 import MonsterMovementSensesTab from '../../components/compendium/monster/MonsterMovementSensesTab';
 import { numOrNull, type MonsterForm, type SetForm } from '../../components/compendium/monster/fields';
+import MarkdownEditor from '../../components/MarkdownEditor';
+import TagPicker from '../../components/compendium/TagPicker';
 
 /**
  * Admin monster (NPC) editor — `/compendium/monsters/manage`. Built on the
@@ -62,6 +64,9 @@ export default function MonstersEditor({ userProfile }: { userProfile: any }) {
 
   const [monsters, setMonsters] = useState<MonsterRow[]>([]);
   const [sources, setSources] = useState<SourceRecord[]>([]);
+  const [languages, setLanguages] = useState<Array<{ id: string; name?: string; identifier?: string }>>([]);
+  const [tags, setTags] = useState<any[]>([]);
+  const [tagGroups, setTagGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
@@ -88,12 +93,18 @@ export default function MonstersEditor({ userProfile }: { userProfile: any }) {
     (async () => {
       setLoading(true);
       try {
-        const [, srcRes] = await Promise.all([
+        const [, srcRes, langRes, tagRes, groupRes] = await Promise.all([
           reloadList(),
           fetchCollection<SourceRecord>('sources', { orderBy: 'name ASC' }),
+          fetchCollection<any>('languages', { orderBy: 'name ASC' }).catch(() => []),
+          fetchCollection<any>('tags', { orderBy: 'name ASC' }).catch(() => []),
+          fetchCollection<any>('tagGroups', { orderBy: 'name ASC' }).catch(() => []),
         ]);
         if (cancelled) return;
         setSources(srcRes);
+        setLanguages(langRes);
+        setTags(tagRes.map((t: any) => ({ ...t, groupId: t.group_id ?? t.groupId ?? null })));
+        setTagGroups(groupRes.map((g: any) => ({ id: g.id, name: g.name })));
       } catch (err) {
         console.error('[MonstersEditor] failed to load:', err);
       } finally {
@@ -106,6 +117,16 @@ export default function MonstersEditor({ userProfile }: { userProfile: any }) {
   const sourceById = useMemo(
     () => Object.fromEntries(sources.map((s) => [s.id, s])) as Record<string, SourceRecord>,
     [sources],
+  );
+
+  // Language chip options — value = the slug the imported corpus stores
+  // (lowercase identifier), label = the display name.
+  const languageOptions = useMemo<Array<[string, string]>>(
+    () => languages.map((l) => [
+      String(l.identifier || slugify(l.name || '') || l.id).toLowerCase(),
+      String(l.name || l.identifier || l.id),
+    ]),
+    [languages],
   );
 
   // ─── Hydrate the form when a row is selected ────────────────────
@@ -192,6 +213,7 @@ export default function MonstersEditor({ userProfile }: { userProfile: any }) {
       const id = selectedId || makeFoundryId();
       const identifier = String(formData.identifier ?? '').trim() || slugify(name);
       const { id: _omit, ...rest } = formData;
+      const bio = String(formData.biography || '');
       const payload: MonsterForm = {
         ...rest,
         name,
@@ -202,6 +224,8 @@ export default function MonstersEditor({ userProfile }: { userProfile: any }) {
         hp: numOrNull(formData.hp),
         proficiencyBonus: numOrNull(formData.proficiencyBonus),
         passivePerception: numOrNull(formData.passivePerception),
+        // Short teaser mirrors the importer (first slice of the biography).
+        description: bio ? bio.slice(0, 240) : (rest.description ?? ''),
       };
       await upsertMonster(id, payload);
       const rows = await reloadList();
@@ -288,12 +312,31 @@ export default function MonstersEditor({ userProfile }: { userProfile: any }) {
       saving={saving}
       formId="monster-manual-editor-form"
       editorSubTabs={[
-        { key: 'basics', label: 'Basics', layout: 'scroll', render: () => <MonsterBasicsTab form={formData} set={set} sources={sources} /> },
-        { key: 'defenses', label: 'Defenses', layout: 'scroll', render: () => <MonsterDefensesTab form={formData} set={set} /> },
+        { key: 'basics', label: 'Basics', layout: 'scroll', render: () => <MonsterBasicsTab form={formData} set={set} sources={sources} monsterId={selectedId} /> },
+        { key: 'defenses', label: 'Defenses', layout: 'scroll', render: () => <MonsterDefensesTab form={formData} set={set} languages={languageOptions} /> },
         { key: 'movement', label: 'Move & Senses', layout: 'scroll', render: () => <MonsterMovementSensesTab form={formData} set={set} /> },
+        { key: 'lore', label: 'Lore', layout: 'fill', render: () => (
+          <div className="flex flex-col flex-1 min-h-0">
+            <span className="block text-[10px] font-bold uppercase tracking-widest text-gold/75 pb-1">Biography</span>
+            <MarkdownEditor
+              value={String(formData.biography || '')}
+              onChange={(v) => set({ biography: v })}
+              fillContainer
+              className="flex-1 min-h-0"
+            />
+          </div>
+        ) },
       ]}
+      tagsSuperTabCount={(formData.tags || []).length}
       tagsSubTabs={[{ key: 'tags', label: 'Tags', render: () => (
-        <p className="text-sm text-ink/50 italic">Tag editing arrives in a later phase.</p>
+        <TagPicker
+          tags={tags}
+          tagGroups={tagGroups}
+          selectedIds={formData.tags || []}
+          onChange={(next: string[]) => set({ tags: next })}
+          hint="Tags categorise monsters for browsing + future encounter tooling."
+          emptyHint="No tags loaded yet."
+        />
       ) }]}
       renderPreview={() => (
         <MonsterDetailPanel

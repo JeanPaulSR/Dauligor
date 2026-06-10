@@ -8,6 +8,7 @@ import {
   Field, TextField, NumField, Sel, Nudge, MonsterFieldset, numOrNull,
   type MonsterForm, type SetForm,
 } from './fields';
+import { ImageUpload } from '../../ui/ImageUpload';
 
 type SourceRecord = { id: string; name?: string; abbreviation?: string; [k: string]: any };
 
@@ -18,8 +19,8 @@ const CR_OPTIONS: ReadonlyArray<[string, string]> = [
   ...Array.from({ length: 30 }, (_, i) => [String(i + 1), String(i + 1)] as [string, string]),
 ];
 
-export default function MonsterBasicsTab({ form, set, sources }: {
-  form: MonsterForm; set: SetForm; sources: SourceRecord[];
+export default function MonsterBasicsTab({ form, set, sources, monsterId }: {
+  form: MonsterForm; set: SetForm; sources: SourceRecord[]; monsterId: string | null;
 }) {
   const cr = numOrNull(form.cr);
   const suggestedProf = crToProfBonus(cr);
@@ -97,6 +98,33 @@ export default function MonsterBasicsTab({ form, set, sources }: {
           </Field>
         </div>
         <p className="text-[10px] text-ink/45 pt-1 px-1">XP follows the Challenge rating automatically. Proficiency bonus, saves, skills, and passive Perception keep authored values — use the nudge to adopt a derived value.</p>
+      </MonsterFieldset>
+
+      <MonsterFieldset legend="Portrait & token">
+        <div className="flex flex-wrap gap-6">
+          <div className="space-y-1">
+            <span className="block text-[10px] font-bold uppercase tracking-widest text-ink/45">Portrait</span>
+            <ImageUpload
+              currentImageUrl={form.imageUrl}
+              storagePath={`images/monsters/${monsterId || 'draft'}/portrait/`}
+              onUpload={(url) => set({ imageUrl: url })}
+              imageType="icon"
+              compact
+              className="h-[96px] w-[96px]"
+            />
+          </div>
+          <div className="space-y-1">
+            <span className="block text-[10px] font-bold uppercase tracking-widest text-ink/45">Token</span>
+            <ImageUpload
+              currentImageUrl={form.tokenImageUrl}
+              storagePath={`images/monsters/${monsterId || 'draft'}/token/`}
+              onUpload={(url) => set({ tokenImageUrl: url })}
+              imageType="icon"
+              compact
+              className="h-[96px] w-[96px]"
+            />
+          </div>
+        </div>
       </MonsterFieldset>
 
       <MonsterFieldset legend="Ability scores">

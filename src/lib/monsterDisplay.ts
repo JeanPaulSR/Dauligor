@@ -53,6 +53,35 @@ export const SIZE_LABEL: Record<string, string> = {
   tiny: 'Tiny', sm: 'Small', med: 'Medium', lg: 'Large', huge: 'Huge', grg: 'Gargantuan',
 };
 
+// ─── editor option lists (slug, label) — fixed 5e enums ──────────────────────
+
+export const DAMAGE_TYPES: ReadonlyArray<[string, string]> = [
+  ['acid', 'Acid'], ['bludgeoning', 'Bludgeoning'], ['cold', 'Cold'], ['fire', 'Fire'],
+  ['force', 'Force'], ['lightning', 'Lightning'], ['necrotic', 'Necrotic'], ['piercing', 'Piercing'],
+  ['poison', 'Poison'], ['psychic', 'Psychic'], ['radiant', 'Radiant'], ['slashing', 'Slashing'],
+  ['thunder', 'Thunder'],
+];
+
+// Damage-bypass slugs — a resistance/immunity flagged with these is bypassed by
+// that attack quality (e.g. `mgc` → "…from nonmagical attacks"). Block-level.
+export const DAMAGE_BYPASSES: ReadonlyArray<[string, string]> = [
+  ['mgc', 'Magical'], ['sil', 'Silvered'], ['ada', 'Adamantine'],
+];
+
+export const CONDITIONS: ReadonlyArray<[string, string]> = [
+  ['blinded', 'Blinded'], ['charmed', 'Charmed'], ['deafened', 'Deafened'], ['exhaustion', 'Exhaustion'],
+  ['frightened', 'Frightened'], ['grappled', 'Grappled'], ['incapacitated', 'Incapacitated'],
+  ['invisible', 'Invisible'], ['paralyzed', 'Paralyzed'], ['petrified', 'Petrified'], ['poisoned', 'Poisoned'],
+  ['prone', 'Prone'], ['restrained', 'Restrained'], ['stunned', 'Stunned'], ['unconscious', 'Unconscious'],
+];
+
+// Foundry dnd5e habitat slugs (system.details.habitat.value[].type).
+export const HABITATS: ReadonlyArray<[string, string]> = [
+  ['arctic', 'Arctic'], ['coast', 'Coastal'], ['desert', 'Desert'], ['forest', 'Forest'],
+  ['grassland', 'Grassland'], ['hill', 'Hill'], ['mountain', 'Mountain'], ['planar', 'Planar'],
+  ['swamp', 'Swamp'], ['underdark', 'Underdark'], ['underwater', 'Underwater'], ['urban', 'Urban'],
+];
+
 export const CREATURE_TYPE_LABEL: Record<string, string> = {
   aberration: 'Aberration', beast: 'Beast', celestial: 'Celestial',
   construct: 'Construct', dragon: 'Dragon', elemental: 'Elemental',
