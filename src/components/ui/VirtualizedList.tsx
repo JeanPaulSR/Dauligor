@@ -52,7 +52,15 @@ export default function VirtualizedList<T>({
             right: 0
           }}
         >
-          {visibleItems.map((item, index) => renderItem(item, startIndex + index))}
+          {visibleItems.map((item, index) => (
+            // Key each windowed row by its absolute index in `items` — stable
+            // for a given item position so React reconciles correctly on
+            // scroll. renderItem's own root element doesn't carry a key, so the
+            // keyed wrapper here is what satisfies the list-child key contract.
+            <React.Fragment key={startIndex + index}>
+              {renderItem(item, startIndex + index)}
+            </React.Fragment>
+          ))}
         </div>
       </div>
     </div>

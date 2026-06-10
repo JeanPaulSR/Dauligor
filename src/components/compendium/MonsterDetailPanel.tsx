@@ -396,27 +396,50 @@ function formatSaves(saves?: Record<string, number>): string {
 
 // ─── body sections ───────────────────────────────────────────────────────────
 
+// Shared prose classes for the block renderers below. `prose` emits block
+// elements (<p>, <ul>, <h3>…), so every prose renderer is a <div> — never an
+// inline <span> (a block inside a <span>/<p> is invalid DOM nesting).
+const PROSE_CLASS =
+  'prose prose-sm max-w-none text-sm leading-snug prose-p:my-1 prose-p:text-ink/90 '
+  + 'prose-strong:text-ink prose-em:text-ink/85 prose-li:text-ink/85 prose-ul:my-1 '
+  + 'prose-headings:text-gold/90 prose-h3:text-base prose-h4:text-sm';
+
+// Block prose render — used for section preambles (legendary / lair / spell-
+// casting intro) where the content stands alone.
 function MonsterProse({ bbcode }: { bbcode: string }) {
   const html = useMemo(() => bbcodeToHtml(cleanMonsterProse(bbcode)), [bbcode]);
+  return <div className={PROSE_CLASS} dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
+// One stat-block entry (trait / action / lair bullet / regional effect). The
+// bold name + italic usage-suffix + body are composed into a SINGLE BBCode
+// string and rendered as one block, so a leading bold name sits inline with the
+// first line and any list/heading the prose contains stays valid block content.
+function RenderedEntry({
+  name, suffix, body, bullet,
+}: { name?: string; suffix?: string; body: string; bullet?: boolean }) {
+  const html = useMemo(() => {
+    const lead = name ? `[b]${name}.[/b]${suffix ? ` [i]${suffix}[/i]` : ''} ` : '';
+    return bbcodeToHtml(`${lead}${body}`);
+  }, [name, suffix, body]);
   return (
-    <span
-      className="prose prose-sm max-w-none inline prose-p:inline prose-p:text-ink/90 prose-strong:text-ink prose-em:text-ink/85 prose-li:text-ink/85"
+    <div
+      className={cn(
+        PROSE_CLASS,
+        bullet && "pl-4 relative before:content-['•'] before:absolute before:left-0 before:text-gold/60",
+      )}
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );
 }
 
-function EntryBody({ entry }: { entry: Entry }) {
+// The body BBCode for an entry: its prose when present, else a synthesised line
+// from the activity tuples (rare fallback — most monster actions carry prose).
+function entryBody(entry: Entry): string {
   const raw = String(entry.description || '').trim();
-  // Most monster actions carry full prose; only synthesise from the activity
-  // tuple when the body is empty (rare, but keeps the entry from rendering blank).
-  if (!raw) {
-    const acts = Array.isArray(entry.activities) ? entry.activities : [];
-    const synth = acts.map(synthesizeActivityLine).filter(Boolean).join(' ');
-    if (!synth) return null;
-    return <MonsterProse bbcode={synth} />;
-  }
-  return <MonsterProse bbcode={raw} />;
+  if (raw) return cleanMonsterProse(raw);
+  const acts = Array.isArray(entry.activities) ? entry.activities : [];
+  return acts.map(synthesizeActivityLine).filter(Boolean).join(' ');
 }
 
 function entrySuffix(entry: Entry): string {
@@ -462,20 +485,15 @@ function EntrySection({
           if (!suffix && /^legendary resistance$/i.test(name) && legendaryResistanceCount) {
             suffix = `(${legendaryResistanceCount}/Day)`;
           }
-          // Unnamed entries (MM lair/regional bullets) render as plain bullets.
-          if (!name) {
-            return (
-              <p key={i} className="text-sm text-ink/90 leading-snug pl-4 relative before:content-['•'] before:absolute before:left-0 before:text-gold/60">
-                <EntryBody entry={entry} />
-              </p>
-            );
-          }
+          // Unnamed entries (MM lair bullets) render as plain bullets.
           return (
-            <p key={i} className="text-sm leading-snug">
-              <span className="font-bold italic text-ink">{name}.</span>
-              {suffix ? <span className="text-ink/70 italic"> {suffix}</span> : null}{' '}
-              <EntryBody entry={entry} />
-            </p>
+            <RenderedEntry
+              key={i}
+              name={name || undefined}
+              suffix={suffix}
+              body={entryBody(entry)}
+              bullet={!name}
+            />
           );
         })}
       </div>
@@ -494,12 +512,15 @@ function RegionalSection({ entries }: { entries?: Array<{ name?: string; descrip
       <div className="space-y-2">
         {list.map((entry, i) => {
           const name = String(entry.name || '').trim();
+          // "Regional Effects" is the section heading itself — drop it as an
+          // entry name; its description carries the full intro + bullet list.
           const isHeading = /^regional effects$/i.test(name);
           return (
-            <div key={i} className="text-sm leading-snug">
-              {name && !isHeading ? <span className="font-bold italic text-ink">{name}. </span> : null}
-              <MonsterProse bbcode={String(entry.description || '')} />
-            </div>
+            <RenderedEntry
+              key={i}
+              name={isHeading ? undefined : (name || undefined)}
+              body={cleanMonsterProse(String(entry.description || ''))}
+            />
           );
         })}
       </div>
@@ -548,6 +569,25 @@ function SpellcastingBlock({ block }: { block: Spellcasting }) {
   }
   const levels = [...byLevel.keys()].sort((a, b) => a - b);
 
+  // Render the spell list as BBCode so each spell is a real `@spell[id]{Name}`
+  // cross-reference — canonical `ref-link ref-spell` styling, consistent with
+  // how spells are referenced everywhere else in the app. The level label is
+  // plain bold (NOT gold): a gold highlight would clash with the reference
+  // links' own colour.
+  const listBbcode = levels.map((lvl) => {
+    const slotCount = block.slots?.[`spell${lvl}`];
+    const label = lvl === 0
+      ? 'Cantrips (at will)'
+      : `${ordinal(lvl)} Level${slotCount ? ` (${slotCount} slot${slotCount === 1 ? '' : 's'})` : ''}`;
+    const refs = byLevel.get(lvl)!.map((sp) => {
+      const name = sp.name || titleCase(sp.identifier || '');
+      const ref = sp.identifier ? `@spell[${sp.identifier}]{${name}}` : name;
+      const uses = sp.uses ? formatUsesSuffix(sp.uses) : '';
+      return uses ? `${ref} ${uses}` : ref;
+    }).join(', ');
+    return `[b]${label}:[/b] ${refs}`;
+  }).join('\n');
+
   return (
     <div className="space-y-2">
       {preamble ? (
@@ -556,36 +596,10 @@ function SpellcastingBlock({ block }: { block: Spellcasting }) {
         </div>
       ) : null}
       {levels.length ? (
-        <ul className="space-y-1 text-sm">
-          {levels.map((lvl) => {
-            const slotCount = block.slots?.[`spell${lvl}`];
-            const label = lvl === 0
-              ? 'Cantrips (at will)'
-              : `${ordinal(lvl)} Level${slotCount ? ` (${slotCount} slot${slotCount === 1 ? '' : 's'})` : ''}`;
-            const group = byLevel.get(lvl)!;
-            return (
-              <li key={lvl} className="text-ink/90">
-                <span className="font-bold text-gold/75">{label}:</span>{' '}
-                {group.map((sp, idx) => (
-                  <React.Fragment key={`${sp.identifier || sp.name}-${idx}`}>
-                    {idx > 0 ? ', ' : ''}
-                    {sp.identifier ? (
-                      <Link
-                        to={`/compendium/spells?focus=${encodeURIComponent(sp.identifier)}`}
-                        className="italic text-ink hover:text-gold underline-offset-2 hover:underline transition-colors"
-                      >
-                        {sp.name || titleCase(sp.identifier)}
-                      </Link>
-                    ) : (
-                      <span className="italic">{sp.name || '—'}</span>
-                    )}
-                    {sp.uses ? <span className="text-ink/55"> {formatUsesSuffix(sp.uses) || ''}</span> : null}
-                  </React.Fragment>
-                ))}
-              </li>
-            );
-          })}
-        </ul>
+        <div
+          className="text-sm leading-relaxed prose prose-sm max-w-none prose-strong:text-ink prose-strong:font-bold prose-p:text-ink/90 prose-p:my-0"
+          dangerouslySetInnerHTML={{ __html: bbcodeToHtml(listBbcode) }}
+        />
       ) : null}
     </div>
   );

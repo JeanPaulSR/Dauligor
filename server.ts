@@ -411,8 +411,21 @@ async function startServer() {
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
+    // HMR is set INLINE here (authoritative): in middlewareMode the inline
+    // server config wins over vite.config's `server.hmr`, so the config-file
+    // value (DISABLE_HMR) is otherwise ignored. Env-gated so default behavior
+    // is unchanged for any stack that sets neither var:
+    //   DISABLE_HMR=true → HMR off (no client ws at all).
+    //   HMR_PORT=<n>      → HMR client ws on a unique per-stack port, so
+    //                       concurrent git-worktree dev stacks don't all fight
+    //                       over Vite's default :24678 (the loser's client logs
+    //                       a failed-ws error). Each dev-<branch>.mjs sets its own.
+    const hmr =
+      process.env.DISABLE_HMR === "true"
+        ? false
+        : (process.env.HMR_PORT ? { port: Number(process.env.HMR_PORT) } : true);
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { middlewareMode: true, hmr },
       appType: "spa",
     });
     app.use(vite.middlewares);

@@ -327,7 +327,7 @@ export function synthesizeActivityLine(activity: any): string {
         ? `range ${atk.range}/${atk.long} ${units}.`
         : `range ${atk.range} ${units}.`);
     }
-    parts.push(`*${kind} Attack:* ${formatBonus(Number(atk.bonus || 0))} to hit${reachRange.length ? `, ${reachRange.join(', ')}` : ''}.`);
+    parts.push(`[i]${kind} Attack:[/i] ${formatBonus(Number(atk.bonus || 0))} to hit${reachRange.length ? `, ${reachRange.join(', ')}` : ''}.`);
   }
   const save = activity.save;
   if (save && typeof save === 'object' && save.dc) {
@@ -341,7 +341,7 @@ export function synthesizeActivityLine(activity: any): string {
       const types = Array.isArray(p.types) ? p.types.join(', ') : '';
       return `${p.average != null ? `${p.average} ` : ''}(${p.formula})${types ? ` ${types}` : ''}`;
     }).join(' plus ');
-    parts.push(`*Hit:* ${hit} damage.`);
+    parts.push(`[i]Hit:[/i] ${hit} damage.`);
   }
   return parts.join(' ');
 }

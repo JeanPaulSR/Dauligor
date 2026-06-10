@@ -402,17 +402,22 @@ export function CompendiumBrowserShell<TRow>(props: CompendiumBrowserShellProps<
   // chips). Order: page actions → result count → Settings.
   const settingsPopover = (
     <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-8 border-gold/25 text-gold hover:bg-gold/5 gap-2"
-          title="List settings"
-        >
-          <Settings className="w-3.5 h-3.5" />
-          Settings
-        </Button>
+      {/* base-ui Popover uses `render` (NOT Radix `asChild`) to render the
+          trigger AS the Button — one <button>, no nested-button/hydration
+          error, and no unknown `asChild` prop leaking to the DOM. */}
+      <PopoverTrigger
+        render={
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 border-gold/25 text-gold hover:bg-gold/5 gap-2"
+            title="List settings"
+          />
+        }
+      >
+        <Settings className="w-3.5 h-3.5" />
+        Settings
       </PopoverTrigger>
       <PopoverContent align="end" className="w-56 p-2">
         <div className="text-[10px] uppercase tracking-widest text-ink/45 px-1 pb-1.5 mb-1 border-b border-gold/15">

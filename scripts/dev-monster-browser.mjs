@@ -43,6 +43,10 @@ const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const APP_PORT = process.env.APP_PORT || '3006';
 const WORKER_PORT = process.env.WORKER_PORT || '8793';
 const INSPECTOR_PORT = process.env.WORKER_INSPECTOR_PORT || '9234';
+// Unique HMR ws port for THIS stack. Vite's default is :24678, shared across
+// every worktree stack — whichever starts first owns it and the rest log a
+// failed-ws error. server.ts reads HMR_PORT and binds the client ws here.
+const HMR_PORT = process.env.HMR_PORT || '24693';
 
 console.log(
   `[dev-monster-browser] app http://localhost:${APP_PORT}  ` +
@@ -70,7 +74,10 @@ const app = spawn('npx', ['tsx', 'server.ts'], {
   cwd: rootDir,
   stdio: 'inherit',
   shell: true,
-  env: { ...process.env, PORT: APP_PORT, R2_WORKER_URL: `http://localhost:${WORKER_PORT}` },
+  // HMR_PORT gives this stack its OWN HMR ws port (server.ts honors it inline —
+  // the config-file `server.hmr` is overridden by middlewareMode), so running
+  // several worktree stacks at once doesn't collide on Vite's default :24678.
+  env: { ...process.env, PORT: APP_PORT, R2_WORKER_URL: `http://localhost:${WORKER_PORT}`, HMR_PORT },
 });
 
 const shutdown = () => {
