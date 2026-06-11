@@ -16,6 +16,7 @@
 
 import { slugify } from './utils';
 import { htmlToBbcode } from './bbcode';
+import { foundryActivityToSemantic } from './foundryActivities';
 
 // ─── lookups passed in by the runner ────────────────────────────────────────
 export interface MonsterImportContext {
@@ -80,107 +81,6 @@ function crToXp(cr: number | null): number | null {
   return CR_XP[key] ?? null;
 }
 
-/** Resolve a Foundry damage-part bonus ("@mod" / "" / "2") to a number. */
-function resolveBonus(bonus: any, attackAbility: string, abilities: Record<string, number>): number {
-  const s = String(bonus ?? '').trim();
-  if (!s) return 0;
-  if (s === '@mod') return abilityMod(abilities[attackAbility] ?? 10);
-  const n = Number(s);
-  if (!Number.isNaN(n)) return n;
-  // "@mod + 2" style — extract @mod + trailing int
-  let total = 0;
-  if (/@mod/.test(s)) total += abilityMod(abilities[attackAbility] ?? 10);
-  const m = s.match(/([+-]?\s*\d+)\s*$/);
-  if (m) total += Number(m[1].replace(/\s+/g, ''));
-  return total;
-}
-
-function buildDamageParts(activity: any, item: any, attackAbility: string, abilities: Record<string, number>, baseMod = 0) {
-  const parts: any[] = [];
-  const raw = activity?.damage?.parts;
-  if (Array.isArray(raw)) {
-    for (const p of raw) {
-      const num = Number(p.number ?? p.denomination ? p.number : 0) || Number(p.number) || 0;
-      const denom = Number(p.denomination) || 0;
-      const bonus = resolveBonus(p.bonus, attackAbility, abilities);
-      const avg = (denom ? Math.floor(num * (denom + 1) / 2) : 0) + bonus;
-      const formula = denom
-        ? `${num}d${denom}${bonus ? (bonus > 0 ? ` + ${bonus}` : ` - ${Math.abs(bonus)}`) : ''}`
-        : String(bonus);
-      parts.push({ average: avg, formula, types: Array.from(p.types ?? []) });
-    }
-  }
-  // weapons with includeBase + empty parts fall back to system.damage.base
-  if (parts.length === 0 && activity?.damage?.includeBase && item?.system?.damage?.base) {
-    const b = item.system.damage.base;
-    const denom = Number(b.denomination) || 0;
-    const num = Number(b.number) || 0;
-    // Foundry applies the wielder's ability mod to weapon-base damage via the
-    // includeBase mechanic (NOT stored as an "@mod" part), so add it for attack
-    // activities — else e.g. Javelin renders "1d6" instead of "1d6 + 2".
-    const explicit = resolveBonus(b.bonus, attackAbility, abilities);
-    const bonus = explicit + (/@mod/.test(String(b.bonus ?? '')) ? 0 : baseMod);
-    const avg = (denom ? Math.floor(num * (denom + 1) / 2) : 0) + bonus;
-    parts.push({
-      average: avg,
-      formula: denom ? `${num}d${denom}${bonus ? (bonus > 0 ? ` + ${bonus}` : ` - ${Math.abs(bonus)}`) : ''}` : String(bonus),
-      types: Array.from(b.types ?? []),
-    });
-  }
-  return parts;
-}
-
-function buildActivityTuple(activity: any, item: any, abilities: Record<string, number>, pb: number) {
-  const kind = activity?.type || 'utility';
-  const tuple: any = { kind, activation: activity?.activation?.type ?? '' };
-  if (kind === 'attack' && activity.attack) {
-    const ability = activity.attack.ability || 'str';
-    const mod = abilityMod(abilities[ability] ?? 10);
-    const flatBonus = resolveBonus(activity.attack.bonus, ability, abilities);
-    const isMelee = (activity.attack.type?.value || 'melee') === 'melee';
-    tuple.attack = {
-      bonus: mod + pb + flatBonus,
-      type: isMelee ? 'melee' : 'ranged',
-      units: item?.system?.range?.units || 'ft',
-    };
-    const rng = item?.system?.range || {};
-    const value = Number(rng.value);
-    const long = Number(rng.long);
-    const reachField = Number(rng.reach);
-    // Foundry stores a melee weapon's REACH in range.value (range.reach is
-    // almost always null). A thrown melee weapon (has range.long) keeps reach=5
-    // default + its throw range/long. Ranged attacks use range/long as-is.
-    if (isMelee) {
-      if (!Number.isNaN(long) && long) {
-        tuple.attack.reach = (!Number.isNaN(reachField) && reachField) ? reachField : 5;
-        if (!Number.isNaN(value) && value) tuple.attack.range = value;
-        tuple.attack.long = long;
-      } else {
-        tuple.attack.reach = (!Number.isNaN(reachField) && reachField) ? reachField
-          : (!Number.isNaN(value) && value ? value : 5);
-      }
-    } else {
-      if (!Number.isNaN(value) && value) tuple.attack.range = value;
-      if (!Number.isNaN(long) && long) tuple.attack.long = long;
-    }
-    const dp = buildDamageParts(activity, item, ability, abilities, mod);
-    if (dp.length) tuple.damageParts = dp;
-  } else if (kind === 'save' && activity.save) {
-    const dc = parseInt(String(activity.save?.dc?.formula ?? ''), 10);
-    tuple.save = {
-      abilities: Array.from(activity.save.ability ?? []),
-      dc: Number.isNaN(dc) ? 0 : dc,
-    };
-    if (activity.damage?.onSave) tuple.save.onSave = activity.damage.onSave;
-    const dp = buildDamageParts(activity, item, 'str', abilities);
-    if (dp.length) tuple.damageParts = dp;
-  } else {
-    const dp = buildDamageParts(activity, item, 'str', abilities);
-    if (dp.length) tuple.damageParts = dp;
-  }
-  return tuple;
-}
-
 function buildUses(item: any) {
   const uses = item?.system?.uses;
   if (!uses) return undefined;
@@ -191,10 +91,15 @@ function buildUses(item: any) {
   return { max: uses.max ? String(uses.max) : undefined, recovery };
 }
 
-function buildAction(item: any, abilities: Record<string, number>, pb: number, pageBucket: string) {
+function buildAction(item: any, _abilities: Record<string, number>, _pb: number, pageBucket: string) {
   const acts = item?.system?.activities;
+  // Convert each Foundry activity to the shared SemanticActivity shape — formulas
+  // (@mod, dc.formula, dice components) PRESERVED. This is the same converter
+  // items/feats/spells use, so monster activities ride the existing Foundry-export
+  // pipeline (the module's normalizeSemanticActivityCollection) and re-export as
+  // functional attack/save/damage activities instead of inert display numbers.
   const activities = acts && typeof acts === 'object'
-    ? Object.values(acts).filter((a: any) => a && typeof a === 'object').map((a: any) => buildActivityTuple(a, item, abilities, pb))
+    ? Object.values(acts).filter((a: any) => a && typeof a === 'object').map((a: any, i: number) => foundryActivityToSemantic(a, i))
     : [];
   const action: any = {
     name: item.name || '',

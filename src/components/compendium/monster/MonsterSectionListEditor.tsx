@@ -4,7 +4,7 @@ import { cn } from '../../../lib/utils';
 import MarkdownEditor from '../../MarkdownEditor';
 import { Field, NumField, Sel } from './fields';
 import { Input } from '../../ui/input';
-import MonsterActivityEditor from './MonsterActivityEditor';
+import ActivityEditor from '../ActivityEditor';
 import { formatUsesSuffix } from '../../../lib/monsterDisplay';
 
 /**
@@ -84,7 +84,11 @@ export default function MonsterSectionListEditor({
                   </Field>
                 ) : null}
                 {options.activities ? (
-                  <MonsterActivityEditor activities={entry.activities} onChange={(a) => update(i, { activities: a })} />
+                  <ActivityEditor
+                    activities={entry.activities || []}
+                    onChange={(a) => update(i, { activities: a })}
+                    context="feat"
+                  />
                 ) : null}
               </div>
             ) : null}

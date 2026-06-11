@@ -8,7 +8,7 @@ import {
   ABILITY_ORDER, ABILITY_ABBR, SKILL_NAME, ABILITY_NAME,
   abilityMod, formatBonus, formatCr, formatXp, formatTypeLine, formatSpeed,
   formatSenses, formatDamageMod, formatStringList, formatLanguages,
-  formatUsesSuffix, cleanMonsterProse, synthesizeActivityLine, titleCase,
+  formatUsesSuffix, cleanMonsterProse, titleCase,
 } from '../../lib/monsterDisplay';
 
 /**
@@ -441,13 +441,11 @@ function RenderedEntry({
   );
 }
 
-// The body BBCode for an entry: its prose when present, else a synthesised line
-// from the activity tuples (rare fallback — most monster actions carry prose).
+// The body BBCode for an entry — the prose (the reader is prose-driven). The
+// structured `activities[]` (now SemanticActivity, formula-bearing) are the
+// machine-readable copy for Foundry export, not a display source.
 function entryBody(entry: Entry): string {
-  const raw = String(entry.description || '').trim();
-  if (raw) return cleanMonsterProse(raw);
-  const acts = Array.isArray(entry.activities) ? entry.activities : [];
-  return acts.map(synthesizeActivityLine).filter(Boolean).join(' ');
+  return cleanMonsterProse(String(entry.description || '').trim());
 }
 
 function entrySuffix(entry: Entry): string {

@@ -377,40 +377,6 @@ export function cleanMonsterProse(input: string): string {
   return s;
 }
 
-/**
- * For the rare action whose stored `description` is empty: synthesise a minimal
- * mechanical line from a single activity tuple so the entry isn't blank. Most
- * monster actions DO carry full prose, so this is a fallback, not the norm.
- */
-export function synthesizeActivityLine(activity: any): string {
-  if (!activity || typeof activity !== 'object') return '';
-  const parts: string[] = [];
-  const atk = activity.attack;
-  if (atk && typeof atk === 'object') {
-    const kind = atk.type === 'ranged' ? 'Ranged' : 'Melee';
-    const units = atk.units || 'ft';
-    const reachRange: string[] = [];
-    if (atk.reach != null) reachRange.push(`reach ${atk.reach} ${units}.`);
-    if (atk.range != null) {
-      reachRange.push(atk.long != null
-        ? `range ${atk.range}/${atk.long} ${units}.`
-        : `range ${atk.range} ${units}.`);
-    }
-    parts.push(`[i]${kind} Attack:[/i] ${formatBonus(Number(atk.bonus || 0))} to hit${reachRange.length ? `, ${reachRange.join(', ')}` : ''}.`);
-  }
-  const save = activity.save;
-  if (save && typeof save === 'object' && save.dc) {
-    const abilities = (Array.isArray(save.abilities) ? save.abilities : [])
-      .map((a: string) => ABILITY_NAME[String(a).toLowerCase()] || a).join(' or ');
-    parts.push(`DC ${save.dc} ${abilities} saving throw${save.onSave === 'half' ? ' (half damage on a success)' : ''}.`);
-  }
-  const dmg: any[] = Array.isArray(activity.damageParts) ? activity.damageParts : [];
-  if (dmg.length) {
-    const hit = dmg.map((p) => {
-      const types = Array.isArray(p.types) ? p.types.join(', ') : '';
-      return `${p.average != null ? `${p.average} ` : ''}(${p.formula})${types ? ` ${types}` : ''}`;
-    }).join(' plus ');
-    parts.push(`[i]Hit:[/i] ${hit} damage.`);
-  }
-  return parts.join(' ');
-}
+// (synthesizeActivityLine removed — monster activities are now SemanticActivity,
+// not the display tuple it read; the reader is prose-driven, so the empty-desc
+// synthesized fallback is gone.)
