@@ -16,6 +16,7 @@ import {
 import MonsterBasicsTab from '../../components/compendium/monster/MonsterBasicsTab';
 import MonsterDefensesTab from '../../components/compendium/monster/MonsterDefensesTab';
 import MonsterMovementSensesTab from '../../components/compendium/monster/MonsterMovementSensesTab';
+import MonsterActionsTab from '../../components/compendium/monster/MonsterActionsTab';
 import { numOrNull, type MonsterForm, type SetForm } from '../../components/compendium/monster/fields';
 import MarkdownEditor from '../../components/MarkdownEditor';
 import TagPicker from '../../components/compendium/TagPicker';
@@ -224,6 +225,15 @@ export default function MonstersEditor({ userProfile }: { userProfile: any }) {
         hp: numOrNull(formData.hp),
         proficiencyBonus: numOrNull(formData.proficiencyBonus),
         passivePerception: numOrNull(formData.passivePerception),
+        legendaryActionCount: numOrNull(formData.legendaryActionCount),
+        legendaryResistanceCount: numOrNull(formData.legendaryResistanceCount),
+        lairInitiative: numOrNull(formData.lairInitiative),
+        // Derived filter flags — keep in lockstep with the section content.
+        hasLegendary: ((Array.isArray(formData.legendaryActions) && formData.legendaryActions.length > 0)
+          || (numOrNull(formData.legendaryActionCount) ?? 0) > 0) ? 1 : 0,
+        hasLair: ((Array.isArray(formData.lairActions) && formData.lairActions.length > 0)
+          || numOrNull(formData.lairInitiative) != null) ? 1 : 0,
+        hasSpellcasting: (Array.isArray(formData.spellcasting) && formData.spellcasting.length > 0) ? 1 : 0,
         // Short teaser mirrors the importer (first slice of the biography).
         description: bio ? bio.slice(0, 240) : (rest.description ?? ''),
       };
@@ -315,6 +325,7 @@ export default function MonstersEditor({ userProfile }: { userProfile: any }) {
         { key: 'basics', label: 'Basics', layout: 'scroll', render: () => <MonsterBasicsTab form={formData} set={set} sources={sources} monsterId={selectedId} /> },
         { key: 'defenses', label: 'Defenses', layout: 'scroll', render: () => <MonsterDefensesTab form={formData} set={set} languages={languageOptions} /> },
         { key: 'movement', label: 'Move & Senses', layout: 'scroll', render: () => <MonsterMovementSensesTab form={formData} set={set} /> },
+        { key: 'actions', label: 'Actions & Traits', layout: 'scroll', render: () => <MonsterActionsTab form={formData} set={set} /> },
         { key: 'lore', label: 'Lore', layout: 'fill', render: () => (
           <div className="flex flex-col flex-1 min-h-0">
             <span className="block text-[10px] font-bold uppercase tracking-widest text-gold/75 pb-1">Biography</span>
