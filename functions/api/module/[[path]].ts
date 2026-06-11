@@ -46,6 +46,7 @@ import { buildBackgroundFeatureItemBundle } from "../../../api/_lib/_backgroundF
 import { buildRaceItemBundle } from "../../../api/_lib/_raceExport.js";
 import { buildSpeciesOptionItemBundle } from "../../../api/_lib/_speciesOptionExport.js";
 import { buildItemBundle } from "../../../api/_lib/_itemExport.js";
+import { buildMonsterBundleForIdentifier } from "../../../api/_lib/_monsterExport.js";
 import { buildTagCatalog } from "../../../api/_lib/_tagCatalog.js";
 import { buildSpellcastingChartBundle } from "../../../api/_lib/_spellcastingChart.js";
 import { SERVER_EXPORT_FETCHERS } from "../../../api/_lib/d1-fetchers-server.js";
@@ -319,6 +320,19 @@ export const onRequest = async (context: any): Promise<Response> => {
         () => buildClassBundleForIdentifier(classIdentifier),
       );
       if (result) return serveCached(result);
+    }
+
+    // Per-monster full NPC actor — live read-through, no R2 cache. URL:
+    //   /api/module/<source>/monsters/<identifier>.json
+    // The Foundry module's monster-import path (NEW — see the foundry-module
+    // handoff) creates an Actor from this bundle and runs each embedded item's
+    // SemanticActivity[] through normalizeSemanticActivityCollection. Live so
+    // editor edits propagate on the next import without a rebake.
+    else if (pathParts.length === 3 && pathParts[1] === "monsters" && pathParts[2].endsWith(".json")) {
+      const monsterIdentifier = pathParts[2].replace(".json", "").toLowerCase();
+      const result = await buildMonsterBundleForIdentifier(monsterIdentifier, SERVER_EXPORT_FETCHERS);
+      if (result) return serveLive(result);
+      // Fall through to 404 if the identifier didn't match.
     }
 
     // Per-class spell list — live read-through, NOT R2-cached. URL:
