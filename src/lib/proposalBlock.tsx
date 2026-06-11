@@ -45,9 +45,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { auth } from './firebase';
-import { onAuthStateChanged } from 'firebase/auth';
-import { getIdentity, getSessionToken } from "./auth";
+import { getIdentity, getSessionToken, onAuthChange } from "./auth";
 
 const LS_KEY = 'dauligor:active-block-id';
 // The active-block id is persisted PER USER. A global key let one account's
@@ -111,6 +109,18 @@ export type BlockContextValue = {
   openBlocks: ProposalBundle[];
   /** True while a network round-trip for drafts/metadata/openBlocks is in flight. */
   loading: boolean;
+  /**
+   * True once the ACTIVE block's drafts have been fetched at least once
+   * (or when no block is active — nothing to wait for). Single-work
+   * editors with a queue/draft form fallback (ClassEditor,
+   * UniqueOptionGroupEditor, SubclassEditor) gate their initial form
+   * hydration on this: on a hard reload their load effect otherwise
+   * races the provider's async drafts fetch, reads an empty drafts map,
+   * seeds the form blank/stale — and the next Save Progress pre-flush
+   * PATCHes the server draft with those blank values, silently wiping
+   * the creator's drafted work.
+   */
+  draftsReady: boolean;
   /** Start a new block. Returns the server-issued bundle id. Throws if name missing. */
   startBlock: (name: string, description?: string | null) => Promise<string>;
   /** Switch the active block to an existing open one (caller's). Pass null to clear. */
@@ -125,7 +135,14 @@ export type BlockContextValue = {
   // Returns the freshly-fetched drafts for the active block (not just void)
   // so a caller mid-flush can adopt server truth synchronously instead of
   // waiting on the async React `drafts` state to re-render (R4 fold race).
-  refresh: () => Promise<DraftRevision[]>;
+  //
+  // `bundleIdOverride` lets a caller fetch against an EXPLICIT bundle id
+  // instead of the closure's `activeBundleId` state. The picker path
+  // (setActiveBlock(id) followed immediately by flushToBundle(id)) needs
+  // this: React hasn't committed the new activeBundleId yet, so a
+  // parameterless refresh would fetch the OLD bundle (or nothing) and the
+  // flush would partition against the wrong draft set.
+  refresh: (bundleIdOverride?: string) => Promise<DraftRevision[]>;
   /** Re-fetch the user's open blocks list. */
   refreshOpenBlocks: () => Promise<void>;
 };
@@ -184,6 +201,11 @@ export function BlockProvider({ children }: { children: ReactNode }) {
   }, [drafts]);
   const [openBlocks, setOpenBlocks] = useState<ProposalBundle[]>([]);
   const [loading, setLoading] = useState(false);
+  // The bundle id whose drafts have completed at least one fetch — drives
+  // the `draftsReady` context flag (see the type's doc comment). Reset
+  // implicitly by comparison: switching bundles makes the stored id stale
+  // until the new bundle's first refresh lands.
+  const [readyBundleId, setReadyBundleId] = useState<string | null>(null);
 
   // Track the bundle id we last fetched against so race-y refreshes
   // (e.g. user starts a new block before the previous fetch returns)
@@ -203,8 +225,15 @@ export function BlockProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Track auth changes so block state is scoped per account.
-  useEffect(() => onAuthStateChanged(auth, (u) => setCurrentUid(u?.uid ?? null)), []);
+  // Track auth changes so block state is scoped per account. Subscribe
+  // through the unified auth layer (NOT Firebase's onAuthStateChanged
+  // directly): natively-authenticated session-token users don't exist in
+  // Firebase, so the Firebase callback fires `null` for them and the
+  // account-switch effect below would wipe the restored active block +
+  // drafts moments after every page load. onAuthChange emits for both
+  // native-token and Firebase changes, and getIdentity() prefers the
+  // native session — same pattern as App.tsx.
+  useEffect(() => onAuthChange((id) => setCurrentUid(id?.uid ?? null)), []);
 
   // On account switch (incl. the async restore of the signed-in user after
   // mount), drop in-memory block state and load THIS user's persisted active
@@ -238,14 +267,17 @@ export function BlockProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const refresh = useCallback(async () => {
-    if (!activeBundleId) {
+  const refresh = useCallback(async (bundleIdOverride?: string) => {
+    // Explicit override beats the closure state — see the context-type
+    // doc: the picker path flushes against a bundle React hasn't
+    // committed to `activeBundleId` yet.
+    const requestedId = bundleIdOverride ?? activeBundleId;
+    if (!requestedId) {
       setDrafts([]);
       setActiveBundle(null);
       return [];
     }
     setLoading(true);
-    const requestedId = activeBundleId;
     lastFetchedIdRef.current = requestedId;
     try {
       // Drafts + metadata in parallel. Both 404-class responses
@@ -316,7 +348,15 @@ export function BlockProvider({ children }: { children: ReactNode }) {
       console.error('[BlockProvider] refresh failed:', err);
       return draftsRef.current;
     } finally {
-      if (lastFetchedIdRef.current === requestedId) setLoading(false);
+      if (lastFetchedIdRef.current === requestedId) {
+        setLoading(false);
+        // Mark this bundle's drafts as fetched-at-least-once even on a
+        // failed round-trip: the `draftsReady` gate exists to close an
+        // ordinary fast-path timing race, not to wedge editors behind a
+        // persistent network failure (where loading live data beats
+        // never hydrating at all).
+        setReadyBundleId(requestedId);
+      }
     }
   }, [activeBundleId, persist]);
 
@@ -445,6 +485,10 @@ export function BlockProvider({ children }: { children: ReactNode }) {
     return { discarded: Number(body.discarded_count) || 0 };
   }, [activeBundleId, persist, refreshOpenBlocks]);
 
+  // No active block → nothing to wait for; otherwise ready once the
+  // active bundle's drafts have completed at least one fetch.
+  const draftsReady = !activeBundleId || readyBundleId === activeBundleId;
+
   const value: BlockContextValue = useMemo(
     () => ({
       activeBundleId,
@@ -452,6 +496,7 @@ export function BlockProvider({ children }: { children: ReactNode }) {
       drafts,
       openBlocks,
       loading,
+      draftsReady,
       startBlock,
       setActiveBlock,
       patchActiveBlock,
@@ -466,6 +511,7 @@ export function BlockProvider({ children }: { children: ReactNode }) {
       drafts,
       openBlocks,
       loading,
+      draftsReady,
       startBlock,
       setActiveBlock,
       patchActiveBlock,

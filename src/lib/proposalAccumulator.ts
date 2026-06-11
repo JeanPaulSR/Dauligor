@@ -580,6 +580,15 @@ export async function postQueuedChanges(
         draftDrops.push(existingDelete.id);
         continue;
       }
+      if (existingDelete?.operation === 'delete') {
+        // The block already carries a DELETE draft for this entity —
+        // nothing new to record. Folding here (instead of falling
+        // through to POST) prevents duplicate DELETE revisions when a
+        // tombstoned row's Trash is clicked again, and keeps a retry
+        // after a partial flush failure convergent instead of stacking
+        // a second DELETE.
+        continue;
+      }
       if (existingDelete?.operation === 'update') {
         draftDrops.push(existingDelete.id);
         // fall through to POST the DELETE
@@ -611,31 +620,6 @@ export async function postQueuedChanges(
     } else {
       newRevisions.push(q);
     }
-  }
-
-  // DROP drafts that are being un-proposed by a follow-up queue
-  // DELETE. Done before POST so the draft set is consistent when the
-  // server runs its own validation on the new revisions.
-  if (draftDrops.length > 0) {
-    await Promise.all(
-      draftDrops.map((draftId) =>
-        fetch(`/api/proposals/${encodeURIComponent(draftId)}`, {
-          method: 'DELETE',
-          headers: { Authorization: auth_header },
-        }).then(async (res) => {
-          // 404 is acceptable here — the draft may have been resolved
-          // (approved / rejected) since the client cache was last
-          // refreshed. The user's intent ("undo my proposal") is
-          // still satisfied.
-          if (!res.ok && res.status !== 404) {
-            const body = await res.json().catch(() => ({}));
-            throw new Error(
-              body?.error || `Failed to withdraw draft ${draftId} (HTTP ${res.status})`,
-            );
-          }
-        }),
-      ),
-    );
   }
 
   // PATCH existing drafts in parallel.
@@ -787,6 +771,37 @@ export async function postQueuedChanges(
         );
       }
     }
+  }
+
+  // DROP drafts that are being un-proposed by a follow-up queue DELETE.
+  // Done AFTER the POST (the server's submit path validates new revisions
+  // only against the live entity tables, never against draft rows, and the
+  // batch INSERT is all-or-nothing). Ordering matters for failure
+  // recovery: dropping FIRST meant a doomed co-revision could fail the
+  // POST after a CREATE draft was already withdrawn — the queue's DELETE
+  // entry then had no draft to match on retry and re-created the exact
+  // 404 wedge. With drops last, a failed POST leaves the draft set
+  // untouched and the retry recomputes an identical partition.
+  if (draftDrops.length > 0) {
+    await Promise.all(
+      draftDrops.map((draftId) =>
+        fetch(`/api/proposals/${encodeURIComponent(draftId)}`, {
+          method: 'DELETE',
+          headers: { Authorization: auth_header },
+        }).then(async (res) => {
+          // 404 is acceptable here — the draft may have been resolved
+          // (approved / rejected) since the client cache was last
+          // refreshed. The user's intent ("undo my proposal") is
+          // still satisfied.
+          if (!res.ok && res.status !== 404) {
+            const body = await res.json().catch(() => ({}));
+            throw new Error(
+              body?.error || `Failed to withdraw draft ${draftId} (HTTP ${res.status})`,
+            );
+          }
+        }),
+      ),
+    );
   }
 
   return { submitted: queue.length };

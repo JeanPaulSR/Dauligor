@@ -162,9 +162,8 @@ export function ProposalEditorWrapper({
     refreshOpenBlocks,
   } = useBlock();
   // Subset of the block's drafts that belong to entity types this
-  // editor handles. Used by `flushToBundle` to dedup queue entries
-  // against existing same-bundle drafts and by `dropEntity` to know
-  // which server-side drafts to DELETE alongside the local queue.
+  // editor handles. Used by `dropEntity` to know which server-side
+  // drafts to DELETE alongside the local queue.
   const drafts = useMemo(
     () =>
       allDrafts.filter((d) =>
@@ -173,15 +172,27 @@ export function ProposalEditorWrapper({
     [allDrafts, entityTypes],
   );
 
-  // Ref-mirror of this editor's drafts so `flushToBundle` partitions against
-  // the freshest known set rather than a closure-captured React value. After
-  // each flush we adopt `refreshBlock()`'s return (server truth) into it; the
-  // effect keeps it current for the first flush + any external cache updates.
-  // (R4 — closes the create→update fold race across rapid sequential flushes.)
-  const latestDraftsRef = useRef(drafts);
+  // Ref-mirror of ALL the block's drafts (NOT filtered to this editor's
+  // entityTypes) so `flushToBundle` partitions against the freshest known
+  // set rather than a closure-captured React value. After each flush we
+  // adopt `refreshBlock()`'s return (server truth) into it; the effect
+  // keeps it current for the first flush + any external cache updates.
+  // (R4 — closes the create→update fold race across rapid sequential
+  // flushes.)
+  //
+  // Unfiltered on purpose: editors queue writes for entity types beyond
+  // the route's `entityType` prop (ClassEditor queues `feature` and
+  // `scaling_column` under a route declared `entityType="class"`).
+  // postQueuedChanges matches queue entries to drafts on
+  // (entity_type, id), so extra types are inert — but FILTERING them out
+  // breaks the partition: a DELETE for a block-created scaling column
+  // can't find its CREATE draft, posts a doomed DELETE revision, the
+  // server 404s ("Cannot propose delete on missing scaling_column …"),
+  // and the wedged queue blocks every later save. (2026-06-13 prod bug.)
+  const latestDraftsRef = useRef(allDrafts);
   useEffect(() => {
-    latestDraftsRef.current = drafts;
-  }, [drafts]);
+    latestDraftsRef.current = allDrafts;
+  }, [allDrafts]);
   // Serializes flushes so a second flush can't partition against drafts the
   // first one hasn't finished registering. Each flush chains behind the prior
   // (running even if it failed, so one error doesn't wedge the queue).
@@ -303,11 +314,25 @@ export function ProposalEditorWrapper({
           const currentQueue = queueRef.current;
           if (currentQueue.length === 0) return { submitted: 0 };
 
+          // Hydrate the partition's draft view from server truth FOR THIS
+          // BUNDLE before partitioning. Two freshness windows otherwise
+          // reproduce the 404-wedge / duplicate-CREATE bugs even with the
+          // ref unfiltered: (1) the very first flush can run before the
+          // provider's initial drafts fetch resolves (hard reload, fast
+          // Save), and (2) the picker path flushes against a bundle id
+          // React hasn't committed to the provider's state yet — which is
+          // why the explicit bundleId override matters here. Cost: one
+          // GET per flush, in exchange for never partitioning blind.
+          const preFresh = await refreshBlock(bundleId);
+          if (Array.isArray(preFresh)) {
+            latestDraftsRef.current = preFresh;
+          }
+
           // Only drafts in THIS bundle are dedup-eligible — a draft from
           // a different bundle (impossible today since only one is
           // active, but defensive) shouldn't get patched here. Read from
-          // the ref (server truth as of the prior flush), not the stale
-          // closure, so a just-created draft is seen.
+          // the ref (server truth as of the pre-partition refresh), not
+          // the stale closure, so a just-created draft is seen.
           const sameBundleDrafts = latestDraftsRef.current.filter(
             (d) => d.bundle_id === bundleId,
           );
@@ -326,11 +351,12 @@ export function ProposalEditorWrapper({
           // Block tab update) AND adopt the freshly-fetched drafts into the
           // ref synchronously, so the next serialized flush dedups against
           // server truth without waiting on a React re-render (R4).
+          // Unfiltered — same reason as the ref's declaration above: the
+          // partition must see drafts of EVERY entity type the editor
+          // queues, not just the route's declared ones.
           const fresh = await refreshBlock();
           if (Array.isArray(fresh)) {
-            latestDraftsRef.current = fresh.filter((d) =>
-              entityTypes.includes(d.entity_type as ProposalEntityType),
-            );
+            latestDraftsRef.current = fresh;
           }
           return result;
         } catch (err) {
@@ -351,7 +377,7 @@ export function ProposalEditorWrapper({
       );
       return chained;
     },
-    [refreshBlock, resetQueue, entityTypes],
+    [refreshBlock, resetQueue],
   );
 
   /* --------------------------------------------------------------- */
