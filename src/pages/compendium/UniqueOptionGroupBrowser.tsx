@@ -51,6 +51,7 @@ import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { useAxisFilters, type AxisState } from '../../hooks/useAxisFilters';
 import { matchesSingleAxisFilter, matchesMultiAxisFilter } from '../../lib/spellFilters';
 import { useProposalContextOptional } from '../../lib/proposalAccumulator';
+import { useBlock } from '../../lib/proposalBlock';
 import { useDraftedEntityIds } from '../../hooks/useDraftedEntityIds';
 import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
 import { useBlockDraftedList } from '../../hooks/useBlockDraftedList';
@@ -122,6 +123,10 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
   const proposalContext = useProposalContextOptional();
   const focusMode = proposalContext?.focusMode ?? 'drafts';
   const focusModeEnabled = proposalContext?.focusModeEnabled ?? false;
+  // True once the active block's drafts have been fetched — the hash
+  // deep-link waits on this in proposal mode so a draft group's slug
+  // can resolve (the View Page jump from the group editor).
+  const { draftsReady } = useBlock();
   // Route-aware link targets — proposal route points Edit/New at the
   // wrapped editor; admin route keeps its /compendium/* targets.
   const editGroupHref = (gid: string) =>
@@ -148,6 +153,13 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
   // ─── Data ───────────────────────────────────────────────────────
   const [groups, setGroups] = useState<GroupRow[]>([]);
   const [groupsLoading, setGroupsLoading] = useState(true);
+  // Active block's draft groups overlaid onto the live list: CREATE-draft
+  // groups (no live row yet) get appended + tagged `__draft`; UPDATE drafts
+  // overlay their payload; DELETE drafts get tagged `__pendingDelete`.
+  // Returns `groups` untouched outside a wrapper (admin route). Declared
+  // here (not next to filteredGroups) because the route-preselect + hash
+  // deep-link effects below resolve against it.
+  const displayGroups = useBlockDraftedList<GroupRow>('unique_option_group', groups);
   const [search, setSearch] = useState('');
   // Class id → name, for the Groups class-restriction filter axis.
   const [classNameById, setClassNameById] = useState<Record<string, string>>({});
@@ -317,11 +329,15 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
   }, [selectedGroupId]);
 
   // Preselect from the route id once groups are loaded (deep-link support).
+  // Resolves against displayGroups (declared below; hoisted via function
+  // deps is unnecessary — the effect just re-runs when it changes) so a
+  // block-draft group is selectable too.
   useEffect(() => {
-    if (routeGroupId && groups.some((g) => g.id === routeGroupId)) {
+    if (routeGroupId && displayGroups.some((g) => g.id === routeGroupId)) {
       setSelectedGroupId(routeGroupId);
     }
-  }, [routeGroupId, groups]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeGroupId, displayGroups]);
 
   // ─── Hash deep-link (`#group-slug` or `#group-slug:item-slug`) ──
   // Mirrors the spell browser's #identifier_source convention, adapted
@@ -335,12 +351,17 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
   const [pendingItemSlug, setPendingItemSlug] = useState<string | null>(null);
   useEffect(() => {
     if (hashAppliedRef.current) return;
-    if (!groups.length) return;
+    if (!displayGroups.length) return;
+    // Proposal route: don't latch until the block's drafts have merged
+    // into displayGroups — the View Page jump from the group editor
+    // targets a DRAFT group's slug, which only resolves post-merge.
+    // Outside a wrapper this never waits.
+    if (proposalContext && !draftsReady) return;
     hashAppliedRef.current = true;
     const raw = decodeURIComponent(window.location.hash.replace(/^#/, '')).trim();
     if (!raw) return;
     const [groupSlug, itemSlug] = raw.split(':');
-    const group = groups.find((g) => slugifyReferenceSegment(g.name) === groupSlug);
+    const group = displayGroups.find((g) => slugifyReferenceSegment(g.name) === groupSlug);
     if (!group) return;
     setSelectedGroupId(group.id);
     if (itemSlug) {
@@ -351,7 +372,7 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
     }
     // slugifyReferenceSegment is module-stable; isLg read once at apply time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groups]);
+  }, [displayGroups]);
 
   // Resolve the pending item slug once the target group's items arrive.
   useEffect(() => {
@@ -362,9 +383,10 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
   }, [pendingItemSlug, items]);
 
   // Outbound — rewrite the hash on selection (replaceState, no history spam).
+  // displayGroups so a selected DRAFT group's slug lands in the hash too.
   useEffect(() => {
     if (!selectedGroupId) return;
-    const group = groups.find((g) => g.id === selectedGroupId);
+    const group = displayGroups.find((g) => g.id === selectedGroupId);
     if (!group) return;
     const groupSlug = slugifyReferenceSegment(group.name);
     if (!groupSlug) return;
@@ -376,7 +398,7 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
     window.history.replaceState(
       null, '', `${window.location.pathname}${window.location.search}${nextHash}`,
     );
-  }, [selectedGroupId, selectedItemId, groups, items]);
+  }, [selectedGroupId, selectedItemId, displayGroups, items]);
 
   // ─── Shared filter helpers ──────────────────────────────────────
   const levelBucket = (lvl: number | null | undefined): string => {
@@ -464,12 +486,6 @@ export default function UniqueOptionGroupBrowser({ userProfile }: { userProfile:
     Object.keys(browserFilters.axisFilters.traits?.states ?? {}).length > 0,
     [browserFilters.axisFilters],
   );
-
-  // Active block's draft groups overlaid onto the live list: CREATE-draft
-  // groups (no live row yet) get appended + tagged `__draft`; UPDATE drafts
-  // overlay their payload; DELETE drafts get tagged `__pendingDelete`.
-  // Returns `groups` untouched outside a wrapper (admin route).
-  const displayGroups = useBlockDraftedList<GroupRow>('unique_option_group', groups);
 
   const filteredGroups = useMemo(() => {
     const q = search.trim().toLowerCase();

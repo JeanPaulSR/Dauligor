@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { fetchCollection, fetchDocument } from '../../lib/d1';
 import { useClassRouteId } from '../../lib/useClassRouteId';
 import { calculateEffectiveCastingLevel, getSpellSlotsForLevel, buildPactDisplayTable } from '../../lib/spellcasting';
@@ -48,10 +48,62 @@ import { useSpellFilters } from '../../hooks/useSpellFilters';
 import { cn } from '../../lib/utils';
 import { imageFocalStyle as ClassImageStyle, DEFAULT_DISPLAY } from '../../components/ui/FocalImageEditor';
 import { toast } from 'sonner';
+import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
+import { useBlock } from '../../lib/proposalBlock';
+
+/**
+ * Merge an active block's drafts into a live row list (proposal-route
+ * preview only — every drafts map is empty outside a
+ * <ProposalEditorWrapper>, so the public view renders pure live data):
+ *   - rows with a queued DELETE are dropped,
+ *   - rows with an UPDATE draft get the payload overlaid,
+ *   - CREATE drafts that `belongs` to this view are appended.
+ * Draft payloads carry JS objects where live rows carry JSON strings;
+ * the call sites' existing `typeof === 'string' ? parse : value`
+ * mapping handles both shapes.
+ */
+function overlayDraftRows(
+  rows: any[],
+  drafts: { byId: Map<string, Record<string, any>>; deletedIds: Set<string> },
+  belongs: (payload: Record<string, any>, draftId: string) => boolean,
+): any[] {
+  if (drafts.byId.size === 0 && drafts.deletedIds.size === 0) return rows;
+  const merged = rows
+    .filter((r) => !drafts.deletedIds.has(String(r.id)))
+    .map((r) => {
+      const overlay = drafts.byId.get(String(r.id));
+      return overlay ? { ...r, ...overlay, id: r.id } : r;
+    });
+  for (const [draftId, payload] of drafts.byId.entries()) {
+    if (merged.some((r) => String(r.id) === draftId)) continue;
+    if (!belongs(payload, draftId)) continue;
+    merged.push({ ...payload, id: draftId });
+  }
+  return merged;
+}
 
 export default function ClassView({ userProfile }: { userProfile: any }) {
   const { id, slug, isLoading: slugLoading, notFound: slugNotFound } = useClassRouteId();
   const navigate = useNavigate();
+  // ── Proposal-route preview (drafted class "as if it were live") ──
+  // At /proposals/edit/classes/view/:id this page is mounted inside a
+  // <ProposalEditorWrapper>, and the loads below overlay the active
+  // block's drafts: the class row, its features, scaling columns,
+  // subclasses, and any referenced option groups/items. On the public
+  // /compendium/classes/view/:slug route every map is empty and the
+  // page behaves exactly as before — drafts never leak there.
+  const location = useLocation();
+  const isProposalRoute = location.pathname.startsWith('/proposals/edit/');
+  const classDrafts = useProposalEntityDrafts('class');
+  const featureDrafts = useProposalEntityDrafts('feature');
+  const scalingDrafts = useProposalEntityDrafts('scaling_column');
+  const subclassDrafts = useProposalEntityDrafts('subclass');
+  const optionGroupDrafts = useProposalEntityDrafts('unique_option_group');
+  const optionItemDrafts = useProposalEntityDrafts('unique_option_item');
+  // Don't load until the block's drafts are known (proposal route only) —
+  // otherwise a draft-only class would 404-bail to the catalog before the
+  // drafts arrive. The load effects re-fire when this flips true.
+  const { draftsReady } = useBlock();
   const [classData, setClassData] = useState<any>(null);
   const [source, setSource] = useState<any>(null);
   const [features, setFeatures] = useState<any[]>([]);
@@ -137,7 +189,15 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
 
     const loadSubclassData = async () => {
       try {
-        const subData = await fetchDocument<any>('subclasses', selectedSubclassId);
+        let subData = await fetchDocument<any>('subclasses', selectedSubclassId);
+        // Proposal-route preview: a drafted subclass has no live row (or
+        // carries drafted edits over one) — overlay the block draft.
+        const subOverlay = subclassDrafts.byId.get(String(selectedSubclassId));
+        if (subOverlay) {
+          subData = subData
+            ? { ...subData, ...subOverlay, id: selectedSubclassId }
+            : { ...subOverlay, id: selectedSubclassId };
+        }
 
         if (subData) {
           // Remap snake_case D1 columns to camelCase
@@ -197,10 +257,20 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
           }
         }
 
-        const [subFeatures, subScalings] = await Promise.all([
+        const [subFeaturesLive, subScalingsLive] = await Promise.all([
           fetchCollection<any>('features', { where: "parent_id = ? AND parent_type = 'subclass'", params: [selectedSubclassId], orderBy: 'level ASC' }),
           fetchCollection<any>('scaling_columns', { where: "parent_id = ? AND parent_type = 'subclass'", params: [selectedSubclassId] })
         ]);
+
+        // Overlay block-draft children scoped to this subclass.
+        const subFeatures = overlayDraftRows(subFeaturesLive, featureDrafts, (p) =>
+          String(p.parent_id ?? p.parentId ?? '') === String(selectedSubclassId) &&
+          String(p.parent_type ?? p.parentType ?? '') === 'subclass',
+        ).sort((a, b) => (Number(a.level) || 0) - (Number(b.level) || 0));
+        const subScalings = overlayDraftRows(subScalingsLive, scalingDrafts, (p) =>
+          String(p.parent_id ?? p.parentId ?? '') === String(selectedSubclassId) &&
+          String(p.parent_type ?? p.parentType ?? '') === 'subclass',
+        );
 
         setSubclassFeatures(subFeatures.map((f: any) => ({
           ...f,
@@ -222,7 +292,8 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
     };
 
     loadSubclassData();
-  }, [selectedSubclassId, spellcastingTypes.length, !!masterMulticlassChart, !!pactMasterChart]);
+  }, [selectedSubclassId, spellcastingTypes.length, !!masterMulticlassChart, !!pactMasterChart,
+      subclassDrafts, featureDrafts, scalingDrafts]);
 
   const allFeaturesWithSpellcasting = useMemo(() => {
     if (!classData) return [];
@@ -288,13 +359,22 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
 
   useEffect(() => {
     if (!id) return;
+    // Proposal-route preview: wait for the block's drafts before loading,
+    // or a draft-only class would bail to the catalog below.
+    if (isProposalRoute && !draftsReady) return;
     const loadMainClassData = async () => {
       setLoading(true);
       try {
-        const classInfo = await fetchDocument<any>('classes', id);
+        let classInfo = await fetchDocument<any>('classes', id);
+        // Overlay the block's drafted class state: an UPDATE draft merges
+        // over the live row; a CREATE draft (no live row) stands in for it.
+        const classOverlay = classDrafts.byId.get(String(id));
+        if (classOverlay) {
+          classInfo = classInfo ? { ...classInfo, ...classOverlay, id } : { ...classOverlay, id };
+        }
 
         if (!classInfo) {
-          navigate('/compendium/classes');
+          navigate(isProposalRoute ? '/my-proposals' : '/compendium/classes');
           return;
         }
 
@@ -323,12 +403,26 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
         setClassData(mappedClass);
 
         // Parallel fetch for associated data
-        const [featData, scalingsData, subsData, sourceData] = await Promise.all([
+        const [featLive, scalingsLive, subsLive, sourceData] = await Promise.all([
           fetchCollection<any>('features', { where: "parent_id = ? AND parent_type = 'class'", params: [id], orderBy: 'level ASC' }),
           fetchCollection<any>('scaling_columns', { where: "parent_id = ? AND parent_type = 'class'", params: [id] }),
           fetchCollection<any>('subclasses', { where: "class_id = ?", params: [id], orderBy: 'name ASC' }),
           classInfo.source_id ? fetchDocument<any>('sources', classInfo.source_id) : Promise.resolve(null)
         ]);
+
+        // Overlay block-draft children scoped to this class, restoring the
+        // server's ordering after appends (drafted CREATEs arrive unsorted).
+        const featData = overlayDraftRows(featLive, featureDrafts, (p) =>
+          String(p.parent_id ?? p.parentId ?? '') === String(id) &&
+          String(p.parent_type ?? p.parentType ?? 'class') === 'class',
+        ).sort((a, b) => (Number(a.level) || 0) - (Number(b.level) || 0));
+        const scalingsData = overlayDraftRows(scalingsLive, scalingDrafts, (p) =>
+          String(p.parent_id ?? p.parentId ?? '') === String(id) &&
+          String(p.parent_type ?? p.parentType ?? 'class') === 'class',
+        );
+        const subsData = overlayDraftRows(subsLive, subclassDrafts, (p) =>
+          String(p.class_id ?? p.classId ?? '') === String(id),
+        ).sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
 
         setFeatures(featData.map((f: any) => ({
           ...f,
@@ -410,7 +504,11 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
       }
     };
     loadMainClassData();
-  }, [id, navigate, spellcastingTypes.length, !!masterMulticlassChart, !!pactMasterChart]);
+    // Draft maps in the deps: a flush refreshes the provider's drafts, and
+    // this read-only view should re-render the latest drafted state (no
+    // user edits here to clobber, unlike the editors' gated hydration).
+  }, [id, navigate, spellcastingTypes.length, !!masterMulticlassChart, !!pactMasterChart,
+      isProposalRoute, draftsReady, classDrafts, featureDrafts, scalingDrafts, subclassDrafts]);
 
   const allScalingColumns = useMemo(() => {
     return [...scalingColumns, ...subclassScalingColumns];
@@ -446,10 +544,18 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
 
     const loadOptions = async () => {
       try {
-        const [groupsData, itemsData] = await Promise.all([
+        const [groupsLive, itemsLive] = await Promise.all([
           fetchCollection<any>('unique_option_groups', { where: `id IN (${allGroupIds.map(() => '?').join(',')})`, params: allGroupIds }),
           fetchCollection<any>('unique_option_items', { where: `group_id IN (${allGroupIds.map(() => '?').join(',')})`, params: allGroupIds })
         ]);
+        // Overlay block-draft option groups the advancements reference,
+        // plus drafted options belonging to any referenced group.
+        const groupsData = overlayDraftRows(groupsLive, optionGroupDrafts, (_p, draftId) =>
+          allGroupIds.includes(draftId),
+        );
+        const itemsData = overlayDraftRows(itemsLive, optionItemDrafts, (p) =>
+          allGroupIds.includes(String(p.group_id ?? p.groupId ?? '')),
+        );
         setOptionGroups(groupsData.map((g: any) => ({
           ...g,
           sourceId: g.source_id || g.sourceId,
@@ -470,7 +576,7 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
       }
     };
     loadOptions();
-  }, [id, allGroupIds]);
+  }, [id, allGroupIds, optionGroupDrafts, optionItemDrafts]);
 
   useEffect(() => {
     const loadFoundation = async () => {
@@ -1029,7 +1135,9 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Link to={`/compendium/classes/edit/${slug ?? id}`}>
+              <Link to={isProposalRoute
+                ? `/proposals/edit/classes/edit/${id}`
+                : `/compendium/classes/edit/${slug ?? id}`}>
                 <Button variant="outline" className="border-gold/20 text-gold gap-2 hover:bg-gold/10">
                   <Edit className="w-4 h-4" /> Edit Class
                 </Button>

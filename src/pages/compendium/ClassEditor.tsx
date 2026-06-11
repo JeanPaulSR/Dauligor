@@ -15,7 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { ImageUpload } from '../../components/ui/ImageUpload';
 import { ImageSetEditor, type ImageDisplay, DEFAULT_DISPLAY } from '../../components/ui/ImageSetEditor';
-import { Sword, Save, Plus, Trash2, ChevronLeft, Shield, Scroll, Wand2, Heart, Hammer, BookOpen, Tag, Edit, Check, Image as ImageIcon, Zap, ListChecks, ChevronDown, ChevronRight, MessageCircle, Sliders } from 'lucide-react';
+import { Sword, Save, Plus, Trash2, ChevronLeft, Shield, Scroll, Wand2, Heart, Hammer, BookOpen, Tag, Edit, Check, Image as ImageIcon, Zap, ListChecks, ChevronDown, ChevronRight, MessageCircle, Sliders, Eye } from 'lucide-react';
 import { Dialog, DialogContent, DialogContentLarge, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '../../components/ui/dialog';
 import { ScrollArea } from '../../components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
@@ -1534,6 +1534,26 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
       >
         <div className="flex flex-col items-stretch gap-2 sm:items-end">
           <div className="flex items-center gap-2">
+            {/* View Page — proposal mode only: jumps to the draft-populated
+                ClassView (/proposals/edit/classes/view/:id), which renders
+                the block's drafted class/features/columns/subclasses "as if
+                live". The public class view never shows drafts, so this is
+                the only way a content-creator can preview their work on the
+                real view page. Renders what's SAVED to the block — unsaved
+                form edits aren't in the preview (the leave-guard prompts if
+                the queue is dirty). */}
+            {isProposalMode && effectiveId && (
+              <Link to={`/proposals/edit/classes/view/${effectiveId}`}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-gold/30 text-gold gap-2 hover:bg-gold/10"
+                  title="Preview the class view page with this block's drafts applied"
+                >
+                  <Eye className="w-4 h-4" /> View Page
+                </Button>
+              </Link>
+            )}
             {/* Save Class is only shown when there's no global Submit
                 Changes covering it: admin direct route always, AND the
                 proposal route's create flow (where the explicit click

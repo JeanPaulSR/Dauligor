@@ -12,12 +12,14 @@ import {
   Save,
   Plus,
   Edit,
+  Eye,
 } from 'lucide-react';
 import { fetchCollection, fetchDocument, upsertDocument, deleteDocument } from '../../lib/d1';
 import { cn } from '../../lib/utils';
 import { denormalizeCompendiumData } from '../../lib/compendium';
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
 import { useBlock } from '../../lib/proposalBlock';
+import { slugifyReferenceSegment } from '../../lib/referenceSyntax';
 import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
 import { useBlockDraftedList } from '../../hooks/useBlockDraftedList';
 import { actionLabel, applyProposalWrite } from '../../lib/proposalAware';
@@ -820,6 +822,26 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
             <Button onClick={handleDeleteGroup} disabled={loading} size="sm" variant="outline" className="border-blood/30 btn-danger gap-2">
               <Trash2 className="w-4 h-4" /> Delete Group
             </Button>
+          )}
+          {/* View Page — proposal mode only: jumps to the draft-aware
+              3-pane browser (/proposals/edit/option-groups) deep-linked
+              at this group via the #group-slug hash, so the creator sees
+              their drafted group/options "as if live" on the real view
+              surface. The public /compendium/unique-options browser never
+              shows drafts. Renders what's SAVED to the block — unsaved
+              edits aren't in the preview (the leave-guard prompts if the
+              queue is dirty). */}
+          {isProposalMode && effectiveId && name && (
+            <Link to={`/proposals/edit/option-groups#${slugifyReferenceSegment(name)}`}>
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-gold/30 text-gold gap-2 hover:bg-gold/10"
+                title="Preview the option-group browser with this block's drafts applied"
+              >
+                <Eye className="w-4 h-4" /> View Page
+              </Button>
+            </Link>
           )}
           {/* Save / Create button: hidden in proposal mode once the
               entity exists (either by route id OR by a locally-minted

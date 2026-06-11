@@ -483,6 +483,17 @@ export default function App() {
                       <ClassEditor userProfile={effectiveProfile} />
                     </ProposalEditorWrapper>
                   } />
+                  {/* Draft-populated class preview — the SAME ClassView the
+                      public /compendium/classes/view/:slug uses, but mounted
+                      inside the wrapper so its draft overlays activate: the
+                      block's drafted class/features/columns/subclasses render
+                      "as if live". Only reachable from the proposal editor's
+                      View Page button; the public view never shows drafts. */}
+                  <Route path="/proposals/edit/classes/view/:id" element={
+                    <ProposalEditorWrapper entityType={['class', 'feature', 'scaling_column']}>
+                      <ClassView userProfile={effectiveProfile} />
+                    </ProposalEditorWrapper>
+                  } />
                   {/* Subclasses — same single-work pattern as Classes.
                       Reachable via the parent ClassEditor's Subclasses
                       tab (which routes here when the user is editing
