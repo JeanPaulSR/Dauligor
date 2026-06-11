@@ -1074,8 +1074,20 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
       const entryId = entryIdAtStart || crypto.randomUUID();
 
       if (isProposalMode) {
-        const { updated_at: _droppedUpdatedAt, ...proposalPayload } = payload;
-        await applyProposalWrite(itemWriter, proposalPayload, {
+        // The admin path's upsertItem translates tagIds → the `tags`
+        // column via the compendium alias layer; the proposal path posts
+        // the payload raw, and the server's writableColumns allowlist
+        // only knows `tags` — an un-remapped tagIds key is silently
+        // stripped, so the approved item would lose all its tags.
+        const {
+          updated_at: _droppedUpdatedAt,
+          tagIds: _proposalTagIds,
+          ...proposalPayload
+        } = payload;
+        await applyProposalWrite(itemWriter, {
+          ...proposalPayload,
+          tags: Array.isArray(_proposalTagIds) ? _proposalTagIds : [],
+        }, {
           id: entryId,
           isCreate: wasCreate,
           silent: opts.silent,

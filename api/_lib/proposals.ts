@@ -123,7 +123,13 @@ const ENTITY_CONFIGS: Record<EntityType, EntityConfig> = {
   tag: {
     tableName: "tags",
     pkColumn: "id",
-    writableColumns: new Set(["id", "group_id", "name", "slug", "parent_tag_id"]),
+    // `description` + `linked_article_id` were added by migration
+    // 20260522-1100 and are authored in TagsExplorer — omitting them
+    // approved a tag-description / linked-article edit as a silent no-op.
+    writableColumns: new Set([
+      "id", "group_id", "name", "slug", "parent_tag_id",
+      "description", "linked_article_id",
+    ]),
     jsonColumns: new Set(),
   },
   tag_group: {
@@ -230,31 +236,65 @@ const ENTITY_CONFIGS: Record<EntityType, EntityConfig> = {
   feat: {
     tableName: "feats",
     pkColumn: "id",
+    // `advancements` (migration 20260527-1200 era), `feat_category_id`,
+    // and `requirements_short_text` (20260527-0100) are staged by the
+    // proposal-mode FeatsEditor — omitting them silently dropped a
+    // proposed feat's advancement graph, category FK, and short
+    // requirements text on approval.
     writableColumns: new Set([
       "id", "name", "identifier", "feat_type", "feat_subtype", "source_type",
-      "requirements", "repeatable", "uses_max", "uses_spent", "uses_recovery",
-      "description", "image_url",
-      "activities", "effects",
+      "requirements", "requirements_short_text", "repeatable",
+      "uses_max", "uses_spent", "uses_recovery",
+      "description", "image_url", "feat_category_id",
+      "activities", "effects", "advancements",
       "source_id", "page", "tags", "requirements_tree",
     ]),
     jsonColumns: new Set([
-      "uses_recovery", "activities", "effects", "tags", "requirements_tree",
+      "uses_recovery", "activities", "effects", "advancements",
+      "tags", "requirements_tree",
     ]),
   },
+  // Items were rebuilt to Foundry dnd5e 5.3.1 item-sheet fidelity
+  // (migrations 20260524-1800 → 20260608-1300): `weight`/`price` became
+  // JSON shapes (the old flat price_value/price_denomination columns are
+  // DROPPED — allowlisting them made approval fail with "no such
+  // column"), and the per-type detail columns (weapon damage/range,
+  // armor AC fields, tool fields, container capacity/currency, vehicle,
+  // base-item FKs, uses) landed. This allowlist mirrors the rebuilt
+  // ItemsEditor's payload; omitting a column an editor stages means an
+  // approved proposal silently drops that field (the F3/#65 bug class).
   item: {
     tableName: "items",
     pkColumn: "id",
     writableColumns: new Set([
       "id", "name", "identifier", "item_type",
-      "rarity", "quantity", "weight",
-      "price_value", "price_denomination",
-      "attunement", "equipped", "identified", "magical",
-      "description", "image_url",
-      "activities", "effects",
+      "type_subtype", "type_inner_subtype",
+      "rarity", "quantity", "weight", "price",
+      "attunement", "equipped", "identified", "magical", "proficient",
+      "description", "unidentified_description", "chat_description",
+      "image_url",
+      "properties", "uses",
+      // Weapon shape.
+      "damage", "range", "mastery", "magical_bonus", "ammunition",
+      // Armor shape.
+      "armor_value", "armor_dex", "armor_magical_bonus", "strength",
+      "stealth", "armor_type",
+      // Vehicle-equipment shape.
+      "vehicle",
+      // Tool shape.
+      "tool_type", "bonus", "chat_flavor", "ability_id",
+      // Container shape.
+      "capacity", "currency", "container_id",
+      // Base-item FKs (polymorphic) + the verbatim Foundry slug.
+      "base_weapon_id", "base_armor_id", "base_tool_id", "base_item",
+      "activities", "effects", "advancements",
       "source_id", "page", "tags",
     ]),
     jsonColumns: new Set([
-      "activities", "effects", "tags",
+      "weight", "price", "properties", "uses",
+      "damage", "range", "ammunition",
+      "vehicle", "capacity", "currency",
+      "activities", "effects", "advancements", "tags",
     ]),
   },
   unique_option_group: {
@@ -278,6 +318,12 @@ const ENTITY_CONFIGS: Record<EntityType, EntityConfig> = {
     jsonColumns: new Set([
       "class_ids", "properties", "activities", "effects", "advancements",
       "tags", "requirements_tree",
+      // The editor always sends `uses_recovery` as a RecoveryRule array
+      // (UniqueOptionGroupEditor handleSaveItem) — without stringification
+      // the raw array binds into the approval INSERT/UPDATE and the whole
+      // (block-atomic) approve fails with D1_TYPE_ERROR. Mirrors the
+      // `feature` config, which has carried it from day one.
+      "uses_recovery",
     ]),
   },
   // Scaling columns belong to a class or subclass (parent_id +
