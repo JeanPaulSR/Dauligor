@@ -404,18 +404,23 @@ export default function App() {
                       wraps the existing editor component with
                       ProposalEditorWrapper so Save/auto-update accumulates
                       locally and flushes on Submit Changes. */}
+                  {/* entityType lists EVERY type the editor tree queues, not
+                      just the headline one — the wrapper's dropEntity (undo)
+                      searches only the declared types' server drafts, so an
+                      undeclared type makes Undo silently leave the draft in
+                      the block. The header label keys on the FIRST element. */}
                   <Route path="/proposals/edit/tags" element={
-                    <ProposalEditorWrapper entityType="tag" fullscreen>
+                    <ProposalEditorWrapper entityType={['tag', 'tag_group']} fullscreen>
                       <TagsExplorer userProfile={effectiveProfile} />
                     </ProposalEditorWrapper>
                   } />
                   <Route path="/proposals/edit/tags/:id" element={
-                    <ProposalEditorWrapper entityType="tag" fullscreen>
+                    <ProposalEditorWrapper entityType={['tag', 'tag_group']} fullscreen>
                       <TagsExplorer userProfile={effectiveProfile} />
                     </ProposalEditorWrapper>
                   } />
                   <Route path="/proposals/edit/spell-rules" element={
-                    <ProposalEditorWrapper entityType="spell_rule">
+                    <ProposalEditorWrapper entityType={['spell_rule', 'spell_rule_application']}>
                       <SpellRulesEditor userProfile={effectiveProfile} />
                     </ProposalEditorWrapper>
                   } />
@@ -458,49 +463,53 @@ export default function App() {
                     </ProposalEditorWrapper>
                   } />
                   {/* Classes — single-work: one route per class instance.
-                      Nested entity edits (features, scaling columns,
-                      subclasses) remain admin-only inside the editor —
-                      those tables aren't in the proposal allowlist. */}
+                      ClassEditor also queues `feature` and `scaling_column`
+                      writes (its Features modal + ScalingColumnsPanel), so
+                      those types are declared too. The entityType prop scopes
+                      ONLY dropEntity's draft search + the header label —
+                      flushToBundle deliberately partitions against ALL bundle
+                      drafts regardless of this list. (Subclass edits route to
+                      /proposals/edit/subclasses via the Subclasses tab.) */}
                   <Route path="/proposals/edit/classes" element={
                     <ClassList userProfile={effectiveProfile} />
                   } />
                   <Route path="/proposals/edit/classes/new" element={
-                    <ProposalEditorWrapper entityType="class">
+                    <ProposalEditorWrapper entityType={['class', 'feature', 'scaling_column']}>
                       <ClassEditor userProfile={effectiveProfile} />
                     </ProposalEditorWrapper>
                   } />
                   <Route path="/proposals/edit/classes/edit/:id" element={
-                    <ProposalEditorWrapper entityType="class">
+                    <ProposalEditorWrapper entityType={['class', 'feature', 'scaling_column']}>
                       <ClassEditor userProfile={effectiveProfile} />
                     </ProposalEditorWrapper>
                   } />
                   {/* Subclasses — same single-work pattern as Classes.
                       Reachable via the parent ClassEditor's Subclasses
                       tab (which routes here when the user is editing
-                      a class through /proposals/edit/*). */}
+                      a class through /proposals/edit/*). Also queues
+                      feature + scaling_column writes. */}
                   <Route path="/proposals/edit/subclasses/new" element={
-                    <ProposalEditorWrapper entityType="subclass">
+                    <ProposalEditorWrapper entityType={['subclass', 'feature', 'scaling_column']}>
                       <SubclassEditor userProfile={effectiveProfile} />
                     </ProposalEditorWrapper>
                   } />
                   <Route path="/proposals/edit/subclasses/edit/:id" element={
-                    <ProposalEditorWrapper entityType="subclass">
+                    <ProposalEditorWrapper entityType={['subclass', 'feature', 'scaling_column']}>
                       <SubclassEditor userProfile={effectiveProfile} />
                     </ProposalEditorWrapper>
                   } />
                   {/* Feats — multi-work editor (catalog + inline form),
-                      same focus-mode + auto-stage pattern as Spells. */}
+                      same focus-mode + auto-stage pattern as Spells. Feats
+                      own scaling columns (polymorphic ScalingColumnsPanel). */}
                   <Route path="/proposals/edit/feats" element={
-                    <ProposalEditorWrapper entityType="feat" enableFocusMode>
+                    <ProposalEditorWrapper entityType={['feat', 'scaling_column']} enableFocusMode>
                       <FeatsEditor userProfile={effectiveProfile} />
                     </ProposalEditorWrapper>
                   } />
-                  {/* Items — delegates to DevelopmentCompendiumManager
-                      which detects proposal mode via the wrapper's
-                      context (entityType + focus-mode wiring lives
-                      inside the manager). */}
+                  {/* Items — same multi-work pattern as Feats; items own
+                      scaling columns too. */}
                   <Route path="/proposals/edit/items" element={
-                    <ProposalEditorWrapper entityType="item" enableFocusMode>
+                    <ProposalEditorWrapper entityType={['item', 'scaling_column']} enableFocusMode>
                       <ItemsEditor userProfile={effectiveProfile} />
                     </ProposalEditorWrapper>
                   } />

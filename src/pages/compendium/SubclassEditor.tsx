@@ -4,6 +4,7 @@ import { useProposalAccumulator, useProposalContextOptional } from '../../lib/pr
 import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
 import { useBlockDraftPickerOptions } from '../../hooks/useBlockDraftPickerOptions';
 import { useBlockDraftedList } from '../../hooks/useBlockDraftedList';
+import { useBlock } from '../../lib/proposalBlock';
 import { actionLabel, applyProposalWrite } from '../../lib/proposalAware';
 import { useProposalReview, resolveReviewPayload, ReviewFieldHighlight } from '../../lib/proposalReview';
 import { DeletedEntityBanner } from '../../components/proposals/TombstoneRow';
@@ -170,8 +171,20 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
   const reviewMode = useProposalReview();
   const reviewPayload = resolveReviewPayload(reviewMode, 'subclass', id ?? null);
   const isReviewingThis = !!reviewMode && !!reviewPayload;
+  // ?review= present but the provider hasn't resolved the proposal yet —
+  // the load effect waits so it doesn't seed from live/drafts and then
+  // never re-seed from the review payload.
+  const reviewParamPending =
+    !reviewMode && new URLSearchParams(location.search).has('review');
   const proposalContext = useProposalContextOptional();
   const isProposalMode = subclassWriter.mode === 'proposal' || subclassWriter.mode === 'block';
+  // True once the active block's drafts have been fetched — the load
+  // effect gates on this in proposal mode so a hard reload can't seed
+  // the form blank/stale and let pre-flush wipe the server draft (same
+  // hydration-gate fix as ClassEditor / UniqueOptionGroupEditor).
+  const { draftsReady } = useBlock();
+  // One load per (id, classId) after the gates open.
+  const loadedKeyRef = useRef<string | null>(null);
   // Queued + drafted subclass payloads keyed by entity_id. Falls back
   // to the queue when the live row doesn't exist yet (post-Create
   // navigate without flush) so the form doesn't blank out.
@@ -349,6 +362,17 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
   }, []);
 
   useEffect(() => {
+    // ── Hydration gates (mirror ClassEditor's) ───────────────────
+    // Only gate when hydrating an EXISTING id. The effect re-fires via
+    // its deps when a gate opens; loadedKeyRef keeps re-fires idempotent
+    // so a drafts refresh after a flush can't re-seed over user edits.
+    if (id) {
+      if (reviewParamPending) return;
+      if (isProposalMode && !draftsReady) return;
+    }
+    const loadKey = `${id ?? '__new__'}|${classId ?? ''}`;
+    if (loadedKeyRef.current === loadKey) return;
+    loadedKeyRef.current = loadKey;
     async function fetchData() {
       if (!id) {
         setLoading(false);
@@ -462,7 +486,9 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
     // Subclass features and scaling columns are loaded by the dependents effect
     // below — they refresh on `loadTick` without re-fetching the subclass row,
     // parent class, parent features, or parent scalings.
-  }, [id, classId]);
+    // draftsReady + reviewMode re-fire the effect when a hydration gate
+    // opens; loadedKeyRef keeps the re-fires idempotent once seeded.
+  }, [id, classId, draftsReady, reviewMode]);
 
   // Dependent collections — subclass features + subclass scaling columns.
   // Bumping `loadTick` (after a feature/scaling save or delete) re-runs only
@@ -644,7 +670,13 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
     enabled: isProposalMode,
     proposalContext,
     handleSave: (_e, opts) => handleSave({ silent: opts?.silent ?? false }),
-    shouldRun: () => !!effectiveId,
+    // For an id-routed subclass, require that the form actually hydrated
+    // before staging it (the load effect's hydration gates can hold the
+    // form blank while drafts/review data load) — otherwise Save
+    // Progress would PATCH the server draft with that blank form. New
+    // creates (/new) stage freely via pendingCreateId.
+    shouldRun: () =>
+      !!effectiveId && (!id || (loadedKeyRef.current ?? '').startsWith(`${id}|`)),
   });
 
   useKeyboardSave(() => { handleSave(); });

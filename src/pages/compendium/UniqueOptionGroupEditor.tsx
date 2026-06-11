@@ -17,6 +17,7 @@ import { fetchCollection, fetchDocument, upsertDocument, deleteDocument } from '
 import { cn } from '../../lib/utils';
 import { denormalizeCompendiumData } from '../../lib/compendium';
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
+import { useBlock } from '../../lib/proposalBlock';
 import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
 import { useBlockDraftedList } from '../../hooks/useBlockDraftedList';
 import { actionLabel, applyProposalWrite } from '../../lib/proposalAware';
@@ -138,9 +139,21 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
   const reviewMode = useProposalReview();
   const reviewPayload = resolveReviewPayload(reviewMode, 'unique_option_group', id ?? null);
   const isReviewingThis = !!reviewMode && !!reviewPayload;
+  // ?review= present but the provider hasn't resolved the proposal yet —
+  // the load effect waits for this so it doesn't seed from live/drafts
+  // and then never re-seed from the review payload.
+  const reviewParamPending =
+    !reviewMode && new URLSearchParams(location.search).has('review');
   // Same queue/draft lookup pattern as ClassEditor — supports loading
   // a queued-but-not-yet-flushed group when the live row doesn't exist.
   const groupDrafts = useProposalEntityDrafts('unique_option_group');
+  // True once the active block's drafts have been fetched. The load
+  // effect gates on this in proposal mode — on a hard reload it would
+  // otherwise read an empty drafts map, seed the form blank/stale, and
+  // the next Save Progress pre-flush would PATCH the server draft with
+  // those values, wiping the creator's drafted group. (Same fix as
+  // ClassEditor's hydration gates.)
+  const { draftsReady } = useBlock();
   // Tombstone banner state (queued / drafted DELETE in active block).
   const { isPendingDelete: isGroupPendingDelete, undoDelete: undoGroupDelete } =
     useTombstoneBanner('unique_option_group', id);
@@ -299,7 +312,26 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
     });
   }, [optionRows]);
 
+  // One load per (id | new) after the hydration gates open — later dep
+  // changes (drafts refresh after a flush) must not re-seed the form
+  // over the user's edits.
+  const loadedKeyRef = useRef<string | null>(null);
+
   useEffect(() => {
+    // ── Hydration gates (mirror ClassEditor's) ───────────────────
+    // Only gate when hydrating an EXISTING id; /new has nothing to
+    // mis-seed. The effect re-fires via its deps when a gate opens.
+    if (id) {
+      // ?review= present but the proposal fetch hasn't resolved.
+      if (reviewParamPending) return;
+      // Proposal mode before the block's drafts are fetched — the
+      // queue/draft fallback below would read an empty map and seed
+      // blank (CREATE drafts) or live values (drafted UPDATEs).
+      if (isProposalMode && !draftsReady) return;
+    }
+    const loadKey = id ?? '__new__';
+    if (loadedKeyRef.current === loadKey) return;
+    loadedKeyRef.current = loadKey;
     const loadAll = async () => {
       setLoading(true);
       try {
@@ -460,7 +492,9 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
     };
 
     loadAll();
-  }, [id]);
+    // draftsReady + reviewMode re-fire the effect when a hydration gate
+    // opens; loadedKeyRef keeps the re-fires idempotent once seeded.
+  }, [id, draftsReady, reviewMode]);
 
   const handleSaveGroup = async (e?: React.FormEvent, opts: { silent?: boolean } = {}) => {
     if (e) e.preventDefault();
@@ -516,7 +550,11 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
     enabled: isProposalMode,
     proposalContext,
     handleSave: handleSaveGroup,
-    shouldRun: () => !!effectiveId,
+    // For an id-routed group, require that the form actually hydrated
+    // before staging it — a Save Progress fired during the gated loading
+    // window would otherwise PATCH the server draft with a blank form.
+    // New creates (/new) stage freely via pendingCreateId.
+    shouldRun: () => !!effectiveId && (!id || loadedKeyRef.current === id),
   });
 
   const handleDeleteGroup = () => {

@@ -42,6 +42,7 @@ import { useProposalAccumulator, useProposalContextOptional } from '../../lib/pr
 import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
 import { useBlockDraftPickerOptions } from '../../hooks/useBlockDraftPickerOptions';
 import { useBlockDraftedList } from '../../hooks/useBlockDraftedList';
+import { useBlock } from '../../lib/proposalBlock';
 import { actionLabel, applyProposalWrite } from '../../lib/proposalAware';
 import { useProposalReview, ReviewFieldHighlight } from '../../lib/proposalReview';
 import { ReviewBanner } from '../../components/proposals/ReviewBanner';
@@ -322,6 +323,14 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   // D1 would blank the form. Falling back to the queued payload keeps
   // their work visible until Submit Changes lands the draft.
   const classDrafts = useProposalEntityDrafts('class');
+  // True once the active block's drafts have been fetched at least once.
+  // The class-hydration effect gates on this in proposal mode: on a hard
+  // reload it otherwise races the BlockProvider's async drafts fetch,
+  // reads an empty drafts map, seeds the form blank (CREATE drafts) or
+  // from the live row (drafted UPDATEs) — and the next Save Progress
+  // pre-flush then PATCHes the server draft with those blank/stale
+  // values, silently wiping the creator's drafted class.
+  const { draftsReady } = useBlock();
   // Tombstone state — true when this class has a queued/drafted
   // DELETE in the active block. Shown via DeletedEntityBanner above
   // the form + wraps the rest of the form in fieldset disabled.
@@ -343,10 +352,24 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   // suppressed. Rejected proposals stay editable so the user can
   // resubmit.
   const reviewMode = useProposalReview();
+  // useProposalReview returns null BOTH when there's no ?review param and
+  // while the provider is still fetching the proposal. The hydration
+  // effect must distinguish the two: hydrating while the review fetch is
+  // pending would seed the form from the live row / drafts and never
+  // re-seed from the review payload (the effect used to key on [id]
+  // only). When the param is present but the data hasn't resolved, WAIT.
+  const reviewParamPending =
+    !reviewMode && new URLSearchParams(location.search).has('review');
   const isReviewingThisClass =
     !!reviewMode &&
     reviewMode.entityType === 'class' &&
-    (reviewMode.entityId === id || (reviewMode.operation === 'create' && !id));
+    (reviewMode.entityId === id ||
+      // CREATE reviews carry entity_id=null server-side; the minted id
+      // lives in the payload. Match it so a create-review opened at
+      // /edit/<payload.id> hydrates from the payload instead of falling
+      // through to a blank form.
+      (reviewMode.operation === 'create' &&
+        (!id || reviewMode.proposedPayload?.id === id)));
   const reviewIsReadOnly = isReviewingThisClass && reviewMode!.isReadOnly;
   const [deleteClassConfirmOpen, setDeleteClassConfirmOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -622,6 +645,18 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
     }
   }, [initialLoading, getCurrentStateHash, lastSavedTick]);
 
+  // Hydration bookkeeping for the data-load effect below. The effect now
+  // re-fires when its gates open (draftsReady flips true, the ?review
+  // payload resolves) — these refs keep those re-fires from repeating
+  // work that already happened:
+  //   - foundationLoadedRef: the taxonomy fetches don't depend on drafts
+  //     or review state, so they run exactly once per mount.
+  //   - hydratedIdRef: once the class form hydrated for an id from the
+  //     correct source, later dep changes (drafts refresh after a flush)
+  //     must not re-seed the form over the user's edits.
+  const foundationLoadedRef = useRef(false);
+  const hydratedIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     const loadFoundation = async () => {
       try {
@@ -725,9 +760,31 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
       }
     };
 
-    loadFoundation();
+    if (!foundationLoadedRef.current) {
+      foundationLoadedRef.current = true;
+      loadFoundation();
+    }
 
     if (id) {
+      // ── Hydration gates ─────────────────────────────────────────
+      // Wait until every truth source the seed below reads from is
+      // actually loaded; the effect re-fires (via its deps) when a gate
+      // opens. While gated, `initialLoading` stays true, so the user
+      // sees the loading state instead of a blank/stale form they could
+      // type into (and that pre-flush could stage over their draft).
+      //   1. ?review=<id> present but the proposal fetch hasn't
+      //      resolved — hydrating now would seed from live/drafts and
+      //      never re-seed from the review payload.
+      if (reviewParamPending) return;
+      //   2. Proposal mode before the block's drafts have been fetched —
+      //      the queue/draft fallback would read an empty map and seed
+      //      blank (CREATE drafts) or live values (drafted UPDATEs).
+      if (isProposalMode && !draftsReady) return;
+      //   3. Already hydrated this id from the correct source — later
+      //      dep changes (drafts refresh after a flush) must not re-seed
+      //      the form over the user's edits.
+      if (hydratedIdRef.current === id) return;
+      hydratedIdRef.current = id;
       const fetchAllData = async () => {
         setInitialLoading(true);
         const startTime = performance.now();
@@ -927,7 +984,9 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
     } else {
       setInitialLoading(false); // No ID, so nothing to load
     }
-  }, [id]);
+    // draftsReady + reviewMode re-fire the effect when a hydration gate
+    // opens; hydratedIdRef keeps the re-fires idempotent once seeded.
+  }, [id, draftsReady, reviewMode]);
 
   // Dependent collections — features, scaling columns, subclasses for this class.
   // Bumping `loadTick` (after a feature/scaling save or delete) re-runs only
@@ -1320,7 +1379,12 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
     enabled: isProposalMode,
     proposalContext,
     handleSave,
-    shouldRun: () => !!effectiveId,
+    // For an id-routed class, require that the form actually hydrated
+    // (hydratedIdRef) before staging it — otherwise a Save Progress fired
+    // during the gated loading window would PATCH the server draft with
+    // a blank/stale form. New creates (/new, no id) don't hydrate and
+    // stage freely via pendingCreateId.
+    shouldRun: () => !!effectiveId && (!id || hydratedIdRef.current === id),
   });
 
   const handleInitializeBaseAdvancements = () => {

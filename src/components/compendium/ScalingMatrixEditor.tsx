@@ -182,11 +182,11 @@ export default function ScalingMatrixEditor({
         await writer.create({ ...d1Data, id: saveId });
       }
 
-      toast.success(
-        writer.mode === 'proposal'
-          ? (inBlock ? 'Scaling column added to block' : 'Scaling column submitted for review')
-          : 'Scaling column saved',
-      );
+      // actionLabel handles all three writer modes — the old ternary
+      // tested mode === 'proposal', but inside a ProposalEditorWrapper
+      // the accumulator reports 'block', so content-creators saw the
+      // direct-save "Scaling column saved" message for a queued write.
+      toast.success(actionLabel(writer.mode, columnId ? 'updated' : 'created'));
       onSaved?.();
     } catch (error) {
       console.error('Error saving scaling column:', error);
