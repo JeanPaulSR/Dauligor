@@ -1196,3 +1196,68 @@
 .dauligor-importer-app .window-content {
   position: relative;
 }
+/* ── Monster Browser (importer → Monsters; GM-only) ───────────────────────────
+   Reuses the class-options shell (toolbar/body/footer). A bestiary picker:
+   search + CR/Type/Size filters over a scrollable monster table; footer Import.
+   Imports as world npc actors (never onto a character sheet). */
+.dauligor-monster-browser__toolbar {
+  display: flex; gap: 8px; align-items: center; padding: 8px 10px; flex-wrap: wrap;
+}
+.dauligor-monster-browser__search { flex: 1 1 200px; min-width: 160px; }
+.dauligor-monster-browser__search,
+.dauligor-monster-browser__filter {
+  height: 28px; padding: 0 8px;
+  border: 1px solid var(--dauligor-border);
+  background: var(--dauligor-panel-alt);
+  color: var(--dauligor-text);
+  font: 12px var(--font-primary);
+}
+.dauligor-monster-browser__reload {
+  height: 28px; width: 32px; cursor: pointer;
+  border: 1px solid var(--dauligor-btn-border);
+  background: var(--dauligor-btn-bg); color: var(--dauligor-text);
+}
+.dauligor-monster-browser__reload:hover {
+  border-color: var(--dauligor-btn-border-hover); background: var(--dauligor-btn-hover-bg);
+}
+.dauligor-monster-browser__table { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.dauligor-monster-browser__head,
+.dauligor-monster-browser__row {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) 3.5rem 8rem 6rem 5rem;
+  align-items: center; gap: 6px; padding: 4px 10px;
+}
+.dauligor-monster-browser__head {
+  position: sticky; top: 0; z-index: 1;
+  border-bottom: 1px solid var(--dauligor-border);
+  background: var(--dauligor-panel);
+  color: var(--dauligor-text-muted);
+  font: 600 11px var(--font-primary); text-transform: uppercase; letter-spacing: 0.04em;
+}
+.dauligor-monster-browser__rows { overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+.dauligor-monster-browser__row {
+  cursor: pointer; color: var(--dauligor-text);
+  border-bottom: 1px solid rgba(var(--dauligor-accent-tint), 0.12);
+}
+.dauligor-monster-browser__row:hover { background: var(--dauligor-panel-alt); }
+.dauligor-monster-browser__row.is-selected { background: rgba(var(--dauligor-accent-tint), 0.18); }
+.dauligor-monster-browser__cell--name { font-weight: 600; }
+.dauligor-monster-browser__cell--cr,
+.dauligor-monster-browser__cell--type,
+.dauligor-monster-browser__cell--size,
+.dauligor-monster-browser__cell--source { color: var(--dauligor-text-muted); font-size: 12px; }
+.dauligor-monster-browser__empty { padding: 24px 12px; text-align: center; color: var(--dauligor-text-muted); }
+.dauligor-monster-browser__footer {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 8px 12px; border-top: 1px solid var(--dauligor-border);
+}
+.dauligor-monster-browser__status { font-size: 12px; color: var(--dauligor-text-muted); }
+.dauligor-monster-browser__status.is-success { color: var(--dauligor-text); }
+.dauligor-monster-browser__status.is-warn { color: var(--dauligor-warning); }
+.dauligor-monster-browser__import {
+  height: 30px; padding: 0 16px; cursor: pointer;
+  border: 1px solid rgb(var(--dauligor-accent-gold));
+  background: rgb(var(--dauligor-accent-gold)); color: #15140f;
+  font: 600 13px var(--font-primary);
+}
+.dauligor-monster-browser__import:disabled { opacity: 0.5; cursor: default; }

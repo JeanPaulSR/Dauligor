@@ -10,6 +10,7 @@ import {
 import { buildClassImportWorkflow, fetchClassCatalog, fetchClassSpellList, fetchFullSpellItem, fetchJson, fetchSourceCatalog, importClassPayloadToWorld } from "./class-import-service.js";
 import { openSpellBrowser } from "./spell-preparation-app.js";
 import { openFeatBrowser } from "./feat-browser-app.js";
+import { openMonsterBrowser } from "./monster-browser-app.js";
 import { maybeOfferSpellPointsSupport } from "./spell-points-service.js";
 import { log, notifyInfo, notifyWarn } from "./utils.js";
 import { baseClassHandler, extractStrings, formatFoundryLabel } from "./importer-base-features.js";
@@ -94,6 +95,13 @@ const IMPORT_TYPES = [
     label: "Species",
     status: "ready",
     description: "Browse every species (race) published in a source and import any of them directly to the actor."
+  },
+  {
+    id: "monsters",
+    label: "Monsters",
+    status: "ready",
+    gmOnly: true,
+    description: "GM only. Browse a source's bestiary and import monsters as world NPC actors (never onto a character sheet)."
   }
 ];
 
@@ -118,13 +126,16 @@ const SOURCE_TYPES = {
   // Backgrounds + species also load the live API source catalog (filtered by
   // counts.backgrounds / counts.species); they open the feat browser scoped.
   backgrounds: [],
-  species: []
+  species: [],
+  // Monsters use the live API source catalog (filtered by counts.bestiary);
+  // empty here so the hardcoded fallback never fires.
+  monsters: []
 };
 
 // Import types whose source list is the live API source catalog (per-source
 // `/api/module/<slug>/*.json`) rather than the static SOURCE_TYPES map.
 // Centralized so adding a type (backgrounds / species) is one edit.
-const API_SOURCE_IMPORT_TYPES = new Set(["classes-subclasses", "spells", "feats", "backgrounds", "species"]);
+const API_SOURCE_IMPORT_TYPES = new Set(["classes-subclasses", "spells", "feats", "backgrounds", "species", "monsters"]);
 function importTypeUsesApiSources(id) {
   return API_SOURCE_IMPORT_TYPES.has(id);
 }
@@ -482,7 +493,7 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
     // generic count column drives spells / feats / backgrounds / species; the
     // classes mode falls through to the class-catalog rule.
     const importTypeId = this._state.importTypeId;
-    const COUNT_KEY = { spells: "spells", feats: "feats", backgrounds: "backgrounds", species: "species" };
+    const COUNT_KEY = { spells: "spells", feats: "feats", backgrounds: "backgrounds", species: "species", monsters: "bestiary" };
     const countKey = COUNT_KEY[importTypeId] || null;
     this._sourceEntries = ensureArray(catalog?.entries)
       .filter((entry) => {
@@ -519,7 +530,7 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
       : (readySourceIds.length ? readySourceIds : this._sourceEntries.map((entry) => entry.id));
     this._state.sourceTypeId = this._state.selectedSourceIds[0] ?? this._sourceEntries[0]?.id ?? null;
 
-    const importerLabel = { "classes-subclasses": "classes", spells: "spells", feats: "feats", backgrounds: "backgrounds", species: "species" }[importTypeId] || "sources";
+    const importerLabel = { "classes-subclasses": "classes", spells: "spells", feats: "feats", backgrounds: "backgrounds", species: "species", monsters: "monsters" }[importTypeId] || "sources";
     this._state.status = this._sourceEntries.length
       ? `Loaded ${this._sourceEntries.length} source${this._sourceEntries.length === 1 ? "" : "s"} for ${importerLabel}.`
       : `No ${importerLabel}-capable sources were found in the local source library.`;
@@ -538,7 +549,10 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
   _renderImportTypesPanel() {
     if (!this._panelTypes) return;
 
-    const rowsHtml = IMPORT_TYPES.map((type) => `
+    // GM-only import types (Monsters) are hidden from non-GM players — monsters
+    // create world NPC actors, which only a GM can do.
+    const isGm = game.user?.isGM === true;
+    const rowsHtml = IMPORT_TYPES.filter((type) => !type.gmOnly || isGm).map((type) => `
       <button
         type="button"
         class="dauligor-wizard__choice ${type.id === this._state.importTypeId ? "dauligor-wizard__choice--active" : ""} ${type.status !== "ready" ? "dauligor-wizard__choice--disabled" : ""}"
@@ -678,7 +692,9 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
                     ? `background${source.count === 1 ? "" : "s"}`
                     : this._state.importTypeId === "species"
                       ? `species`
-                      : `class${source.count === 1 ? "" : "es"}`}</span>
+                      : this._state.importTypeId === "monsters"
+                        ? `monster${source.count === 1 ? "" : "s"}`
+                        : `class${source.count === 1 ? "" : "es"}`}</span>
               ${source.rules ? `<span>${foundry.utils.escapeHTML(String(source.rules))}</span>` : ""}
             </div>
           ` : ""}
@@ -862,6 +878,18 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
       const slugs = selectedSources.map((s) => s.slug || s.id).filter(Boolean);
       const only = this._state.importTypeId === "species" ? "race" : "background";
       await openFeatBrowser(this._actor, { sourceSlugs: slugs, only });
+      return;
+    }
+
+    if (this._state.importTypeId === "monsters") {
+      // GM only; monsters import as WORLD npc actors, not onto a character sheet,
+      // so (unlike spells/feats) there is no required target actor.
+      if (!game.user?.isGM) {
+        notifyWarn("Only a GM can import monsters.");
+        return;
+      }
+      const slugs = selectedSources.map((s) => s.slug || s.id).filter(Boolean);
+      await openMonsterBrowser({ sourceSlugs: slugs, folderPath: this._state.folderPath });
       return;
     }
 
