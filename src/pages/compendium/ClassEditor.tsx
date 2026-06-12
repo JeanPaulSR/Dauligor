@@ -2616,9 +2616,9 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
             <>
               <FeatureModalHero
                 iconUrl={editingFeature.iconUrl || ''}
-                onIconChange={(url) => setEditingFeature({ ...editingFeature, iconUrl: url })}
+                onIconChange={(url) => setEditingFeature((prev: any) => ({ ...prev, iconUrl: url }))}
                 name={editingFeature.name || ''}
-                onNameChange={(name) => setEditingFeature({ ...editingFeature, name })}
+                onNameChange={(name) => setEditingFeature((prev: any) => ({ ...prev, name }))}
                 required
                 tabs={['description', 'details', 'activities', 'effects', 'advancement']}
                 activeTab={featureTab}
@@ -2632,7 +2632,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                         min="1"
                         max="20"
                         value={editingFeature.level || 1}
-                        onChange={e => setEditingFeature({ ...editingFeature, level: parseInt(e.target.value) || 1, configuration: { ...editingFeature.configuration, requiredLevel: parseInt(e.target.value) || 1 } })}
+                        onChange={e => setEditingFeature((prev: any) => ({ ...prev, level: parseInt(e.target.value) || 1, configuration: { ...prev.configuration, requiredLevel: parseInt(e.target.value) || 1 } }))}
                         className="w-12 h-8 bg-transparent border border-transparent rounded text-left text-xs text-ink/60 px-2 py-0 focus:ring-1 focus:ring-gold/50 hover:bg-gold/5 outline-none transition-colors"
                       />
                     </div>
@@ -2651,7 +2651,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                   <div className="space-y-4 h-full min-h-0">
                     <MarkdownEditor
                       value={editingFeature.description || ''}
-                      onChange={(val) => setEditingFeature({ ...editingFeature, description: val })}
+                      onChange={(val) => setEditingFeature((prev: any) => ({ ...prev, description: val }))}
                       minHeight="400px"
                       maxHeight="100%"
                       className="h-full min-h-0"
@@ -2663,7 +2663,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                 {featureTab === 'details' && (() => {
                   const recovery: any[] = editingFeature.uses?.recovery || [];
                   const setRecovery = (rows: any[]) =>
-                    setEditingFeature({ ...editingFeature, uses: { ...editingFeature.uses, recovery: rows } });
+                    setEditingFeature((prev: any) => ({ ...prev, uses: { ...prev.uses, recovery: rows } }));
                   const addRecovery = () =>
                     setRecovery([...recovery, { period: 'lr', type: 'recoverAll' }]);
                   const removeRecovery = (i: number) =>
@@ -2683,7 +2683,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                         {/* Type */}
                         <div className="flex items-center justify-between py-2 gap-4">
                           <label className="text-xs font-semibold text-ink/70 shrink-0 w-36">Type</label>
-                          <Select value={editingFeature.type || 'class'} onValueChange={val => setEditingFeature({ ...editingFeature, type: val })}>
+                          <Select value={editingFeature.type || 'class'} onValueChange={val => setEditingFeature((prev: any) => ({ ...prev, type: val }))}>
                             <SelectTrigger className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold"><SelectValue /></SelectTrigger>
                             <SelectContent>{FEATURE_TYPES.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
                           </Select>
@@ -2693,12 +2693,12 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                         <div className="flex items-center justify-between py-2 gap-4">
                           <label className="text-xs font-semibold text-ink/70 shrink-0 w-36">Subtype</label>
                           {editingFeature.type === 'class' ? (
-                            <Select value={editingFeature.subtype || ''} onValueChange={val => setEditingFeature({ ...editingFeature, subtype: val })}>
+                            <Select value={editingFeature.subtype || ''} onValueChange={val => setEditingFeature((prev: any) => ({ ...prev, subtype: val }))}>
                               <SelectTrigger className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold"><SelectValue placeholder="None" /></SelectTrigger>
                               <SelectContent>{CLASS_FEATURE_SUBTYPES.map(o => <SelectItem key={o.id || 'none'} value={o.id}>{o.name}</SelectItem>)}</SelectContent>
                             </Select>
                           ) : (
-                            <Input value={editingFeature.subtype || ''} onChange={e => setEditingFeature({ ...editingFeature, subtype: e.target.value })} className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold" />
+                            <Input value={editingFeature.subtype || ''} onChange={e => setEditingFeature((prev: any) => ({ ...prev, subtype: e.target.value }))} className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold" />
                           )}
                         </div>
 
@@ -2707,13 +2707,13 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                           <div className="shrink-0 w-36">
                             <p className="text-xs font-semibold text-ink/70">Identifier</p>
                           </div>
-                          <Input value={editingFeature.identifier || ''} onChange={e => setEditingFeature({ ...editingFeature, identifier: slugify(e.target.value) })} placeholder={slugify(editingFeature.name || 'feature')} className="h-7 text-xs flex-1 font-mono bg-background/50 border-gold/10 focus:border-gold" />
+                          <Input value={editingFeature.identifier || ''} onChange={e => setEditingFeature((prev: any) => ({ ...prev, identifier: slugify(e.target.value) }))} placeholder={slugify(editingFeature.name || 'feature')} className="h-7 text-xs flex-1 font-mono bg-background/50 border-gold/10 focus:border-gold" />
                         </div>
 
                         {/* Requirements */}
                         <div className="flex items-center justify-between py-2 gap-4">
                           <label className="text-xs font-semibold text-ink/70 shrink-0 w-36">Requirements</label>
-                          <Input value={editingFeature.requirements || ''} onChange={e => setEditingFeature({ ...editingFeature, requirements: e.target.value })} placeholder="Barbarian 1" className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold" />
+                          <Input value={editingFeature.requirements || ''} onChange={e => setEditingFeature((prev: any) => ({ ...prev, requirements: e.target.value }))} placeholder="Barbarian 1" className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold" />
                         </div>
 
                         {/* Required Level */}
@@ -2722,7 +2722,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                             <p className="text-xs font-semibold text-ink/70">Required Level</p>
                             <p className="text-[10px] text-ink/40">Character or class level to select this feature when levelling up.</p>
                           </div>
-                          <Input type="number" value={editingFeature.prerequisites?.level ?? ''} onChange={e => setEditingFeature({ ...editingFeature, prerequisites: { ...editingFeature.prerequisites, level: e.target.value ? parseInt(e.target.value) || null : null } })} placeholder="—" className="h-7 text-xs w-24 shrink-0 bg-background/50 border-gold/10 focus:border-gold" />
+                          <Input type="number" value={editingFeature.prerequisites?.level ?? ''} onChange={e => setEditingFeature((prev: any) => ({ ...prev, prerequisites: { ...prev.prerequisites, level: e.target.value ? parseInt(e.target.value) || null : null } }))} placeholder="—" className="h-7 text-xs w-24 shrink-0 bg-background/50 border-gold/10 focus:border-gold" />
                         </div>
 
                         {/* Required Items */}
@@ -2731,7 +2731,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                             <p className="text-xs font-semibold text-ink/70">Required Items</p>
                             <p className="text-[10px] text-ink/40">Identifiers the character must have before selecting this.</p>
                           </div>
-                          <Input value={editingFeature.prerequisites?.items?.join(', ') || ''} onChange={e => setEditingFeature({ ...editingFeature, prerequisites: { ...editingFeature.prerequisites, items: e.target.value.split(',').map((s: string) => s.trim()).filter(Boolean) } })} placeholder="item-identifier-1, item-identifier-2" className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold" />
+                          <Input value={editingFeature.prerequisites?.items?.join(', ') || ''} onChange={e => setEditingFeature((prev: any) => ({ ...prev, prerequisites: { ...prev.prerequisites, items: e.target.value.split(',').map((s: string) => s.trim()).filter(Boolean) } }))} placeholder="item-identifier-1, item-identifier-2" className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold" />
                         </div>
 
                         {/* Repeatable */}
@@ -2740,7 +2740,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                             <p className="text-xs font-semibold text-ink/70">Repeatable</p>
                             <p className="text-[10px] text-ink/40">This feature can be chosen more than once.</p>
                           </div>
-                          <Checkbox id="feat-repeatable" className="border-gold/30 data-[state=checked]:bg-gold data-[state=checked]:text-white" checked={editingFeature.prerequisites?.repeatable || false} onCheckedChange={checked => setEditingFeature({ ...editingFeature, prerequisites: { ...editingFeature.prerequisites, repeatable: !!checked } })} />
+                          <Checkbox id="feat-repeatable" className="border-gold/30 data-[state=checked]:bg-gold data-[state=checked]:text-white" checked={editingFeature.prerequisites?.repeatable || false} onCheckedChange={checked => setEditingFeature((prev: any) => ({ ...prev, prerequisites: { ...prev.prerequisites, repeatable: !!checked } }))} />
                         </div>
 
                         {/* Feature Properties */}
@@ -2748,15 +2748,15 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                           <p className="text-xs font-semibold text-ink/70 mb-2">Feature Properties</p>
                           <div className="flex items-center gap-6">
                             <div className="flex items-center gap-2">
-                              <Checkbox id="feat-magical" className="border-gold/30 data-[state=checked]:bg-gold data-[state=checked]:text-white" checked={editingFeature.properties?.includes('mgc') || false} onCheckedChange={checked => { const props = normalizeFeaturePropertiesForEditor(editingFeature.properties || []); setEditingFeature({ ...editingFeature, properties: checked ? Array.from(new Set([...props, 'mgc'])) : props.filter((p: string) => p !== 'mgc') }); }} />
+                              <Checkbox id="feat-magical" className="border-gold/30 data-[state=checked]:bg-gold data-[state=checked]:text-white" checked={editingFeature.properties?.includes('mgc') || false} onCheckedChange={checked => setEditingFeature((prev: any) => { const props = normalizeFeaturePropertiesForEditor(prev.properties || []); return { ...prev, properties: checked ? Array.from(new Set([...props, 'mgc'])) : props.filter((p: string) => p !== 'mgc') }; })} />
                               <label htmlFor="feat-magical" className="text-xs text-ink/70 cursor-pointer">Magical</label>
                             </div>
                             <div className="flex items-center gap-2">
-                              <Checkbox id="feat-passive" className="border-gold/30 data-[state=checked]:bg-gold data-[state=checked]:text-white" checked={editingFeature.properties?.includes('trait') || false} onCheckedChange={checked => { const props = normalizeFeaturePropertiesForEditor(editingFeature.properties || []); setEditingFeature({ ...editingFeature, properties: checked ? Array.from(new Set([...props, 'trait'])) : props.filter((p: string) => p !== 'trait') }); }} />
+                              <Checkbox id="feat-passive" className="border-gold/30 data-[state=checked]:bg-gold data-[state=checked]:text-white" checked={editingFeature.properties?.includes('trait') || false} onCheckedChange={checked => setEditingFeature((prev: any) => { const props = normalizeFeaturePropertiesForEditor(prev.properties || []); return { ...prev, properties: checked ? Array.from(new Set([...props, 'trait'])) : props.filter((p: string) => p !== 'trait') }; })} />
                               <label htmlFor="feat-passive" className="text-xs text-ink/70 cursor-pointer">Passive Trait</label>
                             </div>
                             <div className="flex items-center gap-2">
-                              <Checkbox id="isSubclassFeature" className="border-gold/30 data-[state=checked]:bg-gold data-[state=checked]:text-white" checked={editingFeature?.isSubclassFeature || false} onCheckedChange={checked => setEditingFeature({ ...editingFeature, isSubclassFeature: !!checked })} />
+                              <Checkbox id="isSubclassFeature" className="border-gold/30 data-[state=checked]:bg-gold data-[state=checked]:text-white" checked={editingFeature?.isSubclassFeature || false} onCheckedChange={checked => setEditingFeature((prev: any) => ({ ...prev, isSubclassFeature: !!checked }))} />
                               <label htmlFor="isSubclassFeature" className="text-xs text-ink/70 cursor-pointer">Subclass Choice Point</label>
                             </div>
                           </div>
@@ -2783,22 +2783,22 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                           <div className="mt-2 space-y-0 divide-y divide-gold/5">
                             <div className="flex items-center justify-between py-2 gap-4">
                               <label className="text-xs font-semibold text-ink/70 shrink-0 w-36">Book</label>
-                              <select value={editingFeature.sourceId || ''} onChange={e => { const match = sources.find((s: any) => s.id === e.target.value); setEditingFeature({ ...editingFeature, sourceId: e.target.value, source: { ...editingFeature.source, book: match?.abbreviation || match?.name || editingFeature.source?.book || '' } }); }} className="h-7 flex-1 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink">
+                              <select value={editingFeature.sourceId || ''} onChange={e => { const match = sources.find((s: any) => s.id === e.target.value); setEditingFeature((prev: any) => ({ ...prev, sourceId: e.target.value, source: { ...prev.source, book: match?.abbreviation || match?.name || prev.source?.book || '' } })); }} className="h-7 flex-1 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink">
                                 <option value="">Inherit class source</option>
                                 {sources.map((entry: any) => <option key={entry.id} value={entry.id}>{entry.name}{entry.abbreviation ? ` (${entry.abbreviation})` : ''}</option>)}
                               </select>
                             </div>
                             <div className="flex items-center justify-between py-2 gap-4">
                               <label className="text-xs font-semibold text-ink/70 shrink-0 w-36">Page</label>
-                              <Input value={editingFeature.source?.page || ''} onChange={e => setEditingFeature({ ...editingFeature, source: { ...editingFeature.source, page: e.target.value } })} className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold" />
+                              <Input value={editingFeature.source?.page || ''} onChange={e => setEditingFeature((prev: any) => ({ ...prev, source: { ...prev.source, page: e.target.value } }))} className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold" />
                             </div>
                             <div className="flex items-center justify-between py-2 gap-4">
                               <label className="text-xs font-semibold text-ink/70 shrink-0 w-36">Rules</label>
-                              <Input value={editingFeature.source?.rules || ''} onChange={e => setEditingFeature({ ...editingFeature, source: { ...editingFeature.source, rules: e.target.value } })} placeholder="2014, 2024" className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold" />
+                              <Input value={editingFeature.source?.rules || ''} onChange={e => setEditingFeature((prev: any) => ({ ...prev, source: { ...prev.source, rules: e.target.value } }))} placeholder="2014, 2024" className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold" />
                             </div>
                             <div className="flex items-center justify-between py-2 gap-4">
                               <label className="text-xs font-semibold text-ink/70 shrink-0 w-36">Custom Note</label>
-                              <Input value={editingFeature.source?.custom || ''} onChange={e => setEditingFeature({ ...editingFeature, source: { ...editingFeature.source, custom: e.target.value } })} className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold" />
+                              <Input value={editingFeature.source?.custom || ''} onChange={e => setEditingFeature((prev: any) => ({ ...prev, source: { ...prev.source, custom: e.target.value } }))} className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold" />
                             </div>
                           </div>
                         )}
@@ -2815,11 +2815,11 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                           <div className="flex items-center gap-3 flex-1">
                             <div className="flex flex-col items-center gap-0.5">
                               <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Spent</span>
-                              <Input type="number" value={editingFeature.uses?.spent || 0} onChange={e => setEditingFeature({ ...editingFeature, uses: { ...editingFeature.uses, spent: parseInt(e.target.value) || 0 } })} className="h-7 w-16 text-center text-xs bg-background/50 border-gold/10 focus:border-gold" />
+                              <Input type="number" value={editingFeature.uses?.spent || 0} onChange={e => setEditingFeature((prev: any) => ({ ...prev, uses: { ...prev.uses, spent: parseInt(e.target.value) || 0 } }))} className="h-7 w-16 text-center text-xs bg-background/50 border-gold/10 focus:border-gold" />
                             </div>
                             <div className="flex flex-col items-center gap-0.5">
                               <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Max</span>
-                              <Input value={editingFeature.uses?.max || ''} onChange={e => setEditingFeature({ ...editingFeature, uses: { ...editingFeature.uses, max: e.target.value } })} placeholder="—" className="h-7 w-28 text-center text-xs bg-background/50 border-gold/10 focus:border-gold" />
+                              <Input value={editingFeature.uses?.max || ''} onChange={e => setEditingFeature((prev: any) => ({ ...prev, uses: { ...prev.uses, max: e.target.value } }))} placeholder="—" className="h-7 w-28 text-center text-xs bg-background/50 border-gold/10 focus:border-gold" />
                             </div>
                           </div>
                         </div>
@@ -2911,7 +2911,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                             <label className="text-[10px] uppercase text-ink/60 font-bold">Quantity Column</label>
                             <select
                               value={editingFeature?.quantityColumnId || ''}
-                              onChange={e => setEditingFeature({ ...editingFeature, quantityColumnId: e.target.value })}
+                              onChange={e => setEditingFeature((prev: any) => ({ ...prev, quantityColumnId: e.target.value }))}
                               className="w-full h-9 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm text-ink"
                             >
                               <option value="">None</option>
@@ -2925,7 +2925,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                             <label className="text-[10px] uppercase text-ink/60 font-bold">Scaling Column</label>
                             <select
                               value={editingFeature?.scalingColumnId || ''}
-                              onChange={e => setEditingFeature({ ...editingFeature, scalingColumnId: e.target.value })}
+                              onChange={e => setEditingFeature((prev: any) => ({ ...prev, scalingColumnId: e.target.value }))}
                               className="w-full h-9 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm text-ink"
                             >
                               <option value="">None</option>
@@ -2961,7 +2961,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                   <div className="pt-2">
                     <ActiveEffectEditor
                       effects={editingFeature.effects || []}
-                      onChange={fx => setEditingFeature({ ...editingFeature, effects: fx })}
+                      onChange={fx => setEditingFeature((prev: any) => ({ ...prev, effects: fx }))}
                       defaultImg={editingFeature.iconUrl || editingFeature.imageUrl || editingFeature.icon_url || editingFeature.image_url || null}
                     />
                   </div>
