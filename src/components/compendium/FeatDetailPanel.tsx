@@ -97,6 +97,28 @@ function mapRawFeatRow(featId: string, data: any): FeatRecord {
   };
 }
 
+// Activity-kind → display label, mirroring ActivityEditor's `ACTIVITY_KINDS`
+// (kept local so this read-only panel doesn't import the heavy editor). Falls
+// back to a title-cased kind for any future kind not listed here.
+const ACTIVITY_KIND_LABELS: Record<string, string> = {
+  attack: 'Attack',
+  cast: 'Cast',
+  check: 'Check',
+  damage: 'Damage',
+  enchant: 'Enchant',
+  forward: 'Forward',
+  heal: 'Heal',
+  save: 'Save',
+  summon: 'Summon',
+  transform: 'Transform',
+  utility: 'Use',
+};
+function activityKindLabel(kind?: string): string {
+  const key = String(kind || '').toLowerCase();
+  if (ACTIVITY_KIND_LABELS[key]) return ACTIVITY_KIND_LABELS[key];
+  return key ? key.charAt(0).toUpperCase() + key.slice(1) : 'Activity';
+}
+
 export default function FeatDetailPanel({
   featId,
   emptyMessage = 'Select a feat from the list to view its details.',
@@ -301,6 +323,23 @@ export default function FeatDetailPanel({
     groupedTags.push({ group: { id: '__other__', name: 'Other' }, tags: otherTags });
   }
 
+  // Read-only activities rollup. The fetch path carries the denormalized
+  // `automation.activities` (compendium.ts); the raw-row `featData` path may
+  // carry `activities` as a JSON string — coalesce + parse both into an array.
+  const activities: Array<{ id?: string; kind?: string; type?: string; name?: string }> = (() => {
+    const raw = (feat as any).automation?.activities ?? (feat as any).activities ?? [];
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  })();
+
   return (
     // Flex column at full panel height so the Show Tags disclosure
     // can pin itself to the bottom (mt-auto). Mirrors
@@ -369,15 +408,42 @@ export default function FeatDetailPanel({
         </div>
       </div>
 
-      {/* Description fills the body. No bordered card, no
-          activities/effects rollup, no bottom source strip — the
-          feat description is the whole content. */}
+      {/* Description fills the body. No bordered card, no bottom source
+          strip — the feat description is the primary content, followed by
+          a small read-only activities rollup (below) when present. */}
       <div className="px-6 py-5">
         <div
           className="prose max-w-none prose-p:text-ink/95 prose-strong:text-ink prose-em:text-ink/85 prose-li:text-ink/85 prose-headings:text-ink"
           dangerouslySetInnerHTML={{ __html: descriptionHtml }}
         />
       </div>
+
+      {/* Read-only Activities summary — count + each activity's kind (pill)
+          and name. Gives authors at-a-glance confirmation that an activity
+          persisted (the editor's Activities sub-tab is the authoring
+          surface). Mirrors the tag-pill / source-label styling below. */}
+      {activities.length > 0 && (
+        <div className="px-6 pb-5 space-y-2">
+          <div className="font-bold uppercase tracking-widest text-[10px] text-gold/70">
+            Activities
+            <span className="text-ink/45 font-normal normal-case tracking-normal ml-1.5">
+              ({activities.length})
+            </span>
+          </div>
+          <ul className="space-y-1.5">
+            {activities.map((activity, index) => (
+              <li key={activity.id || index} className="flex items-center gap-2">
+                <StatusEmblem tone="neutral" size="md">
+                  {activityKindLabel(activity.kind || activity.type)}
+                </StatusEmblem>
+                <span className="text-sm text-ink/85 truncate">
+                  {activity.name || activityKindLabel(activity.kind || activity.type)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Footer pinned to the bottom of the panel via mt-auto. Holds the
           Show Tags disclosure (matching SpellDetailPanel) and — at the very
