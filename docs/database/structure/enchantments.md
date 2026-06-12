@@ -36,7 +36,8 @@ here.
 | `imageUrl` | TEXT | CDN URL or relative path |
 | `restrictions` | JSON | `{allowMagical, type, categories[], properties[]}` — the enchant-activity gate (what item types/categories/properties this may apply to) |
 | `effects` | JSON | Active Effect document(s) of `type:"enchantment"` — the actual changes (name override, `system.magicalBonus`, damage riders, AC…) |
-| `riders` | JSON | `{activity[], effect[], item[]}` granted alongside the enchantment |
+| `activities` | JSON | Activity document(s) the enchantment grants to the item it's applied to (e.g. a magic weapon's *swipe* attack). Mirrors `items.activities`. Migration `20260610-1200`. Authored via the shared `ActivityEditor`; `activities` is already in the global `jsonFields` auto-parse list. |
+| `riders` | JSON | `{activity[], effect[], item[]}` granted alongside the enchantment (id references; preserved but not yet authored in the editor) |
 | `magicalBonus` | INTEGER | Convenience flat +N (mirrors `items.magical_bonus`) |
 | `rarity` | TEXT | Rarity conferred on the finished item (`none|common|…|artifact`) |
 | `attunement` | TEXT | 3-state: `''` / `'required'` / `'optional'` |

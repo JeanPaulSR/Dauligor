@@ -4,11 +4,10 @@ The admin-managed taxonomy that organizes **all** crafting (Alchemy, Blacksmithi
 Enchanting, …) — the organizing axis of the crafting editor. `recipes.disciplineId`
 references it; `crafting_materials.usedFor` is a JSON array of its ids.
 
-Migration `20260609-1350_create_crafting_disciplines.sql` — seeded from Kibbles' Chapter 6
-disciplines (idempotent, admin-editable). **Lightweight by decision** (the 2026-06-09
-[Kibbles reconciliation](../../_drafts/kibbles-reconciliation-2026-06-09.html)): the
-execution fields (ability score / tool / forge facility) are **deferred to Phase D** (live
-crafting).
+Migration `20260609-1350_create_crafting_disciplines.sql` (idempotent, admin-editable).
+Each discipline records its core mechanics — the **tool** it uses and the **ability** its
+crafting roll keys off (migration `20260610-1300`). A **facility** requirement is
+deliberately NOT stored: it is a per-case DM call handled in the Foundry module.
 
 > **camelCase columns.** Foundry is camelCase end-to-end (verified against real exports —
 > `baseItem`, `magicalBonus`, and the ordering field is `sort`), and we are migrating off
@@ -26,6 +25,8 @@ crafting).
 | `identifier` | TEXT NOT NULL UNIQUE | Slug (e.g. `enchanting`) |
 | `description` | TEXT | Optional |
 | `sort` | INTEGER | Display order (Foundry's `sort` field name; the shell's `includeOrder` field) |
+| `tool_id` | TEXT (FK) | → `tools.id` — the tool the discipline uses (alchemist's supplies, smith's tools…). The shell's `categoryFK` picker, pointed at `tools`. Migration `20260610-1300`. **snake_case** to match the shell. |
+| `ability_id` | TEXT (FK) | → `attributes.id` — the ability the crafting roll keys off (INT/WIS/STR/…). The shell's `includeAbility` field. Single ability for now (Kibbles' "Int **or** Wis" choices capture one). Migration `20260610-1300`. **snake_case** (shell-hardcoded). |
 | `createdAt` / `updatedAt` | DATETIME | DEFAULT CURRENT_TIMESTAMP |
 
 ## Seeded values
@@ -35,9 +36,9 @@ crafting).
 Weaving/Cobbling/Masonry/Glassblowing/Painting/Brewing/Carpentry/Tailoring.)
 
 ## Future (Phase D — live crafting)
-When crafting execution lands, extend this table with: ability score(s) (supporting
-INT-or-WIS choices), tool/skill used, a consecutive-checks flag, and a facility
-requirement (forge/heat/none).
+`tool_id` + `ability_id` are now captured (above). If live crafting needs more, candidates
+are: multi-ability support (Kibbles' INT-**or**-WIS choices, currently a single pick) and a
+consecutive-checks flag. Facility stays out — it is a per-case DM call in the module.
 
 ## Related docs
 - [`recipes.md`](recipes.md) — `recipes.disciplineId` references this

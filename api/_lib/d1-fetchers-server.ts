@@ -94,6 +94,8 @@ const JSON_COLUMNS = new Set([
   "inputs", "goldCost", "craftTime", "craftRequirements",
   // crafting_materials JSON column (migration 20260609-1500)
   "usedFor",
+  // shops JSON column (migration 20260610-1400)
+  "shopItems",
 ]);
 
 function autoParseJsonColumns(row: any): any {

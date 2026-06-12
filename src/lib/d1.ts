@@ -358,6 +358,9 @@ export async function queryD1<T>(sql: string, params: any[] = [], options: { noC
         // crafting_materials JSON column (migration 20260609-1500). usedFor =
         // crafting_disciplines id array. price/weight/tags already global above.
         'usedFor',
+        // shops JSON column (migration 20260610-1400). shopItems =
+        // [{itemId, priceOverride?:{value,denomination}}] — the shop's pool.
+        'shopItems',
       ];
       const parsedResults = (data.results || []).map((row: any) => {
         const parsed: any = { ...row };

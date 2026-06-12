@@ -120,13 +120,13 @@ const ITEM_TYPE_LABEL: Record<string, string> = {
 // need. The detail BODY (description / weapon-armor-tool mechanics /
 // weight / price) loads on click. base_*_id resolve the base-item label.
 const ITEM_BROWSER_SELECT =
-  'id, name, identifier, source_id, item_type, rarity, magical, attunement, base_item, base_weapon_id, base_armor_id, base_tool_id, image_url';
+  'id, name, identifier, source_id, item_type, type_subtype, rarity, magical, attunement, base_item, base_weapon_id, base_armor_id, base_tool_id, image_url';
 
 const AXIS_KEYS = ['itemType', 'rarity', 'source', 'property'] as const;
 
 // ─── Component ────────────────────────────────────────────────
 
-export default function ItemList({ userProfile }: { userProfile: any }) {
+export default function ItemList({ userProfile, magicalOnly = false }: { userProfile: any; magicalOnly?: boolean }) {
   const [items, setItems] = useState<ItemRow[]>([]);
   const [sources, setSources] = useState<SourceRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -174,7 +174,19 @@ export default function ItemList({ userProfile }: { userProfile: any }) {
       const wById = new Map(wDefs.map((r) => [r.id, r.name || r.identifier || '—']));
       const aById = new Map(aDefs.map((r) => [r.id, r.name || r.identifier || '—']));
       const tById = new Map(tDefs.map((r) => [r.id, r.name || r.identifier || '—']));
-      const annotated: ItemRow[] = pick(itemsRes, 'items').map((row: any) => {
+      // Crafting materials are loot rows tagged subtype 'material' — they're
+      // authored in the Crafting Materials editor and don't belong in the gear
+      // browser. Hide them so the catalog stays focused on weapons/armor/gear.
+      const annotated: ItemRow[] = pick(itemsRes, 'items')
+        .filter((row: any) => String(row.type_subtype || '') !== 'material')
+        // Magic items live in their OWN tab: the Magic Items browser shows only
+        // magical rows, the general Items browser shows only non-magical ones.
+        // `items.magical` is set on save from a non-`none` rarity or `mgc`.
+        .filter((row: any) => {
+          const isMagical = row.magical === 1 || row.magical === true;
+          return magicalOnly ? isMagical : !isMagical;
+        })
+        .map((row: any) => {
         const attunementFlag = !!(row.attunement === 1 || row.attunement === true || (typeof row.attunement === 'string' && row.attunement));
         const magicalFlag = !!(row.magical === 1 || row.magical === true);
         // Resolve base-item label from whichever FK is set; fall back
@@ -197,7 +209,7 @@ export default function ItemList({ userProfile }: { userProfile: any }) {
     };
     load();
     return () => { cancelled = true; };
-  }, []);
+  }, [magicalOnly]);
 
   const sourceById = useMemo(
     () => Object.fromEntries(sources.map((s) => [s.id, s])) as Record<string, SourceRecord>,
@@ -405,7 +417,7 @@ export default function ItemList({ userProfile }: { userProfile: any }) {
       onSelect={setSelectedId}
       search={search}
       onSearchChange={setSearch}
-      searchPlaceholder="Search item name, base item, identifier, or source"
+      searchPlaceholder={magicalOnly ? 'Search magic item name, base item, identifier, or source' : 'Search item name, base item, identifier, or source'}
       filterAxes={filterAxes}
       axisFilters={axisFilters}
       cyclers={cyclers}
@@ -425,7 +437,7 @@ export default function ItemList({ userProfile }: { userProfile: any }) {
           onToggleFavorite={detailRow ? () => toggleFavorite(detailRow.id) : undefined}
         />
       }
-      emptyMessage="No items match the current search and filters."
+      emptyMessage={magicalOnly ? 'No magic items match the current search and filters.' : 'No items match the current search and filters.'}
       trailingActions={
         userProfile?.role === 'admin' ? (
           <Link to="/compendium/items/manage">

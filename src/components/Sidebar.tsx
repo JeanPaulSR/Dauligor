@@ -201,6 +201,7 @@ export default function Sidebar({
           // (migration 20260601-1200) but their public list pages are
           // still placeholders.
           { label: 'Items', path: '/compendium/items' },
+          { label: 'Magic Items', path: '/compendium/magic-items' },
           // Facilities (Bastions, 2024 DMG) — separate browser at
           // /compendium/facilities, admin editor at /facilities/manage.
           { label: 'Facilities', path: '/compendium/facilities' },
@@ -219,16 +220,29 @@ export default function Sidebar({
           // links: `/compendium/items/manage`, `/compendium/races/manage`,
           // `/compendium/backgrounds/manage`.
           ...(isAdmin ? [
-            // Crafting recipes — admin authoring editor (no public browser
-            // yet; Phase A = authoring). Disciplines live under Admin →
-            // Proficiencies (Items group).
-            { label: 'Recipes', path: '/compendium/recipes/manage' },
+            // (Recipes / Enchantments / Crafting Materials moved to their own
+            // top-level "Crafting" section below.)
             { label: 'Tags', path: '/compendium/tags' },
             { label: 'Spell Rules', path: '/compendium/spell-rules' },
             { label: 'Spell Lists', path: '/compendium/spell-lists' },
             { label: 'Import / Mark', path: '/compendium/import' },
           ] : []),
         ]
+      },
+      // Crafting system — its own section: materials, recipes, enchantments.
+      // The links go to the public view pages; admins reach each editor via the
+      // "Manager" button on the page header (same pattern as Items).
+      {
+        label: 'Crafting',
+        icon: Hammer,
+        path: '/system/crafting',
+        subItems: [
+          { label: 'Overview', path: '/system/crafting' },
+          { label: 'Crafting Materials', path: '/compendium/materials' },
+          { label: 'Recipes', path: '/compendium/recipes' },
+          { label: 'Enchantments', path: '/compendium/enchantments' },
+          { label: 'Shops', path: '/compendium/shops' },
+        ],
       },
       // Proposals — visible to admins (so they can see their own
       // /my-proposals view if they ever submitted via the block flow)
@@ -258,7 +272,7 @@ export default function Sidebar({
       }] : []),
       { label: 'Rules', icon: Scroll, path: '/wiki?category=law' },
       { label: 'Sources', icon: Book, path: '/sources' },
-      { label: 'Crafting', icon: Hammer, path: '/wiki?category=technology' },
+      { label: 'Technology', icon: Hammer, path: '/wiki?category=technology' },
       { label: 'Downtime', icon: Bed, path: '/wiki?category=generic' },
     ]
   };

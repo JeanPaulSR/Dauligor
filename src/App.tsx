@@ -62,6 +62,13 @@ import FeatsEditor from './pages/compendium/FeatsEditor';
 import FeatList from './pages/compendium/FeatList';
 import ItemsEditor from './pages/compendium/ItemsEditor';
 import RecipesEditor from './pages/compendium/RecipesEditor';
+import CraftingMaterialsEditor from './pages/compendium/CraftingMaterialsEditor';
+import CraftingMaterialsList from './pages/compendium/CraftingMaterialsList';
+import EnchantmentsEditor from './pages/compendium/EnchantmentsEditor';
+import RecipesList from './pages/compendium/RecipesList';
+import EnchantmentsList from './pages/compendium/EnchantmentsList';
+import ShopEditor from './pages/compendium/ShopEditor';
+import ShopList from './pages/compendium/ShopList';
 import ItemList from './pages/compendium/ItemList';
 import FacilitiesEditor from './pages/compendium/FacilitiesEditor';
 import FacilitiesList from './pages/compendium/FacilitiesList';
@@ -346,10 +353,31 @@ export default function App() {
                       convention (/<entity> for the read-only browser,
                       /<entity>/manage for the admin CRUD surface). */}
                   <Route path="/compendium/items" element={<ItemList userProfile={effectiveProfile} />} />
+                  {/* Magic Items — the same browser filtered to magical rows. */}
+                  <Route path="/compendium/magic-items" element={<ItemList userProfile={effectiveProfile} magicalOnly />} />
+                  {/* Public crafting-materials browser (read view). Materials are
+                      hidden from the gear Items browser, so this is their home. */}
+                  <Route path="/compendium/materials" element={<CraftingMaterialsList userProfile={effectiveProfile} />} />
                   <Route path="/compendium/items/manage" element={<ItemsEditor userProfile={effectiveProfile} />} />
                   {/* Crafting recipes — admin authoring editor (the crafting
                       system spine). No public browser yet (Phase A = authoring). */}
                   <Route path="/compendium/recipes/manage" element={<RecipesEditor userProfile={effectiveProfile} />} />
+                  {/* Enchantments — admin authoring editor (reusable effects
+                      applied to base items). No public browser yet (Phase A). */}
+                  <Route path="/compendium/enchantments/manage" element={<EnchantmentsEditor userProfile={effectiveProfile} />} />
+                  {/* Crafting overview is a SYSTEM PAGE (/system/crafting), not a
+                      hardcoded route — authored via the System Page Designer. */}
+                  {/* Public temp view pages for recipes + enchantments (Phase A).
+                      Admin reaches the editors via each page's Manager button. */}
+                  <Route path="/compendium/recipes" element={<RecipesList userProfile={effectiveProfile} />} />
+                  <Route path="/compendium/enchantments" element={<EnchantmentsList userProfile={effectiveProfile} />} />
+                  {/* Shops — public browser (stock + prices) + admin editor. */}
+                  <Route path="/compendium/shops" element={<ShopList userProfile={effectiveProfile} />} />
+                  <Route path="/compendium/shops/manage" element={<ShopEditor userProfile={effectiveProfile} />} />
+                  {/* Crafting materials — admin authoring editor. Each material is
+                      backed by a loot-type items row (subtype 'material') minted on
+                      save, so it's carryable + usable as a recipe input. */}
+                  <Route path="/compendium/materials/manage" element={<CraftingMaterialsEditor userProfile={effectiveProfile} />} />
                   {/* Facilities (Bastions, 2024 DMG) — separate table
                       + page from items. Public browser at /facilities,
                       admin editor at /facilities/manage. Migration

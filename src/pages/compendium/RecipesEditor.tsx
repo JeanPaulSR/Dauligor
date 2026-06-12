@@ -19,7 +19,18 @@ import { normalizeTagRow } from '../../lib/tagHierarchy';
 
 // ─── Recipe form shape (camelCase, mirrors the recipes table) ──────────────
 type OutputType = 'item' | 'enchantment' | 'enchant-item';
-type RecipeInput = { itemId: string; quantity: number };
+type InputKind = 'item' | 'slot';
+// An input is EITHER a specific catalog item OR a material "slot" — a class of
+// material matched by category (+ optional subtype / rarity), e.g. "any common
+// curative reagent". Slot fields are blank when kind === 'item' and vice-versa.
+type RecipeInput = {
+  kind: InputKind;
+  itemId: string;
+  category: string;
+  subtype: string;
+  rarity: string;
+  quantity: number;
+};
 
 type RecipeForm = {
   name: string;
@@ -46,6 +57,18 @@ type RecipeForm = {
 };
 
 const DENOMINATIONS = ['cp', 'sp', 'ep', 'gp', 'pp'];
+// Material-slot vocab (mirrors the Crafting Materials editor).
+const MATERIAL_CATEGORIES = [
+  { value: 'reagent', label: 'Reagent' }, { value: 'essence', label: 'Essence' },
+  { value: 'magicalInk', label: 'Magical Ink' }, { value: 'metal', label: 'Metal' },
+  { value: 'hide', label: 'Hide' }, { value: 'wood', label: 'Wood' }, { value: 'part', label: 'Part' },
+  { value: 'gem', label: 'Gem' }, { value: 'cookingSupply', label: 'Cooking Supply' }, { value: 'misc', label: 'Misc' },
+];
+const MATERIAL_RARITIES = [
+  { value: '', label: 'Any rarity' }, { value: 'trivial', label: 'Trivial' }, { value: 'common', label: 'Common' },
+  { value: 'uncommon', label: 'Uncommon' }, { value: 'rare', label: 'Rare' },
+  { value: 'veryRare', label: 'Very Rare' }, { value: 'legendary', label: 'Legendary' },
+];
 const TIME_UNITS = ['minute', 'hour', 'day', 'week'];
 const OUTPUT_TYPES: { value: OutputType; label: string; hint: string }[] = [
   { value: 'item', label: 'Item', hint: 'Produces a catalog item (potion, gear, material…)' },
@@ -79,7 +102,14 @@ function hydrate(row: any): RecipeForm {
     outputBaseItemId: row.outputBaseItemId || '',
     outputQuantity: typeof row.outputQuantity === 'number' ? row.outputQuantity : 1,
     inputs: Array.isArray(row.inputs)
-      ? row.inputs.map((i: any) => ({ itemId: i.itemId || '', quantity: Number(i.quantity) || 1 }))
+      ? row.inputs.map((i: any) => ({
+          kind: (i.kind === 'slot' ? 'slot' : 'item') as InputKind,
+          itemId: i.itemId || '',
+          category: i.category || '',
+          subtype: i.subtype || '',
+          rarity: i.rarity || '',
+          quantity: Number(i.quantity) || 1,
+        }))
       : [],
     goldCostValue: typeof gold.value === 'number' ? gold.value : '',
     goldCostDenom: gold.denomination || 'gp',
@@ -203,7 +233,17 @@ export default function RecipesEditor({ userProfile }: { userProfile: any }) {
         outputEnchantmentId: form.outputType === 'item' ? null : (form.outputEnchantmentId || null),
         outputBaseItemId: form.outputType === 'enchant-item' ? (form.outputBaseItemId || null) : null,
         outputQuantity: form.outputQuantity || 1,
-        inputs: form.inputs.filter((i) => i.itemId).map((i) => ({ itemId: i.itemId, quantity: Number(i.quantity) || 1 })),
+        inputs: form.inputs
+          .filter((i) => (i.kind === 'slot' ? i.category : i.itemId))
+          .map((i) => {
+            if (i.kind === 'slot') {
+              const slot: Record<string, any> = { kind: 'slot', category: i.category, quantity: Number(i.quantity) || 1 };
+              if (i.subtype) slot.subtype = i.subtype;
+              if (i.rarity) slot.rarity = i.rarity;
+              return slot;
+            }
+            return { kind: 'item', itemId: i.itemId, quantity: Number(i.quantity) || 1 };
+          }),
         goldCost: form.goldCostValue === '' ? {} : { value: Number(form.goldCostValue), denomination: form.goldCostDenom },
         craftTime: form.craftTimeValue === '' ? {} : { value: Number(form.craftTimeValue), unit: form.craftTimeUnit },
         craftChecks: form.craftChecks === '' ? null : Number(form.craftChecks),
@@ -364,30 +404,53 @@ export default function RecipesEditor({ userProfile }: { userProfile: any }) {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label className="field-label">Material / Item Inputs</Label>
-              <button type="button" onClick={() => setForm((p) => ({ ...p, inputs: [...p.inputs, { itemId: '', quantity: 1 }] }))} className="text-[10px] text-gold flex items-center gap-1 hover:text-gold/70">
+              <button type="button" onClick={() => setForm((p) => ({ ...p, inputs: [...p.inputs, { kind: 'item', itemId: '', category: '', subtype: '', rarity: '', quantity: 1 }] }))} className="text-[10px] text-gold flex items-center gap-1 hover:text-gold/70">
                 <Plus className="w-3 h-3" /> Add input
               </button>
             </div>
             {form.inputs.length === 0 && <p className="text-[10px] text-ink/40 italic">No inputs yet — add the materials/items this recipe consumes.</p>}
             {form.inputs.map((inp, idx) => (
-              <div key={idx} className="grid grid-cols-[1fr_64px_28px] gap-2 items-center">
-                <SingleSelectSearch
-                  value={inp.itemId}
-                  onChange={(v) => setForm((p) => { const next = [...p.inputs]; next[idx] = { ...next[idx], itemId: v }; return { ...p, inputs: next }; })}
-                  options={itemOptions}
-                  placeholder="Select item…"
-                  className="w-full"
-                  triggerClassName="w-full h-8"
-                />
-                <Input
-                  type="number"
-                  value={inp.quantity}
-                  onChange={(e) => setForm((p) => { const next = [...p.inputs]; next[idx] = { ...next[idx], quantity: Number(e.target.value) || 1 }; return { ...p, inputs: next }; })}
-                  className="field-input h-8"
-                />
-                <button type="button" onClick={() => setForm((p) => ({ ...p, inputs: p.inputs.filter((_, i) => i !== idx) }))} className="text-blood/70 hover:text-blood p-1" aria-label="Remove input">
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+              <div key={idx} className="space-y-1.5 border border-gold/10 p-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex gap-1">
+                    {(['item', 'slot'] as const).map((k) => (
+                      <button key={k} type="button"
+                        onClick={() => setForm((p) => { const next = [...p.inputs]; next[idx] = { ...next[idx], kind: k }; return { ...p, inputs: next }; })}
+                        className={`px-2 py-0.5 text-[10px] border transition-colors ${inp.kind === k ? 'border-gold bg-gold/15 text-ink' : 'border-gold/20 text-ink/55 hover:border-gold/40'}`}>
+                        {k === 'item' ? 'Specific item' : 'Material slot'}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input type="number" value={inp.quantity}
+                      onChange={(e) => setForm((p) => { const next = [...p.inputs]; next[idx] = { ...next[idx], quantity: Number(e.target.value) || 1 }; return { ...p, inputs: next }; })}
+                      className="field-input h-8 w-16" aria-label="Quantity" />
+                    <button type="button" onClick={() => setForm((p) => ({ ...p, inputs: p.inputs.filter((_, i) => i !== idx) }))} className="text-blood/70 hover:text-blood p-1" aria-label="Remove input">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+                {inp.kind === 'slot' ? (
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <select value={inp.category} onChange={(e) => setForm((p) => { const next = [...p.inputs]; next[idx] = { ...next[idx], category: e.target.value }; return { ...p, inputs: next }; })} className="field-input h-8 px-1 text-xs">
+                      <option value="">— Category —</option>
+                      {MATERIAL_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                    </select>
+                    <Input value={inp.subtype} placeholder="subtype (any)" onChange={(e) => setForm((p) => { const next = [...p.inputs]; next[idx] = { ...next[idx], subtype: e.target.value }; return { ...p, inputs: next }; })} className="field-input h-8 text-xs" />
+                    <select value={inp.rarity} onChange={(e) => setForm((p) => { const next = [...p.inputs]; next[idx] = { ...next[idx], rarity: e.target.value }; return { ...p, inputs: next }; })} className="field-input h-8 px-1 text-xs">
+                      {MATERIAL_RARITIES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                    </select>
+                  </div>
+                ) : (
+                  <SingleSelectSearch
+                    value={inp.itemId}
+                    onChange={(v) => setForm((p) => { const next = [...p.inputs]; next[idx] = { ...next[idx], itemId: v }; return { ...p, inputs: next }; })}
+                    options={itemOptions}
+                    placeholder="Select item…"
+                    className="w-full"
+                    triggerClassName="w-full h-8"
+                  />
+                )}
               </div>
             ))}
           </div>

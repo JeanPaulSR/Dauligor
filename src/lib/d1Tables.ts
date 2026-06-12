@@ -77,6 +77,9 @@ export const D1_TABLE_MAP: Record<string, string> = {
   // organizing axis + inputs of the crafting system. Migrations 20260609-1350 / -1500.
   craftingDisciplines: 'crafting_disciplines',
   craftingMaterials: 'crafting_materials',
+  // Shops — named item-pools that sell catalog items at listed prices (the
+  // first commerce surface). Migration 20260610-1400.
+  shops: 'shops',
   // Admin-managed taxonomy that groups feats into player-facing
   // buckets (General / Fighting Style / Epic Boon / Origin / …).
   // Authored via /admin/feat-categories; feats reference rows here

@@ -550,6 +550,12 @@ export default function AdminProficiencies({ userProfile }: { userProfile: any }
                 description="The crafting professions that organize every recipe and material (Alchemy, Blacksmithing, Enchanting, …)."
                 columnCase="camel"
                 {...TAXONOMY_TAB_BASE}
+                // A discipline's core mechanics: the ability its crafting roll
+                // keys off (writes `ability_id`) and the tool it uses (the shared
+                // `categoryFK` picker pointed at the `tools` table → `tool_id`).
+                // Facility is a per-case DM call, handled in the module.
+                includeAbility
+                categoryFK={{ column: 'tool_id', referenceTable: 'tools', label: 'Tool' }}
               />
             )}
             {activeTab === 'spellcasting' && <SpellcastingAdvancementManager userProfile={userProfile} />}
