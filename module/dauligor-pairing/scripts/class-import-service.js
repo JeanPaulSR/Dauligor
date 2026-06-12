@@ -2718,7 +2718,7 @@ function deterministicFoundryId(seed) {
   return out;
 }
 
-function buildItemIdRemap(automation) {
+export function buildItemIdRemap(automation) {
   const activityIdMap = new Map();
   const effectIdMap = new Map();
   // summon/transform profiles are activity-internal, but we hoist the
@@ -2786,12 +2786,12 @@ function resolveRemappedId(map, raw) {
  * should be re-normalized — the guard in `normalizeWorldItem` keeps raw-Foundry
  * passthroughs (notably spells) untouched.
  */
-function hasSemanticActivities(activities) {
+export function hasSemanticActivities(activities) {
   const list = Array.isArray(activities) ? activities : Object.values(activities || {});
   return list.some((a) => a && typeof a === "object" && typeof a.kind === "string");
 }
 
-function normalizeSemanticActivityCollection(activities, idMaps) {
+export function normalizeSemanticActivityCollection(activities, idMaps) {
   const entries = Array.isArray(activities)
     ? activities
     : activities && typeof activities === "object"
@@ -2957,7 +2957,7 @@ function normalizeSemanticActivityEffects(effects, idMaps = {}) {
 //     flags }
 // dnd5e 5.x effect `type` defaults to "base"; the system may register
 // custom types ("enchantment") that we pass through verbatim.
-function normalizeSemanticItemEffects(effects, idMaps = {}) {
+export function normalizeSemanticItemEffects(effects, idMaps = {}) {
   return ensureArray(effects).map((effect) => {
     if (!effect || typeof effect !== "object") return null;
     return {
