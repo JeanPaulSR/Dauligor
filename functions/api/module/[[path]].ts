@@ -270,6 +270,13 @@ export const onRequest = async (context: any): Promise<Response> => {
       // `counts.feats` field is part of the shape now (Number, not
       // missing), and the Foundry Feats wizard reads it the same way
       // the Spells wizard reads `counts.spells`.
+      //
+      // And reject catalogs that pre-date the items-count patch — those
+      // carry `counts.items: 0` (hard-coded) and lack the per-entry
+      // `itemCatalogUrl` hint. `itemCatalogUrl` is the reliable marker
+      // (counts.items always existed as a field), so its presence gates
+      // the self-heal that surfaces real `counts.items` + the
+      // `<slug>/items.json` list for the Foundry Items wizard.
       const result = await getOrBuild(
         topLevelCatalogKey(),
         buildTopLevelCatalog,
@@ -279,7 +286,8 @@ export const onRequest = async (context: any): Promise<Response> => {
           return entries.every(
             (e: any) =>
               Array.isArray(e?.supportedImportTypes)
-              && typeof e?.counts?.feats === "number",
+              && typeof e?.counts?.feats === "number"
+              && typeof e?.itemCatalogUrl === "string",
           );
         },
       );
