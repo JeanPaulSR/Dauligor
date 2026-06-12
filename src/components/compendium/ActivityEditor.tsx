@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Swords, Wand2, Dices, Zap, Sparkles, ArrowRight,
   Heart, Shield, Boxes, RefreshCw, Wrench, Plus,
@@ -313,12 +313,24 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
     ? activities 
     : Object.values(activities);
 
+  // Hosts pass an inline `onChange` (new identity every render), so keying the
+  // normalize effect on `onChange` made it re-run on EVERY parent render and
+  // re-emit the whole activities array from a snapshot — a narrow window in
+  // which a just-added activity could be clobbered back out. Hold the latest
+  // onChange in a ref and key the effect to the activities VALUE only, so it
+  // fires exactly when the input changes (e.g. a freshly-loaded legacy row that
+  // needs sanitizing), never on unrelated re-renders.
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  });
   useEffect(() => {
     const normalized = activityList.map(sanitizeActivity);
     if (JSON.stringify(normalized) !== JSON.stringify(activityList)) {
-      onChange(normalized);
+      onChangeRef.current(normalized);
     }
-  }, [activities, onChange]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activities]);
 
   // Lazy-load the spell compendium only once a Cast activity is actually being
   // edited — feeds the "Spell to Cast" picker. d1.ts caches the response, so
