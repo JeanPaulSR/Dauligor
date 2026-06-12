@@ -6,7 +6,7 @@ import {
   BookOpen, Map as MapIcon, Users, Bookmark, History, Calendar,
   Clock, Book, Shield, Dna, Bug, Scroll, Sword, Wand2,
   Hammer, Bed, ChevronRight, ChevronDown, PanelLeftClose, PanelLeftOpen,
-  Plus, Image as ImageIcon, Inbox
+  Plus, Image as ImageIcon, Inbox, RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
@@ -493,6 +493,36 @@ export default function Sidebar({
                     </Button>
                   } />
                   <TooltipContent side="right">BBCode Tester</TooltipContent>
+                </Tooltip>
+              )}
+            </Link>
+          )}
+
+          {/* Foundry Export — bulk rebake (admin-only power tool) */}
+          {isAdmin && (
+            <Link to="/admin/module-export" onClick={() => onClose?.()}>
+              {(!isCollapsed || isOpen) ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className={`w-full justify-start gap-2 text-xs text-ink/65 hover:text-gold hover:bg-gold/5 ${
+                    location.pathname === '/admin/module-export' ? 'text-gold bg-gold/15' : ''
+                  }`}
+                >
+                  <RefreshCw className="w-3.5 h-3.5 shrink-0" /> Rebake Export
+                </Button>
+              ) : (
+                <Tooltip>
+                  <TooltipTrigger render={
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="w-10 h-10 mx-auto text-ink/65 hover:text-gold hover:bg-gold/5"
+                    >
+                      <RefreshCw className="w-5 h-5" />
+                    </Button>
+                  } />
+                  <TooltipContent side="right">Rebake Export</TooltipContent>
                 </Tooltip>
               )}
             </Link>

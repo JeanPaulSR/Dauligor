@@ -7,29 +7,62 @@ export default {
     }
   },
   async scheduled(event, env, ctx) {
-    // Two background tasks per nightly tick:
-    //
-    //   1. Retention sweep — drops resolved pending_revisions older
-    //      than 30 days unless an admin pinned the row. See
+    // Gradual module-export rebake-queue drain — runs on EVERY tick (the
+    // frequent */15 cron AND the daily 03:30 one) so entities that have been
+    // quiet for the 1-hour debounce bake on a timer, independent of whether a
+    // Foundry client is hitting the module API. Bounded per call (see
+    // process-export-queue) so a backlog drains slowly instead of bursting
+    // past the Worker subrequest cap. See api/_lib/module-export-queue.ts.
+    ctx.waitUntil(runExportQueueDrain(env));
+
+    // Heavier daily-only housekeeping (the 03:30 UTC schedule). `event.cron`
+    // distinguishes which trigger fired so these don't run every 15 minutes:
+    //   1. Retention sweep — drops resolved pending_revisions older than 30
+    //      days unless an admin pinned the row. See
     //      migrations/20260520-1000_pending_revisions_pinned.sql.
-    //
-    //   2. Spell cache pre-warm — POSTs the Pages Functions endpoint
-    //      that walks every consumer with applied rules and refreshes
-    //      `consumer_spell_list_cache` if the inputs fingerprint went
-    //      stale. Phase 4.5 of the spell-list-resolution rework — keeps
-    //      first-after-edit user reads on the cache-hit path. Cheap on
-    //      a steady-state world (~100 consumers × 4 SELECT MAX each);
-    //      ~100ms recompute on misses.
-    //
-    // wrangler.toml's [triggers] currently runs both on the daily
-    // 03:30 UTC schedule. If pre-warm staleness becomes user-visible
-    // (e.g. catalogue edits during the day still pay the recompute on
-    // first read), split into two cron entries — `event.cron` exposes
-    // which one fired.
-    ctx.waitUntil(runRetentionSweep(env));
-    ctx.waitUntil(runSpellCachePrewarm(env));
+    //   2. Spell-cache pre-warm — refreshes `consumer_spell_list_cache` so
+    //      first-after-edit user reads stay on the cache-hit path.
+    if (event.cron === '30 3 * * *') {
+      ctx.waitUntil(runRetentionSweep(env));
+      ctx.waitUntil(runSpellCachePrewarm(env));
+    }
   },
 };
+
+// Drains a bounded batch of due rebake-queue entries by POSTing the Pages
+// Functions endpoint with the shared worker secret (same pattern as the
+// spell-cache prewarm). Best-effort — the opportunistic per-request path is
+// the fallback, and a failed entry stays queued for the next tick.
+async function runExportQueueDrain(env) {
+  const appUrl = env.APP_URL;
+  if (!appUrl || !env.API_SECRET) {
+    console.warn('[scheduled] export-queue drain skipped — APP_URL or API_SECRET unset');
+    return;
+  }
+  const target = new URL('/api/admin/process-export-queue', appUrl);
+  try {
+    const res = await fetch(target.toString(), {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.API_SECRET}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      console.error(`[scheduled] export-queue drain failed ${res.status}: ${text.slice(0, 200)}`);
+      return;
+    }
+    const body = await res.json().catch(() => ({}));
+    console.log(
+      `[scheduled] export-queue drain ok — due=${body.due ?? '?'} ` +
+      `rebaked=${body.rebaked ?? '?'} failed=${body.failed ?? '?'} ` +
+      `written=${body.written ?? '?'} server=${body.durationMs ?? '?'}ms`,
+    );
+  } catch (err) {
+    console.error('[scheduled] export-queue drain threw:', err);
+  }
+}
 
 async function runRetentionSweep(env) {
   try {

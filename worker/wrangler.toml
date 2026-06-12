@@ -28,8 +28,11 @@ database_name = "dauligor-db"
 database_id = "25a9d61a-29ec-42c7-9dae-8cde8d88913d"
 migrations_dir = "migrations"
 
-# Daily cron sweep that prunes resolved (approved/rejected/withdrawn)
-# pending_revisions older than 30 days. Admin pins (`pinned_at IS NOT
-# NULL`) survive. Runs at 03:30 UTC — off-peak across the user base.
+# Cron triggers (the `scheduled()` handler dispatches on `event.cron`):
+#   • "30 3 * * *"   — daily 03:30 UTC: prune resolved pending_revisions
+#     older than 30 days (admin pins survive) + spell-cache pre-warm.
+#   • "*/15 * * * *" — every 15 min: drain a small bounded batch of the
+#     module-export rebake queue, so entities quiet for the 1h debounce
+#     bake on a timer (gradually, not in a burst) regardless of traffic.
 [triggers]
-crons = ["30 3 * * *"]
+crons = ["30 3 * * *", "*/15 * * * *"]

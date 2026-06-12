@@ -30,6 +30,7 @@ import AdminProficiencies from './pages/admin/AdminProficiencies';
 import StatusesEditor from './pages/admin/StatusesEditor';
 import ImageManager from './pages/admin/ImageManager';
 import ImageViewer from './pages/admin/ImageViewer';
+import ModuleExportManager from './pages/admin/ModuleExportManager';
 import Settings from './pages/core/Settings';
 import Profile from './pages/core/Profile';
 import Construction from './pages/core/Construction';
@@ -575,6 +576,7 @@ export default function App() {
                   <Route path="/admin/proficiencies" element={<AdminProficiencies userProfile={effectiveProfile} />} />
                   <Route path="/admin/statuses" element={<StatusesEditor userProfile={effectiveProfile} />} />
                   <Route path="/admin/images" element={<ImageManager userProfile={effectiveProfile} />} />
+                  <Route path="/admin/module-export" element={<ModuleExportManager userProfile={effectiveProfile} />} />
                   <Route path="/images/view" element={<ImageViewer userProfile={effectiveProfile} />} />
                   {/* Dev tools — admin-only. BBCode tester for the
                       ongoing BBCode audit + cross-reference authoring

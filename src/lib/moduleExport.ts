@@ -91,3 +91,31 @@ export async function rebakeNow(
     return { ok: false, written: [], error: error?.message ?? String(error) };
   }
 }
+
+/**
+ * Bulk-enqueue every entity of a kind for rebake — the admin "rebake this
+ * system" action after a code/export-logic change. Entries become due
+ * immediately but never override an in-flight edit's 1h window; the server
+ * cron drains them gradually. Returns `{ ok, count, error? }`.
+ */
+export async function rebakeKind(
+  kind: 'class' | 'source',
+): Promise<{ ok: boolean; count: number; error?: string }> {
+  const headers = await authHeaders();
+  if (!headers) return { ok: false, count: 0, error: 'You must be signed in.' };
+  try {
+    const res = await fetch('/api/module/queue-rebake-kind', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ kind }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      return { ok: false, count: 0, error: text || `HTTP ${res.status}` };
+    }
+    const json = await res.json().catch(() => null);
+    return { ok: true, count: Number(json?.count) || 0 };
+  } catch (error: any) {
+    return { ok: false, count: 0, error: error?.message ?? String(error) };
+  }
+}

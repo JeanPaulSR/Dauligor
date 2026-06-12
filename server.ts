@@ -363,6 +363,10 @@ async function startServer() {
     // the local Express dev server lets us exercise the prewarm
     // end-to-end without spinning up `wrangler pages dev`.
     { mount: "/api/admin/prewarm-spell-cache", modulePath: "./functions/api/admin/prewarm-spell-cache.ts" },
+    // Module-export rebake-queue drain. The worker's scheduled() handler
+    // POSTs here on the frequent cron; mirrored locally so the drain can
+    // be exercised against `wrangler dev` without `wrangler pages dev`.
+    { mount: "/api/admin/process-export-queue", modulePath: "./functions/api/admin/process-export-queue.ts" },
     // Single-file Pages Functions for per-user favorites. Local dev
     // wires them through the same `wrapPagesFunction` adapter so
     // signed-in users get cloud-sync against `npx wrangler d1 …

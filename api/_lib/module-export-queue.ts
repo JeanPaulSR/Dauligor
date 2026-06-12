@@ -59,6 +59,48 @@ export async function clearForRebake(kind: ExportEntityKind, id: string): Promis
   });
 }
 
+// Kinds the "rebake a whole system" admin button can bulk-enqueue, mapped to
+// the table whose `id`s to sweep in. `class` is the workhorse — rebakeClass
+// bakes the FULL class bundle (embedded features / subclasses / options) +
+// the source catalog, so a code change to class/feature export only needs
+// "rebake all classes". `source` is the heavier "refresh catalogs + every
+// class in the book" option.
+const BULK_ENQUEUE_TABLES: Partial<Record<ExportEntityKind, string>> = {
+  class: "classes",
+  source: "sources",
+};
+
+export function isBulkEnqueueKind(kind: string): kind is ExportEntityKind {
+  return Object.prototype.hasOwnProperty.call(BULK_ENQUEUE_TABLES, kind);
+}
+
+/**
+ * Bulk-enqueue every entity of `kind` for rebake — the admin "rebake this
+ * system" action after a code/export-logic change (which never touches entity
+ * rows, so nothing self-enqueues). Entries are stamped **immediately due**
+ * (`now − DEBOUNCE`) so the cron drain picks them up next sweep, but uses
+ * `ON CONFLICT DO NOTHING` — an entity already in the queue (i.e. actively
+ * being edited, with a fresh `last_edit_at`) keeps its own 1-hour window and
+ * is NOT pulled forward. Returns the number of ids swept.
+ */
+export async function enqueueAllOfKind(kind: ExportEntityKind): Promise<number> {
+  const table = BULK_ENQUEUE_TABLES[kind];
+  if (!table) return 0;
+  const res = await executeD1QueryInternal({ sql: `SELECT id FROM ${table}` });
+  const ids = (res.results ?? []).map((r: any) => String(r.id)).filter(Boolean);
+  if (!ids.length) return 0;
+  const dueAt = Date.now() - DEBOUNCE_MS - 1; // already past the cutoff → due now
+  for (const id of ids) {
+    await executeD1QueryInternal({
+      sql: `INSERT INTO module_export_queue (entity_kind, entity_id, last_edit_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(entity_kind, entity_id) DO NOTHING`,
+      params: [kind, id, dueAt],
+    });
+  }
+  return ids.length;
+}
+
 export interface QueueEntry {
   kind: ExportEntityKind;
   id: string;

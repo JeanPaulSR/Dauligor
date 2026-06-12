@@ -62,6 +62,8 @@ import {
 } from "../../../api/_lib/module-export-store.js";
 import {
   clearForRebake,
+  enqueueAllOfKind,
+  isBulkEnqueueKind,
   popDueEntries,
   queueRebake,
   type ExportEntityKind,
@@ -216,6 +218,25 @@ export const onRequest = async (context: any): Promise<Response> => {
         }
         await queueRebake(entry.kind, entry.id);
         return serveJson(200, { queued: entry, scheduledFor: Date.now() + 60 * 60 * 1000 });
+      }
+
+      // Bulk-enqueue every entity of a kind — the admin "rebake this system"
+      // action after a code/export-logic change (which touches no entity rows,
+      // so nothing self-enqueues). Entries are stamped due-now but never
+      // override an in-flight edit's 1h window; the cron drains them gradually.
+      if (cleanSubpath === "queue-rebake-kind") {
+        await requireStaffAccess(request.headers.get("authorization") ?? undefined);
+        const body = (await request.json().catch(() => ({}))) as any;
+        const kind = String(body?.kind ?? "").trim();
+        if (!isBulkEnqueueKind(kind)) {
+          return serveJson(400, { error: "Body must be { kind } where kind is one of: class, source." });
+        }
+        const count = await enqueueAllOfKind(kind);
+        return serveJson(200, {
+          queuedKind: kind,
+          count,
+          note: "Entries are due now; the cron drains them gradually (a few per sweep).",
+        });
       }
 
       if (cleanSubpath === "rebake-now") {
