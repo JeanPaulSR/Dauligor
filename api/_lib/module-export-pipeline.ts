@@ -132,6 +132,27 @@ export async function buildTopLevelCatalog() {
     itemCountsBySourceId.set(String(row.source_id), Number(row.item_count) || 0);
   }
 
+  // Monster counts per source — drives the Foundry wizard's Bestiary importer
+  // source filter (`counts.bestiary > 0`). NOTE the `monsters` table uses a
+  // camelCase `sourceId` column (unlike the snake_case `source_id` on
+  // classes/spells/feats). The table is NEW on the monster-browser branch and
+  // does NOT exist on prod until that branch ships with its migration; guard so
+  // a missing table degrades the count to 0 instead of 500-ing the entire
+  // source catalog (critical infra read by every importer mode). Creatures with
+  // a null sourceId (the deferred MPMM source row) group under a "null" key and
+  // simply don't surface — same as before. Handoff: foundry-module → monster-browser, 2026-06-12.
+  const monsterCountsBySourceId = new Map<string, number>();
+  try {
+    const monsterCountsRes = await executeD1QueryInternal({
+      sql: "SELECT sourceId, COUNT(*) AS monster_count FROM monsters GROUP BY sourceId",
+    });
+    for (const row of monsterCountsRes.results || []) {
+      monsterCountsBySourceId.set(String(row.sourceId), Number(row.monster_count) || 0);
+    }
+  } catch {
+    // `monsters` table absent (pre-ship environments) — leave every count at 0.
+  }
+
   const entries = allSources
     .filter((s: any) => s.status === "ready" || s.status === "active")
     .map((s: any) => {
@@ -140,6 +161,7 @@ export async function buildTopLevelCatalog() {
       const spellCount = spellCountsBySourceId.get(String(s.id)) || 0;
       const featCount = featCountsBySourceId.get(String(s.id)) || 0;
       const itemCount = itemCountsBySourceId.get(String(s.id)) || 0;
+      const monsterCount = monsterCountsBySourceId.get(String(s.id)) || 0;
       // `supportedImportTypes` — explicit allow-list the Foundry
       // wizard reads to decide which importer modes a source can
       // feed. Derived from the per-table counts so the catalog
@@ -150,6 +172,7 @@ export async function buildTopLevelCatalog() {
       if (spellCount > 0) supportedImportTypes.push("spells");
       if (featCount > 0) supportedImportTypes.push("feats");
       if (itemCount > 0) supportedImportTypes.push("items");
+      if (monsterCount > 0) supportedImportTypes.push("monsters");
       return {
         // Public semantic id. The internal D1 row id is intentionally
         // NOT exposed — consumers join against this synthesized id,
@@ -169,7 +192,7 @@ export async function buildTopLevelCatalog() {
           spells: spellCount,
           feats: featCount,
           items: itemCount,
-          bestiary: 0,
+          bestiary: monsterCount,
           journals: 0,
         },
         supportedImportTypes,
@@ -197,6 +220,11 @@ export async function buildTopLevelCatalog() {
         // Sibling URL hint for the items importer — same per-source list
         // pattern as feats/spells. Drives the wizard's Items picker.
         itemCatalogUrl: `${slug}/items.json`,
+        // Bestiary importer URL hint — the per-source monster *list*
+        // catalog (`dauligor.monster-catalog.v1`). Slim entries; the
+        // module fetches the full NPC actor from each entry's
+        // `detailUrl` (`monsters/<identifier>.json`) on selection.
+        monsterCatalogUrl: `${slug}/monsters.json`,
       };
     });
 
@@ -483,6 +511,71 @@ export async function buildSourceItemCatalog(sourceSlug: string) {
       system: "dauligor",
       entity: "item-catalog",
       id: `${source.semanticId}-items`,
+      sourceId: source.semanticId,
+    },
+    entries,
+  };
+}
+
+// Per-source monster *list* catalog — the Bestiary importer's enumeration
+// endpoint, served by `/api/module/<source>/monsters.json`. NOT folded into
+// `buildSourceEntityCatalog` because the bestiary's list shape is its own thing
+// (cr/type/size facets, identifier-keyed detail URL) rather than the
+// description/tags shape backgrounds & species share. Slim entries — the module
+// fetches the full NPC actor from each entry's `detailUrl`
+// (`monsters/<identifier>.json` → `buildMonsterBundleForIdentifier`) on select.
+// The `monsters` table uses camelCase columns (`sourceId`, `creatureType`).
+// Handoff: foundry-module → monster-browser, 2026-06-12.
+export async function buildSourceMonsterCatalog(sourceSlug: string) {
+  const sourcesRes = await executeD1QueryInternal({ sql: "SELECT * FROM sources" });
+  const allSources = (sourcesRes.results || []).map(denormalizeSourceRow);
+  const slug = String(sourceSlug || "").toLowerCase();
+  const source = allSources.find((s: any) =>
+    (s.slug || "").toLowerCase() === slug
+    || String(s.id).toLowerCase() === slug
+    || (s.semanticId || "").toLowerCase() === slug
+  );
+  if (!source) return null;
+
+  const sourceSlugForUrl = (source.slug || source.id) as string;
+  const shortName = source.abbreviation || source.name || "";
+
+  // `monsters` is new on the monster-browser branch — guard the read so a
+  // pre-ship environment (no table) returns an empty catalog rather than 500.
+  let rows: any[] = [];
+  try {
+    const rowsRes = await executeD1QueryInternal({
+      sql: "SELECT id, identifier, name, cr, creatureType, size FROM monsters WHERE sourceId = ?",
+      params: [source.id],
+    });
+    rows = rowsRes.results || [];
+  } catch {
+    rows = [];
+  }
+
+  const entries = rows
+    .map((row: any) => {
+      const identifier = String(row.identifier || "");
+      return {
+        id: String(row.id),
+        identifier,
+        name: String(row.name || ""),
+        cr: row.cr == null ? null : Number(row.cr),
+        type: String(row.creatureType || ""),
+        size: String(row.size || ""),
+        source: shortName,
+        detailUrl: `${sourceSlugForUrl}/monsters/${identifier}.json`,
+      };
+    })
+    .sort((a: any, b: any) => a.name.localeCompare(b.name));
+
+  return {
+    kind: "dauligor.monster-catalog.v1",
+    schemaVersion: 1,
+    source: {
+      system: "dauligor",
+      entity: "monster-catalog",
+      id: `${source.semanticId}-monsters`,
       sourceId: source.semanticId,
     },
     entries,

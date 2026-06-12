@@ -33,6 +33,7 @@ import {
   buildSourceBackgroundCatalog,
   buildSourceSpeciesCatalog,
   buildSourceItemCatalog,
+  buildSourceMonsterCatalog,
   buildTopLevelCatalog,
   rebakeBundle,
 } from "../../../api/_lib/module-export-pipeline.js";
@@ -278,6 +279,13 @@ export const onRequest = async (context: any): Promise<Response> => {
       // (counts.items always existed as a field), so its presence gates
       // the self-heal that surfaces real `counts.items` + the
       // `<slug>/items.json` list for the Foundry Items wizard.
+      //
+      // Likewise reject catalogs baked before the bestiary patch. `counts.bestiary`
+      // was already a Number (hard-coded 0), so it can't distinguish stale from
+      // fresh; the new per-entry `monsterCatalogUrl` field is the marker. Without
+      // this, an already-cached catalog keeps serving `bestiary:0` + no
+      // `monsterCatalogUrl` and the Foundry Bestiary wizard never surfaces
+      // monsters until some unrelated rebake invalidates the cache.
       const result = await getOrBuild(
         topLevelCatalogKey(),
         buildTopLevelCatalog,
@@ -288,7 +296,8 @@ export const onRequest = async (context: any): Promise<Response> => {
             (e: any) =>
               Array.isArray(e?.supportedImportTypes)
               && typeof e?.counts?.feats === "number"
-              && typeof e?.itemCatalogUrl === "string",
+              && typeof e?.itemCatalogUrl === "string"
+              && typeof e?.monsterCatalogUrl === "string",
           );
         },
       );
@@ -550,6 +559,23 @@ export const onRequest = async (context: any): Promise<Response> => {
     ) {
       const slug = pathParts[0].toLowerCase();
       const result = await buildSourceItemCatalog(slug);
+      if (result) return serveLive(result);
+      // Fall through to 404 if the source slug didn't match.
+    }
+
+    // Per-source monster *list* catalog — live read-through, no R2. URL:
+    //   /api/module/<source>/monsters.json
+    // The Foundry Bestiary import wizard enumerates a source's creatures here,
+    // then fetches the full NPC actor from each entry's `detailUrl`
+    // (`monsters/<identifier>.json`). Distinct from the 3-segment per-monster
+    // detail arm above (`pathParts[1] === "monsters"`), since here
+    // `pathParts[1] === "monsters.json"`. Handoff: foundry-module, 2026-06-12.
+    else if (
+      pathParts.length === 2
+      && pathParts[1] === "monsters.json"
+    ) {
+      const slug = pathParts[0].toLowerCase();
+      const result = await buildSourceMonsterCatalog(slug);
       if (result) return serveLive(result);
       // Fall through to 404 if the source slug didn't match.
     }
