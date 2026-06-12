@@ -9,10 +9,14 @@ export type CanonicalAdvancementType =
   | 'Subclass'
   | 'GrantSpells'
   | 'ExtendSpellList'
-  // Phase C — bumps the `uses.max` of an existing feature / feat the
-  // character already owns. Authored on the granting feat or item;
-  // resolved app-side at bake time (not as a runtime Active Effect).
-  // Configuration shape: { target: { kind: 'feature'|'feat', id }, amount }.
+  // Phase C — bumps the `uses.max` of a named RESOURCE the character
+  // owns, resolved to its holder by matching `resourceKey` against a
+  // holder's `identifier` (item-first, then class → subclass → feat).
+  // Authored on the granting feat or item; resolved app-side at bake
+  // time (not a runtime Active Effect). Configuration:
+  //   { resourceKey, amount, preferredTarget: { kind: 'item'|'feature'|'feat', id } | null }.
+  // Legacy rows used `{ target, amount }`; the runtime reads
+  // `preferredTarget || target`, so old data keeps resolving unchanged.
   | 'ItemBumpUses';
 
 export interface CanonicalTraitChoiceEntry {
@@ -84,12 +88,14 @@ export function buildDefaultAdvancementConfiguration(type: string, defaultHitDie
       };
     case 'ItemBumpUses':
       return {
-        // `target` mirrors the requirements-tree leaf shape for
-        // feature / feat picks — a discriminated `{ kind, id }` pair.
-        // The shape stays minimal because Phase C bumps a single
-        // target; multi-target bumps would author two advancements.
-        target: null,
+        // `resourceKey` is the primary field — a slug matched against a
+        // holder's `identifier` at bake time (item-first, then
+        // class → subclass → feat). `preferredTarget` optionally pins a
+        // specific holder. One resource per advancement; multi-bumps
+        // author two advancements.
+        resourceKey: '',
         amount: '',
+        preferredTarget: null,
       };
     default:
       return {};
@@ -189,24 +195,35 @@ export function normalizeAdvancementForEditor<T extends { type?: string; configu
   }
 
   if (type === 'ItemBumpUses') {
-    // Defensive normalization for the bump configuration. We accept
-    // the editor's `{ target: { kind, id } | null, amount: string }`
-    // shape; anything else is coerced. `kind` is restricted to
-    // `feature` or `feat` (the two leaf types in the requirements
-    // editor that target an entity row). Amount is stored as a raw
-    // formula string so authors can write `+1`, `@prof`,
-    // `@scale.<owner>.<col>` without app-side parsing leaking into
-    // the persisted shape.
-    const rawTarget = configuration.target;
-    const validKind = rawTarget?.kind === 'feat' || rawTarget?.kind === 'feature';
-    const targetId = String(rawTarget?.id || '').trim();
+    // Defensive normalization for the bump configuration. The primary
+    // field is `resourceKey` — a slug matched against a holder's
+    // `identifier` at bake time. `preferredTarget` (was `target`)
+    // optionally pins a specific holder; `kind` ∈ item|feature|feat.
+    // Amount is a raw formula string (`+1`, `@prof`,
+    // `@scale.<owner>.<col>`) kept verbatim so app-side parsing doesn't
+    // leak into the persisted shape.
+    //
+    // Back-compat: legacy rows stored `{ target, amount }`. The runtime
+    // reads `preferredTarget || target`; here we surface a legacy
+    // `target` as `preferredTarget` when the new field is absent so old
+    // rows open correctly in the editor, then drop `target` from the
+    // editor shape (no migration — new writes are resourceKey +
+    // preferredTarget; untouched old rows keep their `target` column).
+    const rawPreferred = configuration.preferredTarget ?? configuration.target;
+    const validKind =
+      rawPreferred?.kind === 'item'
+      || rawPreferred?.kind === 'feat'
+      || rawPreferred?.kind === 'feature';
+    const preferredId = String(rawPreferred?.id || '').trim();
     configuration = {
       ...configuration,
-      target: validKind && targetId
-        ? { kind: rawTarget.kind, id: targetId }
+      resourceKey: String(configuration.resourceKey || '').trim(),
+      preferredTarget: validKind && preferredId
+        ? { kind: rawPreferred.kind, id: preferredId }
         : null,
       amount: String(configuration.amount || '').trim(),
     };
+    delete (configuration as any).target;
   }
 
   if (type === 'Trait') {

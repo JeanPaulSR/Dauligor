@@ -38,11 +38,12 @@ export type AdvancementType =
   // Editor blocks live in ./SpellAdvancementEditors.tsx; resolver runs in CharacterBuilder.
   | 'GrantSpells'
   | 'ExtendSpellList'
-  // Phase C — author-time hook to bump `uses.max` on a feature / feat
-  // the character already owns. Typical authors are feats (e.g.
-  // "Divine Intervention Improvement") and items (e.g. "Amulet of the
-  // Devout"). Configuration: `{ target: { kind, id }, amount }`.
-  // Bake-time application — see docs/handoff-phase-c-itembumpuses.md.
+  // Phase C — author-time hook to bump `uses.max` of a named RESOURCE
+  // the character owns, resolved to its holder by `identifier`. Typical
+  // authors are feats (e.g. "Divine Intervention Improvement") and items
+  // (e.g. "Amulet of the Devout"). Configuration:
+  // `{ resourceKey, amount, preferredTarget: { kind, id } | null }`.
+  // Bake-time application; the runtime resolver is live on settings-pages.
   | 'ItemBumpUses';
 
 export interface Advancement {
@@ -77,6 +78,11 @@ interface AdvancementManagerProps {
   // (string IDs in `pool`). Filter / tag UI for feats is intentionally
   // deferred — keep the picker simple for this pass.
   availableFeats?: any[];
+  // Items pickable as an ItemBumpUses *preferred target*. Optional —
+  // defaults to []. Primary targeting is by `resourceKey` (matched
+  // against an item's `identifier`); this pool only feeds the manual
+  // preferred-target picker when the author pins kind = "Item".
+  availableItems?: any[];
   isInsideFeature?: boolean;
   featureId?: string;
   classId?: string;
@@ -297,6 +303,7 @@ function AdvancementManager({
   availableOptionGroups = [],
   availableOptionItems = [],
   availableFeats = [],
+  availableItems = [],
   isInsideFeature = false,
   featureId,
   classId,
@@ -1008,18 +1015,24 @@ function AdvancementManager({
                   {adv.type === 'Trait' && `Proficiency: ${TRAIT_TYPE_LABELS[adv.configuration.type] || adv.configuration.type}`}
                   {adv.type === 'Subclass' && `Subclass selection trigger`}
                   {adv.type === 'ItemBumpUses' && (() => {
-                    // Compact one-liner for the list row. We surface the
-                    // amount (the visible mutation) + the target kind, but
-                    // not the target name — the row is space-constrained
-                    // and authors who need the name open the editor.
+                    // Compact one-liner for the list row. Surface the amount
+                    // (the visible mutation) + the resource key it targets;
+                    // fall back to the preferred target's kind when no key is
+                    // set. Authors who need detail open the editor.
                     const amount = String(adv.configuration?.amount || '').trim();
-                    const kind = adv.configuration?.target?.kind;
-                    if (!amount || !kind) return 'Bump uses (target / amount not set)';
+                    const resourceKey = String(adv.configuration?.resourceKey || '').trim();
+                    // legacy `target` still surfaces as the preferred target.
+                    const preferredKind = (adv.configuration?.preferredTarget ?? adv.configuration?.target)?.kind;
+                    if (!amount || (!resourceKey && !preferredKind)) {
+                      return 'Bump uses (resource / amount not set)';
+                    }
                     // Add a leading + only when the amount itself doesn't
                     // already start with a sign — `+1` stays `+1`,
                     // `@prof` becomes `+@prof`, `-1` stays `-1`.
                     const signed = /^[+-]/.test(amount) ? amount : `+${amount}`;
-                    return `${signed} to a ${kind === 'feat' ? 'feat' : 'feature'}'s uses`;
+                    if (resourceKey) return `${signed} to ${resourceKey}`;
+                    const kindLabel = preferredKind === 'item' ? 'item' : preferredKind === 'feat' ? 'feat' : 'feature';
+                    return `${signed} to a ${kindLabel}'s uses`;
                   })()}
                 </span>
                 {adv.isBase && (
@@ -3069,114 +3082,92 @@ function AdvancementManager({
                 </fieldset>
               )}
 
-              {/* ── ItemBumpUses (Phase C — bump uses.max on a target) ── */}
+              {/* ── ItemBumpUses (Phase C — bump a named resource's uses.max) ── */}
               {/*
                 Authoring surface for the bump-uses mechanic. Examples:
-                  • Cleric: Divine Intervention Improvement → +1 to Channel Divinity
-                  • Amulet of the Devout → +1 to Channel Divinity
-                  • Homebrew feat → +1 to Bardic Inspiration
+                  • Sorcerer: Font of Magic → +1 to sorcery-points
+                  • Cleric: Divine Intervention Improvement → +1 to channel-divinity
+                  • Amulet of the Devout → +1 to channel-divinity
 
                 Storage shape:
                   configuration: {
-                    target: { kind: 'feature' | 'feat', id: string } | null,
-                    amount: string  // formula: '+1', '@prof', '@scale.<owner>.<col>'
+                    resourceKey: string,   // slug matched against a holder's `identifier`
+                    amount: string,        // formula: '+1', '@prof', '@scale.<owner>.<col>'
+                    preferredTarget: { kind: 'item' | 'feature' | 'feat', id } | null
                   }
 
-                Runtime resolution (character builder + Foundry export) is
-                a separate slice — see docs/handoff-phase-c-itembumpuses.md
-                § "Implementation scope" sections 4 + 5. Until that ships
-                the authored shape is inert; saving works so authors can
-                stage content for the upcoming runtime pass.
+                Resolution (runtime resolver is LIVE on settings-pages): one
+                holder, first match wins — (1) preferredTarget if present on the
+                character, (2) an ITEM whose identifier === resourceKey, (3) a
+                FEATURE whose identifier === resourceKey; within a type,
+                class → subclass → feat. Missing → DM-facing warning, never a
+                hard failure.
               */}
               {editingAdv.type === 'ItemBumpUses' && (() => {
-                const target = editingAdv.configuration?.target || null;
-                const kind = (target?.kind === 'feat' ? 'feat' : 'feature') as 'feature' | 'feat';
-                const pool = kind === 'feat'
-                  ? availableFeats.map((f: any) => ({ id: String(f.id), name: String(f.name || f.id) }))
-                  : availableFeatures.map((f: any) => ({ id: String(f.id), name: String(f.name || f.id) }));
-                const targetId = String(target?.id || '');
-                const amount = String(editingAdv.configuration?.amount || '');
+                const cfg = editingAdv.configuration || {};
+                const resourceKey = String(cfg.resourceKey || '');
+                const amount = String(cfg.amount || '');
+                // Legacy `target` surfaces as the preferred target (normalize
+                // does this on load; guard here for in-session shapes too).
+                const preferred = cfg.preferredTarget ?? cfg.target ?? null;
+                const preferredKind = (preferred?.kind === 'item' || preferred?.kind === 'feat')
+                  ? preferred.kind
+                  : 'feature';
+                const preferredId = String(preferred?.id || '');
 
-                const setTargetKind = (nextKind: 'feature' | 'feat') => {
-                  // Switching kind clears the id — a class feature id doesn't
-                  // resolve against the feats table and vice versa.
-                  setEditingAdv({
-                    ...editingAdv,
-                    configuration: {
-                      ...editingAdv.configuration,
-                      target: { kind: nextKind, id: '' },
-                    },
-                  });
+                // Pool for the manual preferred-target picker, by kind.
+                const poolFor = (k: 'item' | 'feature' | 'feat') => {
+                  const src = k === 'feat' ? availableFeats : k === 'item' ? availableItems : availableFeatures;
+                  return src.map((e: any) => ({ id: String(e.id), name: String(e.name || e.identifier || e.id) }));
                 };
-                const setTargetId = (nextId: string) => {
-                  setEditingAdv({
-                    ...editingAdv,
-                    configuration: {
-                      ...editingAdv.configuration,
-                      target: nextId ? { kind, id: nextId } : null,
-                    },
-                  });
-                };
-                const setAmount = (nextAmount: string) => {
-                  setEditingAdv({
-                    ...editingAdv,
-                    configuration: {
-                      ...editingAdv.configuration,
-                      amount: nextAmount,
-                    },
-                  });
-                };
+                const pool = poolFor(preferredKind);
+
+                // Resource-key autocomplete — holder identifiers we know
+                // locally. Free-text; the key need only equal a holder's
+                // identifier at bake time.
+                const resourceKeySuggestions = Array.from(new Set(
+                  [...availableFeatures, ...availableFeats, ...availableItems]
+                    .map((e: any) => String(e?.identifier || '').trim())
+                    .filter(Boolean)
+                )).sort();
+
+                const patchCfg = (patch: any) =>
+                  setEditingAdv({ ...editingAdv, configuration: { ...cfg, ...patch } });
+                const setResourceKey = (v: string) => patchCfg({ resourceKey: v });
+                const setAmount = (v: string) => patchCfg({ amount: v });
+                const setPreferredKind = (k: 'item' | 'feature' | 'feat') =>
+                  // Switching kind clears the id — an id from one pool doesn't
+                  // resolve against another.
+                  patchCfg({ preferredTarget: { kind: k, id: '' } });
+                const setPreferredId = (id: string) =>
+                  patchCfg({ preferredTarget: id ? { kind: preferredKind, id } : null });
+                const clearPreferred = () => patchCfg({ preferredTarget: null });
 
                 return (
                   <div className="grid xl:grid-cols-[minmax(280px,0.9fr)_minmax(0,1.1fr)] gap-5 items-start">
                     <fieldset className="config-fieldset bg-background/20">
-                      <legend className="section-label text-gold/65 px-1">Target</legend>
+                      <legend className="section-label text-gold/65 px-1">Resource</legend>
                       <div className="space-y-3">
                         <div className="space-y-1.5">
-                          <label className="field-label">Target Kind</label>
-                          <Select
-                            value={kind}
-                            onValueChange={(val: string | null) => {
-                              if (val !== 'feature' && val !== 'feat') return;
-                              setTargetKind(val);
-                            }}
-                          >
-                            <SelectTrigger className="w-full h-9 bg-background/50 border-gold/15">
-                              <SelectValue>{kind === 'feat' ? 'Feat' : 'Class Feature'}</SelectValue>
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="feature">Class Feature</SelectItem>
-                              <SelectItem value="feat">Feat</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <label className="field-label">Resource Key</label>
+                          <Input
+                            value={resourceKey}
+                            onChange={(e) => setResourceKey(e.target.value)}
+                            list="itembump-resource-keys"
+                            placeholder="e.g. sorcery-points"
+                            className="h-9 bg-background/50 border-gold/15 placeholder:text-ink/25 font-mono text-[12px]"
+                          />
+                          <datalist id="itembump-resource-keys">
+                            {resourceKeySuggestions.map((k) => <option key={k} value={k} />)}
+                          </datalist>
                           <p className="text-[10px] text-ink/45">
-                            {kind === 'feat'
-                              ? 'Pick a feat from the catalog. Bumps the feat\'s uses when it\'s present on the character.'
-                              : 'Pick a class feature from the local list. Bumps the feature\'s uses when the character has it.'}
+                            The <code className="font-mono text-ink/65">identifier</code> slug of the resource to bump
+                            (an item or feature the character owns). At bake time it resolves to ONE holder — an item
+                            first, then a feature — ordered class → subclass → feat. Suggestions list locally-known
+                            identifiers; any slug is allowed.
                           </p>
                         </div>
 
-                        <div className="space-y-1.5">
-                          <label className="field-label">
-                            {kind === 'feat' ? 'Target Feat' : 'Target Feature'}
-                          </label>
-                          <SingleSelectSearch
-                            value={targetId}
-                            onChange={setTargetId}
-                            options={pool}
-                            placeholder={kind === 'feat' ? 'Select feat…' : 'Select feature…'}
-                            noEntitiesText={kind === 'feat'
-                              ? 'No feats available — pass `availableFeats` from the parent editor.'
-                              : 'No features available — pass `availableFeatures` from the parent editor.'}
-                            triggerClassName="w-full h-9"
-                          />
-                        </div>
-                      </div>
-                    </fieldset>
-
-                    <fieldset className="config-fieldset bg-background/20">
-                      <legend className="section-label text-gold/65 px-1">Bump Amount</legend>
-                      <div className="space-y-3">
                         <div className="space-y-1.5">
                           <label className="field-label">Amount Formula</label>
                           <Input
@@ -3187,28 +3178,92 @@ function AdvancementManager({
                           />
                           <p className="text-[10px] text-ink/45">
                             Stored verbatim. Plain numbers like <code className="font-mono text-ink/65">1</code> mean
-                            "add 1 to the target's <code className="font-mono text-ink/65">uses.max</code>." Formulas
+                            "add 1 to the resource's <code className="font-mono text-ink/65">uses.max</code>." Formulas
                             like <code className="font-mono text-ink/65">@prof</code> or
-                            <code className="font-mono text-ink/65"> @scale.&lt;owner&gt;.&lt;col&gt;</code> are
-                            evaluated against the character at apply time.
-                          </p>
-                        </div>
-
-                        <div className="border border-gold/15 rounded-md bg-card/40 px-3 py-2.5 space-y-1">
-                          <p className="text-[10px] uppercase font-black tracking-widest text-gold/65">Resolution</p>
-                          <p className="text-[10px] text-ink/55 leading-snug">
-                            When this advancement applies, the character builder finds the target
-                            on the sheet and adds the amount to its <code className="font-mono text-ink/65">uses.max</code>.
-                            If the target is <span className="font-bold text-ink/75">not present</span> on the character,
-                            the builder logs a warning so you can pass the note along to the DM — the rest of the
-                            granting feat / item still applies.
-                          </p>
-                          <p className="text-[10px] text-ink/45 italic">
-                            Note: runtime application is queued — see docs/handoff-phase-c-itembumpuses.md.
+                            <code className="font-mono text-ink/65"> @scale.&lt;owner&gt;.&lt;col&gt;</code> evaluate
+                            against the character at apply time.
                           </p>
                         </div>
                       </div>
                     </fieldset>
+
+                    <div className="space-y-5">
+                      <fieldset className="config-fieldset bg-background/20">
+                        <legend className="section-label text-gold/65 px-1">Preferred Target — optional</legend>
+                        <div className="space-y-3">
+                          <p className="text-[10px] text-ink/55 leading-snug">
+                            Leave empty to resolve purely by resource key. Set this to pin a specific holder — it's
+                            used only when that exact entity is present on the character; otherwise resource-key
+                            resolution takes over.
+                          </p>
+                          <div className="space-y-1.5">
+                            <label className="field-label">Kind</label>
+                            <Select
+                              value={preferredKind}
+                              onValueChange={(val: string | null) => {
+                                if (val !== 'feature' && val !== 'feat' && val !== 'item') return;
+                                setPreferredKind(val);
+                              }}
+                            >
+                              <SelectTrigger className="w-full h-9 bg-background/50 border-gold/15">
+                                <SelectValue>
+                                  {preferredKind === 'feat' ? 'Feat' : preferredKind === 'item' ? 'Item' : 'Class Feature'}
+                                </SelectValue>
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="feature">Class Feature</SelectItem>
+                                <SelectItem value="feat">Feat</SelectItem>
+                                <SelectItem value="item">Item</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <label className="field-label">
+                                {preferredKind === 'feat' ? 'Feat' : preferredKind === 'item' ? 'Item' : 'Feature'}
+                              </label>
+                              {preferredId && (
+                                <button
+                                  type="button"
+                                  onClick={clearPreferred}
+                                  className="text-[10px] text-ink/45 hover:text-blood/80 uppercase tracking-wide"
+                                >
+                                  Clear
+                                </button>
+                              )}
+                            </div>
+                            <SingleSelectSearch
+                              value={preferredId}
+                              onChange={setPreferredId}
+                              options={pool}
+                              placeholder={preferredKind === 'feat' ? 'Select feat…' : preferredKind === 'item' ? 'Select item…' : 'Select feature…'}
+                              noEntitiesText={preferredKind === 'feat'
+                                ? 'No feats available — pass `availableFeats` from the parent editor.'
+                                : preferredKind === 'item'
+                                  ? 'No items available — pass `availableItems` from the parent editor.'
+                                  : 'No features available — pass `availableFeatures` from the parent editor.'}
+                              triggerClassName="w-full h-9"
+                            />
+                          </div>
+                        </div>
+                      </fieldset>
+
+                      <div className="border border-gold/15 rounded-md bg-card/40 px-3 py-2.5 space-y-1">
+                        <p className="text-[10px] uppercase font-black tracking-widest text-gold/65">Resolution</p>
+                        <p className="text-[10px] text-ink/55 leading-snug">
+                          One holder, first match wins: (1) the <span className="font-bold text-ink/75">preferred target</span> if
+                          it's on the character, else (2) an <span className="font-bold text-ink/75">item</span> whose identifier
+                          equals the resource key, else (3) a <span className="font-bold text-ink/75">feature</span> whose
+                          identifier equals it — within a type, class beats subclass beats feat. The amount is added to that
+                          holder's <code className="font-mono text-ink/65">uses.max</code>.
+                        </p>
+                        <p className="text-[10px] text-ink/45 leading-snug">
+                          If nothing matches, the builder logs a DM-facing warning (never a hard failure) and the rest of the
+                          granting feat / item still applies.
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 );
               })()}
