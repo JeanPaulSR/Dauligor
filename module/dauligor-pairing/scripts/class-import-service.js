@@ -1433,7 +1433,7 @@ function isSemanticClassExport(payload) {
     && Array.isArray(payload.scalingColumns);
 }
 
-function normalizeSemanticClassExportToBundle(payload, { entry = null } = {}) {
+export function normalizeSemanticClassExportToBundle(payload, { entry = null } = {}) {
   const classData = payload.class ?? {};
   const subclasses = ensureArray(payload.subclasses);
   const features = ensureArray(payload.features);
@@ -1615,8 +1615,16 @@ function createSemanticClassItem(context) {
       },
       wealth: normalizeWealthFormula(classData.wealth ?? ""),
       properties: [],
+      // The app's exporters ALWAYS ship root `class.advancements`, so the
+      // buildSemanticClassAdvancement fallback below never runs for app
+      // bundles — but the app models its scaling COLUMNS
+      // (`payload.scalingColumns`) as their own concept and never emits them
+      // as root ScaleValue advancements. They must be MERGED in, not gated
+      // behind the either/or: without the merge no app-authored scale ever
+      // reaches Foundry and every `@scale.<class>.<column>` formula resolves
+      // to 0 (the Rite Die bug).
       advancement: Object.keys(rootAdvancement).length
-        ? rootAdvancement
+        ? mergeScalingColumnAdvancements(rootAdvancement, context)
         : buildSemanticClassAdvancement(context)
     }
   };
@@ -2308,22 +2316,26 @@ function normalizeSemanticFeatureItemChoiceAdvancement(base, advancement, contex
 
 function normalizeSemanticFeatureScaleAdvancement(base, advancement, context) {
   const configuration = foundry.utils.deepClone(advancement?.configuration ?? {});
+  const scaleType = trimString(configuration?.type) || "number";
   const scale = normalizeScaleConfiguration(
     configuration?.scale
     ?? context.scalingColumnsById.get(configuration?.scalingColumnId)?.values
-    ?? context.scalingColumnsBySourceId.get(configuration?.scalingSourceId)?.values
+    ?? context.scalingColumnsBySourceId.get(configuration?.scalingSourceId)?.values,
+    scaleType
   );
   const identifier = trimString(configuration?.identifier);
   if (!identifier || !Object.keys(scale).length) return null;
 
   base.configuration = {
     identifier,
-    type: trimString(configuration?.type) || "number",
-    distance: {
-      units: trimString(configuration?.distance?.units)
-    },
+    type: scaleType,
     scale
   };
+  // `distance.units` only belongs on distance scales — emitting it on
+  // number/dice configurations is at best noise for dnd5e's validator.
+  if (scaleType === "distance") {
+    base.configuration.distance = { units: trimString(configuration?.distance?.units) || "ft" };
+  }
   if (!base.value || typeof base.value !== "object") base.value = {};
   return base;
 }
@@ -2488,13 +2500,19 @@ function normalizeNullableSpellConfig(spell) {
   return hasAbility || hasUses || hasPrepared ? normalized : null;
 }
 
-function normalizeScaleConfiguration(scale) {
+function normalizeScaleConfiguration(scale, type = "number") {
   const normalized = {};
   for (const [level, value] of Object.entries(scale ?? {})) {
     const numericLevel = Number(level);
     if (!Number.isFinite(numericLevel) || numericLevel <= 0) continue;
-    if (value && typeof value === "object" && Object.hasOwn(value, "value")) {
+    if (value && typeof value === "object") {
+      // Already a dnd5e-shaped entry — `{value}` for number/distance,
+      // `{number,faces}` for dice. Pass it through: re-wrapping a dice entry
+      // as `{value:{number,faces}}` gets cleaned to null by dnd5e validation
+      // and the scale silently rolls as 0.
       normalized[String(numericLevel)] = foundry.utils.deepClone(value);
+    } else if (type === "dice" || type === "distance") {
+      normalized[String(numericLevel)] = scaleEntryForType(type, value);
     } else {
       normalized[String(numericLevel)] = { value: normalizeNumericValue(value) };
     }
@@ -3439,6 +3457,20 @@ function buildScaleValueAdvancements(context) {
     }
   }
 
+  advancements.push(...buildScalingColumnAdvancements(context));
+
+  return advancements;
+}
+
+// Every scaling column — INCLUDING subclass-owned ones — becomes a ScaleValue
+// advancement on the CLASS item: the app expands `@<col>` shorthand to
+// `@scale.<classIdentifier>.<col>` for all of a class's columns, and dnd5e
+// keys roll-data scale by the OWNING item's identifier, so the class item is
+// the only home where those references resolve.
+function buildScalingColumnAdvancements(context) {
+  const advancements = [];
+  const classSourceId = context.classSourceId ?? buildSemanticSourceId("class", context.classData);
+
   for (const scalingColumn of context.scalingColumns) {
     const identifier = normalizeScaleIdentifier(scalingColumn?.sourceId ?? scalingColumn?.name);
     const values = normalizeScaleValues(scalingColumn?.values);
@@ -3456,6 +3488,25 @@ function buildScaleValueAdvancements(context) {
   }
 
   return advancements;
+}
+
+// Overlay the scaling-column ScaleValues onto a payload-supplied root
+// advancement map. Skips identifiers the payload already provides as a
+// ScaleValue (a bundle may ship its own, e.g. Barbarian "rages") so
+// re-imports stay duplicate-free.
+function mergeScalingColumnAdvancements(rootAdvancement, context) {
+  const advancement = { ...rootAdvancement };
+  const existing = new Set(
+    Object.values(advancement)
+      .filter((entry) => entry?.type === "ScaleValue")
+      .map((entry) => trimString(entry?.configuration?.identifier))
+      .filter(Boolean)
+  );
+  for (const scale of buildScalingColumnAdvancements(context)) {
+    if (existing.has(scale.configuration.identifier)) continue;
+    advancement[scale._id] = scale;
+  }
+  return advancement;
 }
 
 function createScaleValueAdvancement({ ownerSourceId, sourceScaleId, title, identifier, values, type = "number", distanceUnits = "" }) {
