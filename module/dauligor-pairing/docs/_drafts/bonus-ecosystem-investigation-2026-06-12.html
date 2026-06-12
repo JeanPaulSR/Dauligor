@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Bonus Ecosystem Investigation — babonus, AC5e &amp; the Native Answer</title>
+<style>
+  body { background:#1a1611; color:#d9cfb8; font-family: Georgia, 'Times New Roman', serif; margin:0; padding:40px 0; }
+  .page { max-width: 920px; margin: 0 auto; background:#241f17; border:1px solid #6b5a33; box-shadow:0 0 40px rgba(0,0,0,.6); padding:48px 56px; }
+  h1 { font-variant: small-caps; color:#cfa648; border-bottom:2px solid #6b5a33; padding-bottom:12px; margin-top:0; }
+  h2 { font-variant: small-caps; color:#cfa648; border-bottom:1px solid #4a3f28; padding-bottom:6px; margin-top:40px; }
+  h3 { color:#b58838; margin-top:28px; }
+  .meta { color:#8f8467; font-style:italic; margin-bottom:28px; }
+  .verdict { background:#2e2719; border-left:4px solid #cfa648; padding:14px 18px; margin:18px 0; }
+  .verdict strong { color:#e8d9ae; }
+  .dead { border-left-color:#8a3b2e; }
+  table { border-collapse: collapse; width:100%; margin:16px 0; font-size:.95em; }
+  th { background:#2e2719; color:#cfa648; text-align:left; padding:8px 10px; border:1px solid #4a3f28; font-variant:small-caps; }
+  td { padding:8px 10px; border:1px solid #4a3f28; vertical-align:top; }
+  code, pre { font-family: Consolas, monospace; background:#171310; color:#c9b98a; border:1px solid #3a311f; }
+  code { padding:1px 5px; font-size:.9em; }
+  pre { padding:14px 16px; overflow-x:auto; font-size:.85em; line-height:1.5; }
+  .good { color:#7da866; font-weight:bold; }
+  .bad { color:#c0604c; font-weight:bold; }
+  .warn { color:#cfa648; font-weight:bold; }
+  .src { color:#7d7258; font-size:.85em; }
+  ul li { margin:6px 0; }
+  .small { font-size:.88em; color:#a89a78; }
+</style>
+</head>
+<body><div class="page">
+
+<h1>Bonus Ecosystem Investigation</h1>
+<p class="meta">2026-06-12 · foundry-module branch · 9-agent research workflow, all load-bearing claims adversarially verified against primary sources (dnd5e 5.3.1 source, Midi-QOL 13.0.58 source, AC5e source @ 0b5d5a7e, GitHub/Wayback archives). Trigger: Crimson Offering's enchant damage is inert; babonus was the proposed home for a fix and turned out deprecated.</p>
+
+<div class="verdict">
+<strong>Bottom line:</strong> we do <strong>not</strong> need to build a bonus engine, and we do <strong>not</strong> need AC5e for the Crimson Rite. <strong>Core dnd5e 5.3.1 natively expresses "this weapon deals +(scale die) typed damage while enchanted"</strong> via the enchantment-only change key <code>system.damage.parts</code>. The fix is an app-side <em>authoring</em> change, not new module machinery. AC5e is the right <em>future</em> add-on if/when we need conditional bonuses; babonus is dead and legally un-vendorable.
+</div>
+
+<h2>1 · Build-a-Bonus (babonus) — dead, and off-limits</h2>
+<div class="verdict dead">
+<strong>Status: deprecated, deleted, proprietary.</strong> Archived by the owner <strong>Nov 2, 2024</strong>; the GitHub repo has since been <em>deleted</em> (404). Final release v12.5.8 (~Oct 26 2024) supports <strong>Foundry 12 / dnd5e 4.x only</strong> — it never supported our stack and will not activate on Foundry v13 + dnd5e 5.3.1.
+</div>
+<ul>
+  <li><strong>Why it died:</strong> dnd5e 4.1's roll refactor (per dnd5e issue #4692). Author krbz999 ("Zhell") moved to <em>dnd5e core development</em> (merged PRs #4855, #5514).</li>
+  <li><strong>The future is core:</strong> dnd5e issue <strong>#4692 — "Integrate parts of Build-a-Bonus into the core system"</strong> is open, <em>epic / priority:high</em>, milestoned <strong>dnd5e 6.0.0</strong>, assigned to a core dev. The babonus niche is being absorbed into the system itself.</li>
+  <li><strong>License:</strong> <span class="bad">"All rights reserved"</span> — proprietary. We <strong>cannot vendor or fork babonus code</strong> into dauligor-pairing. (The Frost-Jack/babonus re-upload's MIT file is an invalid relicense of proprietary code — never treat that repo as vendorable.) Reimplementing the <em>concept</em> independently is fine; copying code is not.</li>
+  <li><strong>No viable forks</strong> — only a stale 2023 mirror and the v12-only re-upload.</li>
+</ul>
+
+<h2>2 · The decisive finding — core dnd5e already does this</h2>
+<p>The official <em>Elemental Weapon</em> pattern (functionally identical to Crimson Offering) is documented by the dnd5e wiki ("up to date as of 5.3.0") and implemented in <code>EnchantmentData._applyLegacy</code> <span class="src">(dnd5e.mjs 71008–71101)</span>: an enchantment-only virtual change key that appends a <strong>typed, locked damage part to every attack/damage/save activity on the enchanted weapon</strong>. Each part is its own roll, typed by its own <code>types</code> set — natively fire/acid/etc., no flavor-bracket tricks.</p>
+
+<h3>The canonical Crimson Rite enchantment changes</h3>
+<pre>// On the type:"enchantment" effect delivered by the enchant activity
+// (restrictions.type = "weapon") — ONE effect per rite damage type:
+[
+  { "key": "name",                "mode": 5, "value": "{} (Crimson Rite: Fire)" },
+  { "key": "system.damage.parts", "mode": 2,
+    "value": "[[\"@scale.alternate-blood-hunter.rite-die\", \"fire\"]]" }
+]</pre>
+<ul>
+  <li><span class="good">@scale resolves end-to-end</span> — damage rolls use activity→item→actor roll data, which spreads <code>actor.system.scale</code> <span class="src">(dnd5e.mjs 12524 → 17813 → 10650 → 26389)</span>. Requires the actor's class item identifier <code>alternate-blood-hunter</code> + ScaleValue id <code>rite-die</code> (our import provides both; dice-scale shape fixed in <code>a8ae707</code>).</li>
+  <li><span class="good">Crit-correct</span> — a native damage part's dice double on crits like all weapon damage (RAW for the Rite). (AC5e's synthetic bonus parts deliberately <em>don't</em> double.)</li>
+  <li><span class="good">Midi-proof</span> — verified in the installed Midi 13.0.58 source: Midi subclasses dnd5e's activities and <strong>delegates the damage roll to dnd5e</strong> (<code>super.rollDamage</code>, midi-qol.js 7389) on a re-prepared item <em>clone</em> that re-applies enchantments <span class="src">(dnd5e Item5e.clone → applyActiveEffects; the historical clone bug was fixed by Midi 12.4.21/13.0.52 — we run 13.0.58)</span>.</li>
+  <li><span class="warn">Gotcha:</span> the value is JSON parsed inside a bare try/catch — <strong>malformed JSON silently no-ops</strong>. The app editor must validate.</li>
+  <li><span class="warn">Gotcha:</span> an enchantment effect only applies when <code>type==="enchantment" &amp;&amp; origin &amp;&amp; origin !== parent item uuid</code> <span class="src">(24562)</span> — fine when applied via the enchant activity (dnd5e sets origin), inert if ever embedded directly with null origin.</li>
+</ul>
+
+<h3>Why the current authoring is inert (root cause, confirmed)</h3>
+<p><code>system.bonuses.mwak.damage</code> is read from <strong>the actor</strong> at roll time <span class="src">(dnd5e.mjs 12551)</span>; enchantment changes apply only to <strong>the item</strong> <span class="src">(23304)</span>. The change writes nowhere meaningful — with or without Midi. Those <code>system.bonuses.*</code> keys are only correct on <em>actor-applied</em> effects (e.g. a transfer effect on a feature).</p>
+
+<h3>Other valid enchantment damage targets (verified in 5.3.1)</h3>
+<table>
+<tr><th>Key</th><th>What it does</th><th>Dice?</th></tr>
+<tr><td><code>system.damage.parts</code> (ADD)</td><td><strong>Adds a typed extra damage part</strong> to all activities — the Elemental Weapon / Crimson Rite mechanism</td><td class="good">yes</td></tr>
+<tr><td><code>system.damage.bonus</code> (ADD)</td><td>Appends to the <em>first</em> part only; inherits the weapon's base damage type</td><td class="good">yes</td></tr>
+<tr><td><code>system.damage.base.*</code></td><td>Modifies the base roll (number/denomination/bonus/types) — the Shillelagh pattern</td><td class="good">yes (bonus)</td></tr>
+<tr><td><code>system.magicalBonus</code></td><td>+N to attack &amp; first damage when magical — the Magic Weapon pattern</td><td class="bad">numbers only</td></tr>
+<tr><td><code>activities[&lt;type&gt;].&lt;path&gt;</code></td><td>Surgical per-activity edits (attack.bonus, save.dc.bonus, …) — used by Shillelagh 2024</td><td>—</td></tr>
+<tr><td>enchant <code>effects[].riders</code></td><td>Grafts whole rider activities/effects/items onto the weapon — Shillelagh 2014 adds an entire attack activity</td><td>—</td></tr>
+</table>
+<p class="small">Aside: Elemental Weapon itself is <strong>not in the free dnd5e packs</strong> (it's paid-PHB-module content) — which is why the DB's imported copy lacked an enchant effect. Magic Weapon and Shillelagh are the in-system reference examples.</p>
+
+<h2>3 · AC5e (automated-conditions-5e) — the right successor, for a different job</h2>
+<div class="verdict">
+<strong>Adopt later, if/when we need conditional bonuses.</strong> MIT-licensed, exceptionally maintained (15 releases May–Jun 2026; dedicated v13 line verified dnd5e 5.3.3 — exact stack match), deep first-class Midi-QOL integration. It can express the Crimson Rite, but for enchantments it needs a two-part workaround — native is strictly simpler for this case.
+</div>
+<ul>
+  <li><strong>What it adds over core:</strong> a declarative conditional-bonus flag engine — <code>flags.ac5e.&lt;actionType&gt;.&lt;mode&gt;</code> with a rich value grammar: condition expressions against roller/opponent/aura state, <code>itemLimited</code>, <code>once</code>/<code>oncePerTurn</code>, opt-in dialog checkboxes, uses-consumption, auras, <code>grants.*</code>. This is "only vs undead", "while below half HP", "opt-in smite-likes" territory — what babonus did.</li>
+  <li><span class="warn">Critical caveat:</span> AC5e reads flags from <code>actor.appliedEffects</code> only — <strong>dnd5e excludes enchantment-type effects from that list</strong>, so an AC5e flag inside an enchantment's changes is <em>inert</em> (same failure class as our bug). The working enchant pattern is two-part: enchant writes a marker flag on the weapon + an actor-side effect carries the AC5e bonus with a condition on the rolled item's marker. Workable, but native needs none of it.</li>
+  <li><strong>Midi coexistence:</strong> explicit and deep (defers init to <code>midi-qol.midiReady</code>, dedicated midi hooks file, reads Midi config to avoid double-applying). Rule: one owner per overlapping category (statuses/range/visibility).</li>
+  <li><strong>Risks if adopted:</strong> single-author bus factor (the same failure mode that killed babonus — though MIT means we <em>could</em> legally vendor it), plus a new player-facing install.</li>
+</ul>
+
+<h2>4 · Decision matrix</h2>
+<table>
+<tr><th></th><th>Native enchant (<code>system.damage.parts</code>)</th><th>AC5e</th><th>Custom engine in dauligor-pairing</th><th>babonus</th></tr>
+<tr><td>Crimson Rite (typed scale-die on one weapon)</td><td class="good">✅ fully, zero deps, crit-correct</td><td>⚠ two-part workaround</td><td>⚠ buildable, unnecessary</td><td class="bad">✗ dead</td></tr>
+<tr><td>Conditional bonuses (vs-undead, opt-in, 1/turn)</td><td class="bad">✗</td><td class="good">✅ purpose-built</td><td>⚠ large surface to own</td><td class="bad">✗</td></tr>
+<tr><td>New dependency for players</td><td class="good">none</td><td>one module</td><td class="good">none</td><td>—</td></tr>
+<tr><td>Maintenance we own</td><td class="good">none</td><td>none (MIT → vendorable as escape hatch)</td><td class="bad">a roll-hook vs dnd5e/Midi churn</td><td>—</td></tr>
+<tr><td>Future-proofing</td><td class="good">core mechanism</td><td>⚠ dnd5e 6.0 may absorb the niche (#4692)</td><td class="bad">competes with core 6.0</td><td>—</td></tr>
+</table>
+
+<h2>5 · Recommendation &amp; actions</h2>
+<ol>
+  <li><strong>Withdraw the "build a mini-babonus" idea.</strong> Native covers the live case; AC5e covers the conditional tier if needed; dnd5e 6.0 is absorbing the niche. A custom engine would duplicate both.</li>
+  <li><strong>App-side (handoff filed):</strong> the enchantment editor should author <code>system.damage.parts</code> extra-damage parts (structured control: formula + damage-type enum, validated JSON) and stop offering actor-scoped <code>system.bonuses.*</code> keys inside enchantments. Immediate data fix for Crimson Offering's 8 effects included in the handoff.</li>
+  <li><strong>Live smoke test (the one remaining unknown):</strong> everything above is verified by code-reading; one in-Foundry roll with the corrected authoring closes it — covered by the standing verification task.</li>
+  <li><strong>Defer AC5e</strong> until a real conditional-bonus need appears in the enchantments/features catalog; revisit at dnd5e 6.0 (core may obviate it).</li>
+</ol>
+
+<p class="small">Open items inherited from the completeness critic: live smoke test (incl. crit doubling + Midi clone path on <code>damage.parts</code> specifically); audit the enchantments catalog for conditional bonuses (decides if AC5e ever becomes necessary); locate every app-side emitter of the inert <code>system.bonuses.*.damage</code> keys + count affected D1 rows; DAE 13.0.26 interaction unexamined (low risk — DAE doesn't own enchantment application); consumption fix (separate handoff) is a prerequisite for the rite's HP cost.</p>
+
+</div></body>
+</html>

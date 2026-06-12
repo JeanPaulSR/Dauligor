@@ -59,6 +59,19 @@ Re-export → the Fire activity's `consumption.targets[0]` reads
 No DB change. Per the stored-R2-bake behavior, **re-bake** the affected classes after the deploy
 (a class save / `queueRebake`) so the cached bundle refreshes — same as the prior class-export fixes.
 
+## Verified under Midi-QOL (we run midi-qol 13.0.58 + dae 13.0.26)
+Held this handoff until Midi's involvement was checked — confirmed against the installed Midi
+13.0.58 source: **Midi delegates consumption entirely to dnd5e** (`MidiActivityMixin.use` →
+`super.use` → dnd5e `Activity#use` → `consume()` → `ConsumptionTargetData.consumeAttribute`,
+which prepends `"system."` itself — more proof the stored target must be prefix-less). Midi's
+only touchpoints are observational (an `dnd5e.activityConsumption` listener that never modifies
+updates) and dialog control (`checkAutoConsume` pre-flights dnd5e's own usage updates only to
+decide whether to show the config dialog). A malformed target surfaces the same ConsumptionError
+under Midi as vanilla. **So the two fixes above apply unchanged on our stack** — no
+Midi-specific accommodation needed. Bonus data point: Midi's `skipConcentrationCheck` reads
+`consumption.targets.some(t => t.target === "attributes.hp.value")` — the prefix-less canonical
+form, from Midi's own source.
+
 ## Module side
 No change — `normalizeSemanticActivityCollection` carries `consumption` through unmodified (the
 imported activity matches the bundle exactly). Refs are expected resolved at export, and the
