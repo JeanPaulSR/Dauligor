@@ -3449,41 +3449,53 @@ function buildScaleValueAdvancements(context) {
       sourceScaleId: scalingColumn?.sourceId ?? scalingColumn?.id ?? identifier,
       title: trimString(scalingColumn?.name) || "Scale",
       identifier,
-      values
+      values,
+      type: scalingColumn?.type,
+      distanceUnits: scalingColumn?.distanceUnits,
     }));
   }
 
   return advancements;
 }
 
-function createScaleValueAdvancement({ ownerSourceId, sourceScaleId, title, identifier, values }) {
+function createScaleValueAdvancement({ ownerSourceId, sourceScaleId, title, identifier, values, type = "number", distanceUnits = "" }) {
+  // Respect the column's scale TYPE. A `dice` scale (e.g. Blood Hunter's Rite Die:
+  // d4/d6/d8…) imported as `number` parses "d4" as NaN, so `@scale.<class>.<id>`
+  // resolves to 0 — which silently breaks every formula that references it
+  // (the Crimson Offering enchant bonus damage, etc.). Each dnd5e ScaleValue type
+  // wants a different per-level entry: number/distance → { value }, dice → { number, faces }.
+  const scaleType = (type === "dice" || type === "distance") ? type : "number";
+  const configuration = {
+    identifier,
+    type: scaleType,
+    scale: Object.fromEntries(
+      Object.entries(values).map(([level, value]) => [level, scaleEntryForType(scaleType, value)]),
+    ),
+  };
+  if (scaleType === "distance") configuration.distance = { units: distanceUnits || "ft" };
   return {
     _id: buildAdvancementId(ownerSourceId, sourceScaleId),
     type: "ScaleValue",
     title,
-    configuration: {
-      identifier,
-      type: "number",
-      distance: {
-        units: ""
-      },
-      scale: Object.fromEntries(
-        Object.entries(values).map(([level, value]) => [
-          level,
-          { value }
-        ])
-      )
-    },
+    configuration,
     value: {},
-    flags: sourceScaleId
-      ? {
-        [MODULE_ID]: {
-          sourceScaleId
-        }
-      }
-      : {},
+    flags: sourceScaleId ? { [MODULE_ID]: { sourceScaleId } } : {},
     hint: ""
   };
+}
+
+// One dnd5e ScaleValue per-level entry, shaped by the scale type. Matches the
+// system's own `ScaleValueTypeDice.fromString` ("d4" → {number:null,faces:4} →
+// formula "d4"; "2d6" → {number:2,faces:6}); number/distance stay `{ value }`.
+function scaleEntryForType(scaleType, value) {
+  if (scaleType === "dice") {
+    const m = /^\s*(\d*)\s*[dD]\s*(\d+)\s*$/.exec(String(value ?? ""));
+    if (m) return { number: m[1] ? Number(m[1]) : null, faces: Number(m[2]) };
+    const faces = Number(value);
+    return (Number.isFinite(faces) && faces > 0) ? { number: null, faces } : { number: null, faces: null };
+  }
+  if (scaleType === "distance") return { value: Number(value) || 0 };
+  return { value };
 }
 
 function buildItemGrantAdvancements(features, { ownerSourceId, title = "Features" } = {}) {
