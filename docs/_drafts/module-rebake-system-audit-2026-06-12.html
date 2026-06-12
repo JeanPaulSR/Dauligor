@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module Rebake System — Audit &amp; Proposal</title>
+<style>
+  :root{
+    --parchment:#f4ecd8; --parchment-2:#ece0c4; --ink:#2b2117; --ink-soft:#5c4f3d;
+    --gold:#9a7b33; --gold-bright:#b8932f; --rule:#cdbb92; --blood:#7c2d2d; --green:#3d6b3a;
+    --panel:#fbf6e9; --shadow:rgba(60,44,20,.18);
+  }
+  *{box-sizing:border-box}
+  body{margin:0; background:#e7dcc1; color:var(--ink); font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif; line-height:1.62; padding:40px 16px;}
+  .sheet{max-width:920px; margin:0 auto; background:var(--parchment); border:1px solid var(--rule); box-shadow:0 2px 0 var(--shadow),0 18px 40px rgba(40,28,10,.22); padding:46px 54px 60px;}
+  h1{font-size:30px; margin:0 0 4px; letter-spacing:.3px}
+  h1 .sub{display:block; font-size:15px; font-weight:400; color:var(--gold); letter-spacing:2px; text-transform:uppercase; margin-top:8px}
+  h2{font-size:21px; margin:38px 0 10px; padding-bottom:6px; border-bottom:2px solid var(--gold); color:var(--ink)}
+  h3{font-size:16px; margin:22px 0 6px; color:var(--gold)}
+  p{margin:9px 0}
+  .meta{font-size:13px; color:var(--ink-soft); font-style:italic; margin-top:2px}
+  code,.mono{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:.86em; background:var(--parchment-2); padding:1px 5px; border:1px solid var(--rule); color:#4a3a1f}
+  table{width:100%; border-collapse:collapse; margin:12px 0; font-size:13.5px}
+  th,td{text-align:left; padding:7px 10px; border:1px solid var(--rule); vertical-align:top}
+  th{background:var(--parchment-2); font-variant:small-caps; letter-spacing:.5px}
+  td code{background:#fff7e6}
+  .callout{background:var(--panel); border:1px solid var(--rule); border-left:4px solid var(--gold); padding:14px 18px; margin:16px 0}
+  .callout.warn{border-left-color:var(--blood)}
+  .callout.warn strong{color:var(--blood)}
+  .callout.good{border-left-color:var(--green)}
+  .callout .lab{display:block; font-variant:small-caps; letter-spacing:1px; font-size:12px; color:var(--gold); margin-bottom:4px}
+  .callout.warn .lab{color:var(--blood)}
+  .callout.good .lab{color:var(--green)}
+  ul,ol{margin:8px 0 8px 4px; padding-left:22px}
+  li{margin:5px 0}
+  .lede{font-size:16px; color:var(--ink-soft)}
+  hr.soft{border:0; border-top:1px solid var(--rule); margin:30px 0}
+  .foot{margin-top:40px; padding-top:16px; border-top:1px solid var(--rule); font-size:12.5px; color:var(--ink-soft)}
+  .chip{display:inline-block; font-size:10.5px; letter-spacing:.8px; text-transform:uppercase; padding:2px 8px; border:1px solid var(--rule); white-space:nowrap; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace}
+  .chip.done{background:var(--green); color:#f4ecd8; border-color:var(--green)}
+  .chip.gap{background:var(--blood); color:#f4ecd8; border-color:var(--blood)}
+  .chip.partial{background:var(--gold); color:#f4ecd8; border-color:var(--gold)}
+</style>
+</head>
+<body>
+<div class="sheet">
+  <h1>Module Rebake System<span class="sub">Audit &amp; Proposal · 2026-06-12</span></h1>
+  <p class="meta">Question: "a system was meant to auto-bake when enough time passed since the last edit — did it ever get built?" Answer below, against the code.</p>
+
+  <p class="lede">Your memory is right. The <strong>debounce queue exists and works</strong> — but only <em>opportunistically</em>, the <strong>cron driver was never built</strong>, and (the part that actually bites us) a <strong>code deploy enqueues nothing</strong>, so logic fixes always need a manual rebake. There is also no "rebake a whole system" trigger.</p>
+
+  <h2>1 · What's actually in place</h2>
+  <table>
+    <tr><th>Piece</th><th>What it does</th><th>Where</th><th></th></tr>
+    <tr><td><b>Debounce queue</b></td><td><code>module_export_queue</code> table. <code>queueRebake(kind,id)</code> UPSERTs <code>last_edit_at = now</code> on every entity <b>save</b>; consecutive saves reset the 1-hour window.</td><td><code>api/_lib/module-export-queue.ts:44</code></td><td><span class="chip done">works</span></td></tr>
+    <tr><td><b>"Due" read</b></td><td><code>popDueEntries(budget)</code> returns entries whose last edit is &gt; <code>1 hour</code> ago, deletes them, hands them off. <em>This is the "enough time passed" logic.</em></td><td><code>…queue.ts:78</code> · <code>DEBOUNCE_MS=1h</code></td><td><span class="chip done">works</span></td></tr>
+    <tr><td><b>Opportunistic processor</b></td><td>Every hit on <code>/api/module/*</code> fires <code>processQueueOpportunistically(1)</code> via <code>waitUntil</code> → pops <b>1</b> due entry → <code>rebakeBundle</code>.</td><td><code>functions/api/module/[[path]].ts:162, 256</code></td><td><span class="chip partial">partial</span></td></tr>
+    <tr><td><b>Rebake dispatch</b></td><td><code>rebakeBundle(kind,id)</code> → per-kind <code>rebakeClass / rebakeSubclass / rebakeFeature / rebakeFeat / …</code> + catalog rebakers. Writes fresh bundles to R2.</td><td><code>module-export-pipeline.ts:579+</code></td><td><span class="chip done">works</span></td></tr>
+    <tr><td><b>Manual "Bake Now"</b></td><td><code>POST /api/module/rebake-now</code> ← <code>BakeNowButton</code> / <code>rebakeNow(kind,id)</code>. One entity, immediate, warms CDN.</td><td><code>src/lib/moduleExport.ts:69</code></td><td><span class="chip done">works</span></td></tr>
+  </table>
+
+  <h2>2 · The gaps (why it feels like it "never got in place")</h2>
+
+  <div class="callout warn">
+    <span class="lab">Gap 1 — no cron drains the queue</span>
+    The worker <em>does</em> have a cron (<code>crons = ["30 3 * * *"]</code>), but its <code>scheduled()</code> handler only <strong>prunes resolved proposals</strong> and <strong>prewarms the spell cache</strong> — it never calls <code>popDueEntries</code>. The queue's own comment calls the sweep "a future Cloudflare Cron." So due entries only bake when a <strong>Foundry client happens to hit the module API</strong> (1 per request). No traffic → the backlog just sits.
+    <div class="meta">worker/index.js:9 · worker/wrangler.toml:8–13, 31–35</div>
+  </div>
+
+  <div class="callout warn">
+    <span class="lab">Gap 2 — a code deploy enqueues nothing (the real pain)</span>
+    <code>queueRebake</code> only fires on an entity <strong>save</strong>. When we change export <em>logic</em> — the cleanText BBCode fix, the feature-automation fix, the items catalog — the output changes but <strong>no entity is touched</strong>, so nothing is queued and the opportunistic/cron paths never re-bake. The per-class bundle is a stored R2 cache, so it keeps serving the old shape. <strong>That</strong> is why every cross-branch fix ends with "rebake the affected classes."
+  </div>
+
+  <div class="callout warn">
+    <span class="lab">Gap 3 — no bulk / "rebake a whole kind"</span>
+    Every rebake is per-entity (<code>rebakeBundle(kind, id)</code> / one Bake-Now click). There is no <code>rebakeAll('class')</code> and no flag to re-bake a system. After a logic change affecting all classes, today you'd click Bake-Now on each — exactly the manual toil you're describing.
+  </div>
+
+  <h2>3 · Proposal — two small pieces that close all three gaps</h2>
+
+  <h3>A · Wire the cron to drain the queue <span class="chip partial">~20 lines</span></h3>
+  <p>Add a queue sweep to the worker's existing <code>scheduled()</code> (or a more frequent cron): call <code>popDueEntries(budget≈25)</code> and <code>rebakeBundle</code> each. The 1-hour debounce then actually fires on a timer, independent of Foundry traffic. Closes Gap&nbsp;1. Low risk — reuses the existing, idempotent rebake path.</p>
+  <p class="meta">Decision: reuse the daily 03:30 cron (edits bake overnight) <em>or</em> add a frequent cron like <code>*/15 * * * *</code> (drains within ~15&nbsp;min of becoming due). I'd lean frequent — it's cheap and makes the system feel "live."</p>
+
+  <h3>B · A "rebake this system" trigger — your flag <span class="chip gap">new</span></h3>
+  <p>An admin trigger that operates on a whole <em>kind</em> at once. Two flavors (could ship both):</p>
+  <ul>
+    <li><b>Bulk-enqueue (gentle):</b> insert every entity of kind <code>X</code> into the queue with <code>last_edit_at = now − DEBOUNCE</code> so they're <em>immediately due</em>, then let the cron (A) drain them. Cheap write; bakes spread over the next sweep.</li>
+    <li><b>Bulk-rebake-now (immediate):</b> loop <code>rebakeBundle</code> over all of kind <code>X</code> right away. Instant, but heavier per call.</li>
+  </ul>
+  <p>Surface it as a small admin control (an endpoint <code>POST /api/module/rebake-kind</code> + a button next to Bake-Now), <strong>or</strong> — matching your "turn on a flag after a change" framing — a tiny config flag the deploy/admin flips to enqueue the affected kinds. Closes Gaps&nbsp;2 &amp; 3.</p>
+
+  <div class="callout good">
+    <span class="lab">Net result — your original vision</span>
+    Make a code change → flip the flag for the affected kind(s) → every entity of that kind is enqueued → the cron sweep (A) bakes them within a sweep. No per-entity clicking, no "remember to rebake." The opportunistic path stays as a fast-track for live edits.
+  </div>
+
+  <h2>4 · Decisions needed before building</h2>
+  <ol>
+    <li><b>Cron cadence:</b> reuse daily 03:30, or add a frequent (<code>*/15</code>) sweep? <span class="meta">(I recommend frequent.)</span></li>
+    <li><b>Flag flavor:</b> bulk-<em>enqueue</em> (drains via cron), bulk-<em>rebake-now</em> (immediate), or both?</li>
+    <li><b>Trigger surface:</b> admin button + endpoint, a config flag, or both?</li>
+    <li><b>Scope:</b> these are app-side (<code>functions/</code>, <code>worker/</code>, <code>api/_lib/</code>) — all in this branch's territory. No DB migration (the queue table already exists). The worker cron change ships with the worker deploy.</li>
+  </ol>
+
+  <div class="foot">
+    Source of truth: <code>api/_lib/module-export-queue.ts</code>, <code>functions/api/module/[[path]].ts</code>, <code>api/_lib/module-export-pipeline.ts</code>, <code>worker/index.js</code>, <code>worker/wrangler.toml</code>. Nothing built yet — this is the audit + options for your call.
+  </div>
+</div>
+</body>
+</html>
