@@ -5,6 +5,7 @@ import { makeFoundryId, slugify } from '../../lib/utils';
 import {
   CompendiumEditorShell,
   type EditorListColumn,
+  type EditorMode,
 } from '../../components/compendium/CompendiumEditorShell';
 import { SectionFilterPanel, type FilterSection } from '../../components/compendium/SectionFilterPanel';
 import { useAxisFilters } from '../../hooks/useAxisFilters';
@@ -18,6 +19,7 @@ import MonsterDefensesTab from '../../components/compendium/monster/MonsterDefen
 import MonsterMovementSensesTab from '../../components/compendium/monster/MonsterMovementSensesTab';
 import MonsterActionsTab from '../../components/compendium/monster/MonsterActionsTab';
 import MonsterSpellcastingTab, { type SpellCatalogEntry } from '../../components/compendium/monster/MonsterSpellcastingTab';
+import MonsterImportWorkbench from '../../components/compendium/monster/MonsterImportWorkbench';
 import { numOrNull, type MonsterForm, type SetForm } from '../../components/compendium/monster/fields';
 import MarkdownEditor from '../../components/MarkdownEditor';
 import TagPicker from '../../components/compendium/TagPicker';
@@ -278,12 +280,34 @@ export default function MonstersEditor({ userProfile }: { userProfile: any }) {
     xp: crToXp(numOrNull(formData.cr)),
   }), [formData]);
 
+  // Mode tabs — Foundry Import (admin/co-DM) + the Manual Editor. The import
+  // workbench reuses the editor's already-loaded sources + spell catalog and the
+  // monster list (for "already imported" detection); onImported reloads the list.
+  const modes: EditorMode[] = [
+    ...(canManage ? [{
+      key: 'foundry-import',
+      label: 'Foundry Import',
+      adminOnly: true,
+      render: (
+        <MonsterImportWorkbench
+          userProfile={userProfile}
+          sources={sources}
+          spellCatalog={spellCatalog}
+          existingMonsters={monsters}
+          onImported={reloadList}
+        />
+      ),
+    } as EditorMode] : []),
+    { key: 'manual-editor', label: 'Manual Editor', render: null },
+  ];
+
   // ─── Render ─────────────────────────────────────────────────────
   return (
     <CompendiumEditorShell<MonsterRow>
       entityName={{ singular: 'Monster', plural: 'Monsters' }}
       backPath="/compendium/monsters"
-      modes={[{ key: 'manual-editor', label: 'Manual Editor', render: null }]}
+      modes={modes}
+      defaultModeKey="manual-editor"
       isAdmin={canManage}
       listRows={filteredMonsters}
       listColumns={listColumns}
