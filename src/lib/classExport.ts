@@ -433,29 +433,25 @@ function parseDiceScaleEntry(raw: string): { number: number | null; faces: numbe
 }
 
 /**
- * Robust text cleaner that converts BBCode/HTML to Markdown
- * and fixes common encoding/legacy text artifacts.
+ * Light cleaner for module-bound description / lore prose. Normalizes
+ * encoding artifacts (curly quotes, en/em dashes, ellipsis) and collapses
+ * excess blank lines, but PRESERVES BBCode (and HTML) tags intact — the
+ * Foundry module's `bbcodeToFoundryHtml` / `normalizeHtmlBlock` render the
+ * full tag set (headers, bold, lists, tables, …).
+ *
+ * A prior version markdown-ized SOME BBCode ([h3]→###, [b]→**) but had no
+ * case for [table]/[u]/[s]/[quote]/[code], so those shipped as raw BBCode.
+ * The module's single-converter routing then saw the leftover [table], took
+ * the BBCode path, and rendered the markdown ###/** literally in Foundry.
+ * Emitting BBCode untouched lets the module convert everything. See handoff
+ * foundry-module/2026-06-12-cleantext-bbcode-to-markdown-lossy.
  */
 function cleanText(text: string): string {
   if (!text) return "";
   let cleaned = text;
   
-  // Convert BBCode to Markdown
-  cleaned = cleaned.replace(/\[h(\d)\]/gi, (match, level) => '\n' + '#'.repeat(parseInt(level)) + ' ');
-  cleaned = cleaned.replace(/\[\/h\d\]/gi, '\n');
-  cleaned = cleaned.replace(/\[b\]/gi, '**').replace(/\[\/b\]/gi, '**');
-  cleaned = cleaned.replace(/\[i\]/gi, '*').replace(/\[\/i\]/gi, '*');
-  cleaned = cleaned.replace(/\[ul\]/gi, '\n').replace(/\[\/ul\]/gi, '\n');
-  cleaned = cleaned.replace(/\[li\]/gi, '* ').replace(/\[\/li\]/gi, '\n');
-  cleaned = cleaned.replace(/\[center\]/gi, '').replace(/\[\/center\]/gi, '');
-  
-  // HTML tags to Markdown (basic)
-  cleaned = cleaned.replace(/<p>/gi, '').replace(/<\/p>/gi, '\n');
-  cleaned = cleaned.replace(/<br\s*\/?>/gi, '\n');
-  cleaned = cleaned.replace(/&nbsp;/gi, ' ');
-  
-  // Remove remaining HTML tags
-  cleaned = cleaned.replace(/<[^>]*>?/gm, '');
+  // BBCode (and HTML) tags are PRESERVED — the Foundry module renders them.
+  // Only encoding artifacts + excess blank lines are normalized below.
 
   // Fix "mojibake" / Special characters (Curly quotes to straight, etc.)
   cleaned = cleaned.replace(/[\u201C\u201D]/g, '"');
