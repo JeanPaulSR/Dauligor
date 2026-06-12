@@ -17,6 +17,7 @@ import MonsterBasicsTab from '../../components/compendium/monster/MonsterBasicsT
 import MonsterDefensesTab from '../../components/compendium/monster/MonsterDefensesTab';
 import MonsterMovementSensesTab from '../../components/compendium/monster/MonsterMovementSensesTab';
 import MonsterActionsTab from '../../components/compendium/monster/MonsterActionsTab';
+import MonsterSpellcastingTab, { type SpellCatalogEntry } from '../../components/compendium/monster/MonsterSpellcastingTab';
 import { numOrNull, type MonsterForm, type SetForm } from '../../components/compendium/monster/fields';
 import MarkdownEditor from '../../components/MarkdownEditor';
 import TagPicker from '../../components/compendium/TagPicker';
@@ -68,6 +69,7 @@ export default function MonstersEditor({ userProfile }: { userProfile: any }) {
   const [languages, setLanguages] = useState<Array<{ id: string; name?: string; identifier?: string }>>([]);
   const [tags, setTags] = useState<any[]>([]);
   const [tagGroups, setTagGroups] = useState<any[]>([]);
+  const [spellCatalog, setSpellCatalog] = useState<SpellCatalogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
@@ -94,18 +96,25 @@ export default function MonstersEditor({ userProfile }: { userProfile: any }) {
     (async () => {
       setLoading(true);
       try {
-        const [, srcRes, langRes, tagRes, groupRes] = await Promise.all([
+        const [, srcRes, langRes, tagRes, groupRes, spellRes] = await Promise.all([
           reloadList(),
           fetchCollection<SourceRecord>('sources', { orderBy: 'name ASC' }),
           fetchCollection<any>('languages', { orderBy: 'name ASC' }).catch(() => []),
           fetchCollection<any>('tags', { orderBy: 'name ASC' }).catch(() => []),
           fetchCollection<any>('tagGroups', { orderBy: 'name ASC' }).catch(() => []),
+          // Slim spell catalog for the spellcasting tab's picker (linked by identifier).
+          fetchCollection<any>('spells', { select: 'id, identifier, name, level', orderBy: 'name ASC' }).catch(() => []),
         ]);
         if (cancelled) return;
         setSources(srcRes);
         setLanguages(langRes);
         setTags(tagRes.map((t: any) => ({ ...t, groupId: t.group_id ?? t.groupId ?? null })));
         setTagGroups(groupRes.map((g: any) => ({ id: g.id, name: g.name })));
+        setSpellCatalog(
+          (spellRes as any[])
+            .filter((s) => s?.identifier)
+            .map((s) => ({ id: s.id, identifier: String(s.identifier), name: String(s.name || s.identifier), level: Number(s.level ?? 0) })),
+        );
       } catch (err) {
         console.error('[MonstersEditor] failed to load:', err);
       } finally {
@@ -326,6 +335,7 @@ export default function MonstersEditor({ userProfile }: { userProfile: any }) {
         { key: 'defenses', label: 'Defenses', layout: 'scroll', render: () => <MonsterDefensesTab form={formData} set={set} languages={languageOptions} /> },
         { key: 'movement', label: 'Move & Senses', layout: 'scroll', render: () => <MonsterMovementSensesTab form={formData} set={set} /> },
         { key: 'actions', label: 'Actions & Traits', layout: 'scroll', render: () => <MonsterActionsTab form={formData} set={set} /> },
+        { key: 'spellcasting', label: 'Spellcasting', layout: 'scroll', render: () => <MonsterSpellcastingTab form={formData} set={set} spellCatalog={spellCatalog} /> },
         { key: 'lore', label: 'Lore', layout: 'fill', render: () => (
           <div className="flex flex-col flex-1 min-h-0">
             <span className="block text-[10px] font-bold uppercase tracking-widest text-gold/75 pb-1">Biography</span>
