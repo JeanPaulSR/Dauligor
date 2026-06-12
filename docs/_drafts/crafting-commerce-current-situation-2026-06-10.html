@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crafting &amp; Commerce — Current Situation</title>
+<style>
+  :root{
+    --parchment:#f4ecd8; --parchment-2:#ece0c4; --ink:#2b2117; --ink-soft:#5c4f3d;
+    --gold:#9a7b33; --gold-bright:#b8932f; --rule:#cdbb92; --blood:#7c2d2d; --green:#3d6b3a;
+    --panel:#fbf6e9; --shadow:rgba(60,44,20,.18);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:#e7dcc1; color:var(--ink);
+    font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    line-height:1.62; padding:40px 16px;
+  }
+  .sheet{
+    max-width:920px; margin:0 auto; background:var(--parchment);
+    border:1px solid var(--rule); box-shadow:0 2px 0 var(--shadow),0 18px 40px rgba(40,28,10,.22);
+    padding:46px 54px 60px;
+  }
+  h1{font-size:30px; margin:0 0 4px; letter-spacing:.3px}
+  h1 .sub{display:block; font-size:15px; font-weight:400; color:var(--gold); letter-spacing:2px; text-transform:uppercase; margin-top:8px}
+  h2{font-size:21px; margin:38px 0 10px; padding-bottom:6px; border-bottom:2px solid var(--gold); color:var(--ink)}
+  h3{font-size:16px; margin:22px 0 6px; color:var(--gold)}
+  p{margin:9px 0}
+  .meta{font-size:13px; color:var(--ink-soft); font-style:italic; margin-top:2px}
+  code,.mono{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:.86em; background:var(--parchment-2); padding:1px 5px; border:1px solid var(--rule); color:#4a3a1f}
+  table{width:100%; border-collapse:collapse; margin:12px 0; font-size:13.5px}
+  th,td{text-align:left; padding:7px 10px; border:1px solid var(--rule); vertical-align:top}
+  th{background:var(--parchment-2); font-variant:small-caps; letter-spacing:.5px}
+  td code{background:#fff7e6}
+  .callout{background:var(--panel); border:1px solid var(--rule); border-left:4px solid var(--gold); padding:14px 18px; margin:16px 0}
+  .callout.warn{border-left-color:var(--blood)}
+  .callout.warn strong{color:var(--blood)}
+  .callout .lab{display:block; font-variant:small-caps; letter-spacing:1px; font-size:12px; color:var(--gold); margin-bottom:4px}
+  .callout.warn .lab{color:var(--blood)}
+  ul,ol{margin:8px 0 8px 4px; padding-left:22px}
+  li{margin:5px 0}
+  .lede{font-size:16px; color:var(--ink-soft)}
+  hr.soft{border:0; border-top:1px solid var(--rule); margin:30px 0}
+  .foot{margin-top:40px; padding-top:16px; border-top:1px solid var(--rule); font-size:12.5px; color:var(--ink-soft)}
+  /* status chips */
+  .chip{display:inline-block; font-size:10.5px; letter-spacing:.8px; text-transform:uppercase; padding:2px 8px; border:1px solid var(--rule); white-space:nowrap; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace}
+  .chip.done{background:var(--green); color:#f4ecd8; border-color:var(--green)}
+  .chip.now{background:var(--gold); color:#f4ecd8; border-color:var(--gold)}
+  .chip.next{background:transparent; color:var(--gold); border-color:var(--gold)}
+  .chip.later{background:transparent; color:var(--ink-soft); border-color:var(--rule)}
+  .chip.block{background:var(--blood); color:#f4ecd8; border-color:var(--blood)}
+  .stk{display:flex; align-items:center; gap:10px; margin:7px 0; padding:8px 12px; background:var(--panel); border:1px solid var(--rule)}
+  .stk .dot{flex:0 0 auto}
+  .stk .txt{flex:1}
+  .stk .txt b{display:block}
+  .stk .txt span{font-size:13px; color:var(--ink-soft)}
+  .legend{font-size:12px; color:var(--ink-soft); margin:6px 0 0}
+  .now-line{font-size:13.5px}
+  .now-line .up{color:var(--green); font-weight:700}
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <h1>Crafting &amp; Commerce
+    <span class="sub">Current Situation · compendium-editors</span>
+  </h1>
+  <p class="meta">Status snapshot · 2026-06-10 · branch <code>compendium-editors</code> (uncommitted work on
+  <code>ecd6ac5</code>) · nothing pushed to <code>main</code>. <strong>Phase A is feature-complete:</strong>
+  all three catalog editors (Recipes · Crafting Materials · Enchantments) are built, plus public view pages
+  and a dedicated Crafting sidebar section. Awaiting commit + a browser live-test.</p>
+
+  <p class="lede"><strong>Phase A</strong> of the Crafting &amp; Commerce system is built. The data layer is in
+  the ground (four tables + an <code>activities</code> column on enchantments) and <em>all three catalog
+  editors</em> — Recipes, Crafting Materials, and Enchantments — are done, each with a public read view, all
+  gathered under a new <strong>Crafting</strong> sidebar section. Remaining: commit, a browser live-test, and
+  the later phases (Magic-Items tab, the shop).</p>
+
+  <h2>One-glance status</h2>
+  <p class="legend">
+    <span class="chip done">done</span> shipped/built &amp; committed &nbsp;
+    <span class="chip now">checkpoint</span> where we are right now &nbsp;
+    <span class="chip next">next</span> immediate queue &nbsp;
+    <span class="chip later">later</span> future phase &nbsp;
+    <span class="chip block">blocked</span> has a prerequisite
+  </p>
+
+  <div class="stk"><span class="dot"><span class="chip done">done</span></span><div class="txt"><b>Requirements fixes</b><span>Class-level prereqs now show in the AdvancementManager levels column; spell / class-feature requirement pickers wired. <strong>Shipped to main</strong> (<code>79fb59c</code>) — live in production.</span></div></div>
+
+  <div class="stk"><span class="dot"><span class="chip done">done</span></span><div class="txt"><b>Crafting data layer — 4 tables</b><span><code>enchantments</code>, <code>crafting_disciplines</code> (13 seeded), <code>recipes</code>, <code>crafting_materials</code> — all camelCase, with <code>D1_TABLE_MAP</code> / <code>jsonFields</code> / server <code>JSON_COLUMNS</code> wiring + schema docs. Committed <code>b4cbbb4</code>.</span></div></div>
+
+  <div class="stk"><span class="dot"><span class="chip done">done</span></span><div class="txt"><b>RecipesEditor + disciplines admin tab</b><span><code>/compendium/recipes/manage</code> (built on <code>CompendiumEditorShell</code>, 3-mode output switch) and a Crafting Disciplines tab in <code>/admin/proficiencies</code> (via the new opt-in <code>columnCase="camel"</code> prop). Committed <code>b4cbbb4</code>.</span></div></div>
+
+  <div class="stk"><span class="dot"><span class="chip done">done</span></span><div class="txt"><b>Migrations applied to LOCAL D1</b><span>All 5 crafting migrations applied to local D1 via <code>d1 execute --local --file</code> (never <code>migrations apply</code>). 13 disciplines seeded + verified. <strong>Remote apply still owed</strong> before any ship.</span></div></div>
+
+  <div class="stk"><span class="dot"><span class="chip done">done</span></span><div class="txt"><b>Crafting Materials editor + public display</b><span><code>/compendium/materials/manage</code> mints a backing <code>loot</code>/<code>material</code> item on save (carryable + a valid recipe input); hidden from the Items browser. Public read view at <code>/compendium/materials</code>. <strong>Confirmed rendering.</strong></span></div></div>
+
+  <div class="stk"><span class="dot"><span class="chip done">done</span></span><div class="txt"><b>Enchantments editor</b><span><code>/compendium/enchantments/manage</code> — Restrictions (Item Type &rarr; categories/properties), <strong>Activities</strong> (full <code>ActivityEditor</code> — e.g. a magic item's swipe attack) + <strong>Effects</strong> (<code>ActiveEffectEditor</code>), magic bonus / rarity / attunement / price. New <code>activities</code> column (migration <code>20260610-1200</code>).</span></div></div>
+
+  <div class="stk"><span class="dot"><span class="chip done">done</span></span><div class="txt"><b>Temp view pages + Crafting sidebar section</b><span>Public read views for Recipes (<code>/compendium/recipes</code>) + Enchantments (<code>/compendium/enchantments</code>), each with an admin Manager button. All three moved into a dedicated top-level <strong>Crafting</strong> sidebar section (the old wiki &ldquo;Crafting&rdquo; lore link renamed &ldquo;Technology&rdquo; to avoid a duplicate).</span></div></div>
+
+  <div class="stk"><span class="dot"><span class="chip done">done</span></span><div class="txt"><b>Crafting overview = a system page</b><span>The Crafting section header links to <code>/system/crafting</code> — a real <strong>system page</strong> (DB content, editable via the System Page Designer), <em>not</em> a hardcoded component. Seeded with a BBCode explainer (<code>docs/database/seeds/crafting-system-page.sql</code>). The system-pages tables were missing from this worktree's local D1 (pre-feature seed) and have now been created locally.</span></div></div>
+
+  <div class="stk"><span class="dot"><span class="chip now">checkpoint</span></span><div class="txt"><b>Phase A editors complete — uncommitted</b><span>All three catalog editors + the two view pages + the Crafting section are built &amp; tsc-clean on disk, <strong>not yet committed</strong>. Open: your commit + a browser live-test of Recipes/Enchantments; the <code>trivial &rarr; ''</code> rarity export map (our small follow-up).</span></div></div>
+
+  <div class="stk"><span class="dot"><span class="chip later">later</span></span><div class="txt"><b>Magic-Items tab</b><span>A filtered view of <code>items</code> where <code>magical = 1</code> — no new table; the data already exists.</span></div></div>
+
+  <div class="stk"><span class="dot"><span class="chip block">blocked</span></span><div class="txt"><b>Shop — multiple named shops</b><span>Global + per-campaign shops (<code>shops</code> + <code>shop_inventory</code>); a DM can run specific shops, not one global price list. <strong>Blocked on the character-wallet gap</strong> — there's no <code>characters.currency</code> column yet (buy/sell needs it; matches Foundry <code>system.currency</code>).</span></div></div>
+
+  <h2>The environment right now</h2>
+  <p>The local dev stack was dropped by the machine restart and has been relaunched. Both servers are
+  healthy and running in the background:</p>
+  <table>
+    <tr><th>Server</th><th>URL</th><th>State</th></tr>
+    <tr><td>App (Vite + <code>tsx server.ts</code>, no-watch)</td><td><code>http://localhost:3000</code></td><td><span class="now-line up">HTTP 200</span> — serving</td></tr>
+    <tr><td>Worker (local D1 + R2)</td><td><code>http://127.0.0.1:8787</code></td><td><span class="now-line up">HTTP 401</span> on root — up &amp; enforcing API_SECRET (expected)</td></tr>
+  </table>
+  <p class="meta">No-watch means client <code>.tsx</code> edits need a hard refresh; server-side edits
+  (<code>api/_lib</code>, <code>server.ts</code>) need a <code>:3000</code> restart. The benign
+  <code>Port 24678 in use</code> log line is Vite's HMR socket, unused in no-watch mode.</p>
+
+  <h2>The four tables in the ground</h2>
+  <table>
+    <tr><th>Table</th><th>Migration</th><th>What it is</th></tr>
+    <tr><td><code>enchantments</code></td><td><code>20260609-1300</code><br><code>20260610-1200</code></td><td>A <strong>reusable effect</strong> applied to many base items — not an item itself. JSON <code>restrictions</code> / <code>effects</code> / <code>riders</code> (mirrors Foundry's enchant activity) plus <strong><code>activities</code></strong> (full Activity docs the enchantment grants — e.g. a swipe attack; added by migration <code>20260610-1200</code>, mirrors <code>items.activities</code>), and <code>magicalBonus</code> / <code>rarity</code> / <code>attunement</code> / <code>price</code>. (No top-level <code>level</code> column — it would collide with the global JSON-parse list.)</td></tr>
+    <tr><td><code>crafting_disciplines</code></td><td><code>20260609-1350</code></td><td>Lightweight seeded taxonomy (13 rows: alchemy, poisoncraft, blacksmithing, cooking, enchanting, scrollscribing, wand-whittling, leatherworking, tinkering, woodcarving, runecarving, engineering, jewelcrafting). camelCase with a <code>sort</code> column. Execution fields (ability / tool / facility) deferred to Phase D.</td></tr>
+    <tr><td><code>recipes</code></td><td><code>20260609-1400</code></td><td>The <strong>universal creation rule</strong>: <code>inputs &rarr; output</code> in 3 output modes (<code>item</code> / <code>enchantment</code> / <code>enchant-item</code>). FKs a discipline; keeps recipe-native <code>craftChecks</code> + <code>craftDifficultyDC</code> (per the Kibbles reconciliation). Structure now, live execution deferred.</td></tr>
+    <tr><td><code>crafting_materials</code></td><td><code>20260609-1500</code></td><td>A material is an item, so this is <strong>backed by a <code>loot</code>-type items row</strong> (<code>itemId</code> FK) — carryable, stackable, sellable. Adds category / rarity / subtype / <code>usedFor</code> (discipline ids) / price / weight.</td></tr>
+  </table>
+
+  <h2>Git &amp; deploy state</h2>
+  <ul>
+    <li>Branch <code>compendium-editors</code> — committed HEAD is <code>ecd6ac5</code>; <strong>the
+        Materials/Enchantments editors, both view pages, the Crafting sidebar section, the Foundry handoff,
+        and the <code>20260610-1200</code> migration are all uncommitted on disk</strong> on top of it
+        (tsc-clean). The earlier <code>b4cbbb4</code> already carries the data layer + RecipesEditor.</li>
+    <li>Committed chain above main's requirements point: <code>ba44956</code> (requirements, also on main) &rarr;
+        <code>b4cbbb4</code> (crafting data layer + RecipesEditor) &rarr; <code>dc805f9</code> (impl guide +
+        handoff + multi-shop design note) &rarr; <code>ecd6ac5</code> (handoff: migrations-applied state).</li>
+    <li><code>origin/main = ed9f2a5</code> — that's <code>79fb59c</code> (our requirements fix) plus a later,
+        unrelated <code>feat(spellcasting): pact casting</code>. <strong>None of the crafting work is on
+        main.</strong></li>
+  </ul>
+  <div class="callout warn">
+    <span class="lab">Two things owed before any ship</span>
+    <strong>(1)</strong> The 5 crafting migrations are on <em>local</em> D1 only — remote apply is still
+    owed (one file at a time, <code>--remote</code>, with permission; never <code>migrations apply --remote</code>).
+    <strong>(2)</strong> <code>main</code> is production and auto-deploys on push — nothing goes there without
+    explicit permission, and we show <code>git log origin/main..HEAD</code> first.
+  </div>
+
+  <h2>Decisions locked (so we don't re-litigate)</h2>
+  <ul>
+    <li><strong>New tables are camelCase</strong> — Foundry is camelCase end-to-end; ordering field is
+        <code>sort</code>. These tables skip the legacy <code>compendium.ts</code> alias layer.</li>
+    <li><strong>Materials extend items; enchantments get their own table.</strong> A material <em>is</em> a
+        carryable thing (loot row); an enchantment is a reusable effect applied to many bases.</li>
+    <li><strong>Recipes are the universal spine</strong> — one creation rule for items, enchantments, and
+        enchanted items. Structure first; live crafting execution is a later phase.</li>
+    <li><strong>The shop is multiple named shops</strong>, not one global price list — a DM can stock
+        specific shops (decided 2026-06-10).</li>
+  </ul>
+
+  <hr class="soft">
+  <p class="foot">
+    <strong>Resume handoff:</strong> <code>handoffs/compendium-editors/2026-06-10-crafting-system-precompaction-state.md</code>
+    (Phase A editors now built — next is commit + live-test). &nbsp;
+    <strong>Foundry materials handoff:</strong> <code>handoffs/foundry-module/2026-06-10-to-foundry-module-crafting-materials.md</code>. &nbsp;
+    <strong>Code/styling how-to:</strong> <code>docs/_drafts/crafting-editors-implementation-guide-2026-06-10.md</code>. &nbsp;
+    <strong>Design:</strong> <code>docs/_drafts/crafting-commerce-design-2026-06-09.html</code> · &nbsp;
+    <strong>Kibbles KEEP/DEFER/CUT:</strong> <code>docs/_drafts/kibbles-reconciliation-2026-06-09.html</code> · &nbsp;
+    <strong>Friendly overview:</strong> <code>docs/_drafts/crafting-commerce-explained-2026-06-09.html</code>.
+  </p>
+
+</div>
+</body>
+</html>

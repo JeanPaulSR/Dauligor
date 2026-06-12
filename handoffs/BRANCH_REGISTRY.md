@@ -6,6 +6,27 @@ Live record of in-progress branches and the files they're touching.
 
 **Add your row when you start a branch.** Update it as scope evolves. Remove your row when the branch lands on main.
 
+## Dev-server port allocation
+
+Each worktree must run on its **own** ports so launching one branch's dev server doesn't kill another's. **Do not run `scripts/dev-sysapp.mjs` from any worktree other than `settings-pages`** — its hardcoded default is `3001 / 8788 / 9230`, so running it elsewhere kills whoever holds 3001.
+
+| Branch | Launcher | App / Worker / Debug |
+|---|---|---|
+| `settings-pages` | `dev-sysapp.mjs` (default ports) | 3001 / 8788 / 9230 |
+| `compendium-editors` | `npm run dev:nowatch` + manual `wrangler dev --port 8787` | 3000 / 8787 / — |
+| `proposal-system` | `dev-proposal.mjs` | 3002 / — / — |
+| `manual-uploads` | `dev-manual-uploads.mjs` | 3003 / — / — |
+| `character-creator` | `dev-character-creator.mjs` | 3005 / — / — |
+| `monster-browser` | `dev-monster-browser.mjs` | 3006 / — / — |
+| `foundry-module` | `dev-foundry-module.mjs` (copy of dev-sysapp) | 3008 / 8795 / 9236 |
+| `relaxed-wing` | `dev-relaxed-wing.mjs` (copy of dev-sysapp) | 3010 / 8797 / 9238 |
+
+**Two rules so collisions don't recur:**
+1. In a worktree, run **no-watch** (`tsx server.ts`, not `tsx watch`) — the `node_modules` junction makes watch restart-loop.
+2. **Never blanket-kill** node/workerd (no `taskkill /IM node.exe`). Scope kills to your own ports or your launcher's process tree only.
+
+`foundry-module` / `relaxed-wing` have no launcher yet: copy `dev-sysapp.mjs` to their `dev-<branch>.mjs` and set the ports above. `dev-sysapp.mjs` therefore **stays in-tree as the template** — branches with their own launcher just must not *run* it.
+
 ## Active branches
 
 | Branch | Started | Owner | Status | Primary files (exclusive) | Shared files (append-only) | Manifest |
