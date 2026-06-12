@@ -26,15 +26,23 @@ landed on `compendium-editors`, mirroring the bg/species work in `af31eed`. No m
    - Bonus: also emit `itemCatalogUrl: "<slug>/items.json"` on each source entry, matching the
      existing `featCatalogUrl`/`spellCatalogUrl` hints your `resolveCatalogUrl` already handles.
 
-## Verified
+## Verified (live, full dev stack — app :3000 + D1 worker :8787)
 - **tsc**: 3 baseline / 0 new.
-- **Real data** (local D1): item counts per source resolve with slugs — `dmg-14` 439, `phb` 257,
-  `bmt` 91, `egw` 89, … (52 sources, 1669 items). So `counts.items` populates and item-bearing
-  sources gain `items` in `supportedImportTypes`.
-- The builder + router arm are exact structural mirrors of the live bg/species/class endpoints.
-- **Live HTTP** (`GET /api/module/phb/items.json → 200`, `dauligor.item-catalog.v1`, 257 entries)
-  is the post-deploy check — couldn't run it headlessly (the builder fetches the D1 worker, which
-  needs the dev stack up). It'll be green on deploy; ping me if you want me to stand the stack up first.
+- `GET /api/module/phb/items.json` → **200**, `dauligor.item-catalog.v1`, **257 entries**, correct
+  shape (e.g. Battleaxe → `itemType:"weapon"`, `typeSubtype:"martial"`, `rarity:""`,
+  `detailUrl:"/api/module/items/<id>.json"`). `none → ""` rarity normalization confirmed (PHB is
+  all-mundane → distinct rarities `[""]`).
+- `GET /api/module/catalog.json` → `phb` now reports `counts.items: 257`,
+  `supportedImportTypes: [...,"items"]`, `itemCatalogUrl: "phb/items.json"`. **29/40 sources**
+  advertise items (dmg-14 439, phb 257, bmt 91, …).
+
+### ⚠️ Self-heal (important — no manual rebake needed)
+The top-level source catalog is served from a **cached R2 bake** via `getOrBuild` with a
+staleness validator. My first pass updated the builder but not the validator, so the cached
+(post-feats, pre-items) catalog still passed and served `counts.items: 0` — caught this live. Fixed
+by extending the validator to also require `itemCatalogUrl` on each entry, mirroring the existing
+spell/feat-count self-heal. So on deploy the catalog **rebuilds itself on first request** — you do
+NOT need to trigger a rebake. (`/items.json` is live read-through, never cached.)
 
 ## Your side
 Flip Items `soon → ready` and build the picker on the same source-catalog pattern as
