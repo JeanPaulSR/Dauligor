@@ -26,7 +26,7 @@
 // flight), the cache turns N×14 ref-table fetches into 14. The client copy
 // doesn't need this — its fetch patterns are React-driven and per-page.
 // =============================================================================
-import { normalizeSpellFormulaShortcuts } from './_referenceSyntax.js';
+import { normalizeSpellFormulaShortcuts, normalizeSemanticReferenceText, type ReferenceColumnExample } from './_referenceSyntax.js';
 import {
   buildCanonicalClassProgression,
   buildCanonicalSubclassProgression
@@ -1226,6 +1226,49 @@ export async function exportClassSemantic(
     }, ['parentId']);
   });
 
+  // Foundry-bound output: expand the in-class column shorthand
+  // (@rite-die → @scale.<class>.rite-die) in effect change values + activity
+  // roll formulas, so author shorthand resolves in Foundry instead of to 0
+  // (handoff f20e6e3). normalizeSemanticReferenceText only rewrites THIS class's
+  // known columns and is idempotent on already-@scale refs.
+  const shorthandCtx = {
+    classIdentifier,
+    classColumns: scalingColumns.map((c: any) => ({
+      name: c.name, identifier: c.identifier, sourceId: c.sourceId,
+    })) as ReferenceColumnExample[],
+  };
+  const SHORTHAND_FORMULA_KEYS = new Set(['formula', 'bonus', 'max']);
+  // Walk an activity, expanding shorthand in formula-bearing fields (damage
+  // custom/bonus/scaling, save & check dc.formula, uses.max, roll formula).
+  const expandActivityFormulas = (node: any): any => {
+    if (Array.isArray(node)) return node.map(expandActivityFormulas);
+    if (node && typeof node === 'object') {
+      const out: any = {};
+      for (const [k, v] of Object.entries(node)) {
+        if (typeof v === 'string' && SHORTHAND_FORMULA_KEYS.has(k)) {
+          out[k] = normalizeSemanticReferenceText(v, 'formula', shorthandCtx);
+        } else if (v && typeof v === 'object') {
+          out[k] = expandActivityFormulas(v);
+        } else {
+          out[k] = v;
+        }
+      }
+      return out;
+    }
+    return node;
+  };
+  // Active Effect change values are the immediate break (`changes[].value`).
+  const expandEffectChanges = (effects: any[]): any[] =>
+    Array.isArray(effects)
+      ? effects.map((eff) =>
+          eff && Array.isArray(eff.changes)
+            ? { ...eff, changes: eff.changes.map((ch: any) =>
+                ch && typeof ch.value === 'string'
+                  ? { ...ch, value: normalizeSemanticReferenceText(ch.value, 'formula', shorthandCtx) }
+                  : ch) }
+            : eff)
+      : effects;
+
   const scalingById = Object.fromEntries(scalingColumns.map((column) => [column.id, column]));
   const scalingSourceIdById = Object.fromEntries(scalingColumns.map((column) => [column.id, column.sourceId]));
   // Map of column.id → @scale.<class>.<identifier> formula. The module's
@@ -1332,10 +1375,10 @@ export async function exportClassSemantic(
       configuration,
       usage,
       automation: {
-        activities: Array.isArray(feature.automation?.activities)
+        activities: expandActivityFormulas(Array.isArray(feature.automation?.activities)
           ? feature.automation.activities
-          : Object.values(feature.automation?.activities || {}),
-        effects: feature.automation?.effects || []
+          : Object.values(feature.automation?.activities || {})),
+        effects: expandEffectChanges(feature.automation?.effects || [])
       }
     }, [
       'parentId', 'quantityColumnId', 'scalingColumnId',
