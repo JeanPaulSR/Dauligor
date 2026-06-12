@@ -120,6 +120,18 @@ export async function buildTopLevelCatalog() {
     featCountsBySourceId.set(String(row.source_id), Number(row.feat_count) || 0);
   }
 
+  // Item counts per source — parallel to feat/spell counts. Drives the
+  // Foundry wizard's Items importer source filter (`counts.items > 0`)
+  // and gates `items` into `supportedImportTypes`. `items` is snake_case
+  // (`source_id`), like classes/feats. One row per source.
+  const itemCountsRes = await executeD1QueryInternal({
+    sql: "SELECT source_id, COUNT(*) AS item_count FROM items GROUP BY source_id",
+  });
+  const itemCountsBySourceId = new Map<string, number>();
+  for (const row of itemCountsRes.results || []) {
+    itemCountsBySourceId.set(String(row.source_id), Number(row.item_count) || 0);
+  }
+
   const entries = allSources
     .filter((s: any) => s.status === "ready" || s.status === "active")
     .map((s: any) => {
@@ -127,6 +139,7 @@ export async function buildTopLevelCatalog() {
       const classCount = classCountsBySourceId.get(String(s.id)) || 0;
       const spellCount = spellCountsBySourceId.get(String(s.id)) || 0;
       const featCount = featCountsBySourceId.get(String(s.id)) || 0;
+      const itemCount = itemCountsBySourceId.get(String(s.id)) || 0;
       // `supportedImportTypes` — explicit allow-list the Foundry
       // wizard reads to decide which importer modes a source can
       // feed. Derived from the per-table counts so the catalog
@@ -136,6 +149,7 @@ export async function buildTopLevelCatalog() {
       if (classCount > 0) supportedImportTypes.push("classes-subclasses");
       if (spellCount > 0) supportedImportTypes.push("spells");
       if (featCount > 0) supportedImportTypes.push("feats");
+      if (itemCount > 0) supportedImportTypes.push("items");
       return {
         // Public semantic id. The internal D1 row id is intentionally
         // NOT exposed — consumers join against this synthesized id,
@@ -154,7 +168,7 @@ export async function buildTopLevelCatalog() {
           classes: classCount,
           spells: spellCount,
           feats: featCount,
-          items: 0,
+          items: itemCount,
           bestiary: 0,
           journals: 0,
         },
@@ -180,6 +194,9 @@ export async function buildTopLevelCatalog() {
         // from `slug`; emitting it server-side keeps the source of
         // truth one place.
         featCatalogUrl: `${slug}/feats.json`,
+        // Sibling URL hint for the items importer — same per-source list
+        // pattern as feats/spells. Drives the wizard's Items picker.
+        itemCatalogUrl: `${slug}/items.json`,
       };
     });
 
@@ -417,6 +434,59 @@ export async function buildSourceSpeciesCatalog(sourceSlug: string) {
     kind: "dauligor.species-catalog.v1",
     idSuffix: "species",
   });
+}
+
+/** Per-source item list catalog — served by `/api/module/<source>/items.json`.
+ *  Live read-through paralleling buildSourceBackgroundCatalog / buildSourceSpeciesCatalog,
+ *  but the `items` table is snake_case (`source_id`, `item_type`, …) so it can't share
+ *  buildSourceEntityCatalog. Lean entries — the wizard's picker filters on
+ *  name / itemType / typeSubtype / rarity, and the module fetches the full Foundry-ready
+ *  document from each entry's `detailUrl` (the existing `/items/<dbId>.json`) on import.
+ *  Includes ALL of the source's items (magical + mundane), unlike the public Items browser.
+ *  Handoff: foundry-module → compendium-editors, 2026-06-12. */
+export async function buildSourceItemCatalog(sourceSlug: string) {
+  const sourcesRes = await executeD1QueryInternal({ sql: "SELECT * FROM sources" });
+  const allSources = (sourcesRes.results || []).map(denormalizeSourceRow);
+  const slug = String(sourceSlug || "").toLowerCase();
+  const source = allSources.find((s: any) =>
+    (s.slug || "").toLowerCase() === slug
+    || String(s.id).toLowerCase() === slug
+    || (s.semanticId || "").toLowerCase() === slug
+  );
+  if (!source) return null;
+
+  const rowsRes = await executeD1QueryInternal({
+    sql: "SELECT id, identifier, name, item_type, type_subtype, rarity, image_url FROM items WHERE source_id = ?",
+    params: [source.id],
+  });
+  const rows = rowsRes.results || [];
+
+  const entries = rows
+    .map((row: any) => ({
+      id: String(row.id),
+      identifier: String(row.identifier || ""),
+      name: String(row.name || ""),
+      itemType: String(row.item_type || ""),
+      typeSubtype: String(row.type_subtype || ""),
+      // Foundry uses "" for mundane rarity; our DB stores "none". Normalize
+      // so the picker's rarity filter matches the Foundry-side values.
+      rarity: row.rarity && row.rarity !== "none" ? String(row.rarity) : "",
+      image: row.image_url || "",
+      detailUrl: `/api/module/items/${String(row.id)}.json`,
+    }))
+    .sort((a: any, b: any) => a.name.localeCompare(b.name));
+
+  return {
+    kind: "dauligor.item-catalog.v1",
+    schemaVersion: 1,
+    source: {
+      system: "dauligor",
+      entity: "item-catalog",
+      id: `${source.semanticId}-items`,
+      sourceId: source.semanticId,
+    },
+    entries,
+  };
 }
 
 export async function buildClassBundleForIdentifier(classIdentifier: string) {

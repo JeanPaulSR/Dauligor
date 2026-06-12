@@ -32,6 +32,7 @@ import {
   buildSourceClassCatalog,
   buildSourceBackgroundCatalog,
   buildSourceSpeciesCatalog,
+  buildSourceItemCatalog,
   buildTopLevelCatalog,
   rebakeBundle,
 } from "../../../api/_lib/module-export-pipeline.js";
@@ -511,6 +512,22 @@ export const onRequest = async (context: any): Promise<Response> => {
     ) {
       const slug = pathParts[0].toLowerCase();
       const result = await buildSourceSpeciesCatalog(slug);
+      if (result) return serveLive(result);
+      // Fall through to 404 if the source slug didn't match.
+    }
+
+    // Per-source item list catalog — live read-through, no R2. URL:
+    //   /api/module/<source>/items.json
+    // Sibling of backgrounds.json / species.json. Each entry's `detailUrl`
+    // bridges to /items/<dbId>.json (the existing per-item document).
+    // Placed AFTER the `pathParts[0] === "items"` detail arm so
+    // `/items/<dbId>.json` still routes to the per-item handler.
+    else if (
+      pathParts.length === 2
+      && pathParts[1] === "items.json"
+    ) {
+      const slug = pathParts[0].toLowerCase();
+      const result = await buildSourceItemCatalog(slug);
       if (result) return serveLive(result);
       // Fall through to 404 if the source slug didn't match.
     }
