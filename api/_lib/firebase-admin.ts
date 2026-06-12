@@ -385,6 +385,10 @@ export async function requireAdminAccess(authHeader?: string | string[]) {
   return checkAccessFromToken(authHeader, ADMIN_ROLES, "Admin access required.");
 }
 
+export async function requireDmAccess(authHeader?: string | string[]) {
+  return checkAccessFromToken(authHeader, CHARACTER_DM_ROLES, "Admin or co-DM access required.");
+}
+
 export async function requireAuthenticatedUser(authHeader?: string | string[]) {
   return checkAccessFromToken(authHeader, ALL_AUTHENTICATED_ROLES, "Authentication required.");
 }

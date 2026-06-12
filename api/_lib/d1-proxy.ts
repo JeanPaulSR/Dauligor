@@ -3,6 +3,7 @@ import {
   getCredentialErrorMessage,
   requireAdminAccess,
   requireAuthenticatedUser,
+  requireDmAccess,
   requireStaffAccess,
 } from "./firebase-admin.js";
 import { executeD1QueryInternal } from "./d1-internal.js";
@@ -251,6 +252,11 @@ export async function handleD1Query(req: NodeLikeRequest, res: NodeLikeResponse)
     // wider than the permissions-rbac doc says (campaign management
     // is admin / co-dm only). Closes audit priority #8.
     const CAMPAIGN_WRITE_PATTERN = /\b(?:INTO|FROM|UPDATE|TABLE)\s+(?:campaigns|campaign_members)\b/i;
+    // Monster writes are admin + co-DM only (not lore-writer). The frontend
+    // already hides the editor from other roles; this narrows the API gate to
+    // match (defense-in-depth) — without it a lore-writer falls to the generic
+    // staff gate below and could write monster rows. Per monster-browser branch.
+    const MONSTER_WRITE_PATTERN = /\b(?:INTO|FROM|UPDATE|TABLE)\s+monsters\b/i;
 
     const isMutation = MUTATION_KEYWORDS.test(normalizedSql);
     const targetsProtectedTable = isMutation && PROTECTED_WRITE_TABLES.test(normalizedSql);
@@ -258,6 +264,7 @@ export async function handleD1Query(req: NodeLikeRequest, res: NodeLikeResponse)
     const isSystemMetadataWrite = isMutation && SYSTEM_METADATA_WRITE_PATTERN.test(normalizedSql);
     const isFoundationBump = isSystemMetadataWrite && FOUNDATION_BUMP_PATTERN.test(typeof sql === "string" ? sql : "");
     const isCampaignWrite = isMutation && CAMPAIGN_WRITE_PATTERN.test(normalizedSql);
+    const isMonsterWrite = isMutation && MONSTER_WRITE_PATTERN.test(normalizedSql);
 
     if (isSystemMetadataWrite && !isFoundationBump) {
       // Block any non-bump write to system_metadata at the generic
@@ -282,6 +289,9 @@ export async function handleD1Query(req: NodeLikeRequest, res: NodeLikeResponse)
     if (targetsProtectedTable) {
       await requireAdminAccess(authHeader);
       console.log(`[D1 Proxy] Admin-only mutation on protected table: ${sql.substring(0, 100)}${sql.length > 100 ? '...' : ''}`);
+    } else if (isMonsterWrite) {
+      await requireDmAccess(authHeader);
+      console.log(`[D1 Proxy] DM-only mutation on monsters: ${sql.substring(0, 100)}${sql.length > 100 ? '...' : ''}`);
     } else if (isMutation) {
       await requireStaffAccess(authHeader);
       console.log(`[D1 Proxy] Executing mutation: ${sql.substring(0, 100)}${sql.length > 100 ? '...' : ''}`);
