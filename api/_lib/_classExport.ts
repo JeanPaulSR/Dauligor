@@ -1375,10 +1375,15 @@ export async function exportClassSemantic(
       configuration,
       usage,
       automation: {
-        activities: expandActivityFormulas(Array.isArray(feature.automation?.activities)
-          ? feature.automation.activities
-          : Object.values(feature.automation?.activities || {})),
-        effects: expandEffectChanges(feature.automation?.effects || [])
+        // Features denormalize activities/effects to the TOP LEVEL
+        // (denormalizeFeatureRow ~L196). There is no `feature.automation`
+        // wrapper here — only the unique-option-ITEM path builds one (~L1493).
+        // Reading `feature.automation?.…` therefore always collapsed to [] and
+        // silently dropped every class feature's real automation on export.
+        activities: expandActivityFormulas(Array.isArray(feature.activities)
+          ? feature.activities
+          : Object.values(feature.activities || {})),
+        effects: expandEffectChanges(Array.isArray(feature.effects) ? feature.effects : [])
       }
     }, [
       'parentId', 'quantityColumnId', 'scalingColumnId',
