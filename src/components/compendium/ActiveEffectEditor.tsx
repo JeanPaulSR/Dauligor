@@ -11,6 +11,7 @@ import ActiveEffectKeyInput from './ActiveEffectKeyInput';
 import EntityPicker from '../ui/EntityPicker';
 import { fetchCollection } from '../../lib/d1';
 import { ACTIVE_EFFECT_TYPES } from '../../lib/activeEffectStatuses';
+import { getActiveEffectKeyMeta, type AEValueMeta, type AEValueSource } from '../../lib/activeEffectKeys';
 import { makeFoundryId } from '../../lib/utils';
 
 // Mirrors Foundry's EFFECT_MODES constant
@@ -173,6 +174,44 @@ export default function ActiveEffectEditor({ effects, onChange, defaultImg }: Ac
     for (const c of conditionCategories) m[c.id] = c.name;
     return m;
   }, [conditionCategories]);
+
+  // Value-source vocab for the typed change-value pickers (damage resistance,
+  // languages, tool profs). DB-backed so homebrew types surface. Damage-type +
+  // language identifiers are lowercased to match Foundry's enum-key convention
+  // (the table stores them upper/mixed case); conditions + tools use their
+  // identifier verbatim (already the Foundry key, like the `statuses` array).
+  const [damageTypeRows, setDamageTypeRows] = useState<Array<{ identifier?: string; name?: string }>>([]);
+  const [languageRows, setLanguageRows] = useState<Array<{ identifier?: string; name?: string }>>([]);
+  const [toolRows, setToolRows] = useState<Array<{ identifier?: string; name?: string }>>([]);
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      fetchCollection<any>('damageTypes', { orderBy: 'name ASC' }),
+      fetchCollection<any>('languages', { orderBy: 'name ASC' }),
+      fetchCollection<any>('tools', { orderBy: 'name ASC' }),
+    ])
+      .then(([dmg, langs, tls]) => {
+        if (cancelled) return;
+        setDamageTypeRows(dmg || []);
+        setLanguageRows(langs || []);
+        setToolRows(tls || []);
+      })
+      .catch((err) => console.warn('AE editor value-source fetch failed:', err));
+    return () => { cancelled = true; };
+  }, []);
+
+  const valueOptionsBySource = React.useMemo<Record<AEValueSource, { value: string; label: string }[]>>(() => ({
+    damageType: damageTypeRows.filter(r => r.identifier).map(r => ({ value: String(r.identifier).toLowerCase(), label: String(r.name || r.identifier) })),
+    language: languageRows.filter(r => r.identifier).map(r => ({ value: String(r.identifier).toLowerCase(), label: String(r.name || r.identifier) })),
+    condition: statusConditions.filter(c => c.identifier).map(c => ({ value: c.identifier, label: c.name || c.identifier })),
+    tool: toolRows.filter(r => r.identifier).map(r => ({ value: String(r.identifier), label: String(r.name || r.identifier) })),
+  }), [damageTypeRows, languageRows, statusConditions, toolRows]);
+
+  const resolveValueOptions = React.useCallback((meta: AEValueMeta): { value: string; label: string }[] => {
+    if (meta.valueOptions) return meta.valueOptions.map(o => ({ value: o.value, label: o.label }));
+    if (meta.valueSource) return valueOptionsBySource[meta.valueSource] ?? [];
+    return [];
+  }, [valueOptionsBySource]);
 
   const openNew = () => { setDraft(emptyEffect(defaultImg)); setDraftIdx(null); setTab('details'); };
   const openEdit = (idx: number) => {
@@ -561,7 +600,18 @@ export default function ActiveEffectEditor({ effects, onChange, defaultImg }: Ac
                         <ChangeRow
                           key={i}
                           change={c}
-                          onPatchKey={(key) => patchChange(i, { key })}
+                          resolveValueOptions={resolveValueOptions}
+                          onPatchKey={(key) => {
+                            // Picking a typed key also sets its natural change
+                            // mode (Add for array traits, Custom for flags, …)
+                            // and pre-fills "1" for a fresh boolean flag — all
+                            // in ONE patch so they don't clobber each other.
+                            const m = getActiveEffectKeyMeta(key);
+                            const next: Partial<EffectChange> = { key };
+                            if (m?.defaultMode != null) next.mode = m.defaultMode;
+                            if (m?.valueType === 'boolean' && !String(c.value || '').trim()) next.value = '1';
+                            patchChange(i, next);
+                          }}
                           onPatchMode={(mode) => patchChange(i, { mode })}
                           onPatchValue={(value) => patchChange(i, { value })}
                           onPatchPriority={(priority) => patchChange(i, { priority })}
@@ -608,6 +658,7 @@ export default function ActiveEffectEditor({ effects, onChange, defaultImg }: Ac
 
 interface ChangeRowProps {
   change: EffectChange;
+  resolveValueOptions: (meta: AEValueMeta) => { value: string; label: string }[];
   onPatchKey: (key: string) => void;
   onPatchMode: (mode: number) => void;
   onPatchValue: (value: string) => void;
@@ -617,6 +668,7 @@ interface ChangeRowProps {
 
 function ChangeRow({
   change,
+  resolveValueOptions,
   onPatchKey,
   onPatchMode,
   onPatchValue,
@@ -624,7 +676,16 @@ function ChangeRow({
   onDelete,
 }: ChangeRowProps) {
   const rowRef = React.useRef<HTMLDivElement>(null);
+  const valueListId = React.useId();
   const parseNullableInt = (v: string) => v === '' ? null : parseInt(v, 10);
+  // Drive the value control off the key's value type: enum / array-of-enum
+  // keys (damage resistance, languages, …) get a suggestion picker instead of
+  // a free-text box; boolean flags get an on/off toggle; everything else stays
+  // free text (numbers / roll formulas).
+  const valueMeta = getActiveEffectKeyMeta(change.key);
+  const isEnumValue = !!valueMeta && (valueMeta.valueType === 'enum' || valueMeta.valueType === 'enumArray');
+  const isBoolValue = valueMeta?.valueType === 'boolean';
+  const valueOptions = isEnumValue ? resolveValueOptions(valueMeta!) : [];
   return (
     <div ref={rowRef} className="flex items-center gap-2 px-3 py-2">
       {/* Leading magnifier — visually signals the key field is
@@ -652,13 +713,41 @@ function ChangeRow({
           ))}
         </SelectContent>
       </Select>
-      <Input
-        autoComplete="off"
-        value={change.value}
-        onChange={e => onPatchValue(e.target.value)}
-        placeholder="value or formula"
-        className="flex-1 min-w-0 h-7 text-xs font-mono bg-background/50 border-gold/15 focus:border-gold"
-      />
+      {isBoolValue ? (
+        <Select value={String(change.value).trim() === '1' ? '1' : '0'} onValueChange={v => onPatchValue(v)}>
+          <SelectTrigger className="flex-1 min-w-0 h-7 text-xs bg-background/50 border-gold/15 focus:border-gold">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="1">On</SelectItem>
+            <SelectItem value="0">Off</SelectItem>
+          </SelectContent>
+        </Select>
+      ) : isEnumValue ? (
+        <div className="flex-1 min-w-0">
+          {/* Suggestion picker — shows the known ids (e.g. damage types) but
+              still allows a custom id, so homebrew / specific values work. */}
+          <Input
+            autoComplete="off"
+            list={valueListId}
+            value={change.value}
+            onChange={e => onPatchValue(e.target.value)}
+            placeholder={valueMeta!.valueType === 'enumArray' ? 'pick a value (add a row per value)' : 'pick a value…'}
+            className="w-full h-7 text-xs font-mono bg-background/50 border-gold/15 focus:border-gold"
+          />
+          <datalist id={valueListId}>
+            {valueOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </datalist>
+        </div>
+      ) : (
+        <Input
+          autoComplete="off"
+          value={change.value}
+          onChange={e => onPatchValue(e.target.value)}
+          placeholder="value or formula"
+          className="flex-1 min-w-0 h-7 text-xs font-mono bg-background/50 border-gold/15 focus:border-gold"
+        />
+      )}
       {/* Priority — greyed when null (auto = mode default). */}
       <Input
         type="number"

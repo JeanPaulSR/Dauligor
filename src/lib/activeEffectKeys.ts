@@ -398,3 +398,89 @@ export function searchActiveEffectKeys(query: string): ActiveEffectKeyEntry[] {
     );
   });
 }
+
+// ─── Value-type resolution ───────────────────────────────────────────────
+//
+// A change's `value` is free text by default (a number or a roll formula like
+// `@prof`). But many keys take a CONSTRAINED value — an enum, an array of enum
+// ids (damage resistances etc.), or a boolean flag. This resolver classifies a
+// key so the editor renders the right control (a picker with suggestions, an
+// on/off toggle) and defaults a sensible change mode, instead of making the
+// author hand-type ids. Pattern-based, so it also works for keys typed by hand
+// that aren't in the catalog above.
+
+export type AEValueType = 'text' | 'number' | 'boolean' | 'enum' | 'enumArray';
+/** DB-backed option sources — the editor resolves these to live rows. */
+export type AEValueSource = 'damageType' | 'condition' | 'language' | 'tool';
+
+export interface AEValueMeta {
+  valueType: AEValueType;
+  valueSource?: AEValueSource;
+  /** System enums that don't live in a table (size, ability, AC calc, …). */
+  valueOptions?: ReadonlyArray<{ value: string; label: string }>;
+  /** AE change mode to default to when this key is picked. */
+  defaultMode?: number;
+}
+
+// AE modes: 0 Custom · 1 Multiply · 2 Add · 3 Downgrade · 4 Upgrade · 5 Override
+const MODE_ADD = 2;
+const MODE_OVERRIDE = 5;
+const MODE_CUSTOM = 0;
+
+const ABILITY_VALUE_OPTIONS = ABILITIES.map(a => ({ value: a.key, label: a.label }));
+const SIZE_VALUE_OPTIONS = [
+  { value: 'tiny', label: 'Tiny' }, { value: 'sm', label: 'Small' }, { value: 'med', label: 'Medium' },
+  { value: 'lg', label: 'Large' }, { value: 'huge', label: 'Huge' }, { value: 'grg', label: 'Gargantuan' },
+];
+const AC_CALC_VALUE_OPTIONS = [
+  { value: 'flat', label: 'Flat' }, { value: 'natural', label: 'Natural Armor' }, { value: 'default', label: 'Default (Armor)' },
+  { value: 'mage', label: 'Mage Armor' }, { value: 'draconic', label: 'Draconic Resilience' },
+  { value: 'unarmoredMonk', label: 'Unarmored (Monk)' }, { value: 'unarmoredBarb', label: 'Unarmored (Barbarian)' },
+  { value: 'custom', label: 'Custom Formula' },
+];
+const ROLL_MODE_VALUE_OPTIONS = [
+  { value: 'normal', label: 'Normal' }, { value: 'advantage', label: 'Advantage' }, { value: 'disadvantage', label: 'Disadvantage' },
+];
+const SPEED_UNIT_VALUE_OPTIONS = [
+  { value: 'ft', label: 'Feet' }, { value: 'mi', label: 'Miles' }, { value: 'm', label: 'Meters' }, { value: 'km', label: 'Kilometers' },
+];
+const WEAPON_PROF_VALUE_OPTIONS = [{ value: 'sim', label: 'Simple Weapons' }, { value: 'mar', label: 'Martial Weapons' }];
+const ARMOR_PROF_VALUE_OPTIONS = [
+  { value: 'lgt', label: 'Light Armor' }, { value: 'med', label: 'Medium Armor' }, { value: 'hvy', label: 'Heavy Armor' }, { value: 'shl', label: 'Shields' },
+];
+const BYPASS_VALUE_OPTIONS = [{ value: 'mgc', label: 'Magical' }, { value: 'sil', label: 'Silvered' }, { value: 'ada', label: 'Adamantine' }];
+
+export function getActiveEffectKeyMeta(rawKey: string): AEValueMeta | null {
+  const key = (rawKey || '').trim();
+  if (!key) return null;
+
+  // Array-of-enum traits — one value per change, ADD mode.
+  if (/\.(dr|di|dv)\.value$/.test(key)) return { valueType: 'enumArray', valueSource: 'damageType', defaultMode: MODE_ADD };
+  if (/\.ci\.value$/.test(key)) return { valueType: 'enumArray', valueSource: 'condition', defaultMode: MODE_ADD };
+  if (/\.languages\.value$/.test(key)) return { valueType: 'enumArray', valueSource: 'language', defaultMode: MODE_ADD };
+  if (/\.toolProf\.value$/.test(key)) return { valueType: 'enumArray', valueSource: 'tool', defaultMode: MODE_ADD };
+  if (/\.weaponProf\.value$/.test(key)) return { valueType: 'enumArray', valueOptions: WEAPON_PROF_VALUE_OPTIONS, defaultMode: MODE_ADD };
+  if (/\.armorProf\.value$/.test(key)) return { valueType: 'enumArray', valueOptions: ARMOR_PROF_VALUE_OPTIONS, defaultMode: MODE_ADD };
+  if (/\.(dr|di|dv)\.bypasses$/.test(key)) return { valueType: 'enumArray', valueOptions: BYPASS_VALUE_OPTIONS, defaultMode: MODE_ADD };
+
+  // Fixed scalar enums — Override.
+  if (key === 'system.traits.size') return { valueType: 'enum', valueOptions: SIZE_VALUE_OPTIONS, defaultMode: MODE_OVERRIDE };
+  if (key === 'system.attributes.ac.calc') return { valueType: 'enum', valueOptions: AC_CALC_VALUE_OPTIONS, defaultMode: MODE_OVERRIDE };
+  if (key === 'system.attributes.movement.units') return { valueType: 'enum', valueOptions: SPEED_UNIT_VALUE_OPTIONS, defaultMode: MODE_OVERRIDE };
+  if (key === 'system.attributes.concentration.roll.mode') return { valueType: 'enum', valueOptions: ROLL_MODE_VALUE_OPTIONS, defaultMode: MODE_OVERRIDE };
+  if (key === 'system.attributes.spellcasting' || key === 'system.attributes.init.ability' || key === 'system.attributes.concentration.ability') {
+    return { valueType: 'enum', valueOptions: ABILITY_VALUE_OPTIONS, defaultMode: MODE_OVERRIDE };
+  }
+
+  // Booleans — Custom mode, value "1".
+  if (key === 'system.attributes.movement.hover') return { valueType: 'boolean', defaultMode: MODE_CUSTOM };
+  if (/^flags\.dnd5e\./.test(key)) {
+    if (/(Threshold|Dice)$/.test(key)) return { valueType: 'number', defaultMode: MODE_OVERRIDE }; // numeric thresholds
+    return { valueType: 'boolean', defaultMode: MODE_CUSTOM };
+  }
+  if (/^flags\.midi-qol\.(advantage|disadvantage|grants|success|fail|magicResistance|magicVulnerability|absorption|sharpShooter|greatWeaponMaster|greatWeaponFighting|superiorTechnicalFighting|protection)\b/.test(key)) {
+    return { valueType: 'boolean', defaultMode: MODE_CUSTOM };
+  }
+
+  return null; // everything else → free-text number / formula
+}
