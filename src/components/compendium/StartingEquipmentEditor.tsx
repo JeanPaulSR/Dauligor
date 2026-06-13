@@ -94,7 +94,8 @@ export default function StartingEquipmentEditor({
       <p className="text-[10px] text-ink/45">
         Build the equipment a character of this class starts with. <span className="font-semibold">Add Item</span> grants a
         single thing; <span className="font-semibold">Add Choice Group</span> lets the player choose one of several (or
-        bundles several together). Exports to Foundry's native equipment prompt.
+        bundles several together). Use <span className="font-semibold">Qty</span> for multiples (e.g. 2 simple weapons,
+        20 arrows) — no need to add duplicate rows. Exports to Foundry's native equipment prompt.
       </p>
 
       {roots.length === 0 ? (
@@ -315,11 +316,12 @@ function OptionPayload({
   onChange: (next: EquipmentOption) => void;
   items: StartingEquipmentEditorProps['items'];
 }) {
-  // Shared count input (quantity). Hidden for category leaves where a count
-  // rarely makes sense; shown for linked + currency.
-  const countInput = (
-    <label className="flex items-center gap-1 text-[10px] text-ink/45 shrink-0">
-      <span className="uppercase tracking-wider">×</span>
+  // Shared quantity input — present on EVERY option so "any 2 simple weapons"
+  // or "10 pieces of ammunition" is one row with a count, not N duplicate rows.
+  // (For currency the count IS the amount.)
+  const qtyInput = (
+    <label className="flex items-center gap-1 text-[10px] text-ink/55 shrink-0">
+      <span className="uppercase tracking-wider font-semibold">Qty</span>
       <input
         type="number"
         min={1}
@@ -357,7 +359,7 @@ function OptionPayload({
             disabled={items.length === 0}
             triggerClassName="min-w-[180px] max-w-[260px]"
           />
-          {countInput}
+          {qtyInput}
         </>
       );
 
@@ -365,6 +367,7 @@ function OptionPayload({
       return (
         <>
           <CategorySelect value={value.key} options={EQUIPMENT_WEAPON_OPTIONS} onChange={(k) => onChange({ ...value, key: k })} placeholder="Weapon category…" />
+          {qtyInput}
           {profToggle}
         </>
       );
@@ -373,6 +376,7 @@ function OptionPayload({
       return (
         <>
           <CategorySelect value={value.key} options={EQUIPMENT_ARMOR_OPTIONS} onChange={(k) => onChange({ ...value, key: k })} placeholder="Armor category…" />
+          {qtyInput}
           {profToggle}
         </>
       );
@@ -381,19 +385,23 @@ function OptionPayload({
       return (
         <>
           <CategorySelect value={value.key} options={EQUIPMENT_TOOL_OPTIONS} onChange={(k) => onChange({ ...value, key: k })} placeholder="Tool category…" />
+          {qtyInput}
           {profToggle}
         </>
       );
 
     case 'focus':
       return (
-        <CategorySelect value={value.key} options={EQUIPMENT_FOCUS_OPTIONS} onChange={(k) => onChange({ ...value, key: k })} placeholder="Focus type…" />
+        <>
+          <CategorySelect value={value.key} options={EQUIPMENT_FOCUS_OPTIONS} onChange={(k) => onChange({ ...value, key: k })} placeholder="Focus type…" />
+          {qtyInput}
+        </>
       );
 
     case 'currency':
       return (
         <>
-          {countInput}
+          {qtyInput}
           <CategorySelect value={value.key} options={EQUIPMENT_CURRENCY_OPTIONS} onChange={(k) => onChange({ ...value, key: k })} placeholder="Denomination…" />
         </>
       );

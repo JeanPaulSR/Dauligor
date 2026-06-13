@@ -274,17 +274,18 @@ export interface StartingEquipmentLookup {
 }
 
 function formatOption(opt: EquipmentOption, lookup: StartingEquipmentLookup): string {
-  const count = opt.count && opt.count > 1 ? `${opt.count} ` : '';
+  const qty = opt.count && opt.count > 1 ? opt.count : null;
   if (opt.type === 'linked') {
     const name = lookup.itemNameById?.[opt.key] ?? (opt.key || '(unset item)');
-    return `${count}${name}`;
+    return qty ? `${qty} ${name}` : name;
   }
   if (opt.type === 'currency') {
     return `${opt.count ?? 0} ${opt.key || 'gp'}`;
   }
   const label = CATEGORY_LABELS[opt.type]?.[opt.key] ?? opt.key ?? `(unset ${opt.type})`;
   const prof = opt.requiresProficiency ? ' (if proficient)' : '';
-  return `${count}${label}${prof}`;
+  // "2× Any Simple Weapon" reads cleaner than "2 Any Simple Weapon" for counts.
+  return qty ? `${qty}× ${label}${prof}` : `${label}${prof}`;
 }
 
 /**
