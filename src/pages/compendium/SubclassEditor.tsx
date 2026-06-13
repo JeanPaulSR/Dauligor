@@ -519,6 +519,12 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
           parentType: row.parent_type,
           featureType: row.feature_type,
           subtype: row.subtype,
+          // Feature icon/image — snake→camel alias so the image repopulates on
+          // reload. Class features get this for free via denormalizeCompendiumData
+          // (ClassEditor); this hand-rolled subclass mapping must mirror it, or
+          // the icon shows in-session but vanishes after a page reload.
+          iconUrl: row.icon_url ?? row.iconUrl ?? '',
+          imageUrl: row.image_url ?? row.imageUrl ?? '',
           // The feature's Quantity / Scaling Column dropdowns read these
           // camelCase keys; without the alias the snake_case columns
           // round-trip to D1 fine but never repopulate the dropdown on
