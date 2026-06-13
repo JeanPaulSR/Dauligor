@@ -732,7 +732,12 @@ function ChangeRow({
           value={change.value}
           onChange={(next) => onPatchValue(next)}
           options={valueOptions.map(o => ({ id: o.value, name: o.label }))}
-          placeholder={valueMeta!.valueType === 'enumArray' ? 'pick a value (one per row)…' : 'pick a value…'}
+          allowCustom={!!valueMeta!.allowCustomValue}
+          placeholder={
+            valueMeta!.allowCustomValue
+              ? 'pick or type a trigger…'
+              : valueMeta!.valueType === 'enumArray' ? 'pick a value (one per row)…' : 'pick a value…'
+          }
           noEntitiesText="No options loaded yet."
           className="flex-[2] min-w-0"
           triggerClassName="h-7 text-xs w-full font-mono"

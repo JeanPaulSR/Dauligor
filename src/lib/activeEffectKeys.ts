@@ -345,7 +345,7 @@ push({ key: 'macro.execute', label: 'Execute World Macro', description: 'Value =
 push({ key: 'macro.itemMacro', label: 'Execute Item Macro', description: 'Runs the macro stored on the granting item (requires Item Macro module).', category: 'DAE — Macros & Specials' });
 push({ key: 'macro.tokenMagic', label: 'Token Magic FX', description: 'Value = filter name (e.g. "fire", "glow"). Applies a token-magic filter.', category: 'DAE — Macros & Specials' });
 push({ key: 'macro.actorUpdate', label: 'Direct Actor Update', description: 'Value = JSON patch applied to actor. Use sparingly.', category: 'DAE — Macros & Specials' });
-push({ key: 'flags.dae.specialDuration', label: 'Special Duration Trigger', description: 'Array of trigger keys (e.g. ["1Attack","turnEnd"]) — DAE removes the effect on these events.', category: 'DAE — Macros & Specials' });
+push({ key: 'flags.dae.specialDuration', label: 'Special Duration Trigger', description: 'Pick a DAE trigger (turn end, 1 attack, when damaged, …). DAE removes the effect when it fires. One trigger per row — add another row for a second trigger.', category: 'DAE — Macros & Specials' });
 push({ key: 'flags.dae.transfer', label: 'DAE Transfer Override', description: 'Force transfer behavior independently of the effect\'s transfer flag.', category: 'DAE — Macros & Specials' });
 
 export const ACTIVE_EFFECT_KEYS: readonly ActiveEffectKeyEntry[] = entries;
@@ -420,6 +420,14 @@ export interface AEValueMeta {
   valueOptions?: ReadonlyArray<{ value: string; label: string }>;
   /** AE change mode to default to when this key is picked. */
   defaultMode?: number;
+  /**
+   * When true the value picker also accepts a typed value that isn't in
+   * `valueOptions`. DAE special durations have a long tail of dynamic
+   * variants (`isSave.dex`, `1Attack:mwak`, `isSkill.ath`, `isDamaged.fire`)
+   * that we surface the common forms of but can't enumerate exhaustively —
+   * so the picker stays open for hand-entered triggers.
+   */
+  allowCustomValue?: boolean;
 }
 
 // AE modes: 0 Custom · 1 Multiply · 2 Add · 3 Downgrade · 4 Upgrade · 5 Override
@@ -450,6 +458,67 @@ const ARMOR_PROF_VALUE_OPTIONS = [
 ];
 const BYPASS_VALUE_OPTIONS = [{ value: 'mgc', label: 'Magical' }, { value: 'sil', label: 'Silvered' }, { value: 'ada', label: 'Adamantine' }];
 
+/**
+ * DAE special-duration triggers — the values DAE recognises in a
+ * `flags.dae.specialDuration` effect change. Keys are verbatim DAE
+ * identifiers (verified against DAE 13.x `DAEdnd5e.readyActions`); labels
+ * are friendlier than DAE's raw i18n sentences. The author picks one per
+ * row; DAE collects every `flags.dae.specialDuration` change on the effect
+ * into the trigger array and expires the effect when any fires (combat /
+ * Times-Up must be active for the in-combat ones).
+ *
+ * This is the common set. The per-ability / per-skill / per-damage-type
+ * variants (`isSave.dex`, `isCheck.con`, `isSkill.ath`, `isDamaged.fire`)
+ * are NOT enumerated here — `allowCustomValue` keeps the picker open so they
+ * can be typed directly.
+ */
+const DAE_SPECIAL_DURATION_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
+  // Combat turn / round
+  { value: 'turnEnd', label: "End of target's turn" },
+  { value: 'turnStart', label: "Start of target's turn" },
+  { value: 'combatEnd', label: 'End of combat' },
+  { value: 'joinCombat', label: 'When combat is joined' },
+  // Per-action expiry
+  { value: '1Action', label: 'After 1 action' },
+  { value: '1Reaction', label: 'After 1 reaction' },
+  { value: '1Spell', label: 'After casting 1 spell' },
+  { value: 'DamageDealt', label: 'When damage is dealt' },
+  // Attacks (any + by attack type)
+  { value: '1Attack', label: 'After 1 attack (any)' },
+  { value: '1Attack:mwak', label: 'After 1 melee weapon attack' },
+  { value: '1Attack:rwak', label: 'After 1 ranged weapon attack' },
+  { value: '1Attack:msak', label: 'After 1 melee spell attack' },
+  { value: '1Attack:rsak', label: 'After 1 ranged spell attack' },
+  // Hits (any + by attack type)
+  { value: '1Hit', label: 'After 1 hit (any)' },
+  { value: '1Hit:mwak', label: 'After 1 melee weapon hit' },
+  { value: '1Hit:rwak', label: 'After 1 ranged weapon hit' },
+  { value: '1Hit:msak', label: 'After 1 melee spell hit' },
+  { value: '1Hit:rsak', label: 'After 1 ranged spell hit' },
+  { value: '1Critical', label: 'After 1 critical hit' },
+  { value: '1Fumble', label: 'After 1 fumble' },
+  // Being targeted / harmed
+  { value: 'isAttacked', label: 'When attacked' },
+  { value: 'isHit', label: 'When hit' },
+  { value: 'isHitCritical', label: 'When critically hit' },
+  { value: 'isDamaged', label: 'When damaged' },
+  { value: 'isHealed', label: 'When healed' },
+  { value: 'zeroHP', label: 'When reduced to 0 HP' },
+  { value: 'isMoved', label: 'When the token moves' },
+  // Rolls
+  { value: 'isSave', label: 'After any saving throw' },
+  { value: 'isSaveSuccess', label: 'After a successful save' },
+  { value: 'isSaveFailure', label: 'After a failed save' },
+  { value: 'isCheck', label: 'After any ability check' },
+  { value: 'isSkill', label: 'After any skill check' },
+  { value: 'isInitiative', label: 'After rolling initiative' },
+  { value: 'isConcentrationSave', label: 'After a concentration save' },
+  // Rest / time
+  { value: 'shortRest', label: 'On a short rest' },
+  { value: 'longRest', label: 'On a long rest' },
+  { value: 'newDay', label: 'On a new day' },
+];
+
 export function getActiveEffectKeyMeta(rawKey: string): AEValueMeta | null {
   const key = (rawKey || '').trim();
   if (!key) return null;
@@ -470,6 +539,13 @@ export function getActiveEffectKeyMeta(rawKey: string): AEValueMeta | null {
   if (key === 'system.attributes.concentration.roll.mode') return { valueType: 'enum', valueOptions: ROLL_MODE_VALUE_OPTIONS, defaultMode: MODE_OVERRIDE };
   if (key === 'system.attributes.spellcasting' || key === 'system.attributes.init.ability' || key === 'system.attributes.concentration.ability') {
     return { valueType: 'enum', valueOptions: ABILITY_VALUE_OPTIONS, defaultMode: MODE_OVERRIDE };
+  }
+
+  // DAE special-duration triggers — one trigger per change row, Custom mode
+  // (DAE reads the change's value regardless of mode; Custom avoids a stray
+  // actor-flag write). Curated common set + open for hand-typed variants.
+  if (key === 'flags.dae.specialDuration') {
+    return { valueType: 'enumArray', valueOptions: DAE_SPECIAL_DURATION_OPTIONS, allowCustomValue: true, defaultMode: MODE_CUSTOM };
   }
 
   // Booleans — Custom mode, value "1".

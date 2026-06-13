@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, Check, X, Search } from 'lucide-react';
+import { ChevronDown, Check, X, Search, Plus } from 'lucide-react';
 
 /**
  * Compact single-select combobox with type-to-search.
@@ -60,6 +60,14 @@ export interface SingleSelectSearchProps {
   disabled?: boolean;
   /** Allow clearing the selection (renders an × on the trigger). Default true. */
   allowClear?: boolean;
+  /**
+   * When true, the picker also accepts a value not present in `options`:
+   * typing a query that matches no option exactly surfaces a "Use …" row
+   * that selects the raw typed string, and a current value outside the
+   * option list is shown verbatim on the trigger (rather than falling back
+   * to the placeholder). Default false — the picker is pick-only.
+   */
+  allowCustom?: boolean;
   className?: string;
   /** Optional trigger-button override (e.g. for tighter inline use). */
   triggerClassName?: string;
@@ -86,6 +94,7 @@ export default function SingleSelectSearch({
   noEntitiesText = 'Nothing to pick.',
   disabled = false,
   allowClear = true,
+  allowCustom = false,
   className = '',
   triggerClassName = '',
 }: SingleSelectSearchProps) {
@@ -115,6 +124,20 @@ export default function SingleSelectSearch({
       : options.filter(o => !o.hiddenUntilSearch);
     return matched.slice(0, MAX_VISIBLE);
   }, [options, search]);
+
+  // allowCustom: a query that matches no option id exactly surfaces a
+  // "Use …" row that stores the raw typed string. Lets the picker accept
+  // values outside the curated list (DAE dynamic special-duration variants).
+  const customValue = useMemo(() => {
+    if (!allowCustom) return null;
+    const trimmed = search.trim();
+    if (!trimmed || options.some(o => o.id === trimmed)) return null;
+    return trimmed;
+  }, [allowCustom, search, options]);
+
+  // A custom (off-list) current value still displays on the trigger.
+  const hasValue = !!selected || (allowCustom && !!value);
+  const displayLabel = selected ? selected.name : (allowCustom && value ? value : placeholder);
 
   // Reset highlight when filtered list shape changes.
   useEffect(() => {
@@ -201,6 +224,12 @@ export default function SingleSelectSearch({
       if (highlightIdx >= 0 && highlightIdx < filtered.length) {
         e.preventDefault();
         pick(filtered[highlightIdx]);
+      } else if (customValue) {
+        // Type a custom value then Enter to commit it (no need to mouse
+        // down to the "Use …" row).
+        e.preventDefault();
+        onChange(customValue);
+        setOpen(false);
       }
     } else if (e.key === 'Escape') {
       e.preventDefault();
@@ -229,13 +258,13 @@ export default function SingleSelectSearch({
         aria-haspopup="listbox"
         aria-expanded={open}
       >
-        <span className={`flex-1 text-left truncate ${selected ? 'text-ink' : 'text-ink/45'}`}>
-          {selected ? selected.name : placeholder}
+        <span className={`flex-1 text-left truncate ${hasValue ? 'text-ink' : 'text-ink/45'}`}>
+          {displayLabel}
         </span>
         {selected?.hint ? (
           <span className="text-[9px] text-gold/65 truncate shrink-0">{selected.hint}</span>
         ) : null}
-        {allowClear && selected && !disabled ? (
+        {allowClear && hasValue && !disabled ? (
           <span
             // Render as a span (not nested button — invalid HTML) and
             // stop propagation so the parent button's onClick doesn't
@@ -297,9 +326,25 @@ export default function SingleSelectSearch({
           </div>
 
           <div className="overflow-y-auto custom-scrollbar flex-1 divide-y divide-gold/5">
-            {options.length === 0 ? (
+            {customValue ? (
+              <button
+                type="button"
+                role="option"
+                aria-selected={false}
+                onClick={() => { onChange(customValue); setOpen(false); }}
+                className="block w-full text-left px-3 py-1.5 transition-colors hover:bg-gold/15"
+              >
+                <div className="flex items-center gap-2">
+                  <Plus className="w-3 h-3 text-gold shrink-0" />
+                  <span className="flex-1 text-[11px] text-ink/80 truncate">
+                    Use <span className="font-mono text-ink">{customValue}</span>
+                  </span>
+                </div>
+              </button>
+            ) : null}
+            {options.length === 0 && !customValue ? (
               <p className="px-3 py-3 text-[10px] text-ink/25 italic">{noEntitiesText}</p>
-            ) : filtered.length === 0 ? (
+            ) : filtered.length === 0 && !customValue ? (
               <p className="px-3 py-3 text-[10px] text-ink/25 italic">
                 {search.trim()
                   ? (emptyText || `No matches for "${search}".`)
