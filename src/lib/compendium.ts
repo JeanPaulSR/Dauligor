@@ -263,6 +263,10 @@ export function denormalizeCompendiumData(row: any): any {
     subclass_feature_levels: 'subclassFeatureLevels',
     saving_throws: 'savingThrows',
     starting_equipment: 'startingEquipment',
+    // Structured starting-equipment tree (dnd5e EquipmentEntryData authoring
+    // shape) — distinct from the freeform `starting_equipment` prose. Added to
+    // jsonColumns below so it parses from its TEXT JSON string to an array.
+    starting_equipment_data: 'startingEquipmentData',
     primary_ability: 'primaryAbility',
     primary_ability_choice: 'primaryAbilityChoice',
     // Was MISSING — the ClassEditor reads `remapped.multiclassProficiencies`
@@ -431,7 +435,10 @@ export function denormalizeCompendiumData(row: any): any {
     // stored as a TEXT JSON string, so without this the ClassEditor's
     // `typeof rawMultiProf.armor === 'object'` guard sees a string and
     // falls back to all-empty collections.
-    'multiclassProficiencies'
+    'multiclassProficiencies',
+    // Structured class starting-equipment tree (EquipmentNode[]); falls back
+    // to [] on parse failure via the non-object branch below.
+    'startingEquipmentData'
   ];
 
   jsonColumns.forEach(col => {

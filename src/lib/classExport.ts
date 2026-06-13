@@ -24,6 +24,13 @@ import {
   type SpellMatchInput,
 } from './spellFilters';
 import { buildTagParentMap, buildTagIndex } from './tagHierarchy';
+import {
+  parseEquipmentTree,
+  collectLinkedItemKeys,
+  flattenStartingEquipment,
+  makeEntryId,
+  type EquipmentEntryData,
+} from './startingEquipment';
 
 /**
  * Pluggable fetchers so this module can run from server contexts that don't
@@ -137,6 +144,7 @@ export function denormalizeClassRow(row: any) {
     excludedOptionIds: parseJsonField(row.excluded_option_ids, {}),
     uniqueOptionMappings: parseJsonField(row.unique_option_mappings, []),
     startingEquipment: row.starting_equipment,
+    startingEquipmentData: parseJsonField(row.starting_equipment_data, []),
     imageUrl: row.image_url,
     cardImageUrl: row.card_image_url,
     previewImageUrl: row.preview_image_url,
@@ -1814,6 +1822,35 @@ export async function exportClassSemantic(
   // class rebake. See `api/_lib/_classSpellList.ts` and the route
   // in `api/module.ts`.
 
+  // Structured starting equipment → dnd5e `system.startingEquipment`.
+  // Parse the authored tree, resolve each `linked` leaf's item PK to its
+  // source identifier (the Foundry module resolves identifier → item UUID at
+  // import time, same as base-item slugs), and flatten to EquipmentEntryData[].
+  // The prose `startingEquipment` string is kept separately for display.
+  const startingEquipmentRoots = parseEquipmentTree((classDataRaw as any).startingEquipmentData);
+  let bakedStartingEquipmentData: EquipmentEntryData[] = [];
+  if (startingEquipmentRoots.length > 0) {
+    const linkedItemPks = collectLinkedItemKeys(startingEquipmentRoots);
+    let identifierByPk: Record<string, string> = {};
+    if (linkedItemPks.length > 0) {
+      const placeholders = linkedItemPks.map(() => '?').join(',');
+      const itemRows = await fetchCollection<any>('items', {
+        where: `id IN (${placeholders})`,
+        params: linkedItemPks,
+        select: 'id, identifier',
+      });
+      identifierByPk = Object.fromEntries(
+        (itemRows || [])
+          .map((r: any) => [r.id, trimString(r.identifier)])
+          .filter(([, identifier]: any) => identifier)
+      );
+    }
+    bakedStartingEquipmentData = flattenStartingEquipment(startingEquipmentRoots, {
+      makeId: makeEntryId,
+      linkedKeyFor: (pk) => identifierByPk[pk] || pk,
+    });
+  }
+
   const classData = {
     ...classDataRaw,
     id: classDataRaw.id,
@@ -1825,6 +1862,7 @@ export async function exportClassSemantic(
     description: cleanText(classDataRaw.description),
     lore: cleanText(classDataRaw.lore),
     startingEquipment: cleanText(classDataRaw.startingEquipment),
+    startingEquipmentData: bakedStartingEquipmentData,
     multiclassing: cleanText(classDataRaw.multiclassing),
     tagIds,
     proficiencies: normalizedProficiencies,

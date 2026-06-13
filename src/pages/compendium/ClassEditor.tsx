@@ -8,6 +8,7 @@ import ActivityEditor from '../../components/compendium/ActivityEditor';
 import FeatureModalHero from '../../components/compendium/FeatureModalHero';
 import ProficienciesEditor from '../../components/compendium/ProficienciesEditor';
 import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
+import StartingEquipmentEditor from '../../components/compendium/StartingEquipmentEditor';
 import { reportClientError, OperationType } from '../../lib/firebase';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -38,6 +39,7 @@ import {
 import { fetchCollection, fetchDocument, queryD1, upsertDocument, deleteDocument } from '../../lib/d1';
 import { normalizeFeatureData, denormalizeCompendiumData } from '../../lib/compendium';
 import { effectiveOptionLevel } from '../../lib/requirements';
+import { parseEquipmentTree, serializeEquipmentTree, type EquipmentNode } from '../../lib/startingEquipment';
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
 import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
 import { useBlockDraftPickerOptions } from '../../hooks/useBlockDraftPickerOptions';
@@ -441,6 +443,13 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
     skillsDisplayName: ''
   });
   const [startingEquipment, setStartingEquipment] = useState('');
+  // Structured starting-equipment tree (dnd5e EquipmentEntryData authoring
+  // shape) — distinct from the prose `startingEquipment` above. Edited via
+  // StartingEquipmentEditor, persisted to `starting_equipment_data`.
+  const [startingEquipmentData, setStartingEquipmentData] = useState<EquipmentNode[]>([]);
+  // Lean item catalog ({id,name,hint:itemType}) for the equipment editor's
+  // specific-item leaves. Projection only — no full item rows loaded here.
+  const [allItems, setAllItems] = useState<Array<{ id: string; name: string; hint?: string }>>([]);
   const [wealth, setWealth] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [imageDisplay, setImageDisplay] = useState<ImageDisplay>(DEFAULT_DISPLAY);
@@ -585,7 +594,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
     return JSON.stringify({
       name, preview, description, lore, sourceId, hitDie, savingThrows, proficiencies, multiclassProficiencies,
       primaryAbility, primaryAbilityChoice, tagIds, subclassFeatureLevels, asiLevels,
-      advancements, imageUrl, imageDisplay, cardImageUrl, cardDisplay, previewImageUrl, previewDisplay, spellcasting, startingEquipment, wealth, multiclassing, excludedOptionIds, subclassTitle
+      advancements, imageUrl, imageDisplay, cardImageUrl, cardDisplay, previewImageUrl, previewDisplay, spellcasting, startingEquipment, startingEquipmentData, wealth, multiclassing, excludedOptionIds, subclassTitle
     });
   }, [name, preview, description, lore, sourceId, hitDie, savingThrows, proficiencies, multiclassProficiencies, primaryAbility, primaryAbilityChoice, tagIds, subclassFeatureLevels, asiLevels, advancements, imageUrl, imageDisplay, cardImageUrl, cardDisplay, previewImageUrl, previewDisplay, spellcasting, startingEquipment, wealth, multiclassing, excludedOptionIds, subclassTitle]);
 
@@ -679,7 +688,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
           optItemsData,
           tagGroupsData,
           allTagsData,
-          featsData
+          featsData,
+          itemsData
         ] = await Promise.all([
           fetchCollection('sources', { orderBy: 'name ASC' }),
           fetchCollection('spellcastingTypes', { orderBy: 'name ASC' }),
@@ -703,7 +713,10 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
           // Feats catalog feeds AdvancementManager's "Feat" pool.
           // Snake_case `feat_subtype` is normalized to camelCase below
           // so the picker can read `featSubtype` directly.
-          fetchCollection('feats', { orderBy: 'name ASC' })
+          fetchCollection('feats', { orderBy: 'name ASC' }),
+          // Lean projection for the starting-equipment item picker (id + name
+          // + type for the hint) — NOT full item rows.
+          fetchCollection('items', { select: 'id, name, item_type', orderBy: 'name ASC' })
         ]);
 
         setSources(sourcesData.map(s => denormalizeCompendiumData(s)));
@@ -755,6 +768,11 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
             featSubtype: d.featSubtype ?? d.feat_subtype,
           };
         }));
+        setAllItems(itemsData.map((i: any) => ({
+          id: i.id,
+          name: i.name || i.identifier || 'Unnamed Item',
+          hint: i.item_type ?? i.itemType ?? undefined,
+        })));
       } catch (err) {
         console.error("[ClassEditor] Error loading foundation data:", err);
       }
@@ -894,6 +912,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
             }));
 
             setStartingEquipment(remapped.startingEquipment);
+            setStartingEquipmentData(parseEquipmentTree(remapped.startingEquipmentData));
             setPrimaryAbility(normalizePrimaryAbilityListForEditor(remapped.primaryAbility));
             setPrimaryAbilityChoice(normalizePrimaryAbilityListForEditor(remapped.primaryAbilityChoice));
             setWealth(remapped.wealth || '');
@@ -1237,6 +1256,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
         savingThrows: normalizedProficiencies.savingThrows?.fixedIds || [],
         proficiencies: normalizedProficiencies,
         startingEquipment,
+        startingEquipmentData,
         primaryAbility: normalizedPrimaryAbility,
         primaryAbilityChoice: normalizedPrimaryAbilityChoice,
         wealth,
@@ -1274,6 +1294,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
         saving_throws: classData.savingThrows,
         proficiencies: classData.proficiencies,
         starting_equipment: classData.startingEquipment,
+        starting_equipment_data: serializeEquipmentTree(classData.startingEquipmentData),
         primary_ability: classData.primaryAbility,
         primary_ability_choice: classData.primaryAbilityChoice,
         wealth: classData.wealth,
@@ -2205,11 +2226,25 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
 
                 <div className="space-y-4">
                   <div className="space-y-1">
-                    <label className="label-text">Starting Equipment</label>
+                    <label className="label-text">Starting Equipment (Description)</label>
+                    <p className="text-[10px] text-ink/45">
+                      Freeform prose shown on the public class page and in the Foundry importer's review step.
+                    </p>
                     <MarkdownEditor
                       value={startingEquipment}
                       onChange={setStartingEquipment}
                       minHeight="60px"
+                    />
+                  </div>
+
+                  {/* Structured equipment tree → dnd5e system.startingEquipment.
+                      Drives Foundry's native equipment prompt; the prose above
+                      stays as the human-readable description. */}
+                  <div className="pt-3 border-t border-gold/10">
+                    <StartingEquipmentEditor
+                      value={startingEquipmentData}
+                      onChange={setStartingEquipmentData}
+                      items={allItems}
                     />
                   </div>
                 </div>
