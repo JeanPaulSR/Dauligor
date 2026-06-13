@@ -46,7 +46,7 @@ import SpellDetailPanel from '../../components/compendium/SpellDetailPanel';
 import SpellFilterShell from '../../components/compendium/SpellFilterShell';
 import { useSpellFilters } from '../../hooks/useSpellFilters';
 import { cn } from '../../lib/utils';
-import { isColumnHidden, levelSeriesHasValue } from '../../lib/classTableColumns';
+import { isColumnHidden, levelSeriesHasValue, formatKnownCell } from '../../lib/classTableColumns';
 import { parseEquipmentTree, collectLinkedItemKeys, formatStartingEquipmentLines } from '../../lib/startingEquipment';
 import { imageFocalStyle as ClassImageStyle, DEFAULT_DISPLAY } from '../../components/ui/FocalImageEditor';
 import { toast } from 'sonner';
@@ -713,6 +713,8 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
   const knownLevels = (spellsKnown || subclassSpellsKnown)?.levels;
   const showCantripsCol = hasAnySpellsKnown && levelSeriesHasValue(knownLevels, ['cantrips', 'cantripsKnown']);
   const showSpellsKnownCol = hasAnySpellsKnown && levelSeriesHasValue(knownLevels, ['spellsKnown', 'spells']);
+  // For humanizing `@mod` in a formula-based known column ("INT + Level/2").
+  const spellAbilityAbbr = (classData?.spellcasting?.ability || '').toUpperCase();
 
   const maxSpellLevel = useMemo(() => {
     // Check both base and subclass spellcasting to find the true max level across all levels
@@ -1344,12 +1346,12 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                       })}
                       {showCantripsCol && (
                         <td className="p-1.5 text-center font-mono text-ink/80 border-r border-gold/5">
-                          {levelKnown?.cantrips ?? levelKnown?.cantripsKnown ?? '—'}
+                          {formatKnownCell(levelKnown?.cantrips ?? levelKnown?.cantripsKnown, spellAbilityAbbr)}
                         </td>
                       )}
                       {showSpellsKnownCol && (
                         <td className="p-1.5 text-center font-mono text-ink/80 border-r border-gold/5">
-                          {levelKnown?.spellsKnown ?? levelKnown?.spells ?? '—'}
+                          {formatKnownCell(levelKnown?.spellsKnown ?? levelKnown?.spells, spellAbilityAbbr)}
                         </td>
                       )}
                       {hasAnyAltSpellcasting && (

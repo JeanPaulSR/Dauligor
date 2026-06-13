@@ -3,7 +3,7 @@ import { Edit } from 'lucide-react';
 import { fetchCollection, fetchDocument } from '../../lib/d1';
 import { calculateEffectiveCastingLevel, getSpellSlotsForLevel, buildPactDisplayTable } from '../../lib/spellcasting';
 import { cn } from '../../lib/utils';
-import { isColumnHidden, levelSeriesHasValue } from '../../lib/classTableColumns';
+import { isColumnHidden, levelSeriesHasValue, formatKnownCell } from '../../lib/classTableColumns';
 import { motion } from 'motion/react';
 import BBCodeRenderer from '../BBCodeRenderer';
 import FeaturesView from './FeaturesView';
@@ -644,6 +644,7 @@ export default function ClassPreviewPane({
   const knownLevels = previewSpellsKnown?.levels;
   const showCantripsCol = hasAnySpellsKnown && levelSeriesHasValue(knownLevels, ['cantrips', 'cantripsKnown']);
   const showSpellsKnownCol = hasAnySpellsKnown && levelSeriesHasValue(knownLevels, ['spellsKnown', 'spells']);
+  const spellAbilityAbbr = (selectedClass?.spellcasting?.ability || '').toUpperCase();
 
   const maxSpellLevel = React.useMemo(() => {
     if (!previewSpellcasting?.levels) return 0;
@@ -825,10 +826,10 @@ export default function ClassPreviewPane({
                               );
                             })}
                             {showCantripsCol && (
-                              <td className="p-1 px-2 text-center text-[10px] font-mono text-ink/65 border-r border-gold/5">{levelKnown?.cantrips ?? levelKnown?.cantripsKnown ?? '—'}</td>
+                              <td className="p-1 px-2 text-center text-[10px] font-mono text-ink/65 border-r border-gold/5">{formatKnownCell(levelKnown?.cantrips ?? levelKnown?.cantripsKnown, spellAbilityAbbr)}</td>
                             )}
                             {showSpellsKnownCol && (
-                              <td className="p-1 px-2 text-center text-[10px] font-mono text-ink/65 border-r border-gold/5">{levelKnown?.spellsKnown ?? levelKnown?.spells ?? '—'}</td>
+                              <td className="p-1 px-2 text-center text-[10px] font-mono text-ink/65 border-r border-gold/5">{formatKnownCell(levelKnown?.spellsKnown ?? levelKnown?.spells, spellAbilityAbbr)}</td>
                             )}
                             {hasAnyAltSpellcasting && (
                               <>
