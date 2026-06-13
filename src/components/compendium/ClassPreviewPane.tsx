@@ -3,6 +3,7 @@ import { Edit } from 'lucide-react';
 import { fetchCollection, fetchDocument } from '../../lib/d1';
 import { calculateEffectiveCastingLevel, getSpellSlotsForLevel, buildPactDisplayTable } from '../../lib/spellcasting';
 import { cn } from '../../lib/utils';
+import { isColumnHidden, levelSeriesHasValue } from '../../lib/classTableColumns';
 import { motion } from 'motion/react';
 import BBCodeRenderer from '../BBCodeRenderer';
 import FeaturesView from './FeaturesView';
@@ -636,6 +637,13 @@ export default function ClassPreviewPane({
   const hasAnySpellsKnown = !!previewSpellsKnown;
   const hasAnyAltSpellcasting = !!previewAltSpellcasting;
   const hasAnySpellcasting = !!previewSpellcasting;
+  // Mirror ClassView: drop author-hidden columns, and render Cantrips / Spells
+  // Known independently so an all-zero series (e.g. a spellbook caster's
+  // spells-known) doesn't show an empty column. See classTableColumns.
+  const visiblePreviewScalings = previewScalings.filter(c => !isColumnHidden(c));
+  const knownLevels = previewSpellsKnown?.levels;
+  const showCantripsCol = hasAnySpellsKnown && levelSeriesHasValue(knownLevels, ['cantrips', 'cantripsKnown']);
+  const showSpellsKnownCol = hasAnySpellsKnown && levelSeriesHasValue(knownLevels, ['spellsKnown', 'spells']);
 
   const maxSpellLevel = React.useMemo(() => {
     if (!previewSpellcasting?.levels) return 0;
@@ -744,14 +752,14 @@ export default function ClassPreviewPane({
                         <th className="p-1 px-2 label-text italic text-gold text-center w-8 border-r border-gold/15 text-[10px]">Level</th>
                         <th className="p-1 px-2 label-text italic text-gold text-center w-10 border-r border-gold/15 text-[10px]">PB</th>
                         <th className="p-1 px-2 label-text italic text-gold border-r border-gold/15 text-[10px]">Features</th>
-                        {previewScalings.map(col => (
+                        {visiblePreviewScalings.map(col => (
                           <th key={col.id} className="p-1 px-2 label-text italic text-gold text-center border-r border-gold/15 text-[10px]">{col.name}</th>
                         ))}
-                        {hasAnySpellsKnown && (
-                          <>
-                            <th className="p-1 px-2 label-text italic text-gold text-center border-r border-gold/15 text-[10px]">Cantrips</th>
-                            <th className="p-1 px-2 label-text italic text-gold text-center border-r border-gold/15 text-[10px]">Spells Known</th>
-                          </>
+                        {showCantripsCol && (
+                          <th className="p-1 px-2 label-text italic text-gold text-center border-r border-gold/15 text-[10px]">Cantrips</th>
+                        )}
+                        {showSpellsKnownCol && (
+                          <th className="p-1 px-2 label-text italic text-gold text-center border-r border-gold/15 text-[10px]">Spells Known</th>
                         )}
                         {hasAnyAltSpellcasting && (
                           <>
@@ -765,7 +773,7 @@ export default function ClassPreviewPane({
                       </tr>
                       {hasAnySpellcasting && (
                         <tr className="border-b border-gold/15 bg-gold/5">
-                          <th colSpan={3 + previewScalings.length + (hasAnySpellsKnown ? 2 : 0) + (hasAnyAltSpellcasting ? 2 : 0)} className="border-r border-gold/15"></th>
+                          <th colSpan={3 + visiblePreviewScalings.length + (showCantripsCol ? 1 : 0) + (showSpellsKnownCol ? 1 : 0) + (hasAnyAltSpellcasting ? 2 : 0)} className="border-r border-gold/15"></th>
                           {Array.from({ length: maxSpellLevel }, (_, i) => i + 1).map(lvl => (
                             <th key={lvl} className="p-0.5 label-text italic text-gold text-center w-5 border-r border-gold/5 last:border-r-0 text-[10px]">
                               {lvl}{lvl === 1 ? 'st' : lvl === 2 ? 'nd' : lvl === 3 ? 'rd' : 'th'}
@@ -802,7 +810,7 @@ export default function ClassPreviewPane({
                                 {levelFeatures.length === 0 && <span className="text-ink/25 text-[10px]">—</span>}
                               </div>
                             </td>
-                            {previewScalings.map(col => {
+                            {visiblePreviewScalings.map(col => {
                               let displayValue = '—';
                               for (let l = level; l >= 1; l--) {
                                 if (col.values[l.toString()]) {
@@ -816,11 +824,11 @@ export default function ClassPreviewPane({
                                 </td>
                               );
                             })}
-                            {hasAnySpellsKnown && (
-                              <>
-                                <td className="p-1 px-2 text-center text-[10px] font-mono text-ink/65 border-r border-gold/5">{levelKnown?.cantrips ?? levelKnown?.cantripsKnown ?? '—'}</td>
-                                <td className="p-1 px-2 text-center text-[10px] font-mono text-ink/65 border-r border-gold/5">{levelKnown?.spellsKnown ?? levelKnown?.spells ?? '—'}</td>
-                              </>
+                            {showCantripsCol && (
+                              <td className="p-1 px-2 text-center text-[10px] font-mono text-ink/65 border-r border-gold/5">{levelKnown?.cantrips ?? levelKnown?.cantripsKnown ?? '—'}</td>
+                            )}
+                            {showSpellsKnownCol && (
+                              <td className="p-1 px-2 text-center text-[10px] font-mono text-ink/65 border-r border-gold/5">{levelKnown?.spellsKnown ?? levelKnown?.spells ?? '—'}</td>
                             )}
                             {hasAnyAltSpellcasting && (
                               <>

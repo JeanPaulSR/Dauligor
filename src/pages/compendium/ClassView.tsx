@@ -46,6 +46,7 @@ import SpellDetailPanel from '../../components/compendium/SpellDetailPanel';
 import SpellFilterShell from '../../components/compendium/SpellFilterShell';
 import { useSpellFilters } from '../../hooks/useSpellFilters';
 import { cn } from '../../lib/utils';
+import { isColumnHidden, levelSeriesHasValue } from '../../lib/classTableColumns';
 import { imageFocalStyle as ClassImageStyle, DEFAULT_DISPLAY } from '../../components/ui/FocalImageEditor';
 import { toast } from 'sonner';
 import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
@@ -514,6 +515,13 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
     return [...scalingColumns, ...subclassScalingColumns];
   }, [scalingColumns, subclassScalingColumns]);
 
+  // Author-hidden custom columns are dropped from the rendered table; their
+  // per-level values still exist in data and still export. See classTableColumns.
+  const visibleScalingColumns = useMemo(
+    () => allScalingColumns.filter(c => !isColumnHidden(c)),
+    [allScalingColumns],
+  );
+
   const allGroupIds = useMemo(() => {
     const ids = new Set<string>();
     (classData?.uniqueOptionMappings || []).forEach((m: any) => {
@@ -675,6 +683,12 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
   const hasAnySpellsKnown = !!(spellsKnown || subclassSpellsKnown);
   const hasAnyAltSpellcasting = !!(altSpellcasting || subclassAltSpellcasting);
   const hasAnySpellcasting = !!(spellcasting || subclassSpellcasting);
+  // Cantrips Known / Spells Known render independently: a spellbook caster
+  // (Wizard) has cantrips per level but an all-zero spells-known series, so
+  // only the populated column shows.
+  const knownLevels = (spellsKnown || subclassSpellsKnown)?.levels;
+  const showCantripsCol = hasAnySpellsKnown && levelSeriesHasValue(knownLevels, ['cantrips', 'cantripsKnown']);
+  const showSpellsKnownCol = hasAnySpellsKnown && levelSeriesHasValue(knownLevels, ['spellsKnown', 'spells']);
 
   const maxSpellLevel = useMemo(() => {
     // Check both base and subclass spellcasting to find the true max level across all levels
@@ -1227,16 +1241,16 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                   <th className="p-1.5 label-text italic text-gold text-center w-10 border-r border-gold/10">Level</th>
                   <th className="p-1.5 label-text italic text-gold text-center w-14 border-r border-gold/10">Proficiency Bonus</th>
                   <th className="p-1.5 label-text italic text-gold border-r border-gold/10">Features</th>
-                  {allScalingColumns.map(col => (
+                  {visibleScalingColumns.map(col => (
                     <th key={col.id} className="p-1.5 label-text italic text-gold text-center border-r border-gold/10">
                       {col.name}
                     </th>
                   ))}
-                  {hasAnySpellsKnown && (
-                    <>
-                      <th className="p-1.5 label-text italic text-gold text-center border-r border-gold/10">Cantrips</th>
-                      <th className="p-1.5 label-text italic text-gold text-center border-r border-gold/10">Spells Known</th>
-                    </>
+                  {showCantripsCol && (
+                    <th className="p-1.5 label-text italic text-gold text-center border-r border-gold/10">Cantrips</th>
+                  )}
+                  {showSpellsKnownCol && (
+                    <th className="p-1.5 label-text italic text-gold text-center border-r border-gold/10">Spells Known</th>
                   )}
                   {hasAnyAltSpellcasting && (
                     <>
@@ -1250,7 +1264,7 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                 </tr>
                 {hasAnySpellcasting && (
                   <tr className="border-b border-gold/10 bg-gold/5">
-                    <th colSpan={3 + allScalingColumns.length + (hasAnySpellsKnown ? 2 : 0) + (hasAnyAltSpellcasting ? 2 : 0)} className="border-r border-gold/10"></th>
+                    <th colSpan={3 + visibleScalingColumns.length + (showCantripsCol ? 1 : 0) + (showSpellsKnownCol ? 1 : 0) + (hasAnyAltSpellcasting ? 2 : 0)} className="border-r border-gold/10"></th>
                     {Array.from({ length: maxSpellLevel }, (_, i) => i + 1).map(lvl => (
                       <th key={lvl} className="p-1 label-text italic text-gold text-center w-6 border-r border-gold/5 last:border-r-0">
                         {lvl}{lvl === 1 ? 'st' : lvl === 2 ? 'nd' : lvl === 3 ? 'rd' : 'th'}
@@ -1290,7 +1304,7 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                           {levelFeatures.length === 0 && <span className="text-ink/20">—</span>}
                         </div>
                       </td>
-                      {allScalingColumns.map(col => {
+                      {visibleScalingColumns.map(col => {
                         let displayValue = '—';
                         for (let l = level; l >= 1; l--) {
                           if (col.values[l.toString()]) {
@@ -1304,15 +1318,15 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                           </td>
                         );
                       })}
-                      {hasAnySpellsKnown && (
-                        <>
-                          <td className="p-1.5 text-center font-mono text-ink/80 border-r border-gold/5">
-                            {levelKnown?.cantrips ?? levelKnown?.cantripsKnown ?? '—'}
-                          </td>
-                          <td className="p-1.5 text-center font-mono text-ink/80 border-r border-gold/5">
-                            {levelKnown?.spellsKnown ?? levelKnown?.spells ?? '—'}
-                          </td>
-                        </>
+                      {showCantripsCol && (
+                        <td className="p-1.5 text-center font-mono text-ink/80 border-r border-gold/5">
+                          {levelKnown?.cantrips ?? levelKnown?.cantripsKnown ?? '—'}
+                        </td>
+                      )}
+                      {showSpellsKnownCol && (
+                        <td className="p-1.5 text-center font-mono text-ink/80 border-r border-gold/5">
+                          {levelKnown?.spellsKnown ?? levelKnown?.spells ?? '—'}
+                        </td>
                       )}
                       {hasAnyAltSpellcasting && (
                         <>

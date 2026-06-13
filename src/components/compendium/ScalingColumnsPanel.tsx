@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, Edit, ChevronDown } from 'lucide-react';
+import { Plus, Trash2, Edit, ChevronDown, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -9,6 +9,7 @@ import { useProposalAccumulator, useProposalContextOptional } from '../../lib/pr
 import { actionLabel } from '../../lib/proposalAware';
 import ScalingMatrixEditor from './ScalingMatrixEditor';
 import { useBlockDraftedList } from '../../hooks/useBlockDraftedList';
+import { isColumnHidden } from '../../lib/classTableColumns';
 
 /**
  * Shared "Scaling Columns" sidebar — the small editor block that
@@ -175,6 +176,23 @@ export default function ScalingColumnsPanel({
     }
   };
 
+  // Toggle a column's table visibility. Purely a DISPLAY flag — the column's
+  // per-level values stay in data and still export to Foundry, so no rebake.
+  const toggleHidden = async (col: ScalingColumnRow) => {
+    const nextHidden = isColumnHidden(col) ? 0 : 1;
+    try {
+      await writer.update(col.id, {
+        hidden: nextHidden,
+        parent_id: parentId,
+        parent_type: parentType,
+      });
+      onColumnsChanged();
+    } catch (error) {
+      console.error('[ScalingColumnsPanel] toggle visibility failed:', error);
+      toast.error(`Failed to update ${noun} visibility`);
+    }
+  };
+
   return (
     <>
     <div className="p-4 border border-gold/25 bg-card/50 space-y-4 rounded-xl">
@@ -193,22 +211,40 @@ export default function ScalingColumnsPanel({
           const breakpoints = getScalingBreakpoints(valuesMap);
           return (
             <div key={col.id} className="p-3 bg-gold/5 border border-gold/15 rounded space-y-2 group relative">
-              <div className="flex items-center justify-between">
-                <Input
-                  value={nameDrafts[col.id] ?? col.name ?? ''}
-                  onChange={(e) =>
-                    setNameDrafts((prev) => ({ ...prev, [col.id]: e.target.value }))
-                  }
-                  // Commit on blur (and on Enter) rather than per keystroke:
-                  // in block mode a per-keystroke writer.update would queue
-                  // a change for every character typed.
-                  onBlur={() => commitRename(col)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                  }}
-                  className="h-6 text-[11px] font-bold bg-transparent border-none p-0 focus-visible:ring-0"
-                />
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <Input
+                    value={nameDrafts[col.id] ?? col.name ?? ''}
+                    onChange={(e) =>
+                      setNameDrafts((prev) => ({ ...prev, [col.id]: e.target.value }))
+                    }
+                    // Commit on blur (and on Enter) rather than per keystroke:
+                    // in block mode a per-keystroke writer.update would queue
+                    // a change for every character typed.
+                    onBlur={() => commitRename(col)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                    }}
+                    className="h-6 text-[11px] font-bold bg-transparent border-none p-0 focus-visible:ring-0 flex-1 min-w-0"
+                  />
+                  {/* Persistent badge so hidden columns read as hidden at rest,
+                      not just on hover. */}
+                  {isColumnHidden(col) && (
+                    <span className="shrink-0 text-[8px] uppercase font-black tracking-widest text-ink/40 border border-ink/20 rounded px-1 py-0.5">
+                      Hidden
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-5 w-5 p-0 text-gold/70"
+                    onClick={() => toggleHidden(col)}
+                    title={isColumnHidden(col) ? 'Show column on the class table' : 'Hide column from the class table'}
+                  >
+                    {isColumnHidden(col) ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                  </Button>
                   <Button
                     variant="ghost"
                     size="sm"
