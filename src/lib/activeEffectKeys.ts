@@ -472,7 +472,7 @@ const BYPASS_VALUE_OPTIONS = [{ value: 'mgc', label: 'Magical' }, { value: 'sil'
  * are NOT enumerated here — `allowCustomValue` keeps the picker open so they
  * can be typed directly.
  */
-const DAE_SPECIAL_DURATION_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
+export const DAE_SPECIAL_DURATION_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
   // Combat turn / round
   { value: 'turnEnd', label: "End of target's turn" },
   { value: 'turnStart', label: "Start of target's turn" },

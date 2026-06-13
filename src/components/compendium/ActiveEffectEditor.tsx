@@ -12,7 +12,7 @@ import EntityPicker from '../ui/EntityPicker';
 import SingleSelectSearch from '../ui/SingleSelectSearch';
 import { fetchCollection } from '../../lib/d1';
 import { ACTIVE_EFFECT_TYPES } from '../../lib/activeEffectStatuses';
-import { getActiveEffectKeyMeta, type AEValueMeta, type AEValueSource } from '../../lib/activeEffectKeys';
+import { getActiveEffectKeyMeta, DAE_SPECIAL_DURATION_OPTIONS, type AEValueMeta, type AEValueSource } from '../../lib/activeEffectKeys';
 import { makeFoundryId } from '../../lib/utils';
 
 // Mirrors Foundry's EFFECT_MODES constant
@@ -239,6 +239,39 @@ export default function ActiveEffectEditor({ effects, onChange, defaultImg }: Ac
   const deleteChange = (i: number) =>
     patch({ changes: (draft?.changes || []).filter((_, ci) => ci !== i) });
   const parseNullableInt = (v: string) => v === '' ? null : parseInt(v, 10);
+
+  // ── DAE special durations ────────────────────────────────────────────
+  // Special durations live in the effect's `changes` as one
+  // `flags.dae.specialDuration` row per trigger (DAE collects them into an
+  // array). The Duration tab is a friendly multi-select VIEW over exactly
+  // those rows — single source of truth, so it stays in lockstep with the
+  // Changes tab. Derive the current triggers, and reconcile the change rows
+  // when the picker changes (Custom mode, matching the change-row authoring).
+  const specialDurations = React.useMemo(
+    () => (draft?.changes || [])
+      .filter(c => c.key === 'flags.dae.specialDuration')
+      .map(c => String(c.value ?? '').trim())
+      .filter(Boolean),
+    [draft?.changes],
+  );
+  const setSpecialDurations = (next: string[]) => {
+    const others = (draft?.changes || []).filter(c => c.key !== 'flags.dae.specialDuration');
+    const dedup = Array.from(new Set(next.map(v => v.trim()).filter(Boolean)));
+    const rows: EffectChange[] = dedup.map(v => ({ key: 'flags.dae.specialDuration', mode: 0, value: v, priority: null }));
+    patch({ changes: [...others, ...rows] });
+  };
+  // Picker options: the curated DAE set + any custom (off-list) trigger
+  // currently authored (e.g. `isSave.dex` added on the Changes tab) so the
+  // Duration tab shows — and can remove — every active trigger, not just the
+  // common ones. Adding a NEW custom trigger stays on the Changes tab.
+  const specialDurationEntities = React.useMemo(() => {
+    const known = new Set(DAE_SPECIAL_DURATION_OPTIONS.map(o => o.value));
+    const base = DAE_SPECIAL_DURATION_OPTIONS.map(o => ({ id: o.value, name: o.label }));
+    const custom = specialDurations
+      .filter(v => !known.has(v))
+      .map(v => ({ id: v, name: v, hint: 'custom' }));
+    return [...base, ...custom];
+  }, [specialDurations]);
 
   return (
     <div>
@@ -554,6 +587,27 @@ export default function ActiveEffectEditor({ effects, onChange, defaultImg }: Ac
                       />
                     </div>
                   </div>
+                </div>
+
+                {/* Special Durations (DAE) — friendly editor over the
+                    `flags.dae.specialDuration` change rows. Picking here
+                    writes/removes those rows, so the Changes tab stays in
+                    sync. Add a NEW custom trigger on the Changes tab; this
+                    picker still shows + removes any already authored. */}
+                <div className="border border-gold/15 rounded-md bg-background/20 px-3 py-2.5 space-y-1.5">
+                  <span className="text-xs font-semibold text-ink/75 block">Special Durations (DAE)</span>
+                  <p className="text-[11px] text-ink/45">
+                    Expire this effect when a trigger fires — e.g. end of turn, after 1 attack, when damaged. Pick one or more.
+                    Requires the DAE + Times-Up modules (and active combat for the in-combat triggers).
+                  </p>
+                  <EntityPicker
+                    entities={specialDurationEntities}
+                    selectedIds={specialDurations}
+                    onChange={setSpecialDurations}
+                    searchPlaceholder="Search triggers…"
+                    showChips
+                    noEntitiesText="No special-duration triggers available."
+                  />
                 </div>
               </TabsContent>
 
