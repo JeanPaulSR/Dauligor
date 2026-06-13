@@ -200,7 +200,10 @@ function MarkdownEditor({
   // TipTap Editor Setup
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      // StarterKit v3 bundles its own Link + Underline; disable them so our
+      // custom-configured Underline + Link below win without TipTap warning
+      // about duplicate extension names ('link', 'underline').
+      StarterKit.configure({ link: false, underline: false }),
       IndentExtension,
       SpoilerExtension,
       Underline,
