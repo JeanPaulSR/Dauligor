@@ -90,13 +90,19 @@ export async function enqueueAllOfKind(kind: ExportEntityKind): Promise<number> 
   const ids = (res.results ?? []).map((r: any) => String(r.id)).filter(Boolean);
   if (!ids.length) return 0;
   const dueAt = Date.now() - DEBOUNCE_MS - 1; // already past the cutoff → due now
-  for (const id of ids) {
-    await executeD1QueryInternal({
-      sql: `INSERT INTO module_export_queue (entity_kind, entity_id, last_edit_at)
-            VALUES (?, ?, ?)
-            ON CONFLICT(entity_kind, entity_id) DO NOTHING`,
-      params: [kind, id, dueAt],
-    });
+  const sql = `INSERT INTO module_export_queue (entity_kind, entity_id, last_edit_at)
+               VALUES (?, ?, ?)
+               ON CONFLICT(entity_kind, entity_id) DO NOTHING`;
+  // BATCH the inserts — `executeD1QueryInternal` sends an array as a single
+  // D1 `batch()` (one worker round-trip = one subrequest). A loop of
+  // individual INSERTs blows the Worker subrequest cap (50 on the free plan)
+  // on large kinds — e.g. 82 classes = 82 subrequests. Chunk so one giant
+  // batch can't exceed D1's per-batch statement limit either.
+  const CHUNK = 50;
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    await executeD1QueryInternal(
+      ids.slice(i, i + CHUNK).map((id) => ({ sql, params: [kind, id, dueAt] })),
+    );
   }
   return ids.length;
 }

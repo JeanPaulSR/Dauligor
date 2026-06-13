@@ -29,10 +29,12 @@ database_id = "25a9d61a-29ec-42c7-9dae-8cde8d88913d"
 migrations_dir = "migrations"
 
 # Cron triggers (the `scheduled()` handler dispatches on `event.cron`):
-#   • "30 3 * * *"   — daily 03:30 UTC: prune resolved pending_revisions
-#     older than 30 days (admin pins survive) + spell-cache pre-warm.
-#   • "*/15 * * * *" — every 15 min: drain a small bounded batch of the
-#     module-export rebake queue, so entities quiet for the 1h debounce
-#     bake on a timer (gradually, not in a burst) regardless of traffic.
+#   • "30 3 * * *" — daily 03:30 UTC: prune resolved pending_revisions older
+#     than 30 days (admin pins survive) + spell-cache pre-warm.
+#   • "* * * * *"  — every minute: drain ONE due module-export rebake-queue
+#     entry. Budget is 1 because a class rebake fans out to ~25 subrequests and
+#     the FREE-plan cap is 50 per invocation — one-per-minute keeps each call
+#     safe while still draining a bulk "rebake all" within ~1–2h, gradually
+#     (never a burst). Idle minutes are cheap (a single empty queue check).
 [triggers]
-crons = ["30 3 * * *", "*/15 * * * *"]
+crons = ["30 3 * * *", "* * * * *"]

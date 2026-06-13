@@ -23,9 +23,12 @@ import { popDueEntries } from "../../../api/_lib/module-export-queue.js";
 import { rebakeBundle } from "../../../api/_lib/module-export-pipeline.js";
 
 // Bounded per-call budget. Each class rebake fans out to several D1 reads + an
-// R2 write (+ a source-catalog rebake), so keep this small to stay well under
-// the Worker subrequest cap and honor the "drain slowly" intent. Tunable.
-const DRAIN_BUDGET = 5;
+// R2 write (+ a source-catalog rebake) — roughly 25 subrequests for a complex
+// class. The Worker/Pages-Functions subrequest cap is 50 on the FREE plan
+// (1000 on paid), so ONE class per invocation is the safe budget on free; the
+// frequent cron drives throughput instead of a big per-call batch. Bump this
+// (and pass ?budget=) only on a paid plan. Tunable.
+const DRAIN_BUDGET = 1;
 
 export const onRequest = async (context: any): Promise<Response> => {
   const { request } = context;
@@ -45,11 +48,12 @@ export const onRequest = async (context: any): Promise<Response> => {
   }
 
   const t0 = Date.now();
-  // Allow an explicit override (?budget=N) for a manual catch-up sweep, capped
-  // so a stray call can't run away. Defaults to the gentle cron budget.
+  // Allow an explicit override (?budget=N) for a manual catch-up sweep on a
+  // PAID plan (more subrequest headroom). On the free plan leave it unset — >1
+  // risks the 50-subrequest cap. Capped so a stray call can't run away.
   const url = new URL(request.url);
   const requested = Number(url.searchParams.get("budget"));
-  const budget = Number.isFinite(requested) && requested > 0 ? Math.min(requested, 25) : DRAIN_BUDGET;
+  const budget = Number.isFinite(requested) && requested > 0 ? Math.min(requested, 5) : DRAIN_BUDGET;
 
   let rebaked = 0;
   let failed = 0;
