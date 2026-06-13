@@ -16,7 +16,7 @@ import {
   emptyEquipmentOption,
   isEquipmentGroup,
   isEquipmentOption,
-  formatStartingEquipment,
+  formatStartingEquipmentLines,
 } from '../../lib/startingEquipment';
 import SingleSelectSearch from '../ui/SingleSelectSearch';
 
@@ -75,7 +75,7 @@ export default function StartingEquipmentEditor({
     for (const it of items) m[it.id] = it.name;
     return m;
   }, [items]);
-  const preview = formatStartingEquipment(roots, { itemNameById });
+  const previewLines = formatStartingEquipmentLines(roots, { itemNameById });
 
   return (
     <div className="space-y-2">
@@ -161,10 +161,14 @@ export default function StartingEquipmentEditor({
         </div>
       )}
 
-      {preview && (
-        <div className="rounded border border-gold/15 bg-background/40 px-3 py-2">
-          <span className="text-[9px] uppercase tracking-widest text-ink/45">Reads as · </span>
-          <span className="text-xs italic text-ink/85">{preview}</span>
+      {previewLines.length > 0 && (
+        <div className="rounded border border-gold/15 bg-background/40 px-3 py-2 space-y-1">
+          <span className="text-[9px] uppercase tracking-widest text-ink/45">Reads as</span>
+          <ul className="list-disc pl-4 space-y-0.5">
+            {previewLines.map((line, i) => (
+              <li key={i} className="text-xs italic text-ink/85">{line}</li>
+            ))}
+          </ul>
         </div>
       )}
     </div>

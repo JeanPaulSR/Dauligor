@@ -311,3 +311,56 @@ export function formatStartingEquipment(
   // Multiple top-level entries are independent "lines" — join with "; ".
   return roots.map(n => formatNode(n, _nested)).filter(Boolean).join('; ');
 }
+
+/** Letters for OR choices, matching the 5e book style "(a) … or (b) …". */
+const CHOICE_LETTERS = 'abcdefghijklmnopqrstuvwxyz';
+
+/**
+ * Render the tree as a list of "lines" — the natural class starting-equipment
+ * layout, one bullet per line. A single top-level AND group is unwrapped into
+ * its children (you get all of them); otherwise each top-level entry is a line.
+ * Each line reads naturally: an AND bundle → "a light crossbow and 20 bolts";
+ * an OR choice → "(a) studded leather armor or (b) scale mail"; a lone option
+ * → itself.
+ */
+export function formatStartingEquipmentLines(
+  roots: EquipmentNode[] | null | undefined,
+  lookup: StartingEquipmentLookup = {},
+): string[] {
+  if (!roots || roots.length === 0) return [];
+  const lineNodes =
+    roots.length === 1 && isEquipmentGroup(roots[0]) && roots[0].type === 'AND'
+      ? roots[0].children
+      : roots;
+  return lineNodes.map(node => formatLine(node, lookup)).filter(Boolean);
+}
+
+/** One line: OR groups get lettered choices; everything else reads as a bundle. */
+function formatLine(node: EquipmentNode, lookup: StartingEquipmentLookup): string {
+  if (isEquipmentOption(node)) return formatOption(node, lookup);
+  const children = node.children.filter(Boolean);
+  if (children.length === 0) return '';
+  if (children.length === 1) return formatLine(children[0], lookup);
+  if (node.type === 'OR') {
+    return children
+      .map((c, i) => `(${CHOICE_LETTERS[i] ?? '?'}) ${formatBundle(c, lookup)}`)
+      .join(' or ');
+  }
+  return formatBundle(node, lookup);
+}
+
+/** A node as it reads INSIDE a line (no lettering): AND → "X and Y" / "X, Y,
+ *  and Z", OR → "X or Y", option → itself; deeper groups parenthesise. */
+function formatBundle(node: EquipmentNode, lookup: StartingEquipmentLookup): string {
+  if (isEquipmentOption(node)) return formatOption(node, lookup);
+  const children = node.children.filter(Boolean);
+  if (children.length === 0) return '';
+  if (children.length === 1) return formatBundle(children[0], lookup);
+  const parts = children.map(c =>
+    isEquipmentGroup(c) ? `(${formatBundle(c, lookup)})` : formatOption(c, lookup),
+  );
+  if (node.type === 'OR') return parts.join(' or ');
+  return parts.length === 2
+    ? parts.join(' and ')
+    : `${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}`;
+}

@@ -47,6 +47,7 @@ import SpellFilterShell from '../../components/compendium/SpellFilterShell';
 import { useSpellFilters } from '../../hooks/useSpellFilters';
 import { cn } from '../../lib/utils';
 import { isColumnHidden, levelSeriesHasValue } from '../../lib/classTableColumns';
+import { parseEquipmentTree, collectLinkedItemKeys, formatStartingEquipmentLines } from '../../lib/startingEquipment';
 import { imageFocalStyle as ClassImageStyle, DEFAULT_DISPLAY } from '../../components/ui/FocalImageEditor';
 import { toast } from 'sonner';
 import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
@@ -106,6 +107,8 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
   // drafts arrive. The load effects re-fire when this flips true.
   const { draftsReady } = useBlock();
   const [classData, setClassData] = useState<any>(null);
+  // PK → name for the structured starting-equipment's linked items.
+  const [equipmentItemNames, setEquipmentItemNames] = useState<Record<string, string>>({});
   const [source, setSource] = useState<any>(null);
   const [features, setFeatures] = useState<any[]>([]);
   const [scalingColumns, setScalingColumns] = useState<any[]>([]);
@@ -392,6 +395,8 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
           previewDisplay: typeof classInfo.preview_display === 'string' ? JSON.parse(classInfo.preview_display) : (classInfo.preview_display ?? null),
           proficiencies: typeof classInfo.proficiencies === 'string' ? JSON.parse(classInfo.proficiencies) : (classInfo.proficiencies ?? {}),
           startingEquipment: classInfo.starting_equipment,
+          startingEquipmentData: parseEquipmentTree(classInfo.starting_equipment_data),
+          wealth: classInfo.wealth,
           primaryAbility: typeof classInfo.primary_ability === 'string' ? JSON.parse(classInfo.primary_ability) : (classInfo.primary_ability ?? []),
           primaryAbilityChoice: typeof classInfo.primary_ability_choice === 'string' ? JSON.parse(classInfo.primary_ability_choice) : (classInfo.primary_ability_choice ?? []),
           savingThrows: typeof classInfo.saving_throws === 'string' ? JSON.parse(classInfo.saving_throws) : (classInfo.saving_throws ?? []),
@@ -521,6 +526,25 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
     () => allScalingColumns.filter(c => !isColumnHidden(c)),
     [allScalingColumns],
   );
+
+  // Resolve the structured starting-equipment's linked item PKs to display
+  // names for the Equipment list (targeted fetch — only referenced items).
+  useEffect(() => {
+    const roots = classData?.startingEquipmentData;
+    const ids = roots ? collectLinkedItemKeys(roots) : [];
+    if (ids.length === 0) { setEquipmentItemNames({}); return; }
+    let cancelled = false;
+    const placeholders = ids.map(() => '?').join(',');
+    fetchCollection<any>('items', { where: `id IN (${placeholders})`, params: ids, select: 'id, name, identifier' })
+      .then(rows => {
+        if (cancelled) return;
+        const m: Record<string, string> = {};
+        for (const r of rows || []) m[r.id] = r.name || r.identifier || '';
+        setEquipmentItemNames(m);
+      })
+      .catch(() => { if (!cancelled) setEquipmentItemNames({}); });
+    return () => { cancelled = true; };
+  }, [classData?.startingEquipmentData]);
 
   const allGroupIds = useMemo(() => {
     const ids = new Set<string>();
@@ -1839,7 +1863,39 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
 
                   <div className="space-y-1">
                     <p className="uppercase font-bold tracking-widest text-ink/40">Equipment</p>
-                    <BBCodeRenderer content={classData.startingEquipment || 'Standard starting equipment.'} className="prose-sm italic" />
+                    {(() => {
+                      const lines = formatStartingEquipmentLines(classData.startingEquipmentData, { itemNameById: equipmentItemNames });
+                      const hasProse = !!String(classData.startingEquipment || '').trim();
+                      const wealth = String(classData.wealth || '').trim();
+                      // "Alternatively, you may start with <gold>." — shown when a
+                      // wealth formula is set (the gold alternative to equipment).
+                      const wealthLine = wealth
+                        ? <p className="prose-sm italic text-ink/55 mt-1">Alternatively, you may start with {wealth} gp.</p>
+                        : null;
+                      // Structured equipment renders as a bulleted list; the prose
+                      // (if any) reads as the lead-in / "in addition to your
+                      // background" note. Fall back to prose-or-default only when
+                      // there's no structured tree.
+                      if (lines.length > 0) {
+                        return (
+                          <>
+                            {hasProse && <BBCodeRenderer content={classData.startingEquipment} className="prose-sm italic" />}
+                            <ul className="list-disc pl-4 space-y-0.5">
+                              {lines.map((line, i) => (
+                                <li key={i} className="prose-sm italic text-ink/80">{line}</li>
+                              ))}
+                            </ul>
+                            {wealthLine}
+                          </>
+                        );
+                      }
+                      return (
+                        <>
+                          <BBCodeRenderer content={classData.startingEquipment || 'Standard starting equipment.'} className="prose-sm italic" />
+                          {wealthLine}
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
