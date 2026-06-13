@@ -9,6 +9,7 @@ import { Checkbox } from '../ui/checkbox';
 import { ImageUpload } from '../ui/ImageUpload';
 import ActiveEffectKeyInput from './ActiveEffectKeyInput';
 import EntityPicker from '../ui/EntityPicker';
+import SingleSelectSearch from '../ui/SingleSelectSearch';
 import { fetchCollection } from '../../lib/d1';
 import { ACTIVE_EFFECT_TYPES } from '../../lib/activeEffectStatuses';
 import { getActiveEffectKeyMeta, type AEValueMeta, type AEValueSource } from '../../lib/activeEffectKeys';
@@ -305,7 +306,7 @@ export default function ActiveEffectEditor({ effects, onChange, defaultImg }: Ac
         ActiveEffectConfig window (560px) within `max-w-xl` (576px).
       */}
       <Dialog open={!!draft} onOpenChange={open => { if (!open) closeDialog(); }}>
-        <DialogContent className="max-w-[95vw] lg:max-w-xl flex flex-col h-[640px] max-h-[90vh] p-0 gap-0 overflow-hidden">
+        <DialogContent className="max-w-[95vw] lg:max-w-4xl flex flex-col h-[680px] max-h-[92vh] p-0 gap-0 overflow-hidden">
 
           {/* Dialog header — name + icon, Foundry-style.
               autoFocus on the name input transfers focus into this
@@ -580,7 +581,7 @@ export default function ActiveEffectEditor({ effects, onChange, defaultImg }: Ac
                   <div className="w-28 shrink-0 text-[10px] font-black uppercase tracking-wider text-ink/55">
                     Change Mode
                   </div>
-                  <div className="flex-1 min-w-0 text-[10px] font-black uppercase tracking-wider text-ink/55">
+                  <div className="flex-[2] min-w-0 text-[10px] font-black uppercase tracking-wider text-ink/55">
                     Value
                   </div>
                   <div className="w-20 shrink-0 text-[10px] font-black uppercase tracking-wider text-ink/55 text-center">
@@ -676,7 +677,6 @@ function ChangeRow({
   onDelete,
 }: ChangeRowProps) {
   const rowRef = React.useRef<HTMLDivElement>(null);
-  const valueListId = React.useId();
   const parseNullableInt = (v: string) => v === '' ? null : parseInt(v, 10);
   // Drive the value control off the key's value type: enum / array-of-enum
   // keys (damage resistance, languages, …) get a suggestion picker instead of
@@ -715,7 +715,7 @@ function ChangeRow({
       </Select>
       {isBoolValue ? (
         <Select value={String(change.value).trim() === '1' ? '1' : '0'} onValueChange={v => onPatchValue(v)}>
-          <SelectTrigger className="flex-1 min-w-0 h-7 text-xs bg-background/50 border-gold/15 focus:border-gold">
+          <SelectTrigger className="flex-[2] min-w-0 h-7 text-xs bg-background/50 border-gold/15 focus:border-gold">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -724,28 +724,26 @@ function ChangeRow({
           </SelectContent>
         </Select>
       ) : isEnumValue ? (
-        <div className="flex-1 min-w-0">
-          {/* Suggestion picker — shows the known ids (e.g. damage types) but
-              still allows a custom id, so homebrew / specific values work. */}
-          <Input
-            autoComplete="off"
-            list={valueListId}
-            value={change.value}
-            onChange={e => onPatchValue(e.target.value)}
-            placeholder={valueMeta!.valueType === 'enumArray' ? 'pick a value (add a row per value)' : 'pick a value…'}
-            className="w-full h-7 text-xs font-mono bg-background/50 border-gold/15 focus:border-gold"
-          />
-          <datalist id={valueListId}>
-            {valueOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </datalist>
-        </div>
+        // Searchable single-select picker — shows the type NAME (e.g. "Fire"),
+        // not a raw id. Options are DB-backed (damage types / conditions /
+        // languages / tools — homebrew included) or fixed system lists. One
+        // value per row (Foundry-native): another resistance = another row.
+        <SingleSelectSearch
+          value={change.value}
+          onChange={(next) => onPatchValue(next)}
+          options={valueOptions.map(o => ({ id: o.value, name: o.label }))}
+          placeholder={valueMeta!.valueType === 'enumArray' ? 'pick a value (one per row)…' : 'pick a value…'}
+          noEntitiesText="No options loaded yet."
+          className="flex-[2] min-w-0"
+          triggerClassName="h-7 text-xs w-full font-mono"
+        />
       ) : (
         <Input
           autoComplete="off"
           value={change.value}
           onChange={e => onPatchValue(e.target.value)}
           placeholder="value or formula"
-          className="flex-1 min-w-0 h-7 text-xs font-mono bg-background/50 border-gold/15 focus:border-gold"
+          className="flex-[2] min-w-0 h-7 text-xs font-mono bg-background/50 border-gold/15 focus:border-gold"
         />
       )}
       {/* Priority — greyed when null (auto = mode default). */}
